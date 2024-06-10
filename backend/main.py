@@ -5,6 +5,15 @@ from pydantic import BaseModel
 import httpx
 import uvicorn
 from typing import List
+import sqlalchemy
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, select
+from sqlalchemy.orm import sessionmaker
+import os
+
+DATABASE_URL = "sqlite:///./db.sqlite"
+
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+metadata = MetaData()
 
 app = FastAPI()
 
@@ -26,27 +35,70 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 class Operation(BaseModel):
     id: int
     name: str
     description: str
 
+class OperationWithArguments(BaseModel):
+    id: int
+    name: str
+    duration: float
+    arguments: List[dict]
+
+operations = Table(
+    "operations",
+    metadata,
+    Column("operation_id", Integer, primary_key=True),
+    Column("name", String),
+    Column("duration", Float),
+)
+
+operation_arguments = Table(
+    "operation_arguments",
+    metadata,
+    Column("operation_id", Integer),
+    Column("name", String),
+    Column("value", String),
+)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+@app.on_event("startup")
+def startup():
+    metadata.create_all(bind=engine)
+
+@app.on_event("shutdown")
+def shutdown():
+    engine.dispose()
 
 @app.get("/api")
 async def read_root():
     return {"message": "Hello from FastAPI"}
 
+@app.get("/api/get-operations", response_model=List[OperationWithArguments])
+async def get_operations():
+    db = SessionLocal()
+    operations_query = select(operations)  # Corrected line
+    operations_list = db.execute(operations_query).fetchall()
 
-@app.get("/api/get-operations")
-async def get_operations(param: str = Query(None)):
-    # temp data
-    operations = [
-        Operation(id=1, name="Operation1", description="Description for operation 1"),
-        Operation(id=2, name="Operation2", description="Description for operation 2"),
-        Operation(id=3, name="Operation3", description="Description for operation 3"),
-    ]
-    return JSONResponse(content=[operation.dict() for operation in operations])
+    operations_dict = {operation.operation_id: {
+        "id": operation.operation_id,
+        "name": operation.name,
+        "duration": operation.duration,
+        "arguments": []
+    } for operation in operations_list}
+
+    arguments_query = select(operation_arguments)  # Corrected line
+    arguments_list = db.execute(arguments_query).fetchall()
+
+    for argument in arguments_list:
+        operations_dict[argument.operation_id]["arguments"].append({
+            "name": argument.name,
+            "value": argument.value
+        })
+
+    return list(operations_dict.values())
 
 # Middleware to proxy requests to Vite development server, excluding /api/* requests
 @app.middleware("http")
