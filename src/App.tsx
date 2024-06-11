@@ -8,7 +8,6 @@ function App() {
     FocusStyleManager.onlyShowFocusOnTabs();
 
     const [message, setMessage] = useState('');
-    const [operations, setOperations] = useState('');
 
     useEffect(() => {
         axios
@@ -20,28 +19,14 @@ function App() {
                 console.error('There was an error!', error);
             });
     }, []);
-    useEffect(() => {
-        const fetchOperations = async () => {
-            console.log('fetching operations');
-            try {
-                const response = await axios.get('/api/get-operations');
-                console.log(response);
-                setOperations(response.data);
-            } catch (error) {
-                console.error('Error fetching operations:', error);
-            }
-        };
-
-        fetchOperations();
-    }, []);
 
     return (
         <>
             {message && <h1>{message}</h1>}
             <header className='app-header'>
-                <TenstorrentLogo/>
+                <TenstorrentLogo />
             </header>
-            <ApplicationList/>;
+            <ApplicationList />;
         </>
     );
 }
