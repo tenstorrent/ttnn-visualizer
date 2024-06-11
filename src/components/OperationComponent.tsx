@@ -9,6 +9,7 @@ import HighlightedText from './HighlightedText'; // Assuming you have this compo
 import '../scss/components/Operation.scss';
 
 interface OperationProps {
+    // temp interface until we have Operation data model defined
     op: {
         name: string;
     };
