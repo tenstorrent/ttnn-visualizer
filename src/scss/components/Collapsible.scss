@@ -5,19 +5,6 @@
 @use 'styles/definitions/colours' as *;
 
 .collapsible-component {
-    // &:hover {
-    //    .bp5-icon svg {
-    //        fill: $tt-white-text;
-    //    }
-    // }
-
-    // {
-    //    color: $tt-white-text;
-    //    overflow: hidden;
-    //    text-overflow: ellipsis;
-    //    white-space: nowrap;
-    // }
-
     .collapsible-label-wrap,
     > [type="button"] {
         padding: 0;
@@ -28,7 +15,9 @@
         justify-content: flex-start;
         flex-wrap: nowrap;
 
-        &.bp5-button { padding: 0; }
+        &.bp5-button {
+            padding: 0;
+        }
 
         &:hover {
             transform: none;
@@ -36,28 +25,7 @@
 
         }
 
-        > .bp5-icon{
-          color: $tt-white-text;
-        }
-
-        .collapsible-label,
-        .bp5-button-text {
-            color: $tt-white-text;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-
-            .bp5-icon svg {
-                fill: $tt-white-text;
-            }
-
-            > .bp5-icon svg {
-                fill: $tt-yellow;
-            }
-
-        }
-
-        .collapsible-label{
+        .collapsible-label {
             display: flex;
             align-items: center;
             gap: 10px;
@@ -67,7 +35,5 @@
             color: #000;
             margin-bottom: 0;
         }
-
-
     }
 }

@@ -49,9 +49,4 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
     );
 };
 
-Collapsible.defaultProps = {
-    contentStyles: {},
-    styles: {},
-    isOpen: true,
-};
 export default Collapsible;

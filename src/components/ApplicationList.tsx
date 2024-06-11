@@ -1,27 +1,38 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
-import { useState } from 'react';
-
-import { Button, Icon } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
-import { Tooltip2 } from '@blueprintjs/popover2';
+import { useEffect, useState } from 'react';
+import axios from 'axios';
 import SearchField from './SearchField';
 import FilterableComponent from './FilterableComponent';
 import Collapsible from './Collapsible';
-import HighlightedText from './HighlightedText';
-import GoldenTensorComparisonIndicator from './GoldenTensorComparisonIndicator';
+import OperationComponent from './OperationComponent';
+
+interface Operation {
+    id: string;
+    name: string;
+    duration: number;
+    arguments: { name: string; value: string }[];
+}
 
 const ApplicationList = () => {
-    const ops = [
-        { name: 'ttnn.from_torch', goldenGlobal: 1, goldenLocal: 1 },
-        { name: 'ttnn.from_torch', goldenGlobal: 0.9999, goldenLocal: 0.9999 },
-        { name: 'ttnn.add', goldenGlobal: 0.9888, goldenLocal: 1 },
+    const [operations, setOperations] = useState([] as Operation[]);
+    useEffect(() => {
+        const fetchOperations = async () => {
+            const response = await axios.get('/api/get-operations');
+            return response.data;
+        };
 
-        { name: 'ttnn.deallocate.buffer.opname', goldenGlobal: 1, goldenLocal: 0.988 },
-        { name: 'ttnn.to_torch', goldenGlobal: 1, goldenLocal: 1 },
-        { name: 'ttnn.compare', goldenGlobal: 0.8888, goldenLocal: 0.99 },
-    ];
+        fetchOperations()
+            // eslint-disable-next-line promise/always-return
+            .then((data) => {
+                // console.log(data);
+                setOperations(data);
+            })
+            .catch((error) => {
+                console.error('Error fetching operations:', error);
+            });
+    }, []);
 
     const [filterQuery, setFilterQuery] = useState('');
 
@@ -57,60 +68,27 @@ const ApplicationList = () => {
                             ]
                         }
                     />
-                    {ops.map((op, index: number) => {
-                        const hasContent =
-                            op.name.toLowerCase().includes('ttnn.add') ||
-                            op.name.toLowerCase().includes('ttnn.to_torch');
+                    {operations.map((op) => {
                         return (
                             <FilterableComponent
-                                key={index}
+                                key={op.id}
                                 filterableString={op.name}
                                 filterQuery={filterQuery}
                                 component={
                                     <div className='op'>
                                         <Collapsible
-                                            label={
-                                                <>
-                                                    <Icon size={20} icon={IconNames.CUBE} />
-                                                    <span style={{ color: '#fff', fontSize: '20px' }}>
-                                                        <HighlightedText text={op.name} filter={filterQuery} />
-                                                    </span>
-                                                    <Tooltip2 content='Operation tensor report'>
-                                                        <Button minimal small icon={IconNames.GRAPH} />
-                                                    </Tooltip2>
-                                                    <Tooltip2 content='Stack trace'>
-                                                        <Button minimal small icon={IconNames.CODE} />
-                                                    </Tooltip2>
-                                                    <Tooltip2 content='Buffer view'>
-                                                        <Button minimal small icon={IconNames.SEGMENTED_CONTROL} />
-                                                    </Tooltip2>
-                                                    <GoldenTensorComparisonIndicator value={op.goldenGlobal} />
-                                                    <GoldenTensorComparisonIndicator value={op.goldenLocal} />
-                                                </>
-                                            }
+                                            label={<OperationComponent op={op} filterQuery={filterQuery} />}
                                             isOpen={false}
                                         >
-                                            {hasContent && (
+                                            {op.arguments && (
                                                 <div className='collapsible-content'>
                                                     <ul className='op-params'>
-                                                        <li>
-                                                            <strong>Shape: </strong>ttnn.Shape([1 [32], 64])
-                                                        </li>
-                                                        <li>
-                                                            <strong>Dtype: </strong>DataType.BFLOAT16
-                                                        </li>
-                                                        <li>
-                                                            <strong>Layout: </strong>Layout.TILE
-                                                        </li>
-                                                        <li>
-                                                            <strong>Device: </strong>0
-                                                        </li>
-                                                        <li>
-                                                            <strong>Memory: </strong>tt::tt_metal::MemoryConfig(
-                                                            memory_layout=TensorMemoryLayout:: INTERLEAVED,
-                                                            <br /> buffer_type=BufferpType::DRAM, shard_spec=std:
-                                                            :nullopt)
-                                                        </li>
+                                                        {op.arguments.map((arg, index) => (
+                                                            <li key={op.id + arg.name + index}>
+                                                                <strong>{arg.name}: </strong>
+                                                                {arg.value}
+                                                            </li>
+                                                        ))}
                                                     </ul>
                                                 </div>
                                             )}
@@ -122,11 +100,6 @@ const ApplicationList = () => {
                     })}
                 </div>
             </fieldset>
-
-            {/* <h2>Buffer report</h2> */}
-            {/* <div className={'buffer-report'}> */}
-            {/*    <h3>ttnn.add</h3> */}
-            {/* </div> */}
         </div>
     );
 };
