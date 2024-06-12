@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { FocusStyleManager } from '@blueprintjs/core';
 import axios from 'axios';
-import ApplicationList from './components/ApplicationList';
+import OperationList from './components/OperationList.tsx';
 import TenstorrentLogo from './components/TenstorrentLogo';
 
 function App() {
@@ -26,7 +26,7 @@ function App() {
             <header className='app-header'>
                 <TenstorrentLogo />
             </header>
-            <ApplicationList />;
+            <OperationList />;
         </>
     );
 }

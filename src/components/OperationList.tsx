@@ -7,15 +7,9 @@ import SearchField from './SearchField';
 import FilterableComponent from './FilterableComponent';
 import Collapsible from './Collapsible';
 import OperationComponent from './OperationComponent';
+import { Operation } from '../model/Graph.ts';
 
-interface Operation {
-    id: string;
-    name: string;
-    duration: number;
-    arguments: { name: string; value: string }[];
-}
-
-const ApplicationList = () => {
+const OperationList = () => {
     const [operations, setOperations] = useState([] as Operation[]);
     useEffect(() => {
         const fetchOperations = async () => {
@@ -68,25 +62,25 @@ const ApplicationList = () => {
                             ]
                         }
                     />
-                    {operations.map((op) => {
+                    {operations.map((operation) => {
                         return (
                             <FilterableComponent
-                                key={op.id}
-                                filterableString={op.name}
+                                key={operation.id}
+                                filterableString={operation.name}
                                 filterQuery={filterQuery}
                                 component={
                                     <div className='op'>
                                         <Collapsible
-                                            label={<OperationComponent op={op} filterQuery={filterQuery} />}
+                                            label={<OperationComponent operation={operation} filterQuery={filterQuery} />}
                                             isOpen={false}
                                         >
-                                            {op.arguments && (
+                                            {operation.arguments && (
                                                 <div className='collapsible-content'>
                                                     <ul className='op-params'>
-                                                        {op.arguments.map((arg, index) => (
-                                                            <li key={op.id + arg.name + index}>
+                                                        {operation.arguments.map((arg) => (
+                                                            <li key={operation.id + arg.name}>
                                                                 <strong>{arg.name}: </strong>
-                                                                {arg.value}
+                                                                <pre>{arg.value}</pre>
                                                             </li>
                                                         ))}
                                                     </ul>
@@ -104,4 +98,4 @@ const ApplicationList = () => {
     );
 };
 
-export default ApplicationList;
+export default OperationList;
