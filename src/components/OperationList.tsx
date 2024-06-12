@@ -9,7 +9,7 @@ import Collapsible from './Collapsible';
 import OperationComponent from './OperationComponent';
 import { Operation } from '../model/Graph.ts';
 
-const ApplicationList = () => {
+const OperationList = () => {
     const [operations, setOperations] = useState([] as Operation[]);
     useEffect(() => {
         const fetchOperations = async () => {
@@ -98,4 +98,4 @@ const ApplicationList = () => {
     );
 };
 
-export default ApplicationList;
+export default OperationList;
