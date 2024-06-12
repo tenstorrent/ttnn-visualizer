@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Path, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -144,8 +144,8 @@ async def get_operations():
 
     return list(operations_dict.values())
 
-@app.get("/api/get-tensors", response_model=OperationTensors)
-async def get_tensors(operation_id: int = Query(..., description="The ID of the operation")):
+@app.get("/api/get-tensors/{operation_id}", response_model=OperationTensors)
+async def get_tensors(operation_id: int = Path(..., description="The ID of the operation")):
     db = SessionLocal()
 
     # Fetch input tensors
