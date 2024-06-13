@@ -1,3 +1,4 @@
+# main.py
 from fastapi import FastAPI, HTTPException, Path, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,7 +38,8 @@ app.add_middleware(
 class Operation(BaseModel):
     id: int
     name: str
-    description: str
+    duration: float
+    description: Optional[str] = None
 
 class OperationWithArguments(BaseModel):
     id: int
@@ -55,10 +57,31 @@ class Tensor(BaseModel):
     address: Optional[int]
     buffer_type: Optional[int]
 
-class OperationTensors(BaseModel):
+class Buffer(BaseModel):
+    operation_id: int
+    device_id: int
+    address: int
+    max_size_per_bank: int
+    buffer_type: int
+
+class BufferPage(BaseModel):
+    operation_id: int
+    device_id: int
+    address: int
+    core_y: int
+    core_x: int
+    bank_id: int
+    page_index: int
+    page_address: int
+    page_size: int
+    buffer_type: int
+
+class OperationDetails(BaseModel):
     operation_id: int
     input_tensors: List[Tensor]
     output_tensors: List[Tensor]
+    buffers: List[Buffer]
+    buffer_pages: List[BufferPage]
 
 operations = Table(
     "operations",
@@ -105,6 +128,31 @@ output_tensors = Table(
     Column("tensor_id", Integer),
 )
 
+buffers = Table(
+    "buffers",
+    metadata,
+    Column("operation_id", Integer),
+    Column("device_id", Integer),
+    Column("address", Integer),
+    Column("max_size_per_bank", Integer),
+    Column("buffer_type", Integer),
+)
+
+buffer_pages = Table(
+    "buffer_pages",
+    metadata,
+    Column("operation_id", Integer),
+    Column("device_id", Integer),
+    Column("address", Integer),
+    Column("core_y", Integer),
+    Column("core_x", Integer),
+    Column("bank_id", Integer),
+    Column("page_index", Integer),
+    Column("page_address", Integer),
+    Column("page_size", Integer),
+    Column("buffer_type", Integer),
+)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 @app.on_event("startup")
@@ -144,9 +192,11 @@ async def get_operations():
 
     return list(operations_dict.values())
 
-@app.get("/api/get-operation-details/{operation_id}", response_model=OperationTensors)
-async def get_tensors(operation_id: int = Path(..., description="The ID of the operation")):
+@app.get("/api/get-operation-details/{operation_id}", response_model=OperationDetails)
+async def get_operation_details(operation_id: int = Path(..., description="The ID of the operation")):
     db = SessionLocal()
+
+
 
     # Fetch input tensors
     input_query = select(input_tensors).where(input_tensors.c.operation_id == operation_id)
@@ -168,10 +218,24 @@ async def get_tensors(operation_id: int = Path(..., description="The ID of the o
 
     output_tensors_list = [Tensor(**row) for row in output_tensors_data]
 
-    return OperationTensors(
+    # Fetch buffers
+    buffers_query = select(buffers).where(buffers.c.operation_id == operation_id)
+    buffers_data = db.execute(buffers_query).mappings().all()
+
+    buffers_list = [Buffer(**row) for row in buffers_data]
+
+    # Fetch buffer pages
+    buffer_pages_query = select(buffer_pages).where(buffer_pages.c.operation_id == operation_id)
+    buffer_pages_data = db.execute(buffer_pages_query).mappings().all()
+
+    buffer_pages_list = [BufferPage(**row) for row in buffer_pages_data]
+
+    return OperationDetails(
         operation_id=operation_id,
         input_tensors=input_tensors_list,
-        output_tensors=output_tensors_list
+        output_tensors=output_tensors_list,
+        buffers=buffers_list,
+        buffer_pages=buffer_pages_list
     )
 
 # Middleware to proxy requests to Vite development server, excluding /api/* requests
