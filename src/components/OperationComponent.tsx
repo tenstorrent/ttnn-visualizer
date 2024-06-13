@@ -3,11 +3,11 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 import React from 'react';
-import { Button, Icon } from '@blueprintjs/core';
+import { Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import HighlightedText from './HighlightedText';
 import '../scss/components/Operation.scss';
-import { Operation } from '../model/Graph.ts';
+import { Operation } from '../model/Graph';
 
 interface OperationProps {
     operation: Operation;
@@ -20,9 +20,8 @@ const OperationComponent: React.FC<OperationProps> = ({ operation, filterQuery }
             <Icon className='operation-icon' size={20} icon={IconNames.CUBE} />
             <span>{operation.id}</span>
             <HighlightedText text={operation.name} filter={filterQuery} />
-            <Button title='Operation tensor report' minimal small icon={IconNames.GRAPH} />
-            <Button title='Stack trace' minimal small icon={IconNames.CODE} />
-            <Button title='Buffer view' minimal small icon={IconNames.SEGMENTED_CONTROL} />
+            {/* <Button title='Operation tensor report' minimal small icon={IconNames.GRAPH} /> */}
+            {/* <Button title='Stack trace' minimal small icon={IconNames.CODE} /> */}
             {/* <GoldenTensorComparisonIndicator value={op.goldenGlobal} /> */}
             {/* <GoldenTensorComparisonIndicator value={op.goldenLocal} /> */}
         </div>

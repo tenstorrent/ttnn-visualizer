@@ -56,6 +56,11 @@ body{
             gap: 10px;
         }
     }
+    .buffer-view{
+        svg{
+            fill: $tt-light-gray;
+        }
+    }
 }
 
 .op-params {

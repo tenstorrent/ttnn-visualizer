@@ -10,18 +10,20 @@ import '../scss/components/Collapsible.scss';
 
 interface CollapsibleProps {
     label: string | JSX.Element;
+    additionalElements?: string | JSX.Element;
     isOpen?: boolean;
     styles?: React.CSSProperties;
     contentStyles?: React.CSSProperties;
 }
 
 const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
-    label,
-    isOpen = true,
-    styles = {},
-    contentStyles = {},
-    children,
-}) => {
+                                                                              label,
+                                                                              additionalElements = undefined,
+                                                                              isOpen = true,
+                                                                              styles = {},
+                                                                              contentStyles = {},
+                                                                              children,
+                                                                          }) => {
     const [isOpenState, setIsOpenState] = React.useState(isOpen);
     useEffect(() => {
         setIsOpenState(isOpen);
@@ -30,16 +32,21 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
     const icon = isOpenState ? IconNames.CARET_UP : IconNames.CARET_DOWN;
     return (
         <div className='collapsible-component' style={styles}>
-            {children && (
-                <Button small minimal onClick={() => setIsOpenState(!isOpenState)} rightIcon={icon}>
-                    {label}
-                </Button>
-            )}
-            {!children && (
-                <div className='collapsible-label-wrap'>
-                    <div className='collapsible-label'>{label}</div>
-                </div>
-            )}
+            <div className={'collapsible-controls'}>
+                {children && (
+                    <Button small minimal onClick={() => setIsOpenState(!isOpenState)} rightIcon={icon}>
+                        {label}
+                    </Button>
+                )}
+                {!children && (
+                    <div className='collapsible-label-wrap'>
+                        <div className='collapsible-label'>{label}</div>
+                    </div>
+                )}
+                {additionalElements && (
+                    additionalElements
+                )}
+            </div>
             {children && (
                 <Collapse isOpen={isOpenState} keepChildrenMounted>
                     <div style={contentStyles}>{children}</div>
