@@ -20,6 +20,7 @@
     "react-dom": "^18.2.0",
     "react-query": "^3.39.3",
     "react-router": "^6.23.1",
+    "react-router-dom": "^6.23.1",
     "redux-toolkit": "^1.1.2"
   },
   "devDependencies": {

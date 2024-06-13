@@ -1,9 +1,8 @@
-import React from 'react';
+import { Outlet } from 'react-router-dom';
 import { FocusStyleManager } from '@blueprintjs/core';
-import OperationList from './components/OperationList.tsx';
-import TenstorrentLogo from './components/TenstorrentLogo';
+import TenstorrentLogo from './TenstorrentLogo';
 
-function App() {
+function Layout() {
     FocusStyleManager.onlyShowFocusOnTabs();
 
     return (
@@ -11,9 +10,11 @@ function App() {
             <header className='app-header'>
                 <TenstorrentLogo />
             </header>
-            <OperationList />;
+            <main>
+                <Outlet />
+            </main>
         </>
     );
 }
 
-export default App;
+export default Layout;
