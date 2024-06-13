@@ -144,7 +144,7 @@ async def get_operations():
 
     return list(operations_dict.values())
 
-@app.get("/api/get-tensors/{operation_id}", response_model=OperationTensors)
+@app.get("/api/get-operation-details/{operation_id}", response_model=OperationTensors)
 async def get_tensors(operation_id: int = Path(..., description="The ID of the operation")):
     db = SessionLocal()
 
