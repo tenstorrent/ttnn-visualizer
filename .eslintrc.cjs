@@ -66,7 +66,6 @@ module.exports = {
         curly: ['error', 'all'],
         'import/extensions': ['warn', 'never', { css: 'always', scss: 'always', json: 'always' }],
         'import/no-import-module-exports': 'off',
-        'import/no-unresolved': 'error',
         'max-classes-per-file': 'off',
         'no-shadow': 'off',
         'no-unused-vars': 'off',
