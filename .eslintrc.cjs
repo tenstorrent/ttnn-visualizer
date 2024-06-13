@@ -91,5 +91,6 @@ module.exports = {
             'warn',
             { vars: 'all', varsIgnorePattern: '^_', args: 'after-used', argsIgnorePattern: '^_' },
         ],
+        'react/require-default-props': 'off'
     },
 };

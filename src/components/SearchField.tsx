@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
-
+import React from 'react';
 import { Button, Icon, InputGroup } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-
 
 interface SearchFieldProps {
     searchQuery: string;
@@ -17,7 +16,13 @@ interface SearchFieldProps {
 /**
  * Renders a search field. Controlled component.
  */
-function SearchField({searchQuery, onQueryChanged, controls, disabled, placeholder}: SearchFieldProps): React.ReactElement {
+function SearchField({
+    searchQuery,
+    onQueryChanged,
+    controls,
+    disabled = false,
+    placeholder = '',
+}: SearchFieldProps): React.ReactElement {
     return (
         <div className='search-field'>
             <InputGroup
@@ -33,7 +38,7 @@ function SearchField({searchQuery, onQueryChanged, controls, disabled, placehold
                             icon={IconNames.CROSS}
                         />
                     ) : (
-                        <Icon icon={IconNames.SEARCH}/>
+                        <Icon icon={IconNames.SEARCH} />
                     )
                 }
                 placeholder={placeholder}
@@ -44,9 +49,5 @@ function SearchField({searchQuery, onQueryChanged, controls, disabled, placehold
         </div>
     );
 }
-
-SearchField.defaultProps = {
-    disabled: false,
-};
 
 export default SearchField;

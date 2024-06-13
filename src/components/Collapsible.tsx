@@ -32,7 +32,7 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
         <div className='collapsible-component' style={styles}>
             {children && (
                 <Button small minimal onClick={() => setIsOpenState(!isOpenState)} rightIcon={icon}>
-                    {label}
+                    {label} woof
                 </Button>
             )}
             {!children && (
@@ -41,17 +41,18 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
                 </div>
             )}
             {children && (
-                <Collapse isOpen={isOpenState} keepChildrenMounted>
-                    <div style={contentStyles}>{children}</div>
-                </Collapse>
+                <>
+                    <span>pre</span>
+                    <Collapse isOpen={isOpenState} keepChildrenMounted>
+                        woof
+                        <div style={contentStyles} data-test='woof'>
+                            {children}
+                        </div>
+                    </Collapse>
+                </>
             )}
         </div>
     );
 };
 
-Collapsible.defaultProps = {
-    contentStyles: {},
-    styles: {},
-    isOpen: true,
-};
 export default Collapsible;
