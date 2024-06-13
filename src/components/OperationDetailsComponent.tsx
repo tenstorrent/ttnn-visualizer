@@ -11,7 +11,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         const { data } = await axios.get(`/api/get-operation-details/${operationId}`);
         return data;
     };
-    const { data, error, isLoading } = useQuery<any, AxiosError>('operations', fetchOperations);
+    const { data, error, isLoading } = useQuery<any, AxiosError>(
+        ['get-operation-detail', operationId],
+        fetchOperations,
+    );
 
     console.log(data, error, isLoading);
     return <div className='operation-details'>Operation details</div>;

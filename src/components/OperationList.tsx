@@ -35,7 +35,7 @@ const OperationList = () => {
         const { data } = await axios.get('/api/get-operations');
         return data;
     };
-    const { data, error, isLoading } = useQuery<Operation[], AxiosError>('operations', fetchOperations);
+    const { data, error, isLoading } = useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
 
     const [filterQuery, setFilterQuery] = useState('');
 
