@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
-import { useEffect, useState } from 'react';
-import axios from 'axios';
+import { useState } from 'react';
+import axios, { AxiosError } from 'axios';
+import { Button } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import { useQuery } from 'react-query';
 import SearchField from './SearchField';
 import FilterableComponent from './FilterableComponent';
 import Collapsible from './Collapsible';
@@ -10,23 +13,28 @@ import OperationComponent from './OperationComponent';
 import { Operation } from '../model/Graph.ts';
 
 const OperationList = () => {
-    const [operations, setOperations] = useState([] as Operation[]);
-    useEffect(() => {
-        const fetchOperations = async () => {
-            const response = await axios.get('/api/get-operations');
-            return response.data;
-        };
+    // useEffect(() => {
+    //     const fetchOperations = async () => {
+    //         const response = await axios.get('/api/get-operations');
+    //         return response.data;
+    //     };
+    //
+    //     fetchOperations()
+    //         // eslint-disable-next-line promise/always-return
+    //         .then((data) => {
+    //             // console.log(data);
+    //             setOperations(data);
+    //         })
+    //         .catch((error) => {
+    //             console.error('Error fetching operations:', error);
+    //         });
+    // }, []);
 
-        fetchOperations()
-            // eslint-disable-next-line promise/always-return
-            .then((data) => {
-                // console.log(data);
-                setOperations(data);
-            })
-            .catch((error) => {
-                console.error('Error fetching operations:', error);
-            });
-    }, []);
+    const fetchOperations = async () => {
+        const { data } = await axios.get('/api/get-operations');
+        return data;
+    };
+    const { data, error, isLoading } = useQuery<Operation[], AxiosError>('operations', fetchOperations);
 
     const [filterQuery, setFilterQuery] = useState('');
 
@@ -62,36 +70,53 @@ const OperationList = () => {
                             ]
                         }
                     />
-                    {operations.map((operation) => {
-                        return (
-                            <FilterableComponent
-                                key={operation.id}
-                                filterableString={operation.name}
-                                filterQuery={filterQuery}
-                                component={
-                                    <div className='op'>
-                                        <Collapsible
-                                            label={<OperationComponent operation={operation} filterQuery={filterQuery} />}
-                                            isOpen={false}
-                                        >
-                                            {operation.arguments && (
-                                                <div className='collapsible-content'>
-                                                    <ul className='op-params'>
-                                                        {operation.arguments.map((arg) => (
-                                                            <li key={operation.id + arg.name}>
-                                                                <strong>{arg.name}: </strong>
-                                                                <pre>{arg.value}</pre>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-                                            )}
-                                        </Collapsible>
-                                    </div>
-                                }
-                            />
-                        );
-                    })}
+                    {isLoading && <div>Loading...</div>}
+                    {error && <div>An error occurred: {error.message}</div>}
+                    {data &&
+                        data.map((operation) => {
+                            return (
+                                <FilterableComponent
+                                    key={operation.id}
+                                    filterableString={operation.name}
+                                    filterQuery={filterQuery}
+                                    component={
+                                        <div className='op'>
+                                            <Collapsible
+                                                label={
+                                                    <OperationComponent
+                                                        operation={operation}
+                                                        filterQuery={filterQuery}
+                                                    />
+                                                }
+                                                additionalElements={
+                                                    <Button
+                                                        title='Buffer view'
+                                                        minimal
+                                                        small
+                                                        className={'buffer-view'}
+                                                        icon={IconNames.SEGMENTED_CONTROL}
+                                                    />
+                                                }
+                                                isOpen={false}
+                                            >
+                                                {operation.arguments && (
+                                                    <div className='collapsible-content'>
+                                                        <ul className='op-params'>
+                                                            {operation.arguments.map((arg) => (
+                                                                <li key={operation.id + arg.name}>
+                                                                    <strong>{arg.name}: </strong>
+                                                                    <pre>{arg.value}</pre>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+                                            </Collapsible>
+                                        </div>
+                                    }
+                                />
+                            );
+                        })}
                 </div>
             </fieldset>
         </div>
