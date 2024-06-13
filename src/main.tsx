@@ -3,11 +3,11 @@ import ReactDOM from 'react-dom/client';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from 'react-query';
 import './index.scss';
-import OperationView from './roots/OperationView';
-import OperationList from './components/OperationList';
 import ErrorPage from './error-page';
 import Layout from './components/Layout';
 import Home from './roots/Home';
+import Operations from './roots/Operations';
+import OperationDetails from './roots/OperationDetails';
 
 const router = createBrowserRouter([
     {
@@ -21,12 +21,12 @@ const router = createBrowserRouter([
             },
             {
                 path: 'operations',
-                element: <OperationList />,
+                element: <Operations />,
             },
             {
                 path: 'operations/:opId',
                 loader: () => ({ message: "You're interested in viewing the following operation" }),
-                element: <OperationView />,
+                element: <OperationDetails />,
             },
         ],
     },

@@ -6,6 +6,7 @@ import axios, { AxiosError } from 'axios';
 import { Button } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useQuery } from 'react-query';
+import { Link } from 'react-router-dom';
 import SearchField from './SearchField';
 import FilterableComponent from './FilterableComponent';
 import Collapsible from './Collapsible';
@@ -89,13 +90,15 @@ const OperationList = () => {
                                                     />
                                                 }
                                                 additionalElements={
-                                                    <Button
-                                                        title='Buffer view'
-                                                        minimal
-                                                        small
-                                                        className={'buffer-view'}
-                                                        icon={IconNames.SEGMENTED_CONTROL}
-                                                    />
+                                                    <Link to={`/operations/${operation.id}`}>
+                                                        <Button
+                                                            title='Buffer view'
+                                                            minimal
+                                                            small
+                                                            className='buffer-view'
+                                                            icon={IconNames.SEGMENTED_CONTROL}
+                                                        />
+                                                    </Link>
                                                 }
                                                 isOpen={false}
                                             >
