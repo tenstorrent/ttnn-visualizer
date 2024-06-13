@@ -1,11 +1,10 @@
-# main.py
 from fastapi import FastAPI, HTTPException, Path, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
 import uvicorn
-from typing import List, Optional
+from typing import List, Optional, Dict
 import sqlalchemy
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, select
 from sqlalchemy.orm import sessionmaker
@@ -17,11 +16,13 @@ metadata = MetaData()
 
 app = FastAPI()
 
+
 @app.middleware("http")
 async def add_cache_control_header(request, call_next):
     response = await call_next(request)
     response.headers["Cache-Control"] = "no-store"
     return response
+
 
 origins = [
     "http://localhost:5173",
@@ -35,17 +36,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 class Operation(BaseModel):
     id: int
     name: str
     duration: float
     description: Optional[str] = None
 
+
 class OperationWithArguments(BaseModel):
     id: int
     name: str
     duration: float
     arguments: List[dict]
+
 
 class Tensor(BaseModel):
     tensor_id: int
@@ -57,12 +61,14 @@ class Tensor(BaseModel):
     address: Optional[int]
     buffer_type: Optional[int]
 
+
 class Buffer(BaseModel):
     operation_id: int
     device_id: int
     address: int
     max_size_per_bank: int
     buffer_type: int
+
 
 class BufferPage(BaseModel):
     operation_id: int
@@ -76,12 +82,42 @@ class BufferPage(BaseModel):
     page_size: int
     buffer_type: int
 
+
+class Device(BaseModel):
+    device_id: int
+    worker_l1_size: int
+
+
+class GraphData(BaseModel):
+    l1_size: int
+    buffers: List[Buffer]
+    buffer_pages: List[BufferPage]
+
+
 class OperationDetails(BaseModel):
     operation_id: int
     input_tensors: List[Tensor]
     output_tensors: List[Tensor]
     buffers: List[Buffer]
     buffer_pages: List[BufferPage]
+
+
+class GlyphData(BaseModel):
+    glyph_y_location: List[int]
+    glyph_x_location: List[int]
+    glyph_height: List[int]
+    glyph_width: List[int]
+    color: List[str]
+    line_color: List[str]
+    address: List[int]
+    max_size_per_bank: List[int]
+
+
+class PlotData(BaseModel):
+    l1_size: int
+    memory_data: GlyphData
+    buffer_data: GlyphData
+
 
 operations = Table(
     "operations",
@@ -153,19 +189,46 @@ buffer_pages = Table(
     Column("buffer_type", Integer),
 )
 
+devices = Table(
+    "devices",
+    metadata,
+    Column("device_id", Integer, primary_key=True),
+    Column("num_y_cores", Integer),
+    Column("num_x_cores", Integer),
+    Column("num_y_compute_cores", Integer),
+    Column("num_x_compute_cores", Integer),
+    Column("worker_l1_size", Integer),
+    Column("l1_num_banks", Integer),
+    Column("l1_bank_size", Integer),
+    Column("address_at_first_l1_bank", Integer),
+    Column("address_at_first_l1_cb_buffer", Integer),
+    Column("num_banks_per_storage_core", Integer),
+    Column("num_compute_cores", Integer),
+    Column("num_storage_cores", Integer),
+    Column("total_l1_memory", Integer),
+    Column("total_l1_for_tensors", Integer),
+    Column("total_l1_for_interleaved_buffers", Integer),
+    Column("total_l1_for_sharded_buffers", Integer),
+    Column("cb_limit", Integer),
+)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 
 @app.on_event("startup")
 def startup():
     metadata.create_all(bind=engine)
 
+
 @app.on_event("shutdown")
 def shutdown():
     engine.dispose()
 
+
 @app.get("/api")
 async def read_root():
     return {"message": "Hello from FastAPI"}
+
 
 @app.get("/api/get-operations", response_model=List[OperationWithArguments])
 async def get_operations():
@@ -192,11 +255,10 @@ async def get_operations():
 
     return list(operations_dict.values())
 
+
 @app.get("/api/get-operation-details/{operation_id}", response_model=OperationDetails)
-async def get_operation_details(operation_id: int = Path(..., description="The ID of the operation")):
+async def get_operation_details(operation_id: int = Path(..., description="")):
     db = SessionLocal()
-
-
 
     # Fetch input tensors
     input_query = select(input_tensors).where(input_tensors.c.operation_id == operation_id)
@@ -238,6 +300,94 @@ async def get_operation_details(operation_id: int = Path(..., description="The I
         buffer_pages=buffer_pages_list
     )
 
+
+BUFFER_TO_COLOR_INDEX: Dict = {}
+COLORS = ["red", "green", "blue", "yellow", "orange", "purple", "pink", "cyan"]
+
+
+@app.get("/api/get-buffer-plot-data/{operation_id}", response_model=PlotData)
+async def get_buffer_plot_data(operation_id: int = Path(..., description="")):
+    db = SessionLocal()
+
+    # Fetch buffers
+    buffers_query = select(buffers).where(buffers.c.operation_id == operation_id)
+    buffers_data = db.execute(buffers_query).mappings().all()
+
+    if not buffers_data:
+        raise HTTPException(status_code=404, detail="No buffers found for this operation")
+
+    buffers_list = [Buffer(**row) for row in buffers_data]
+
+    device_id = buffers_list[0].device_id
+    device_query = select(devices).where(devices.c.device_id == device_id)
+    device_data = db.execute(device_query).mappings().first()
+
+    if not device_data:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    l1_size = device_data['worker_l1_size']
+
+    glyph_y_location = 0
+    glyph_height = 1
+
+    memory_glyph_y_location = [glyph_y_location]
+    memory_glyph_x_location = [l1_size // 2]
+    memory_height = [glyph_height]
+    memory_width = [l1_size]
+    memory_color = ["white"]
+    memory_line_color = ["black"]
+
+    buffers_glyph_y_location = []
+    buffers_glyph_x_location = []
+    buffers_height = []
+    buffers_width = []
+    buffers_color = []
+    buffers_max_size_per_bank = []
+    buffers_address = []
+
+    for buffer in buffers_list:
+        if (buffer.device_id, buffer.address, buffer.buffer_type) not in BUFFER_TO_COLOR_INDEX:
+            BUFFER_TO_COLOR_INDEX[(buffer.device_id, buffer.address, buffer.buffer_type)] = len(BUFFER_TO_COLOR_INDEX)
+
+        buffers_address.append(buffer.address)
+        buffers_max_size_per_bank.append(buffer.max_size_per_bank)
+        buffers_glyph_y_location.append(glyph_y_location)
+        buffers_glyph_x_location.append(buffer.address + buffer.max_size_per_bank // 2)
+        buffers_height.append(glyph_height)
+        buffers_width.append(buffer.max_size_per_bank)
+        buffers_color.append(
+            COLORS[BUFFER_TO_COLOR_INDEX[(buffer.device_id, buffer.address, buffer.buffer_type)] % len(COLORS)]
+        )
+
+    memory_data = GlyphData(
+        glyph_y_location=memory_glyph_y_location,
+        glyph_x_location=memory_glyph_x_location,
+        glyph_height=memory_height,
+        glyph_width=memory_width,
+        color=memory_color,
+        line_color=memory_line_color,
+        address=[],
+        max_size_per_bank=[]
+    )
+
+    buffer_data = GlyphData(
+        glyph_y_location=buffers_glyph_y_location,
+        glyph_x_location=buffers_glyph_x_location,
+        glyph_height=buffers_height,
+        glyph_width=buffers_width,
+        color=buffers_color,
+        line_color=["black"] * len(buffers_color),
+        address=buffers_address,
+        max_size_per_bank=buffers_max_size_per_bank
+    )
+
+    return PlotData(
+        l1_size=l1_size,
+        memory_data=memory_data,
+        buffer_data=buffer_data
+    )
+
+
 # Middleware to proxy requests to Vite development server, excluding /api/* requests
 @app.middleware("http")
 async def proxy_middleware(request: Request, call_next):
@@ -259,6 +409,7 @@ async def proxy_middleware(request: Request, call_next):
             return StreamingResponse(vite_response.aiter_bytes(), headers=headers)
         except httpx.RequestError as exc:
             return JSONResponse(status_code=500, content={"message": f"Error connecting to Vite server: {exc}"})
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

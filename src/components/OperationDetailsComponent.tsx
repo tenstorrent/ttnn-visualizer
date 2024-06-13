@@ -16,7 +16,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         fetchOperations,
     );
 
+    const fetchPlotData = async () => {
+        return axios.get(`/api/get-buffer-plot-data/${operationId}`);
+    };
+    const { data: plotData } = useQuery(['get-buffer-plot-data', operationId], fetchPlotData);
+
     console.log(data, error, isLoading);
+    console.log(plotData);
     return <div className='operation-details'>Operation details</div>;
 };
 
