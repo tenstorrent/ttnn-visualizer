@@ -40,7 +40,10 @@ module.exports = {
         "import/resolver": {
             "typescript": {
                 "alwaysTryTypes": true
-            }
+            },
+            "alias": [
+                ["styles/*", "./src/scss/*"]
+            ]
         }
 
     },

@@ -18,6 +18,7 @@ module.exports = {
         'comment-whitespace-inside': 'always',
         'at-rule-no-vendor-prefix': true,
         'selector-pseudo-element-colon-notation': 'double',
-        'comment-no-empty': false,
+        'comment-no-empty': null,
+        'scss/comment-no-empty': null,
     },
 };
