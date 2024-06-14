@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
+@use '../definitions/colours' as *;
+
+.operation-arguments {
+    border-collapse: collapse;
+    color: $tt-dark-gray;
+    width: 100%;
+
+    caption {
+        text-align: left;
+        color: $tt-white-text;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    tr {
+        background-color: $tt-extra-light-gray;
+        background-color: #f6f6f6;
+
+        &:nth-of-type(odd) {
+            background: $tt-light-gray;
+        }
+
+        th {
+            font-weight: 700;
+            color: $tt-white-text;
+            background: $tt-purple;
+            text-align: left;
+            padding: 10px;
+        }
+
+        td {
+            padding: 6px 12px;
+
+            &:first-child {
+                font-weight: 700;
+                vertical-align: top;
+            }
+        }
+    }
+}
