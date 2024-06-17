@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
-
-import { Switch } from '@blueprintjs/core';
-import { useState } from 'react';
 import 'styles/components/OperationArguments.scss';
+import ExpandableTensor from './ExpandableTensor';
 
 interface Arguments {
     name: string;
@@ -30,7 +28,7 @@ function OperationArguments({ operationId, data }: OperationArgumentsProps) {
                 {data?.map((arg) => (
                     <tr key={`${operationId}-${arg.name}`}>
                         <td>{arg.name}</td>
-                        <td>{isTensor(arg.value) ? <ParsedTensor tensor={arg.value} /> : arg.value}</td>
+                        <td>{isTensor(arg.value) ? <ExpandableTensor tensor={arg.value} /> : arg.value}</td>
                     </tr>
                 ))}
             </tbody>
@@ -40,34 +38,6 @@ function OperationArguments({ operationId, data }: OperationArgumentsProps) {
 
 function isTensor(value: string) {
     return value.toLowerCase().includes('tensor');
-}
-
-interface ParsedTensorProps {
-    tensor: string;
-}
-
-function ParsedTensor({ tensor }: ParsedTensorProps) {
-    const [isExpanded, setIsExpanded] = useState(false);
-    const splitTensor = tensor.split('\n');
-
-    return (
-        <>
-            {isExpanded ? (
-                <pre>{tensor}</pre>
-            ) : (
-                <>
-                    <p>{splitTensor[0]}</p>
-                    <p>.........</p>
-                    <p>{splitTensor[splitTensor.length - 1]}</p>
-                </>
-            )}
-            <Switch
-                label={isExpanded ? 'Hide full tensor' : 'Show full tensor'}
-                onChange={() => setIsExpanded((previousValue) => !previousValue)}
-                checked={isExpanded}
-            />
-        </>
-    );
 }
 
 export default OperationArguments;
