@@ -1,7 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
-
 .expandable-tensor {
-    font-weight: 700;
+    position: relative;
+    background-color: inherit;
+
+    .expandable-tensor-tools {
+        margin-bottom: 10px;
+        position: sticky;
+        top: 0;
+        background-color: inherit;
+
+        .expand-button {
+            font-weight: 700;
+        }
+    }
 }

@@ -14,7 +14,15 @@ function ExpandableTensor({ tensor }: ExpandableTensorProps) {
     const splitTensor = tensor.split('\n');
 
     return (
-        <>
+        <td className='expandable-tensor'>
+            <div className='expandable-tensor-tools'>
+                <Switch
+                    className='expand-button'
+                    label={isExpanded ? 'Hide full tensor' : 'Show full tensor'}
+                    onChange={() => setIsExpanded((previousValue) => !previousValue)}
+                    checked={isExpanded}
+                />
+            </div>
             {isExpanded ? (
                 <pre>{tensor}</pre>
             ) : (
@@ -24,13 +32,7 @@ function ExpandableTensor({ tensor }: ExpandableTensorProps) {
                     <p>{splitTensor[splitTensor.length - 1]}</p>
                 </>
             )}
-            <Switch
-                className='expandable-tensor'
-                label={isExpanded ? 'Hide full tensor' : 'Show full tensor'}
-                onChange={() => setIsExpanded((previousValue) => !previousValue)}
-                checked={isExpanded}
-            />
-        </>
+        </td>
     );
 }
 

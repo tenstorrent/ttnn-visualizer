@@ -28,7 +28,7 @@ function OperationArguments({ operationId, data }: OperationArgumentsProps) {
                 {data?.map((arg) => (
                     <tr key={`${operationId}-${arg.name}`}>
                         <td>{arg.name}</td>
-                        <td>{isLengthyTensor(arg.value) ? <ExpandableTensor tensor={arg.value} /> : arg.value}</td>
+                        {isLengthyTensor(arg.value) ? <ExpandableTensor tensor={arg.value} /> : <td>{arg.value}</td>}
                     </tr>
                 ))}
             </tbody>
