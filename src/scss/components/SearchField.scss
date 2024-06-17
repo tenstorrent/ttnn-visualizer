@@ -1,0 +1,29 @@
+@use '../definitions/colours' as *;
+
+.search-field {
+    display: flex;
+    min-width: 250px;
+    margin-bottom: 30px;
+
+    .bp5-input-group .bp5-input:not(:last-child) {
+        padding-right: 30px !important;
+    }
+
+    .bp5-input-group {
+        display: flex;
+        align-items: center;
+        min-width: 270px;
+
+        .bp5-input-action {
+            top: unset;
+
+            > .bp5-icon {
+                margin-right: 5px;
+
+                svg {
+                    fill: $tt-dark-gray;
+                }
+            }
+        }
+    }
+}

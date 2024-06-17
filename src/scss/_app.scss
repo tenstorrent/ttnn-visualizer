@@ -3,10 +3,6 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 @use 'definitions/colours' as *;
 
-body{
-    background: $tt-background;
-}
-
 .app-header {
     margin-bottom: 1rem;
 }
@@ -27,15 +23,8 @@ body{
     margin: 0 auto;
 
     legend {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #fefef6;
-    }
-
-    .collapsible-content {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
+        font-size: 24px;
+        font-weight: 700;
     }
 }
 
@@ -56,48 +45,10 @@ body{
             gap: 10px;
         }
     }
+
     .buffer-view{
         svg{
             fill: $tt-light-gray;
-        }
-    }
-}
-
-.op-params {
-    li {
-        display: flex;
-        gap: 5px;
-
-        &::marker {
-            color: $tt-yellow;
-        }
-    }
-}
-
-.search-field {
-    display: flex;
-    min-width: 250px;
-    margin-bottom: 30px;
-
-    .bp5-input-group .bp5-input:not(:last-child) {
-        padding-right: 30px !important;
-    }
-
-    .bp5-input-group {
-        display: flex;
-        align-items: center;
-        min-width: 270px;
-
-        .bp5-input-action {
-            top: unset;
-
-            > .bp5-icon {
-                margin-right: 5px;
-
-                svg {
-                    fill: $tt-dark-gray;
-                }
-            }
         }
     }
 }

@@ -1,5 +1,5 @@
 export interface Operation {
-    id: string;
+    id: number;
     name: string;
     arguments: { name: string; value: string }[];
 }

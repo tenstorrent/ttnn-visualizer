@@ -11,7 +11,8 @@ import SearchField from './SearchField';
 import FilterableComponent from './FilterableComponent';
 import Collapsible from './Collapsible';
 import OperationComponent from './OperationComponent';
-import { Operation } from '../model/Graph.ts';
+import { Operation } from '../model/Graph';
+import OperationArguments from './OperationArguments';
 
 const OperationList = () => {
     // useEffect(() => {
@@ -48,7 +49,7 @@ const OperationList = () => {
                     <SearchField
                         placeholder='Filter operations'
                         searchQuery={filterQuery}
-                        onQueryChanged={setFilterQuery}
+                        onQueryChanged={(value) => setFilterQuery(value)}
                         controls={
                             [
                                 // <Tooltip2
@@ -73,57 +74,84 @@ const OperationList = () => {
                     />
                     {isLoading && <div>Loading...</div>}
                     {error && <div>An error occurred: {error.message}</div>}
-                    {data &&
-                        data.map((operation) => {
-                            return (
-                                <FilterableComponent
-                                    key={operation.id}
-                                    filterableString={operation.name}
-                                    filterQuery={filterQuery}
-                                    component={
-                                        <div className='op'>
-                                            <Collapsible
-                                                label={
-                                                    <OperationComponent
-                                                        operation={operation}
-                                                        filterQuery={filterQuery}
+                    {data?.map((operation) => {
+                        return (
+                            <FilterableComponent
+                                key={operation.id}
+                                filterableString={operation.name}
+                                filterQuery={filterQuery}
+                                component={
+                                    <div className='op'>
+                                        <Collapsible
+                                            label={
+                                                <OperationComponent operation={operation} filterQuery={filterQuery} />
+                                            }
+                                            keepChildrenMounted={false}
+                                            additionalElements={
+                                                <Link to={`/operations/${operation.id}`}>
+                                                    <Button
+                                                        title='Buffer view'
+                                                        minimal
+                                                        small
+                                                        className='buffer-view'
+                                                        icon={IconNames.SEGMENTED_CONTROL}
                                                     />
-                                                }
-                                                additionalElements={
-                                                    <Link to={`/operations/${operation.id}`}>
-                                                        <Button
-                                                            title='Buffer view'
-                                                            minimal
-                                                            small
-                                                            className='buffer-view'
-                                                            icon={IconNames.SEGMENTED_CONTROL}
-                                                        />
-                                                    </Link>
-                                                }
-                                                isOpen={false}
-                                            >
+                                                </Link>
+                                            }
+                                            isOpen={false}
+                                        >
+                                            <div className='arguments-wrapper'>
                                                 {operation.arguments && (
-                                                    <div className='collapsible-content'>
-                                                        <ul className='op-params'>
-                                                            {operation.arguments.map((arg) => (
-                                                                <li key={operation.id + arg.name}>
-                                                                    <strong>{arg.name}: </strong>
-                                                                    <pre>{arg.value}</pre>
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                    </div>
+                                                    <OperationArguments
+                                                        operationId={operation.id}
+                                                        data={operation.arguments}
+                                                    />
                                                 )}
-                                            </Collapsible>
-                                        </div>
-                                    }
-                                />
-                            );
-                        })}
+                                            </div>
+                                        </Collapsible>
+                                    </div>
+                                }
+                            />
+                        );
+                    })}
                 </div>
             </fieldset>
         </div>
     );
 };
+
+// function formatArguments(args: Array<Object>) {
+//     const formattedArguments = [];
+//     const shapeRegex = new RegExp(/shape=(Shape\(\[.*\]\))/);
+//     const argumentRegex = new RegExp(/(\S*)=((?:(?!,|\)").)*)/g);
+
+//     args.forEach((a) => {
+//         let m;
+
+//         while ((m = argumentRegex.exec(a.value)) !== null) {
+//             // This is necessary to avoid infinite loops with zero-width matches
+//             if (m.index === argumentRegex.lastIndex) {
+//                 argumentRegex.lastIndex++;
+//             }
+
+//             a[m[1]] = m[2];
+
+//             // The result can be accessed through the `m`-variable.
+//             // m.forEach((match, groupIndex) => {
+//             //     console.log(`Found match, group ${groupIndex}: ${match}`);
+//             //     if (groupIndex !== 0) {
+//             //         formattedArguments.push({
+//             //             name: a.name,
+//             //             arguments: shape && shape[1],
+//             //         });
+//             //     }
+//             // });
+//         }
+
+//         formattedArguments.push(a);
+//     });
+
+//     return formattedArguments;
+// }
 
 export default OperationList;
