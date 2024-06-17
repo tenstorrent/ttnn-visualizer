@@ -6,29 +6,27 @@
 
 .operation-arguments {
     border-collapse: collapse;
-    color: $tt-dark-gray;
+    color: $tt-white-text;
     width: 100%;
 
     caption {
         text-align: left;
-        color: $tt-white-text;
         font-size: 16px;
         font-weight: 700;
         margin-bottom: 10px;
     }
 
     tr {
-        background-color: $tt-extra-light-gray;
-        background-color: #f6f6f6;
+        background-color: $tt-slight-off-background;
 
         &:nth-of-type(odd) {
-            background: $tt-light-gray;
+            background-color: $tt-off-background;
         }
 
         th {
             font-weight: 700;
             color: $tt-white-text;
-            background: $tt-purple;
+            background-color: $tt-purple;
             text-align: left;
             padding: 10px;
         }
