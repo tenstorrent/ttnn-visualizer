@@ -14,24 +14,32 @@ function ExpandableTensor({ tensor }: ExpandableTensorProps) {
     const splitTensor = tensor.split('\n');
     const cellRef = useRef<null | HTMLTableCellElement>(null);
 
-    function handleExpandToggle() {
+    function handleExpandToggle(shouldScrollTo?: boolean) {
         setIsExpanded((previousValue) => !previousValue);
 
-        cellRef?.current?.scrollIntoView();
+        if (shouldScrollTo) {
+            cellRef.current?.scrollIntoView();
+        }
     }
 
     return (
         <td className='expandable-tensor' ref={cellRef}>
-            <div className='expandable-tensor-tools'>
-                <Switch
-                    className='expand-button'
-                    label={isExpanded ? 'Hide full tensor' : 'Show full tensor'}
-                    onChange={() => handleExpandToggle()}
-                    checked={isExpanded}
-                />
-            </div>
+            <Switch
+                className='expand-button'
+                label={isExpanded ? 'Hide full tensor' : 'Show full tensor'}
+                onChange={() => handleExpandToggle()}
+                checked={isExpanded}
+            />
             {isExpanded ? (
-                <pre>{tensor}</pre>
+                <>
+                    <pre>{tensor}</pre>
+                    <Switch
+                        className='expand-button'
+                        label='Hide full tensor'
+                        onChange={() => handleExpandToggle(true)}
+                        checked={isExpanded}
+                    />
+                </>
             ) : (
                 <>
                     <p>{splitTensor[0]}</p>

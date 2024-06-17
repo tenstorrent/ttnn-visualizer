@@ -23,14 +23,6 @@
             background-color: $tt-off-background;
         }
 
-        th {
-            font-weight: 700;
-            color: $tt-white-text;
-            background-color: $tt-purple;
-            text-align: left;
-            padding: 10px;
-        }
-
         td {
             padding: 6px 12px;
 
@@ -38,20 +30,6 @@
                 font-weight: 700;
                 vertical-align: top;
             }
-        }
-    }
-
-    .expand-tensor {
-        background-color: transparent;
-        border: 0;
-        padding: 0;
-        color: $tt-light-blue;
-
-        &:hover,
-        &:focus {
-            background-color: transparent;
-            text-decoration: underline;
-            color: $tt-dark-blue;
         }
     }
 }

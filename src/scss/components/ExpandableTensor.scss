@@ -2,12 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 .expandable-tensor {
-    position: relative;
-    background-color: inherit;
-
     .expandable-tensor-tools {
-        padding-bottom: 10px;
-        position: sticky;
+        margin-bottom: 10px;
         top: 0;
         background-color: inherit;
 

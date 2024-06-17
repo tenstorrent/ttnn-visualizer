@@ -18,12 +18,6 @@ function OperationArguments({ operationId, data }: OperationArgumentsProps) {
     return (
         <table className='operation-arguments'>
             <caption>Arguments</caption>
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Value</th>
-                </tr>
-            </thead>
             <tbody>
                 {data?.map((arg) => (
                     <tr key={`${operationId}-${arg.name}`}>
