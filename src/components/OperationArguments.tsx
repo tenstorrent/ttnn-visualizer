@@ -28,7 +28,7 @@ function OperationArguments({ operationId, data }: OperationArgumentsProps) {
                 {data?.map((arg) => (
                     <tr key={`${operationId}-${arg.name}`}>
                         <td>{arg.name}</td>
-                        <td>{isTensor(arg.value) ? <ExpandableTensor tensor={arg.value} /> : arg.value}</td>
+                        <td>{isLengthyTensor(arg.value) ? <ExpandableTensor tensor={arg.value} /> : arg.value}</td>
                     </tr>
                 ))}
             </tbody>
@@ -36,8 +36,8 @@ function OperationArguments({ operationId, data }: OperationArgumentsProps) {
     );
 }
 
-function isTensor(value: string) {
-    return value.toLowerCase().includes('tensor');
+function isLengthyTensor(value: string) {
+    return value.toLowerCase().includes('\n');
 }
 
 export default OperationArguments;
