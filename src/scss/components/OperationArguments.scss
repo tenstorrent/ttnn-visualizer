@@ -42,4 +42,18 @@
             }
         }
     }
+
+    .expand-tensor {
+        background-color: transparent;
+        border: 0;
+        padding: 0;
+        color: $tt-light-blue;
+
+        &:hover,
+        &:focus {
+            background-color: transparent;
+            text-decoration: underline;
+            color: $tt-dark-blue;
+        }
+    }
 }

@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
+import { Switch } from '@blueprintjs/core';
+import { useState } from 'react';
 import 'styles/components/OperationArguments.scss';
 
 interface Arguments {
@@ -10,10 +12,11 @@ interface Arguments {
 }
 
 interface OperationArgumentsProps {
+    operationId: number;
     data: Array<Arguments>;
 }
 
-function OperationArguments({ data }: OperationArgumentsProps) {
+function OperationArguments({ operationId, data }: OperationArgumentsProps) {
     return (
         <table className='operation-arguments'>
             <caption>Arguments</caption>
@@ -25,13 +28,45 @@ function OperationArguments({ data }: OperationArgumentsProps) {
             </thead>
             <tbody>
                 {data?.map((arg) => (
-                    <tr>
+                    <tr key={`${operationId}-${arg.name}`}>
                         <td>{arg.name}</td>
-                        <td>{arg.value}</td>
+                        <td>{isTensor(arg.value) ? <ParsedTensor tensor={arg.value} /> : arg.value}</td>
                     </tr>
                 ))}
             </tbody>
         </table>
+    );
+}
+
+function isTensor(value: string) {
+    return value.toLowerCase().includes('tensor');
+}
+
+interface ParsedTensorProps {
+    tensor: string;
+}
+
+function ParsedTensor({ tensor }: ParsedTensorProps) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const splitTensor = tensor.split('\n');
+
+    return (
+        <>
+            {isExpanded ? (
+                <pre>{tensor}</pre>
+            ) : (
+                <>
+                    <p>{splitTensor[0]}</p>
+                    <p>.........</p>
+                    <p>{splitTensor[splitTensor.length - 1]}</p>
+                </>
+            )}
+            <Switch
+                label={isExpanded ? 'Hide full tensor' : 'Show full tensor'}
+                onChange={() => setIsExpanded((previousValue) => !previousValue)}
+                checked={isExpanded}
+            />
+        </>
     );
 }
 

@@ -74,47 +74,46 @@ const OperationList = () => {
                     />
                     {isLoading && <div>Loading...</div>}
                     {error && <div>An error occurred: {error.message}</div>}
-                    {data &&
-                        data.map((operation) => {
-                            return (
-                                <FilterableComponent
-                                    key={operation.id}
-                                    filterableString={operation.name}
-                                    filterQuery={filterQuery}
-                                    component={
-                                        <div className='op'>
-                                            <Collapsible
-                                                label={
-                                                    <OperationComponent
-                                                        operation={operation}
-                                                        filterQuery={filterQuery}
+                    {data?.map((operation) => {
+                        return (
+                            <FilterableComponent
+                                key={operation.id}
+                                filterableString={operation.name}
+                                filterQuery={filterQuery}
+                                component={
+                                    <div className='op'>
+                                        <Collapsible
+                                            label={
+                                                <OperationComponent operation={operation} filterQuery={filterQuery} />
+                                            }
+                                            keepChildrenMounted={false}
+                                            additionalElements={
+                                                <Link to={`/operations/${operation.id}`}>
+                                                    <Button
+                                                        title='Buffer view'
+                                                        minimal
+                                                        small
+                                                        className='buffer-view'
+                                                        icon={IconNames.SEGMENTED_CONTROL}
                                                     />
-                                                }
-                                                keepChildrenMounted={false}
-                                                additionalElements={
-                                                    <Link to={`/operations/${operation.id}`}>
-                                                        <Button
-                                                            title='Buffer view'
-                                                            minimal
-                                                            small
-                                                            className='buffer-view'
-                                                            icon={IconNames.SEGMENTED_CONTROL}
-                                                        />
-                                                    </Link>
-                                                }
-                                                isOpen={false}
-                                            >
-                                                <div className='arguments-wrapper'>
-                                                    {operation.arguments && (
-                                                        <OperationArguments data={operation.arguments} />
-                                                    )}
-                                                </div>
-                                            </Collapsible>
-                                        </div>
-                                    }
-                                />
-                            );
-                        })}
+                                                </Link>
+                                            }
+                                            isOpen={false}
+                                        >
+                                            <div className='arguments-wrapper'>
+                                                {operation.arguments && (
+                                                    <OperationArguments
+                                                        operationId={operation.id}
+                                                        data={operation.arguments}
+                                                    />
+                                                )}
+                                            </div>
+                                        </Collapsible>
+                                    </div>
+                                }
+                            />
+                        );
+                    })}
                 </div>
             </fieldset>
         </div>
