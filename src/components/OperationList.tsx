@@ -81,8 +81,6 @@ const OperationList = () => {
                             ]
                         }
                     />
-                    {isLoading && <div>Loading...</div>}
-                    {error && <div>An error occurred: {error.message}</div>}
                     <div
                         ref={parentRef}
                         style={{
@@ -156,7 +154,10 @@ const OperationList = () => {
                                         );
                                     })
                                 ) : (
-                                    <p>No results</p>
+                                    <>
+                                        {isLoading ? <p>Loading...</p> : <p>No results</p>}
+                                        {error && <div>An error occurred: {error.message}</div>}
+                                    </>
                                 )}
                             </div>
                         </div>

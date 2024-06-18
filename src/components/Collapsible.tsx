@@ -15,6 +15,7 @@ interface CollapsibleProps {
     styles?: React.CSSProperties;
     contentStyles?: React.CSSProperties;
     keepChildrenMounted?: boolean;
+    onClick?: () => void;
 }
 
 const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
@@ -24,6 +25,7 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
     styles = {},
     contentStyles = {},
     keepChildrenMounted = true,
+    onClick,
     children,
 }) => {
     const [isOpenState, setIsOpenState] = React.useState(isOpen);
@@ -36,7 +38,17 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
         <div className='collapsible-component' style={styles}>
             <div className='collapsible-controls'>
                 {children && (
-                    <Button small minimal onClick={() => setIsOpenState(!isOpenState)} rightIcon={icon}>
+                    <Button
+                        small
+                        minimal
+                        onClick={() => {
+                            if (onClick) {
+                                onClick();
+                            }
+                            setIsOpenState(!isOpenState);
+                        }}
+                        rightIcon={icon}
+                    >
                         {label}
                     </Button>
                 )}
