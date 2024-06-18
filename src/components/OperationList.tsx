@@ -1,36 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
-import { useState } from 'react';
+
+import { useRef, useState } from 'react';
 import axios, { AxiosError } from 'axios';
 import { Button } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useQuery } from 'react-query';
 import { Link } from 'react-router-dom';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import SearchField from './SearchField';
-import FilterableComponent from './FilterableComponent';
 import Collapsible from './Collapsible';
 import OperationComponent from './OperationComponent';
 import { Operation } from '../model/Graph';
 import OperationArguments from './OperationArguments';
 
 const OperationList = () => {
-    // useEffect(() => {
-    //     const fetchOperations = async () => {
-    //         const response = await axios.get('/api/get-operations');
-    //         return response.data;
-    //     };
-    //
-    //     fetchOperations()
-    //         // eslint-disable-next-line promise/always-return
-    //         .then((data) => {
-    //             // console.log(data);
-    //             setOperations(data);
-    //         })
-    //         .catch((error) => {
-    //             console.error('Error fetching operations:', error);
-    //         });
-    // }, []);
+    const [filterQuery, setFilterQuery] = useState('');
+    const [activated, setActivated] = useState<number[]>([]);
 
     const fetchOperations = async () => {
         const { data } = await axios.get('/api/get-operations');
@@ -38,7 +25,29 @@ const OperationList = () => {
     };
     const { data, error, isLoading } = useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
 
-    const [filterQuery, setFilterQuery] = useState('');
+    const filteredData = data && filterQuery ? data?.filter((entry) => entry.name.includes(filterQuery)) : data;
+
+    const parentRef = useRef(null);
+    const virtualizer = useVirtualizer({
+        count: filteredData?.length || 10,
+        getScrollElement: () => parentRef.current,
+        estimateSize: () => 39,
+        overscan: 10,
+    });
+    const virtualItems = virtualizer.getVirtualItems();
+
+    function onClickItem(operationId: number) {
+        setActivated((currentValues) => {
+            const array = [...currentValues];
+
+            if (array.includes(operationId)) {
+                return array.filter((entry) => entry !== operationId);
+            }
+
+            array.push(operationId);
+            return array;
+        });
+    }
 
     return (
         <div className='app'>
@@ -74,84 +83,88 @@ const OperationList = () => {
                     />
                     {isLoading && <div>Loading...</div>}
                     {error && <div>An error occurred: {error.message}</div>}
-                    {data?.map((operation) => {
-                        return (
-                            <FilterableComponent
-                                key={operation.id}
-                                filterableString={operation.name}
-                                filterQuery={filterQuery}
-                                component={
-                                    <div className='op'>
-                                        <Collapsible
-                                            label={
-                                                <OperationComponent operation={operation} filterQuery={filterQuery} />
-                                            }
-                                            keepChildrenMounted={false}
-                                            additionalElements={
-                                                <Link to={`/operations/${operation.id}`}>
-                                                    <Button
-                                                        title='Buffer view'
-                                                        minimal
-                                                        small
-                                                        className='buffer-view'
-                                                        icon={IconNames.SEGMENTED_CONTROL}
-                                                    />
-                                                </Link>
-                                            }
-                                            isOpen={false}
-                                        >
-                                            <div className='arguments-wrapper'>
-                                                {operation.arguments && (
-                                                    <OperationArguments
-                                                        operationId={operation.id}
-                                                        data={operation.arguments}
-                                                    />
-                                                )}
+                    <div
+                        ref={parentRef}
+                        style={{
+                            height: `400px`,
+                            width: '100%',
+                            overflowY: 'auto',
+                            contain: 'strict',
+                        }}
+                    >
+                        <div
+                            style={{
+                                height: virtualizer.getTotalSize(),
+                                width: '100%',
+                                position: 'relative',
+                            }}
+                        >
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    width: '100%',
+                                    transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
+                                }}
+                            >
+                                {filteredData?.length ? (
+                                    virtualItems.map((virtualRow) => {
+                                        const operation = filteredData[virtualRow.index];
+
+                                        return (
+                                            <div
+                                                key={virtualRow.index}
+                                                data-index={virtualRow.index}
+                                                ref={virtualizer.measureElement}
+                                                className={virtualRow.index % 2 ? 'ListItemOdd' : 'ListItemEven'}
+                                            >
+                                                <div className='op'>
+                                                    <Collapsible
+                                                        onClick={() => onClickItem(operation.id)}
+                                                        label={
+                                                            <OperationComponent
+                                                                operation={operation}
+                                                                filterQuery={filterQuery}
+                                                            />
+                                                        }
+                                                        keepChildrenMounted={false}
+                                                        additionalElements={
+                                                            <Link to={`/operations/${operation.id}`}>
+                                                                <Button
+                                                                    title='Buffer view'
+                                                                    minimal
+                                                                    small
+                                                                    className='buffer-view'
+                                                                    icon={IconNames.SEGMENTED_CONTROL}
+                                                                />
+                                                            </Link>
+                                                        }
+                                                        isOpen={activated.includes(operation.id)}
+                                                    >
+                                                        <div className='arguments-wrapper'>
+                                                            {operation.arguments && (
+                                                                <OperationArguments
+                                                                    operationId={operation.id}
+                                                                    data={operation.arguments}
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    </Collapsible>
+                                                </div>
                                             </div>
-                                        </Collapsible>
-                                    </div>
-                                }
-                            />
-                        );
-                    })}
+                                        );
+                                    })
+                                ) : (
+                                    <p>No results</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </fieldset>
         </div>
     );
 };
-
-// function formatArguments(args: Array<Object>) {
-//     const formattedArguments = [];
-//     const shapeRegex = new RegExp(/shape=(Shape\(\[.*\]\))/);
-//     const argumentRegex = new RegExp(/(\S*)=((?:(?!,|\)").)*)/g);
-
-//     args.forEach((a) => {
-//         let m;
-
-//         while ((m = argumentRegex.exec(a.value)) !== null) {
-//             // This is necessary to avoid infinite loops with zero-width matches
-//             if (m.index === argumentRegex.lastIndex) {
-//                 argumentRegex.lastIndex++;
-//             }
-
-//             a[m[1]] = m[2];
-
-//             // The result can be accessed through the `m`-variable.
-//             // m.forEach((match, groupIndex) => {
-//             //     console.log(`Found match, group ${groupIndex}: ${match}`);
-//             //     if (groupIndex !== 0) {
-//             //         formattedArguments.push({
-//             //             name: a.name,
-//             //             arguments: shape && shape[1],
-//             //         });
-//             //     }
-//             // });
-//         }
-
-//         formattedArguments.push(a);
-//     });
-
-//     return formattedArguments;
-// }
 
 export default OperationList;
