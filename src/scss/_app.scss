@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 @use 'definitions/colours' as *;
 
 .app-header {
@@ -15,10 +16,6 @@
     border: solid 1px #909096;
     border-radius: 5px;
     padding: 5px 40px 10px;
-    display: inline-flex;
-    gap: 20px;
-    align-items: start;
-    justify-content: stretch;
     min-height: fit-content;
     margin: 0 auto;
 
