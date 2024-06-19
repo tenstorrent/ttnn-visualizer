@@ -1,54 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 @use 'definitions/colours' as *;
 
 .app-header {
     margin-bottom: 1rem;
-}
-
-.ops {
-    margin-top: 10px;
-}
-
-.operations-wrap {
-    border: solid 1px #909096;
-    border-radius: 5px;
-    padding: 5px 40px 10px;
-    display: inline-flex;
-    gap: 20px;
-    align-items: start;
-    justify-content: stretch;
-    min-height: fit-content;
-    margin: 0 auto;
-
-    legend {
-        font-size: 24px;
-        font-weight: 700;
-    }
-}
-
-.op {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    margin-bottom: 15px;
-
-    .bp5-control {
-        margin-bottom: 0;
-    }
-
-    .collapsible-component {
-        .bp5-button-text {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-    }
-
-    .buffer-view{
-        svg{
-            fill: $tt-light-gray;
-        }
-    }
 }
