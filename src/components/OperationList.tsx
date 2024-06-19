@@ -111,7 +111,7 @@ const OperationList = () => {
                                             ref={virtualizer.measureElement}
                                         >
                                             <Collapsible
-                                                onClick={() => onClickItem(operation.id)}
+                                                onExpandToggle={() => onClickItem(operation.id)}
                                                 label={
                                                     <OperationComponent
                                                         operation={operation}
