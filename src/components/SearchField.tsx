@@ -10,7 +10,7 @@ import 'styles/components/SearchField.scss';
 interface SearchFieldProps {
     searchQuery: string;
     onQueryChanged: (query: string) => void;
-    controls: React.ReactElement[];
+    controls?: React.ReactElement[];
     placeholder?: string;
     disabled?: boolean;
 }
