@@ -18,27 +18,30 @@ import 'styles/components/OperationsList.scss';
 import LoadingSpinner from './LoadingSpinner';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
+const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
 
 const OperationList = () => {
     const [filterQuery, setFilterQuery] = useState('');
     const [expandedOperations, setExpandedOperations] = useState<number[]>([]);
 
     const fetchOperations = async () => {
-        const { data } = await axios.get('/api/get-operations');
-        return data;
+        const { data: operationList } = await axios.get('/api/get-operations');
+
+        return operationList;
     };
     const { data, error, isLoading } = useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
 
-    const filteredData = data && filterQuery ? data?.filter((entry) => entry.name.includes(filterQuery)) : data;
+    const filteredOperationsList =
+        data && filterQuery ? data?.filter((entry) => entry.name.includes(filterQuery)) : data;
 
     const parentRef = useRef(null);
     const virtualizer = useVirtualizer({
-        count: filteredData?.length || PLACEHOLDER_ARRAY_SIZE,
+        count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => parentRef.current,
-        estimateSize: () => 39,
+        estimateSize: () => OPERATION_EL_HEIGHT,
     });
     const virtualItems = virtualizer.getVirtualItems();
-    const count = filteredData?.length || PLACEHOLDER_ARRAY_SIZE;
+    const count = filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE;
 
     function onClickItem(operationId: number) {
         setExpandedOperations((currentValues) => {
@@ -96,9 +99,9 @@ const OperationList = () => {
                                 transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
                             }}
                         >
-                            {filteredData?.length ? (
+                            {filteredOperationsList?.length ? (
                                 virtualItems.map((virtualRow) => {
-                                    const operation = filteredData[virtualRow.index];
+                                    const operation = filteredOperationsList[virtualRow.index];
 
                                     return (
                                         <li
