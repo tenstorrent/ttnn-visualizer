@@ -34,25 +34,25 @@ const OperationList = () => {
     const filteredOperationsList =
         data && filterQuery ? data?.filter((entry) => entry.name.includes(filterQuery)) : data;
 
-    const parentRef = useRef(null);
+    const scrollElementRef = useRef(null);
     const virtualizer = useVirtualizer({
         count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
-        getScrollElement: () => parentRef.current,
+        getScrollElement: () => scrollElementRef.current,
         estimateSize: () => OPERATION_EL_HEIGHT,
     });
     const virtualItems = virtualizer.getVirtualItems();
     const count = filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE;
 
     function onClickItem(operationId: number) {
-        setExpandedOperations((currentValues) => {
-            const array = [...currentValues];
+        setExpandedOperations((currentIds) => {
+            const operationIds = [...currentIds];
 
-            if (array.includes(operationId)) {
-                return array.filter((entry) => entry !== operationId);
+            if (operationIds.includes(operationId)) {
+                return operationIds.filter((id) => id !== operationId);
             }
 
-            array.push(operationId);
-            return array;
+            operationIds.push(operationId);
+            return operationIds;
         });
     }
 
@@ -85,7 +85,7 @@ const OperationList = () => {
                     </button>
                 </div>
 
-                <div ref={parentRef} className='scrollable-element'>
+                <div ref={scrollElementRef} className='scrollable-element'>
                     <div
                         style={{
                             // Div is sized to the maximum required to render all list items
