@@ -15,6 +15,7 @@ import OperationComponent from './OperationComponent';
 import { Operation } from '../model/Graph';
 import OperationArguments from './OperationArguments';
 import 'styles/components/OperationsList.scss';
+import LoadingSpinner from './LoadingSpinner';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 
@@ -57,7 +58,7 @@ const OperationList = () => {
             <fieldset className='operations-wrap'>
                 <legend>Operations</legend>
 
-                <div className='buttons'>
+                <div className='list-controls'>
                     <SearchField
                         placeholder='Filter operations'
                         searchQuery={filterQuery}
@@ -150,7 +151,7 @@ const OperationList = () => {
                                 })
                             ) : (
                                 <>
-                                    {isLoading ? <p>Loading...</p> : <p>No results</p>}
+                                    {isLoading ? <LoadingSpinner /> : <p>No results.</p>}
                                     {error && <div>An error occurred: {error.message}</div>}
                                 </>
                             )}
