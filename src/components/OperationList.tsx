@@ -70,15 +70,7 @@ const OperationList = () => {
                             virtualizer.scrollToIndex(0);
                         }}
                     >
-                        Start
-                    </button>
-                    <button
-                        type='button'
-                        onClick={() => {
-                            virtualizer.scrollToIndex(Math.round(count / 2));
-                        }}
-                    >
-                        Middle
+                        Go to Start
                     </button>
                     <button
                         type='button'
@@ -86,7 +78,7 @@ const OperationList = () => {
                             virtualizer.scrollToIndex(count - 1);
                         }}
                     >
-                        End
+                        Go to End
                     </button>
                 </div>
 
