@@ -14,10 +14,13 @@ import Collapsible from './Collapsible';
 import OperationComponent from './OperationComponent';
 import { Operation } from '../model/Graph';
 import OperationArguments from './OperationArguments';
+import 'styles/components/OperationsList.scss';
+
+const PLACEHOLDER_ARRAY_SIZE = 10;
 
 const OperationList = () => {
     const [filterQuery, setFilterQuery] = useState('');
-    const [activated, setActivated] = useState<number[]>([]);
+    const [expandedOperations, setExpandedOperations] = useState<number[]>([]);
 
     const fetchOperations = async () => {
         const { data } = await axios.get('/api/get-operations');
@@ -29,15 +32,15 @@ const OperationList = () => {
 
     const parentRef = useRef(null);
     const virtualizer = useVirtualizer({
-        count: filteredData?.length || 10,
+        count: filteredData?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => parentRef.current,
         estimateSize: () => 39,
-        overscan: 10,
     });
     const virtualItems = virtualizer.getVirtualItems();
+    const count = filteredData?.length || PLACEHOLDER_ARRAY_SIZE;
 
     function onClickItem(operationId: number) {
-        setActivated((currentValues) => {
+        setExpandedOperations((currentValues) => {
             const array = [...currentValues];
 
             if (array.includes(operationId)) {
@@ -54,113 +57,104 @@ const OperationList = () => {
             <fieldset className='operations-wrap'>
                 <legend>Operations</legend>
 
-                <div className='ops'>
+                <div className='buttons'>
                     <SearchField
                         placeholder='Filter operations'
                         searchQuery={filterQuery}
                         onQueryChanged={(value) => setFilterQuery(value)}
-                        controls={
-                            [
-                                // <Tooltip2
-                                //     content='Select all filtered operations'
-                                //     position={PopoverPosition.RIGHT}
-                                //     key='select-all-ops'
-                                // >
-                                //     <Button icon={IconNames.CUBE_ADD}/>
-                                // </Tooltip2>,
-                                // <Tooltip2
-                                //     content='Deselect all filtered operations'
-                                //     position={PopoverPosition.RIGHT}
-                                //     key='deselect-all-ops'
-                                // >
-                                //     <Button
-                                //         icon={IconNames.CUBE_REMOVE}
-                                //
-                                //     />
-                                // </Tooltip2>,
-                            ]
-                        }
                     />
-                    <div
-                        ref={parentRef}
-                        style={{
-                            height: `400px`,
-                            width: '100%',
-                            overflowY: 'auto',
-                            contain: 'strict',
+                    <button
+                        type='button'
+                        onClick={() => {
+                            virtualizer.scrollToIndex(0);
                         }}
                     >
-                        <div
+                        Start
+                    </button>
+                    <button
+                        type='button'
+                        onClick={() => {
+                            virtualizer.scrollToIndex(Math.round(count / 2));
+                        }}
+                    >
+                        Middle
+                    </button>
+                    <button
+                        type='button'
+                        onClick={() => {
+                            virtualizer.scrollToIndex(count - 1);
+                        }}
+                    >
+                        End
+                    </button>
+                </div>
+
+                <div ref={parentRef} className='scrollable-element'>
+                    <div
+                        style={{
+                            // Div is sized to the maximum required to render all list items
+                            height: virtualizer.getTotalSize(),
+                        }}
+                    >
+                        <ul
+                            className='operations-list'
                             style={{
-                                height: virtualizer.getTotalSize(),
-                                width: '100%',
-                                position: 'relative',
+                                // Tracks scroll position
+                                transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
                             }}
                         >
-                            <div
-                                style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    width: '100%',
-                                    transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
-                                }}
-                            >
-                                {filteredData?.length ? (
-                                    virtualItems.map((virtualRow) => {
-                                        const operation = filteredData[virtualRow.index];
+                            {filteredData?.length ? (
+                                virtualItems.map((virtualRow) => {
+                                    const operation = filteredData[virtualRow.index];
 
-                                        return (
-                                            <div
-                                                key={virtualRow.index}
-                                                data-index={virtualRow.index}
-                                                ref={virtualizer.measureElement}
-                                                className={virtualRow.index % 2 ? 'ListItemOdd' : 'ListItemEven'}
+                                    return (
+                                        <li
+                                            className='operation'
+                                            key={virtualRow.index}
+                                            data-index={virtualRow.index}
+                                            ref={virtualizer.measureElement}
+                                        >
+                                            <Collapsible
+                                                onClick={() => onClickItem(operation.id)}
+                                                label={
+                                                    <OperationComponent
+                                                        operation={operation}
+                                                        filterQuery={filterQuery}
+                                                    />
+                                                }
+                                                keepChildrenMounted={false}
+                                                additionalElements={
+                                                    <Link to={`/operations/${operation.id}`}>
+                                                        <Button
+                                                            title='Buffer view'
+                                                            minimal
+                                                            small
+                                                            className='buffer-view'
+                                                            icon={IconNames.SEGMENTED_CONTROL}
+                                                        />
+                                                    </Link>
+                                                }
+                                                isOpen={expandedOperations.includes(operation.id)}
                                             >
-                                                <div className='op'>
-                                                    <Collapsible
-                                                        onClick={() => onClickItem(operation.id)}
-                                                        label={
-                                                            <OperationComponent
-                                                                operation={operation}
-                                                                filterQuery={filterQuery}
-                                                            />
-                                                        }
-                                                        keepChildrenMounted={false}
-                                                        additionalElements={
-                                                            <Link to={`/operations/${operation.id}`}>
-                                                                <Button
-                                                                    title='Buffer view'
-                                                                    minimal
-                                                                    small
-                                                                    className='buffer-view'
-                                                                    icon={IconNames.SEGMENTED_CONTROL}
-                                                                />
-                                                            </Link>
-                                                        }
-                                                        isOpen={activated.includes(operation.id)}
-                                                    >
-                                                        <div className='arguments-wrapper'>
-                                                            {operation.arguments && (
-                                                                <OperationArguments
-                                                                    operationId={operation.id}
-                                                                    data={operation.arguments}
-                                                                />
-                                                            )}
-                                                        </div>
-                                                    </Collapsible>
+                                                <div className='arguments-wrapper'>
+                                                    {operation.arguments && (
+                                                        <OperationArguments
+                                                            operationId={operation.id}
+                                                            data={operation.arguments}
+                                                        />
+                                                    )}
                                                 </div>
-                                            </div>
-                                        );
-                                    })
-                                ) : (
-                                    <>
-                                        {isLoading ? <p>Loading...</p> : <p>No results</p>}
-                                        {error && <div>An error occurred: {error.message}</div>}
-                                    </>
-                                )}
-                            </div>
-                        </div>
+                                            </Collapsible>
+                                        </li>
+                                    );
+                                })
+                            ) : (
+                                <>
+                                    {isLoading ? <p>Loading...</p> : <p>No results</p>}
+                                    {error && <div>An error occurred: {error.message}</div>}
+                                </>
+                            )}
+                        </ul>
                     </div>
                 </div>
             </fieldset>
