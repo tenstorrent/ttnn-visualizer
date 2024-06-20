@@ -7,19 +7,17 @@ import { Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import HighlightedText from './HighlightedText';
 import '../scss/components/Operation.scss';
-import { Operation } from '../model/Graph';
 
 interface OperationProps {
-    operation: Operation;
+    filterName: string;
     filterQuery: string;
 }
 
-const OperationComponent: React.FC<OperationProps> = ({ operation, filterQuery }) => {
+const OperationComponent: React.FC<OperationProps> = ({ filterName, filterQuery }) => {
     return (
         <div className='operation-component'>
             <Icon className='operation-icon' size={20} icon={IconNames.CUBE} />
-            <span>{operation.id}</span>
-            <HighlightedText text={operation.name} filter={filterQuery} />
+            <HighlightedText text={filterName} filter={filterQuery} />
             {/* <Button title='Operation tensor report' minimal small icon={IconNames.GRAPH} /> */}
             {/* <Button title='Stack trace' minimal small icon={IconNames.CODE} /> */}
             {/* <GoldenTensorComparisonIndicator value={op.goldenGlobal} /> */}
