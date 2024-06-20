@@ -42,6 +42,7 @@
             z-index: 1;
             position: sticky;
             left: 0;
+            pointer-events: none;
         }
 
         &.scroll-shade-top {

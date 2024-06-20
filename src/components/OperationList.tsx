@@ -101,125 +101,123 @@ const OperationList = () => {
     }, [data, filterQuery, shouldSortDescending]);
 
     return (
-        <div className='app'>
-            <fieldset className='operations-wrap'>
-                <legend>Operations</legend>
+        <fieldset className='operations-wrap'>
+            <legend>Operations</legend>
 
-                <div className='list-controls'>
-                    <SearchField
-                        placeholder='Filter operations'
-                        searchQuery={filterQuery}
-                        onQueryChanged={(value) => setFilterQuery(value)}
+            <div className='list-controls'>
+                <SearchField
+                    placeholder='Filter operations'
+                    searchQuery={filterQuery}
+                    onQueryChanged={(value) => setFilterQuery(value)}
+                />
+                <ButtonGroup minimal>
+                    <Button
+                        onClick={() => handleExpandAllToggle()}
+                        rightIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
                     />
-                    <ButtonGroup minimal>
-                        <Button
-                            onClick={() => handleExpandAllToggle()}
-                            rightIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
-                        />
-                        <Button
-                            onClick={() => handleReversingList()}
-                            icon={shouldSortDescending ? IconNames.SortAlphabeticalDesc : IconNames.SortAlphabetical}
-                        />
-                        <Button
-                            onClick={() => {
-                                virtualizer.scrollToIndex(0);
-                            }}
-                            icon={IconNames.DOUBLE_CHEVRON_UP}
-                        />
-                        <Button
-                            onClick={() => {
-                                virtualizer.scrollToIndex(numberOfOperations - 1);
-                            }}
-                            icon={IconNames.DOUBLE_CHEVRON_DOWN}
-                        />
-                    </ButtonGroup>
+                    <Button
+                        onClick={() => handleReversingList()}
+                        icon={shouldSortDescending ? IconNames.SortAlphabeticalDesc : IconNames.SortAlphabetical}
+                    />
+                    <Button
+                        onClick={() => {
+                            virtualizer.scrollToIndex(0);
+                        }}
+                        icon={IconNames.DOUBLE_CHEVRON_UP}
+                    />
+                    <Button
+                        onClick={() => {
+                            virtualizer.scrollToIndex(numberOfOperations - 1);
+                        }}
+                        icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                    />
+                </ButtonGroup>
 
-                    {!isLoading && (
-                        <p className='result-count'>
-                            {data && filterQuery
-                                ? `Showing ${numberOfOperations} of ${data.length} operations`
-                                : `Showing ${numberOfOperations} operations`}
-                        </p>
-                    )}
-                </div>
+                {!isLoading && (
+                    <p className='result-count'>
+                        {data && filterQuery
+                            ? `Showing ${numberOfOperations} of ${data.length} operations`
+                            : `Showing ${numberOfOperations} operations`}
+                    </p>
+                )}
+            </div>
 
+            <div
+                ref={scrollElementRef}
+                className={classNames('scrollable-element', {
+                    'scroll-shade-top': hasScrolledFromTop,
+                    'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
+                })}
+                onScroll={(event) => handleUserScrolling(event)}
+            >
                 <div
-                    ref={scrollElementRef}
-                    className={classNames('scrollable-element', {
-                        'scroll-shade-top': hasScrolledFromTop,
-                        'scroll-shade-bottom': !hasScrolledToBottom,
-                    })}
-                    onScroll={(event) => handleUserScrolling(event)}
+                    style={{
+                        // Div is sized to the maximum required to render all list items - our shade element heights
+                        height: virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT,
+                    }}
                 >
-                    <div
+                    <ul
+                        className='operations-list'
                         style={{
-                            // Div is sized to the maximum required to render all list items - our shade element heights
-                            height: virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT,
+                            // Tracks scroll position
+                            transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
                         }}
                     >
-                        <ul
-                            className='operations-list'
-                            style={{
-                                // Tracks scroll position
-                                transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
-                            }}
-                        >
-                            {filteredOperationsList?.length ? (
-                                virtualItems.map((virtualRow) => {
-                                    const operation = filteredOperationsList[virtualRow.index];
+                        {filteredOperationsList?.length ? (
+                            virtualItems.map((virtualRow) => {
+                                const operation = filteredOperationsList[virtualRow.index];
 
-                                    return (
-                                        <li
-                                            className='operation'
-                                            key={virtualRow.index}
-                                            data-index={virtualRow.index}
-                                            ref={virtualizer.measureElement}
-                                        >
-                                            <Collapsible
-                                                onExpandToggle={() => handleToggleCollapsible(operation.id)}
-                                                label={
-                                                    <OperationComponent
-                                                        filterName={getOperationFilterName(operation)}
-                                                        filterQuery={filterQuery}
+                                return (
+                                    <li
+                                        className='operation'
+                                        key={virtualRow.index}
+                                        data-index={virtualRow.index}
+                                        ref={virtualizer.measureElement}
+                                    >
+                                        <Collapsible
+                                            onExpandToggle={() => handleToggleCollapsible(operation.id)}
+                                            label={
+                                                <OperationComponent
+                                                    filterName={getOperationFilterName(operation)}
+                                                    filterQuery={filterQuery}
+                                                />
+                                            }
+                                            keepChildrenMounted={false}
+                                            additionalElements={
+                                                <Link to={`/operations/${operation.id}`}>
+                                                    <Button
+                                                        title='Buffer view'
+                                                        minimal
+                                                        small
+                                                        className='buffer-view'
+                                                        icon={IconNames.SEGMENTED_CONTROL}
                                                     />
-                                                }
-                                                keepChildrenMounted={false}
-                                                additionalElements={
-                                                    <Link to={`/operations/${operation.id}`}>
-                                                        <Button
-                                                            title='Buffer view'
-                                                            minimal
-                                                            small
-                                                            className='buffer-view'
-                                                            icon={IconNames.SEGMENTED_CONTROL}
-                                                        />
-                                                    </Link>
-                                                }
-                                                isOpen={expandedOperations.includes(operation.id)}
-                                            >
-                                                <div className='arguments-wrapper'>
-                                                    {operation.arguments && (
-                                                        <OperationArguments
-                                                            operationId={operation.id}
-                                                            data={operation.arguments}
-                                                        />
-                                                    )}
-                                                </div>
-                                            </Collapsible>
-                                        </li>
-                                    );
-                                })
-                            ) : (
-                                <>
-                                    {isLoading ? <LoadingSpinner /> : <p>No results.</p>}
-                                    {error && <div>An error occurred: {error.message}</div>}
-                                </>
-                            )}
-                        </ul>
-                    </div>
+                                                </Link>
+                                            }
+                                            isOpen={expandedOperations.includes(operation.id)}
+                                        >
+                                            <div className='arguments-wrapper'>
+                                                {operation.arguments && (
+                                                    <OperationArguments
+                                                        operationId={operation.id}
+                                                        data={operation.arguments}
+                                                    />
+                                                )}
+                                            </div>
+                                        </Collapsible>
+                                    </li>
+                                );
+                            })
+                        ) : (
+                            <>
+                                {isLoading ? <LoadingSpinner /> : <p>No results.</p>}
+                                {error && <div>An error occurred: {error.message}</div>}
+                            </>
+                        )}
+                    </ul>
                 </div>
-            </fieldset>
-        </div>
+            </div>
+        </fieldset>
     );
 };
 
