@@ -210,7 +210,7 @@ const OperationList = () => {
                             })
                         ) : (
                             <>
-                                {isLoading ? <LoadingSpinner /> : <p>No results.</p>}
+                                {isLoading ? <LoadingSpinner /> : <p>No results</p>}
                                 {error && <div>An error occurred: {error.message}</div>}
                             </>
                         )}

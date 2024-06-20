@@ -12,7 +12,6 @@ interface CollapsibleProps {
     label: string | JSX.Element;
     additionalElements?: string | JSX.Element;
     isOpen?: boolean;
-    styles?: React.CSSProperties;
     contentStyles?: React.CSSProperties;
     keepChildrenMounted?: boolean;
     onExpandToggle?: () => void;
@@ -22,7 +21,6 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
     label,
     additionalElements = undefined,
     isOpen = true,
-    styles = {},
     contentStyles = {},
     keepChildrenMounted = true,
     onExpandToggle,
@@ -35,7 +33,7 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
 
     const icon = isOpenState ? IconNames.CARET_UP : IconNames.CARET_DOWN;
     return (
-        <div className='collapsible-component' style={styles}>
+        <div className='collapsible-component'>
             <div className='collapsible-controls'>
                 {children && (
                     <Button

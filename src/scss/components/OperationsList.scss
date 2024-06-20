@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+@use '../definitions/colours' as *;
 
 .operations-wrap {
     border: solid 1px #909096;
     border-radius: 5px;
-    padding: 10px 10px 40px 40px;
+    padding: 10px 40px 40px;
     margin: 0 auto;
 
     legend {
@@ -48,14 +49,14 @@
         &.scroll-shade-top {
             &::before {
                 top: 0;
-                background-image: linear-gradient(180deg, rgb(51 51 61 / 100%) 0%, rgb(51 51 61 / 0%) 100%);
+                background-image: linear-gradient(180deg, rgba($tt-background, 100%) 0%, rgba($tt-background, 0%) 100%);
             }
         }
 
         &.scroll-shade-bottom {
             &::after {
                 bottom: 0;
-                background-image: linear-gradient(0deg, rgb(51 51 61 / 100%) 0%, rgb(51 51 61 / 0%) 100%);
+                background-image: linear-gradient(0deg, rgba($tt-background, 100%) 0%, rgba($tt-background, 0%) 100%);
             }
         }
     }
