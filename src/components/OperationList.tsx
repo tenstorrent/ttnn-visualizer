@@ -2,27 +2,34 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import { useRef, useState } from 'react';
+import { UIEvent, useEffect, useRef, useState } from 'react';
 import axios, { AxiosError } from 'axios';
-import { Button } from '@blueprintjs/core';
+import { Button, ButtonGroup } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useQuery } from 'react-query';
 import { Link } from 'react-router-dom';
+import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import SearchField from './SearchField';
 import Collapsible from './Collapsible';
 import OperationComponent from './OperationComponent';
 import { Operation } from '../model/Graph';
 import OperationArguments from './OperationArguments';
-import 'styles/components/OperationsList.scss';
 import LoadingSpinner from './LoadingSpinner';
+import 'styles/components/OperationsList.scss';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
+const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
 
 const OperationList = () => {
     const [filterQuery, setFilterQuery] = useState('');
+    const [filteredOperationsList, setFilteredOperationsList] = useState<Operation[]>([]);
     const [expandedOperations, setExpandedOperations] = useState<number[]>([]);
+    const [shouldSortDescending, setShouldSortDescending] = useState(false);
+    const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
+    const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
+    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
 
     const fetchOperations = async () => {
         const { data: operationList } = await axios.get('/api/get-operations');
@@ -31,9 +38,6 @@ const OperationList = () => {
     };
     const { data, error, isLoading } = useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
 
-    const filteredOperationsList =
-        data && filterQuery ? data?.filter((entry) => entry.name.includes(filterQuery)) : data;
-
     const scrollElementRef = useRef(null);
     const virtualizer = useVirtualizer({
         count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
@@ -41,9 +45,12 @@ const OperationList = () => {
         estimateSize: () => OPERATION_EL_HEIGHT,
     });
     const virtualItems = virtualizer.getVirtualItems();
-    const count = filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE;
+    const numberOfOperations =
+        filteredOperationsList && filteredOperationsList.length >= 0
+            ? filteredOperationsList.length
+            : PLACEHOLDER_ARRAY_SIZE;
 
-    function onClickItem(operationId: number) {
+    function handleToggleCollapsible(operationId: number) {
         setExpandedOperations((currentIds) => {
             const operationIds = [...currentIds];
 
@@ -56,6 +63,43 @@ const OperationList = () => {
         });
     }
 
+    function handleReversingList() {
+        setShouldSortDescending((shouldSort) => !shouldSort);
+    }
+
+    function handleExpandAllToggle() {
+        setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
+        setExpandedOperations(
+            !shouldCollapseAll && filteredOperationsList ? filteredOperationsList.map((operation) => operation.id) : [],
+        );
+    }
+
+    function handleUserScrolling(event: UIEvent<HTMLDivElement>) {
+        const el = event.currentTarget;
+
+        setHasScrolledFromTop(!(el.scrollTop < OPERATION_EL_HEIGHT / 2));
+        setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
+    }
+
+    // TODO: I think we can handle this via useMutation in React Query but this works for now
+    useEffect(() => {
+        if (data) {
+            let list = [...data];
+
+            if (filterQuery) {
+                list = data?.filter((entry) =>
+                    `${entry.id} ${entry.name}`.toLowerCase().includes(filterQuery.toLowerCase()),
+                );
+            }
+
+            if (shouldSortDescending) {
+                list = list.reverse();
+            }
+
+            setFilteredOperationsList(list);
+        }
+    }, [data, filterQuery, shouldSortDescending]);
+
     return (
         <div className='app'>
             <fieldset className='operations-wrap'>
@@ -67,29 +111,50 @@ const OperationList = () => {
                         searchQuery={filterQuery}
                         onQueryChanged={(value) => setFilterQuery(value)}
                     />
-                    <button
-                        type='button'
-                        onClick={() => {
-                            virtualizer.scrollToIndex(0);
-                        }}
-                    >
-                        Go to Start
-                    </button>
-                    <button
-                        type='button'
-                        onClick={() => {
-                            virtualizer.scrollToIndex(count - 1);
-                        }}
-                    >
-                        Go to End
-                    </button>
+                    <ButtonGroup minimal>
+                        <Button
+                            onClick={() => handleExpandAllToggle()}
+                            rightIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
+                        />
+                        <Button
+                            onClick={() => handleReversingList()}
+                            icon={shouldSortDescending ? IconNames.SortAlphabeticalDesc : IconNames.SortAlphabetical}
+                        />
+                        <Button
+                            onClick={() => {
+                                virtualizer.scrollToIndex(0);
+                            }}
+                            icon={IconNames.DOUBLE_CHEVRON_UP}
+                        />
+                        <Button
+                            onClick={() => {
+                                virtualizer.scrollToIndex(numberOfOperations - 1);
+                            }}
+                            icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                        />
+                    </ButtonGroup>
+
+                    {!isLoading && (
+                        <p className='result-count'>
+                            {data && filterQuery
+                                ? `Showing ${numberOfOperations} of ${data.length} operations`
+                                : `Showing ${numberOfOperations} operations`}
+                        </p>
+                    )}
                 </div>
 
-                <div ref={scrollElementRef} className='scrollable-element'>
+                <div
+                    ref={scrollElementRef}
+                    className={classNames('scrollable-element', {
+                        'scroll-shade-top': hasScrolledFromTop,
+                        'scroll-shade-bottom': !hasScrolledToBottom,
+                    })}
+                    onScroll={(event) => handleUserScrolling(event)}
+                >
                     <div
                         style={{
-                            // Div is sized to the maximum required to render all list items
-                            height: virtualizer.getTotalSize(),
+                            // Div is sized to the maximum required to render all list items - our shade element heights
+                            height: virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT,
                         }}
                     >
                         <ul
@@ -111,10 +176,10 @@ const OperationList = () => {
                                             ref={virtualizer.measureElement}
                                         >
                                             <Collapsible
-                                                onExpandToggle={() => onClickItem(operation.id)}
+                                                onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                                 label={
                                                     <OperationComponent
-                                                        operation={operation}
+                                                        filterName={getOperationFilterName(operation)}
                                                         filterQuery={filterQuery}
                                                     />
                                                 }
@@ -157,5 +222,9 @@ const OperationList = () => {
         </div>
     );
 };
+
+function getOperationFilterName(operation: Operation) {
+    return `${operation.id.toString()} ${operation.name}`;
+}
 
 export default OperationList;
