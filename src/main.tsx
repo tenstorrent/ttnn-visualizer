@@ -24,7 +24,7 @@ const router = createBrowserRouter([
                 element: <Operations />,
             },
             {
-                path: 'operations/:opId',
+                path: 'operations/:operationId',
                 loader: () => ({ message: "You're interested in viewing the following operation" }),
                 element: <OperationDetails />,
             },

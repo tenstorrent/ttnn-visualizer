@@ -14,16 +14,20 @@ interface CollapsibleProps {
     isOpen?: boolean;
     styles?: React.CSSProperties;
     contentStyles?: React.CSSProperties;
+    keepChildrenMounted?: boolean;
+    onExpandToggle?: () => void;
 }
 
 const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
-                                                                              label,
-                                                                              additionalElements = undefined,
-                                                                              isOpen = true,
-                                                                              styles = {},
-                                                                              contentStyles = {},
-                                                                              children,
-                                                                          }) => {
+    label,
+    additionalElements = undefined,
+    isOpen = true,
+    styles = {},
+    contentStyles = {},
+    keepChildrenMounted = true,
+    onExpandToggle,
+    children,
+}) => {
     const [isOpenState, setIsOpenState] = React.useState(isOpen);
     useEffect(() => {
         setIsOpenState(isOpen);
@@ -32,9 +36,19 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
     const icon = isOpenState ? IconNames.CARET_UP : IconNames.CARET_DOWN;
     return (
         <div className='collapsible-component' style={styles}>
-            <div className={'collapsible-controls'}>
+            <div className='collapsible-controls'>
                 {children && (
-                    <Button small minimal onClick={() => setIsOpenState(!isOpenState)} rightIcon={icon}>
+                    <Button
+                        small
+                        minimal
+                        onClick={() => {
+                            if (onExpandToggle) {
+                                onExpandToggle();
+                            }
+                            setIsOpenState(!isOpenState);
+                        }}
+                        rightIcon={icon}
+                    >
                         {label}
                     </Button>
                 )}
@@ -43,12 +57,10 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
                         <div className='collapsible-label'>{label}</div>
                     </div>
                 )}
-                {additionalElements && (
-                    additionalElements
-                )}
+                {additionalElements && additionalElements}
             </div>
             {children && (
-                <Collapse isOpen={isOpenState} keepChildrenMounted>
+                <Collapse isOpen={isOpenState} keepChildrenMounted={keepChildrenMounted}>
                     <div style={contentStyles}>{children}</div>
                 </Collapse>
             )}

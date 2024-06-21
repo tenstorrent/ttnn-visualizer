@@ -5,11 +5,12 @@
 import React from 'react';
 import { Button, Icon, InputGroup } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import 'styles/components/SearchField.scss';
 
 interface SearchFieldProps {
     searchQuery: string;
     onQueryChanged: (query: string) => void;
-    controls: React.ReactElement[];
+    controls?: React.ReactElement[];
     placeholder?: string;
     disabled?: boolean;
 }

@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
+.operations-wrap {
+    border: solid 1px #909096;
+    border-radius: 5px;
+    padding: 10px 10px 10px 40px;
+    min-height: fit-content;
+    margin: 0 auto;
+
+    legend {
+        font-size: 24px;
+        font-weight: 700;
+    }
+
+    .list-controls {
+        display: flex;
+        flex-wrap: nowrap;
+        margin-bottom: 15px;
+        gap: 10px;
+    }
+
+    .scrollable-element {
+        height: 600px;
+        width: 100%;
+        overflow-y: auto;
+        contain: strict;
+    }
+
+    .operations-list {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        list-style: none;
+        padding-left: 0;
+        margin-top: 0;
+        margin-bottom: 0;
+    }
+
+    .operation {
+        padding-bottom: 15px;
+
+        // Style added to avoid possible infinite scroll loops
+        // https://github.com/TanStack/virtual/issues/540#issuecomment-1720745734
+        overflow-anchor: none;
+    }
+}

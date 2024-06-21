@@ -1,10 +1,8 @@
-import { useLoaderData, useParams } from 'react-router';
-import OperationDetailsComponent from '../components/OperationDetailsComponent.tsx';
-
-
+import { useParams } from 'react-router';
+import OperationDetailsComponent from '../components/OperationDetailsComponent';
 
 export default function OperationDetails() {
-    const { opId } = useParams();
+    const { operationId } = useParams();
 
-    return <OperationDetailsComponent operationId={opId} />;
+    return operationId && <OperationDetailsComponent operationId={operationId} />;
 }

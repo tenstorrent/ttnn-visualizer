@@ -13,7 +13,7 @@ export default defineConfig({
     },
     resolve: {
         alias: {
-          'styles/': `${path.resolve(__dirname, 'src/scss')}/`
-        }
-    }
-})
+            'styles/': `${path.resolve(__dirname, 'src/scss')}/`,
+        },
+    },
+});
