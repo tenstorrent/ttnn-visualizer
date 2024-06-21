@@ -168,7 +168,7 @@ const OperationList = () => {
             >
                 <div
                     style={{
-                        // Div is sized to the maximum required to render all list items - our shade element heights
+                        // Div is sized to the maximum required to render all list items minus our shade element heights
                         height: virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT,
                     }}
                 >
