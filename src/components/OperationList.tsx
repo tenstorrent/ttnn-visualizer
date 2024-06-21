@@ -36,7 +36,11 @@ const OperationList = () => {
 
         return operationList;
     };
-    const { data, error, isLoading } = useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
+    const {
+        data: fetchedOperations,
+        error,
+        isLoading,
+    } = useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
 
     const scrollElementRef = useRef(null);
     const virtualizer = useVirtualizer({
@@ -81,13 +85,12 @@ const OperationList = () => {
         setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
     };
 
-    // TODO: I think we can handle this via useMutation in React Query but this works for now
     useMemo(() => {
-        if (data) {
-            let operations = [...data];
+        if (fetchedOperations) {
+            let operations = [...fetchedOperations];
 
             if (filterQuery) {
-                operations = data?.filter((operation) =>
+                operations = fetchedOperations?.filter((operation) =>
                     getOperationFilterName(operation).toLowerCase().includes(filterQuery.toLowerCase()),
                 );
             }
@@ -98,7 +101,7 @@ const OperationList = () => {
 
             setFilteredOperationsList(operations);
         }
-    }, [data, filterQuery, shouldSortDescending]);
+    }, [fetchedOperations, filterQuery, shouldSortDescending]);
 
     return (
         <fieldset className='operations-wrap'>
@@ -151,8 +154,8 @@ const OperationList = () => {
 
                 {!isLoading && (
                     <p className='result-count'>
-                        {data && filterQuery
-                            ? `Showing ${numberOfOperations} of ${data.length} operations`
+                        {fetchedOperations && filterQuery
+                            ? `Showing ${numberOfOperations} of ${fetchedOperations.length} operations`
                             : `Showing ${numberOfOperations} operations`}
                     </p>
                 )}
