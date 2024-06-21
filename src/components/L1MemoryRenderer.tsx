@@ -21,7 +21,7 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
         height: 60,
         xaxis: {
             autorange: false,
-            title: 'buffer address',
+            title: '',
             range: [zoomedinView ? minRangeStart : 0, memorySize],
             showgrid: true,
             fixedrange: true,

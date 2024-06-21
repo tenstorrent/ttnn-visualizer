@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
 import { useQuery } from 'react-query';
 import { PlotMouseEvent } from 'plotly.js';
@@ -7,14 +7,17 @@ import { getBufferColor } from '../functions/colorGenerator.ts';
 import { FragmentationEntry, OperationDetailsData, TensorData } from '../model/APIData.ts';
 import L1MemoryRenderer from './L1MemoryRenderer.tsx';
 import { getMemoryData } from '../model/ChartUtils.ts';
+import LoadingSpinner from './LoadingSpinner.tsx';
 
 interface OperationDetailsProps {
     operationId: number;
 }
 
+const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
+
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
-    const [zoomedinView, setZoomedinView] = React.useState(false);
-    const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
+    const [zoomedinView, setZoomedinView] = useState(false);
+
     const fetchOperations = async (id: number) => {
         const response = await axios.get(`/api/get-operation-details/${id}`);
         return response.data;
@@ -31,15 +34,16 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     );
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
-        // TODO: replace with a proper loading spinner
-        return <div>loading</div>;
+        return (
+            <div>
+                <LoadingSpinner />
+            </div>
+        );
     }
 
     const formatSize = (number: number): string => {
         return new Intl.NumberFormat('en-US').format(number);
     };
-
-    console.log(operationDetails);
 
     const tensorList: TensorData[] =
         [
@@ -65,7 +69,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const memorySize = operationDetails?.l1_sizes[0] || 0; // TODO: memorysize will need to be calculated for the multichip scenario
 
     const minPlotRangeStart =
-        Math.min(memory[0].address || memorySize, previousMemory[0].address || memorySize) *
+        Math.min(memory[0]?.address || memorySize, previousMemory[0]?.address || memorySize) *
         MINIMAL_MEMORY_RANGE_OFFSET;
 
     const onBufferClick = (event: Readonly<PlotMouseEvent>): void => {
@@ -103,9 +107,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 onBufferClick={onBufferClick}
             />
             <hr />
+            {/* ugly inline css below will be going away at the design PR */}
+            {/* the below needs a lot of redesigning. */}
             <h3>Legend</h3>
             {memoryReport.map((chunk) => (
-                <div key={chunk.address}>
+                // this likely needs to be a grid of sort to right alight address and size and vertically align coluns
+                <div
+                    key={chunk.address}
+                    style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '5px' }}
+                >
                     <div
                         style={{
                             width: '20px',
@@ -118,12 +128,14 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {chunk.address} - {formatSize(chunk.size)}{' '}
                         {getTensorForAddress(chunk.address) &&
                             `Tensor ${getTensorForAddress(chunk.address)?.tensor_id}`}
+                        {chunk.empty && 'Empty'}
                     </span>
                 </div>
             ))}
             <hr />
 
             <>
+                {/* op 1422 example: some tensors dont write in L1 and appear white, we need to come up with treatment. */}
                 <h3>Inputs</h3>
                 {inputs.map((tensor) => (
                     <div key={tensor.tensor_id}>
