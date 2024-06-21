@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import { UIEvent, useEffect, useRef, useState } from 'react';
+import { UIEvent, useMemo, useRef, useState } from 'react';
 import axios, { AxiosError } from 'axios';
 import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -82,7 +82,7 @@ const OperationList = () => {
     };
 
     // TODO: I think we can handle this via useMutation in React Query but this works for now
-    useEffect(() => {
+    useMemo(() => {
         if (data) {
             let operations = [...data];
 
