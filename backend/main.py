@@ -99,7 +99,8 @@ class OperationDetails(BaseModel):
     input_tensors: List[Tensor]
     output_tensors: List[Tensor]
     buffers: List[Buffer]
-    buffer_pages: List[BufferPage]
+    l1_sizes: List[int]
+    # buffer_pages: List[BufferPage]
 
 
 class GlyphData(BaseModel):
@@ -281,112 +282,43 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
     output_tensors_list = [Tensor(**row) for row in output_tensors_data]
 
     # Fetch buffers
+    # Query buffers with the specified operation_id
     buffers_query = select(buffers).where(buffers.c.operation_id == operation_id)
     buffers_data = db.execute(buffers_query).mappings().all()
 
-    buffers_list = [Buffer(**row) for row in buffers_data]
+    # Use a set to track unique addresses and a list to store unique Buffer objects
+    unique_addresses = set()
+    buffers_list = []
+
+    for row in buffers_data:
+        buffer = Buffer(**row)
+        if buffer.address not in unique_addresses:
+            unique_addresses.add(buffer.address)
+            buffers_list.append(buffer)
+
+    # buffers_list now contains Buffer objects with unique addresses
+
+
+    device_query = select(devices)
+    device_data = db.execute(device_query).mappings().all()
+    l1_sizes = [None] * (max(device['device_id'] for device in device_data) + 1)
+    for device in device_data:
+        l1_sizes[device['device_id']] = device['worker_l1_size']
 
     # Fetch buffer pages
-    buffer_pages_query = select(buffer_pages).where(buffer_pages.c.operation_id == operation_id)
-    buffer_pages_data = db.execute(buffer_pages_query).mappings().all()
-
-    buffer_pages_list = [BufferPage(**row) for row in buffer_pages_data]
+    # buffer_pages_query = select(buffer_pages).where(buffer_pages.c.operation_id == operation_id)
+    # buffer_pages_data = db.execute(buffer_pages_query).mappings().all()
+    #
+    # buffer_pages_list = [BufferPage(**row) for row in buffer_pages_data]
 
     return OperationDetails(
         operation_id=operation_id,
         input_tensors=input_tensors_list,
         output_tensors=output_tensors_list,
         buffers=buffers_list,
-        buffer_pages=buffer_pages_list
+        l1_sizes=l1_sizes,
+        # buffer_pages=buffer_pages_list
     )
-
-
-BUFFER_TO_COLOR_INDEX: Dict = {}
-COLORS = ["red", "green", "blue", "yellow", "orange", "purple", "pink", "cyan"]
-
-
-@app.get("/api/get-buffer-plot-data/{operation_id}", response_model=PlotData)
-async def get_buffer_plot_data(operation_id: int = Path(..., description="")):
-    db = SessionLocal()
-
-    # Fetch buffers
-    buffers_query = select(buffers).where(buffers.c.operation_id == operation_id)
-    buffers_data = db.execute(buffers_query).mappings().all()
-
-    if not buffers_data:
-        raise HTTPException(status_code=404, detail="No buffers found for this operation")
-
-    buffers_list = [Buffer(**row) for row in buffers_data]
-
-    device_id = buffers_list[0].device_id
-    device_query = select(devices).where(devices.c.device_id == device_id)
-    device_data = db.execute(device_query).mappings().first()
-
-    if not device_data:
-        raise HTTPException(status_code=404, detail="Device not found")
-
-    l1_size = device_data['worker_l1_size']
-
-    glyph_y_location = 0
-    glyph_height = 1
-
-    memory_glyph_y_location = [glyph_y_location]
-    memory_glyph_x_location = [l1_size // 2]
-    memory_height = [glyph_height]
-    memory_width = [l1_size]
-    memory_color = ["white"]
-    memory_line_color = ["black"]
-
-    buffers_glyph_y_location = []
-    buffers_glyph_x_location = []
-    buffers_height = []
-    buffers_width = []
-    buffers_color = []
-    buffers_max_size_per_bank = []
-    buffers_address = []
-
-    for buffer in buffers_list:
-        if (buffer.device_id, buffer.address, buffer.buffer_type) not in BUFFER_TO_COLOR_INDEX:
-            BUFFER_TO_COLOR_INDEX[(buffer.device_id, buffer.address, buffer.buffer_type)] = len(BUFFER_TO_COLOR_INDEX)
-
-        buffers_address.append(buffer.address)
-        buffers_max_size_per_bank.append(buffer.max_size_per_bank)
-        buffers_glyph_y_location.append(glyph_y_location)
-        buffers_glyph_x_location.append(buffer.address + buffer.max_size_per_bank // 2)
-        buffers_height.append(glyph_height)
-        buffers_width.append(buffer.max_size_per_bank)
-        buffers_color.append(
-            COLORS[BUFFER_TO_COLOR_INDEX[(buffer.device_id, buffer.address, buffer.buffer_type)] % len(COLORS)]
-        )
-
-    memory_data = GlyphData(
-        glyph_y_location=memory_glyph_y_location,
-        glyph_x_location=memory_glyph_x_location,
-        glyph_height=memory_height,
-        glyph_width=memory_width,
-        color=memory_color,
-        line_color=memory_line_color,
-        address=[],
-        max_size_per_bank=[]
-    )
-
-    buffer_data = GlyphData(
-        glyph_y_location=buffers_glyph_y_location,
-        glyph_x_location=buffers_glyph_x_location,
-        glyph_height=buffers_height,
-        glyph_width=buffers_width,
-        color=buffers_color,
-        line_color=["black"] * len(buffers_color),
-        address=buffers_address,
-        max_size_per_bank=buffers_max_size_per_bank
-    )
-
-    return PlotData(
-        l1_size=l1_size,
-        memory_data=memory_data,
-        buffer_data=buffer_data
-    )
-
 
 # Middleware to proxy requests to Vite development server, excluding /api/* requests
 @app.middleware("http")
