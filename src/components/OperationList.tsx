@@ -50,7 +50,7 @@ const OperationList = () => {
             ? filteredOperationsList.length
             : PLACEHOLDER_ARRAY_SIZE;
 
-    function handleToggleCollapsible(operationId: number) {
+    const handleToggleCollapsible = (operationId: number) => {
         setExpandedOperations((currentIds) => {
             const operationIds = [...currentIds];
 
@@ -61,25 +61,25 @@ const OperationList = () => {
             operationIds.push(operationId);
             return operationIds;
         });
-    }
+    };
 
-    function handleReversingList() {
+    const handleReversingList = () => {
         setShouldSortDescending((shouldSort) => !shouldSort);
-    }
+    };
 
-    function handleExpandAllToggle() {
+    const handleExpandAllToggle = () => {
         setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
         setExpandedOperations(
             !shouldCollapseAll && filteredOperationsList ? filteredOperationsList.map((operation) => operation.id) : [],
         );
-    }
+    };
 
-    function handleUserScrolling(event: UIEvent<HTMLDivElement>) {
+    const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
         const el = event.currentTarget;
 
         setHasScrolledFromTop(!(el.scrollTop < OPERATION_EL_HEIGHT / 2));
         setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
-    }
+    };
 
     // TODO: I think we can handle this via useMutation in React Query but this works for now
     useEffect(() => {
