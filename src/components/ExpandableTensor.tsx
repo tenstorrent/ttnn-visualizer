@@ -14,13 +14,13 @@ function ExpandableTensor({ tensor }: ExpandableTensorProps) {
     const splitTensor = tensor.split('\n');
     const cellRef = useRef<null | HTMLTableCellElement>(null);
 
-    function handleExpandToggle(shouldScrollTo?: boolean) {
+    const handleExpandToggle = (shouldScrollTo?: boolean) => {
         setIsExpanded((previousValue) => !previousValue);
 
-        if (shouldScrollTo) {
-            cellRef.current?.scrollIntoView();
+        if (shouldScrollTo && cellRef.current && !isElementCompletelyInViewPort(cellRef.current)) {
+            cellRef.current.scrollIntoView();
         }
-    }
+    };
 
     return (
         <td className='expandable-tensor' ref={cellRef}>
@@ -32,7 +32,7 @@ function ExpandableTensor({ tensor }: ExpandableTensorProps) {
             />
             {isExpanded ? (
                 <>
-                    <pre>{tensor}</pre>
+                    <pre className='full-tensor'>{tensor}</pre>
                     <Switch
                         className='expand-button'
                         label='Hide full tensor'
@@ -49,6 +49,14 @@ function ExpandableTensor({ tensor }: ExpandableTensorProps) {
             )}
         </td>
     );
+}
+
+function isElementCompletelyInViewPort(element: HTMLTableCellElement) {
+    const elementData = element.getBoundingClientRect();
+    const width = document.documentElement.clientWidth;
+    const height = document.documentElement.clientHeight;
+
+    return elementData.bottom <= height && elementData.right <= width && elementData.left >= 0 && elementData.top >= 0;
 }
 
 export default ExpandableTensor;

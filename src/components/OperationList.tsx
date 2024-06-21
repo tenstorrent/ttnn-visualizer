@@ -2,37 +2,45 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import { useRef, useState } from 'react';
+import { UIEvent, useMemo, useRef, useState } from 'react';
 import axios, { AxiosError } from 'axios';
-import { Button } from '@blueprintjs/core';
+import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useQuery } from 'react-query';
 import { Link } from 'react-router-dom';
+import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import SearchField from './SearchField';
 import Collapsible from './Collapsible';
 import OperationComponent from './OperationComponent';
 import { Operation } from '../model/Graph';
 import OperationArguments from './OperationArguments';
-import 'styles/components/OperationsList.scss';
 import LoadingSpinner from './LoadingSpinner';
+import 'styles/components/OperationsList.scss';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
+const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
 
 const OperationList = () => {
     const [filterQuery, setFilterQuery] = useState('');
+    const [filteredOperationsList, setFilteredOperationsList] = useState<Operation[]>([]);
     const [expandedOperations, setExpandedOperations] = useState<number[]>([]);
+    const [shouldSortDescending, setShouldSortDescending] = useState(false);
+    const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
+    const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
+    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
 
     const fetchOperations = async () => {
         const { data: operationList } = await axios.get('/api/get-operations');
 
         return operationList;
     };
-    const { data, error, isLoading } = useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
-
-    const filteredOperationsList =
-        data && filterQuery ? data?.filter((entry) => entry.name.includes(filterQuery)) : data;
+    const {
+        data: fetchedOperations,
+        error,
+        isLoading,
+    } = useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
 
     const scrollElementRef = useRef(null);
     const virtualizer = useVirtualizer({
@@ -41,9 +49,12 @@ const OperationList = () => {
         estimateSize: () => OPERATION_EL_HEIGHT,
     });
     const virtualItems = virtualizer.getVirtualItems();
-    const count = filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE;
+    const numberOfOperations =
+        filteredOperationsList && filteredOperationsList.length >= 0
+            ? filteredOperationsList.length
+            : PLACEHOLDER_ARRAY_SIZE;
 
-    function onClickItem(operationId: number) {
+    const handleToggleCollapsible = (operationId: number) => {
         setExpandedOperations((currentIds) => {
             const operationIds = [...currentIds];
 
@@ -54,108 +65,183 @@ const OperationList = () => {
             operationIds.push(operationId);
             return operationIds;
         });
-    }
+    };
+
+    const handleReversingList = () => {
+        setShouldSortDescending((shouldSort) => !shouldSort);
+    };
+
+    const handleExpandAllToggle = () => {
+        setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
+        setExpandedOperations(
+            !shouldCollapseAll && filteredOperationsList ? filteredOperationsList.map((operation) => operation.id) : [],
+        );
+    };
+
+    const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
+        const el = event.currentTarget;
+
+        setHasScrolledFromTop(!(el.scrollTop < OPERATION_EL_HEIGHT / 2));
+        setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
+    };
+
+    useMemo(() => {
+        if (fetchedOperations) {
+            let operations = [...fetchedOperations];
+
+            if (filterQuery) {
+                operations = fetchedOperations?.filter((operation) =>
+                    getOperationFilterName(operation).toLowerCase().includes(filterQuery.toLowerCase()),
+                );
+            }
+
+            if (shouldSortDescending) {
+                operations = operations.reverse();
+            }
+
+            setFilteredOperationsList(operations);
+        }
+    }, [fetchedOperations, filterQuery, shouldSortDescending]);
 
     return (
-        <div className='app'>
-            <fieldset className='operations-wrap'>
-                <legend>Operations</legend>
+        <fieldset className='operations-wrap'>
+            <legend>Operations</legend>
 
-                <div className='list-controls'>
-                    <SearchField
-                        placeholder='Filter operations'
-                        searchQuery={filterQuery}
-                        onQueryChanged={(value) => setFilterQuery(value)}
-                    />
-                    <button
-                        type='button'
-                        onClick={() => {
-                            virtualizer.scrollToIndex(0);
-                        }}
+            <div className='list-controls'>
+                <SearchField
+                    placeholder='Filter operations'
+                    searchQuery={filterQuery}
+                    onQueryChanged={(value) => setFilterQuery(value)}
+                />
+                <ButtonGroup minimal>
+                    <Tooltip
+                        content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
+                        placement={PopoverPosition.TOP}
                     >
-                        Go to Start
-                    </button>
-                    <button
-                        type='button'
-                        onClick={() => {
-                            virtualizer.scrollToIndex(count - 1);
-                        }}
+                        <Button
+                            onClick={() => handleExpandAllToggle()}
+                            rightIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
+                        />
+                    </Tooltip>
+                    <Tooltip
+                        content={shouldSortDescending ? 'Sort ascending' : 'Sort descending'}
+                        placement={PopoverPosition.TOP}
                     >
-                        Go to End
-                    </button>
-                </div>
+                        <Button
+                            onClick={() => handleReversingList()}
+                            icon={shouldSortDescending ? IconNames.SortAlphabeticalDesc : IconNames.SortAlphabetical}
+                        />
+                    </Tooltip>
 
-                <div ref={scrollElementRef} className='scrollable-element'>
-                    <div
-                        style={{
-                            // Div is sized to the maximum required to render all list items
-                            height: virtualizer.getTotalSize(),
-                        }}
-                    >
-                        <ul
-                            className='operations-list'
-                            style={{
-                                // Tracks scroll position
-                                transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
+                    <Tooltip content='Scroll to top' placement={PopoverPosition.TOP}>
+                        <Button
+                            onClick={() => {
+                                virtualizer.scrollToIndex(0);
                             }}
-                        >
-                            {filteredOperationsList?.length ? (
-                                virtualItems.map((virtualRow) => {
-                                    const operation = filteredOperationsList[virtualRow.index];
+                            icon={IconNames.DOUBLE_CHEVRON_UP}
+                        />
+                    </Tooltip>
 
-                                    return (
-                                        <li
-                                            className='operation'
-                                            key={virtualRow.index}
-                                            data-index={virtualRow.index}
-                                            ref={virtualizer.measureElement}
-                                        >
-                                            <Collapsible
-                                                onExpandToggle={() => onClickItem(operation.id)}
-                                                label={
-                                                    <OperationComponent
-                                                        operation={operation}
-                                                        filterQuery={filterQuery}
+                    <Tooltip content='Scroll to bottom' placement={PopoverPosition.TOP}>
+                        <Button
+                            onClick={() => {
+                                virtualizer.scrollToIndex(numberOfOperations - 1);
+                            }}
+                            icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                        />
+                    </Tooltip>
+                </ButtonGroup>
+
+                {!isLoading && (
+                    <p className='result-count'>
+                        {fetchedOperations && filterQuery
+                            ? `Showing ${numberOfOperations} of ${fetchedOperations.length} operations`
+                            : `Showing ${numberOfOperations} operations`}
+                    </p>
+                )}
+            </div>
+
+            <div
+                ref={scrollElementRef}
+                className={classNames('scrollable-element', {
+                    'scroll-shade-top': hasScrolledFromTop,
+                    'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
+                })}
+                onScroll={(event) => handleUserScrolling(event)}
+            >
+                <div
+                    style={{
+                        // Div is sized to the maximum required to render all list items minus our shade element heights
+                        height: virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT,
+                    }}
+                >
+                    <ul
+                        className='operations-list'
+                        style={{
+                            // Tracks scroll position
+                            transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
+                        }}
+                    >
+                        {filteredOperationsList?.length ? (
+                            virtualItems.map((virtualRow) => {
+                                const operation = filteredOperationsList[virtualRow.index];
+
+                                return (
+                                    <li
+                                        className='operation'
+                                        key={virtualRow.index}
+                                        data-index={virtualRow.index}
+                                        ref={virtualizer.measureElement}
+                                    >
+                                        <Collapsible
+                                            onExpandToggle={() => handleToggleCollapsible(operation.id)}
+                                            label={
+                                                <OperationComponent
+                                                    filterName={getOperationFilterName(operation)}
+                                                    filterQuery={filterQuery}
+                                                />
+                                            }
+                                            keepChildrenMounted={false}
+                                            additionalElements={
+                                                <Link to={`/operations/${operation.id}`}>
+                                                    <Button
+                                                        title='Buffer view'
+                                                        minimal
+                                                        small
+                                                        className='buffer-view'
+                                                        icon={IconNames.SEGMENTED_CONTROL}
                                                     />
-                                                }
-                                                keepChildrenMounted={false}
-                                                additionalElements={
-                                                    <Link to={`/operations/${operation.id}`}>
-                                                        <Button
-                                                            title='Buffer view'
-                                                            minimal
-                                                            small
-                                                            className='buffer-view'
-                                                            icon={IconNames.SEGMENTED_CONTROL}
-                                                        />
-                                                    </Link>
-                                                }
-                                                isOpen={expandedOperations.includes(operation.id)}
-                                            >
-                                                <div className='arguments-wrapper'>
-                                                    {operation.arguments && (
-                                                        <OperationArguments
-                                                            operationId={operation.id}
-                                                            data={operation.arguments}
-                                                        />
-                                                    )}
-                                                </div>
-                                            </Collapsible>
-                                        </li>
-                                    );
-                                })
-                            ) : (
-                                <>
-                                    {isLoading ? <LoadingSpinner /> : <p>No results.</p>}
-                                    {error && <div>An error occurred: {error.message}</div>}
-                                </>
-                            )}
-                        </ul>
-                    </div>
+                                                </Link>
+                                            }
+                                            isOpen={expandedOperations.includes(operation.id)}
+                                        >
+                                            <div className='arguments-wrapper'>
+                                                {operation.arguments && (
+                                                    <OperationArguments
+                                                        operationId={operation.id}
+                                                        data={operation.arguments}
+                                                    />
+                                                )}
+                                            </div>
+                                        </Collapsible>
+                                    </li>
+                                );
+                            })
+                        ) : (
+                            <>
+                                {isLoading ? <LoadingSpinner /> : <p>No results</p>}
+                                {error && <div>An error occurred: {error.message}</div>}
+                            </>
+                        )}
+                    </ul>
                 </div>
-            </fieldset>
-        </div>
+            </div>
+        </fieldset>
     );
 };
+
+function getOperationFilterName(operation: Operation) {
+    return `${operation.id.toString()} ${operation.name}`;
+}
 
 export default OperationList;

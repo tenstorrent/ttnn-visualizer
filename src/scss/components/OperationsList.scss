@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+@use '../definitions/colours' as *;
 
 .operations-wrap {
     border: solid 1px #909096;
     border-radius: 5px;
-    padding: 10px 10px 10px 40px;
-    min-height: fit-content;
+    padding: 10px 40px 40px;
     margin: 0 auto;
 
     legend {
@@ -19,13 +19,46 @@
         flex-wrap: nowrap;
         margin-bottom: 15px;
         gap: 10px;
+        align-items: center;
+    }
+
+    .result-count {
+        flex-grow: 1;
+        text-align: right;
+        margin-bottom: 0;
     }
 
     .scrollable-element {
         height: 600px;
         width: 100%;
         overflow-y: auto;
-        contain: strict;
+        position: relative;
+
+        &::before,
+        &::after {
+            content: '';
+            display: block;
+            width: 100%;
+            height: 50px;
+            z-index: 1;
+            position: sticky;
+            left: 0;
+            pointer-events: none;
+        }
+
+        &.scroll-shade-top {
+            &::before {
+                top: 0;
+                background-image: linear-gradient(180deg, rgba($tt-background, 100%) 0%, rgba($tt-background, 0%) 100%);
+            }
+        }
+
+        &.scroll-shade-bottom {
+            &::after {
+                bottom: 0;
+                background-image: linear-gradient(0deg, rgba($tt-background, 100%) 0%, rgba($tt-background, 0%) 100%);
+            }
+        }
     }
 
     .operations-list {
