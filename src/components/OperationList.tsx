@@ -4,7 +4,7 @@
 
 import { UIEvent, useEffect, useRef, useState } from 'react';
 import axios, { AxiosError } from 'axios';
-import { Button, ButtonGroup } from '@blueprintjs/core';
+import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useQuery } from 'react-query';
 import { Link } from 'react-router-dom';
@@ -84,19 +84,19 @@ const OperationList = () => {
     // TODO: I think we can handle this via useMutation in React Query but this works for now
     useEffect(() => {
         if (data) {
-            let list = [...data];
+            let operations = [...data];
 
             if (filterQuery) {
-                list = data?.filter((entry) =>
-                    `${entry.id} ${entry.name}`.toLowerCase().includes(filterQuery.toLowerCase()),
+                operations = data?.filter((operation) =>
+                    getOperationFilterName(operation).toLowerCase().includes(filterQuery.toLowerCase()),
                 );
             }
 
             if (shouldSortDescending) {
-                list = list.reverse();
+                operations = operations.reverse();
             }
 
-            setFilteredOperationsList(list);
+            setFilteredOperationsList(operations);
         }
     }, [data, filterQuery, shouldSortDescending]);
 
@@ -111,26 +111,42 @@ const OperationList = () => {
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
                 <ButtonGroup minimal>
-                    <Button
-                        onClick={() => handleExpandAllToggle()}
-                        rightIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
-                    />
-                    <Button
-                        onClick={() => handleReversingList()}
-                        icon={shouldSortDescending ? IconNames.SortAlphabeticalDesc : IconNames.SortAlphabetical}
-                    />
-                    <Button
-                        onClick={() => {
-                            virtualizer.scrollToIndex(0);
-                        }}
-                        icon={IconNames.DOUBLE_CHEVRON_UP}
-                    />
-                    <Button
-                        onClick={() => {
-                            virtualizer.scrollToIndex(numberOfOperations - 1);
-                        }}
-                        icon={IconNames.DOUBLE_CHEVRON_DOWN}
-                    />
+                    <Tooltip
+                        content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => handleExpandAllToggle()}
+                            rightIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
+                        />
+                    </Tooltip>
+                    <Tooltip
+                        content={shouldSortDescending ? 'Sort ascending' : 'Sort descending'}
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => handleReversingList()}
+                            icon={shouldSortDescending ? IconNames.SortAlphabeticalDesc : IconNames.SortAlphabetical}
+                        />
+                    </Tooltip>
+
+                    <Tooltip content='Scroll to top' placement={PopoverPosition.TOP}>
+                        <Button
+                            onClick={() => {
+                                virtualizer.scrollToIndex(0);
+                            }}
+                            icon={IconNames.DOUBLE_CHEVRON_UP}
+                        />
+                    </Tooltip>
+
+                    <Tooltip content='Scroll to bottom' placement={PopoverPosition.TOP}>
+                        <Button
+                            onClick={() => {
+                                virtualizer.scrollToIndex(numberOfOperations - 1);
+                            }}
+                            icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                        />
+                    </Tooltip>
                 </ButtonGroup>
 
                 {!isLoading && (
