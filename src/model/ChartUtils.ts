@@ -42,7 +42,7 @@ export const getMemoryData = (operationDetails: OperationDetailsData) => {
                     simplify: false,
                 },
             },
-            text: `${address}::${size}`, // this should probably be tesnsor specific
+            text: `${address}::${size}`, // this should probably be tensor specific
             hoverinfo: 'text',
         };
     });
