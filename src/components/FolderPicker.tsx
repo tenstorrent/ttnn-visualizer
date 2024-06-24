@@ -6,6 +6,7 @@ import React, { type ReactElement } from 'react';
 
 import { Button } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import 'styles/components/FolderPicker.scss';
 
 interface FolderPickerProps {
     disabled?: boolean;
