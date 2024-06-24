@@ -50,7 +50,6 @@ interface RemoteConnectionSelectorProps {
     loading: boolean;
     offline: boolean;
     onSelectConnection: (connection: RemoteConnection) => void;
-    onEditConnection: (newConnection: RemoteConnection, oldConnection?: RemoteConnection) => void;
     onRemoveConnection: (connection: RemoteConnection) => void;
     onSyncRemoteFolders: (connection: RemoteConnection) => void;
 }
@@ -62,7 +61,6 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
     loading,
     offline,
     onSelectConnection,
-    onEditConnection,
     onRemoveConnection,
     onSyncRemoteFolders,
 }) => {
@@ -107,7 +105,6 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                 key={`${selectedConnection?.name}${selectedConnection?.host}${selectedConnection?.port}${selectedConnection?.path}`}
                 open={isEditdialogOpen}
                 onAddConnection={() => {}}
-                onClose={() => {}}
                 title='Edit remote connection'
                 buttonLabel='Save connection'
                 remoteConnection={selectedConnection}
