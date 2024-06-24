@@ -15,7 +15,7 @@ const GraphSelector: FC<GraphSelectorProps> = ({ disabled = false, label, onSele
     // const { getActiveGraphName, graphOnChipList } = useContext(GraphOnChipContext);
     // const selectedGraph = getActiveGraphName();
     // const availableGraphs = Object.keys(graphOnChipList);
-    const availableGraphs = ['hey', 'ho', 'lets go'];
+    const availableGraphs = ['Graph 1', 'Graph 2', 'Graph 3'];
     const selectedGraph = '';
 
     return (
