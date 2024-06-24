@@ -25,6 +25,8 @@ export const useOperationDetails = (operationId: number) => {
         fetchOperationDetails(operationId),
     );
 
+    // TODO: consider useQueries or include operation data on BE
+
     return {
         operation,
         operationDetails,
