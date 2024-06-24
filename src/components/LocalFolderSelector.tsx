@@ -2,60 +2,28 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { FormGroup } from '@blueprintjs/core';
-import type { FC } from 'react';
-import GraphSelector from './GraphSelector';
+import { AnchorButton, FormGroup } from '@blueprintjs/core';
+import { type FC, useState } from 'react';
 import FolderPicker from './FolderPicker';
 
 import 'styles/components/FolderPicker.scss';
 
-// const getTestName = (path: string) => {
-//     const lastFolder = path.split(pathSeparator).pop();
-//     return lastFolder || undefined;
-// };
+const DEFAULT_TEXT = 'Choose report...';
 
 const LocalFolderOptions: FC = () => {
-    // const { loadPerfAnalyzerFolder, openPerfAnalyzerFolderDialog, error, loadPerfAnalyzerGraph } =
-    //     usePerfAnalyzerFileLoader();
-    // const localFolderPath = useSelector(getFolderPathSelector);
-    // const selectedFolderLocationType = useSelector(getSelectedFolderLocationType);
-    const localFolderPath = './';
-    const selectedFolderLocationType = 'local';
+    const [localFolderPath, setLocalFolderPath] = useState(DEFAULT_TEXT);
 
     return (
         <FormGroup
-            label={<h3>Select local folder</h3>}
+            label={<h3>Select local report</h3>}
             labelFor='text-input'
-            subLabel='Select local folder to load netlist analyzer output and performance data from'
+            subLabel='Select a local directory containing a report'
         >
             <div className='buttons-container'>
-                <FolderPicker
-                    // onSelectFolder={async () => {
-                    //     const folderPath = await openPerfAnalyzerFolderDialog();
-
-                    //     await loadPerfAnalyzerFolder(folderPath);
-
-                    //     if (folderPath) {
-                    //         sendEventToMain(
-                    //             ElectronEvents.UPDATE_WINDOW_TITLE,
-                    //             `(Local Folder) — ${getTestName(folderPath)}`,
-                    //         );
-                    //     }
-                    // }}
-                    onSelectFolder={() => {}}
-                    // text={selectedFolderLocationType === 'local' ? getTestName(localFolderPath) : undefined}
-                    text={undefined}
-                />
-                <GraphSelector
-                    onSelectGraph={() => {}}
-                    // onSelectGraph={(graph) => loadPerfAnalyzerGraph(graph)}
-                    // disabled={selectedFolderLocationType === 'remote'}
-                />
-                {/* {error && (
-                    <div className='loading-error'>
-                        <p>{error.toString()}</p>
-                    </div>
-                )} */}
+                <FolderPicker onSelectFolder={(value) => setLocalFolderPath(value)} text={localFolderPath} />
+                <AnchorButton disabled={!localFolderPath || localFolderPath === DEFAULT_TEXT} href='/operations'>
+                    See operations
+                </AnchorButton>
             </div>
         </FormGroup>
     );

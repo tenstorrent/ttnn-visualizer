@@ -5,15 +5,26 @@
 import { Button, Dialog, DialogBody, DialogFooter, FormGroup, Icon, IconName, InputGroup } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { FC, useState } from 'react';
+import 'styles/components/RemoteConnectionDialog.scss';
 
-import useLogging from '../../hooks/useLogging.hook';
-import useRemoteConnection, {
-    ConnectionStatus,
-    ConnectionTestStates,
-    RemoteConnection,
-} from '../../hooks/useRemote.hook';
+interface RemoteConnection {
+    name: string;
+    host: string;
+    port: number;
+    path: string;
+}
 
-import './RemoteConnectionDialog.scss';
+enum ConnectionTestStates {
+    IDLE,
+    PROGRESS,
+    FAILED,
+    OK,
+}
+
+interface ConnectionStatus {
+    status: ConnectionTestStates;
+    message: string;
+}
 
 const ConnectionTestMessage: FC<ConnectionStatus> = ({ status, message }) => {
     const iconMap: Record<ConnectionTestStates, IconName> = {
@@ -56,52 +67,13 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
     ];
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
-    const { testConnection, testRemoteFolder } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
-    const logging = useLogging();
 
     const isValidConnection = connectionTests.every((status) => status.status === ConnectionTestStates.OK);
 
-    const testConnectionStatus = async () => {
-        setIsTestingconnection(true);
+    const testConnectionStatus = async () => {};
 
-        const sshProgressStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing connection' };
-        const folderProgressStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing remote folder path' };
-
-        setConnectionTests([sshProgressStatus, folderProgressStatus]);
-
-        try {
-            const sshStatus = await testConnection(connection);
-            let folderStatus = folderProgressStatus;
-
-            if (sshStatus.status === ConnectionTestStates.FAILED) {
-                folderStatus = { status: ConnectionTestStates.FAILED, message: 'Could not connect to SSH server' };
-            }
-
-            setConnectionTests([sshStatus, folderStatus]);
-
-            if (sshStatus.status === ConnectionTestStates.OK) {
-                folderStatus = await testRemoteFolder(connection);
-
-                setConnectionTests([sshStatus, folderStatus]);
-            }
-        } catch (err) {
-            logging.error((err as Error)?.message ?? err?.toString() ?? 'Unknown error');
-
-            setConnectionTests([
-                { status: ConnectionTestStates.FAILED, message: 'Connection failed' },
-                { status: ConnectionTestStates.FAILED, message: 'Remote folder path failed' },
-            ]);
-        } finally {
-            setIsTestingconnection(false);
-        }
-    };
-
-    const closeDialog = () => {
-        setConnection(defaultConnection);
-        setConnectionTests(defaultConnectionTests);
-        onClose();
-    };
+    const closeDialog = () => {};
 
     return (
         <Dialog
@@ -190,12 +162,6 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
             />
         </Dialog>
     );
-};
-
-RemoteFolderDialog.defaultProps = {
-    title: 'Add new remote connection',
-    buttonLabel: 'Add connection',
-    remoteConnection: undefined,
 };
 
 export default RemoteFolderDialog;

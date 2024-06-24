@@ -6,7 +6,7 @@ import { AnchorButton, Button, MenuItem, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, useState } from 'react';
-import RemoteFolderDialog from './RemoteConnectionDialog';
+import RemoteConnectionDialog from './RemoteConnectionDialog';
 
 interface RemoteConnection {
     name: string;
@@ -103,7 +103,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                 />
             </Tooltip>
 
-            <RemoteFolderDialog
+            <RemoteConnectionDialog
                 key={`${selectedConnection?.name}${selectedConnection?.host}${selectedConnection?.port}${selectedConnection?.path}`}
                 open={isEditdialogOpen}
                 onAddConnection={() => {}}
@@ -121,10 +121,6 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
             />
         </div>
     );
-};
-
-RemoteConnectionSelector.defaultProps = {
-    connection: undefined,
 };
 
 export default RemoteConnectionSelector;

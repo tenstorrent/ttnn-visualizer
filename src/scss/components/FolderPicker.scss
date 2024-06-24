@@ -4,6 +4,12 @@
 
 @use '../definitions/colours' as *;
 
+.bp5-button-text:has(.path-label) {
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+}
+
 .folder-picker-options {
     display: flex;
     flex-wrap: wrap;
@@ -56,20 +62,6 @@
     }
 }
 
-.popover-list-picker {
-    color: black;
-    padding: 2px 10px;
-    height:fit-content;
-
-    .bp5-menu {
-        color-scheme: normal;
-        overflow-y: auto;
-        scrollbar-gutter: stable;
-        max-height: 400px;
-        height: 100%;
-    }
-}
-
 .loading-error {
     color: #ff5020;
     width: 50%;
@@ -85,12 +77,6 @@
     .remote-folder-status-icon {
         display: contents;
     }
-}
-
-.bp5-button-text:has(.path-label) {
-    display: inline-flex;
-    align-items: center;
-    width: 100%;
 }
 
 .path-label {
