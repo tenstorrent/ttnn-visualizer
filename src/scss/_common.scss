@@ -4,7 +4,7 @@
 @use 'sass:color';
 @use 'definitions/colours' as *;
 
-.bp4-control input:focus ~ .bp4-control-indicator {
+.bp5-control input:focus ~ .bp5-control-indicator {
     outline: $focus-ring solid 2px;
     outline-offset: 0;
 }

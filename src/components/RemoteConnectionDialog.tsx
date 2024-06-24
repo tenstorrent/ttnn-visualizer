@@ -115,7 +115,7 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
             <DialogBody>
                 <FormGroup label='Name' labelFor='text-input' subLabel='Connection name'>
                     <InputGroup
-                        className='bp4-light'
+                        className='bp5-light'
                         key='name'
                         value={connection.name}
                         onChange={(e) => setConnection({ ...connection, name: e.target.value })}

@@ -22,7 +22,7 @@
         min-width: 30rem;
         width: 35vw;
 
-        & > .bp4-icon {
+        & > .bp5-icon {
             color: $tt-dark-gray;
         }
 
@@ -39,15 +39,15 @@
             align-items: center;
         }
 
-        .remote-connection-select .bp4-button-text,
-        .remote-folder-select .bp4-button-text {
+        .remote-connection-select .bp5-button-text,
+        .remote-folder-select .bp5-button-text {
             width: 10rem;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
-        .bp4-form-group-sub-label { color: $tt-light-gray; }
+        .bp5-form-group-sub-label { color: $tt-light-gray; }
     }
 
     legend {
@@ -61,7 +61,7 @@
     padding: 2px 10px;
     height:fit-content;
 
-    .bp4-menu {
+    .bp5-menu {
         color-scheme: normal;
         overflow-y: auto;
         scrollbar-gutter: stable;
@@ -87,7 +87,7 @@
     }
 }
 
-.bp4-button-text:has(.path-label) {
+.bp5-button-text:has(.path-label) {
     display: inline-flex;
     align-items: center;
     width: 100%;
