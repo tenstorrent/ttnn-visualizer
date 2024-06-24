@@ -1,8 +1,8 @@
 import { Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
-import LocalFolderSelector from '../components/LocalFolderSelector';
-import RemoteSyncConfigurator from '../components/RemoteSyncConfigurator';
+import LocalFolderSelector from '../components/report-selection/LocalFolderSelector';
+import RemoteSyncConfigurator from '../components/report-selection/RemoteSyncConfigurator';
 import 'styles/components/Home.scss';
 
 function Home() {
