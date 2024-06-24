@@ -4,7 +4,7 @@
 @use 'sass:color';
 @use 'definitions/colours' as *;
 
-.bp4-control input:focus ~ .bp4-control-indicator {
+.bp5-control input:focus ~ .bp5-control-indicator {
     outline: $focus-ring solid 2px;
     outline-offset: 0;
 }
@@ -60,11 +60,6 @@ $footer-height: 20px;
     }
 }
 
-.bp3-select-popover .bp3-menu {
-    max-height: 400px;
-    overflow: auto;
-}
-
 .header {
     margin-top: 10px;
     display: flex;
@@ -76,12 +71,8 @@ $footer-height: 20px;
 
 .splash-screen {
     display: flex;
-    width: 100vw;
-    height: calc(100vh - 50px);
-    grid-template-columns: 1fr;
     place-content: center center;
-    align-items: center;
-    gap: 40px;
+    margin-top: 100px;
 }
 
 button,

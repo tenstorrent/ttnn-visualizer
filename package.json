@@ -13,7 +13,7 @@
   "dependencies": {
     "@blueprintjs/core": "^5.10.3",
     "@blueprintjs/icons": "^5.9.0",
-    "@blueprintjs/popover2": "^2.1.5",
+    "@blueprintjs/select": "^5.1.5",
     "@tanstack/react-virtual": "^3.5.1",
     "axios": "^1.7.2",
     "normalize.css": "^8.0.1",

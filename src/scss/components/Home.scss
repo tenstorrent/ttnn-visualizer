@@ -1,0 +1,22 @@
+// Rough placeholder styles for demoing home screen
+
+@use '../definitions/colours' as *;
+
+.home {
+    h3 {
+        margin: 0;
+    }
+
+    .bp5-form-group .bp5-form-group-sub-label,
+    .bp5-form-group .bp5-form-helper-text {
+        color: $tt-white-text;
+    }
+
+    .bp5-button {
+        margin: 0;
+    }
+
+    .bp5-file-input {
+        max-width: 265px;
+    }
+}
