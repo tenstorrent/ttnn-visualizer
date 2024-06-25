@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Link, Outlet } from 'react-router-dom';
 import { FocusStyleManager } from '@blueprintjs/core';
 import TenstorrentLogo from './TenstorrentLogo';
 
@@ -8,8 +8,11 @@ function Layout() {
     return (
         <>
             <header className='app-header'>
-                <TenstorrentLogo />
+                <Link to='/'>
+                    <TenstorrentLogo />
+                </Link>
             </header>
+
             <main>
                 <Outlet />
             </main>
