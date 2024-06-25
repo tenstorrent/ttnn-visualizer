@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
-import axios from 'axios';
-import { useQuery } from 'react-query';
 import { PlotMouseEvent } from 'plotly.js';
 import { Switch } from '@blueprintjs/core';
 import { getBufferColor } from '../functions/colorGenerator.ts';
-import { FragmentationEntry, OperationDetailsData, TensorData } from '../model/APIData.ts';
+import { FragmentationEntry, TensorData } from '../model/APIData.ts';
 import L1MemoryRenderer from './L1MemoryRenderer.tsx';
 import { getMemoryData } from '../model/ChartUtils.ts';
 import LoadingSpinner from './LoadingSpinner.tsx';
+import { useOperationDetails, usePreviousOperationDetails } from '../hooks/useAPI.tsx';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -18,20 +17,11 @@ const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const [zoomedinView, setZoomedinView] = useState(false);
 
-    const fetchOperations = async (id: number) => {
-        const response = await axios.get(`/api/get-operation-details/${id}`);
-        return response.data;
-    };
+    const { operation, operationDetails: details } = useOperationDetails(operationId);
 
-    const { data: operationDetails, isLoading } = useQuery<OperationDetailsData>(
-        ['get-operation-detail', operationId],
-        () => fetchOperations(operationId),
-    );
-
-    const { data: previousOperationDetails, isLoading: isPrevLoading } = useQuery<OperationDetailsData>(
-        ['get-operation-detail', operationId - 1],
-        () => fetchOperations(operationId - 1),
-    );
+    const { data: operationDetails, isLoading } = details;
+    const { data: previousOperationDetails, isLoading: isPrevLoading } =
+        usePreviousOperationDetails(operationId).operationDetails;
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
         return (
@@ -85,9 +75,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     return (
         <>
-            <h2>
-                Operation name placeholder <span className='bp5-text-small'>pending api updates</span>
-            </h2>
+            <h2>{operation && `${operation?.id} ${operation.name}`}</h2>
             <Switch
                 label={zoomedinView ? 'Full buffer report' : 'Zoom buffer report'}
                 checked={zoomedinView}

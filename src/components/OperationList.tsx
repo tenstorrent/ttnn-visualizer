@@ -3,10 +3,8 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 import { UIEvent, useMemo, useRef, useState } from 'react';
-import axios, { AxiosError } from 'axios';
 import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useQuery } from 'react-query';
 import { Link } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -17,6 +15,7 @@ import { Operation } from '../model/Graph';
 import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/OperationsList.scss';
+import { useOperationsList } from '../hooks/useAPI.tsx';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -31,16 +30,7 @@ const OperationList = () => {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
 
-    const fetchOperations = async () => {
-        const { data: operationList } = await axios.get('/api/get-operations');
-
-        return operationList;
-    };
-    const {
-        data: fetchedOperations,
-        error,
-        isLoading,
-    } = useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
+    const { data: fetchedOperations, error, isLoading } = useOperationsList();
 
     const scrollElementRef = useRef(null);
     const virtualizer = useVirtualizer({
