@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Button, FocusStyleManager, Intent } from '@blueprintjs/core';
+import { Button, FocusStyleManager } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import TenstorrentLogo from './TenstorrentLogo';
 
@@ -22,11 +22,7 @@ function Layout() {
                 {/* TODO: Handle navigation variations differently */}
                 {navigation.pathname !== '/' && (
                     <nav>
-                        <Button
-                            icon={IconNames.FOLDER_SHARED_OPEN}
-                            onClick={() => handleNavigate('/')}
-                            intent={Intent.PRIMARY}
-                        >
+                        <Button minimal icon={IconNames.FOLDER_SHARED_OPEN} onClick={() => handleNavigate('/')}>
                             Select new report
                         </Button>
                     </nav>
