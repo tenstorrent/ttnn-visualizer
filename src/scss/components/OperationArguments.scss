@@ -25,11 +25,14 @@
 
         td {
             padding: 6px 12px;
-            word-break: break-word; // Can get really long strings in the table cell which cause horizontal overflows
 
             &:first-child {
                 font-weight: 700;
                 vertical-align: top;
+            }
+
+            &.expandable-tensor {
+                word-break: break-word; // Can get really long strings in the table cell which cause horizontal overflows
             }
         }
     }
