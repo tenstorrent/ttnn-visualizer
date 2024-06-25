@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from 'react-query';
+import { FocusStyleManager } from '@blueprintjs/core';
 import './index.scss';
 import ErrorPage from './error-page';
 import Layout from './components/Layout';
@@ -30,6 +31,8 @@ const router = createBrowserRouter([
         ],
     },
 ]);
+
+FocusStyleManager.onlyShowFocusOnTabs();
 
 const queryClient = new QueryClient();
 ReactDOM.createRoot(document.getElementById('root')!).render(
