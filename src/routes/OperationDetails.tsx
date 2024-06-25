@@ -1,8 +1,16 @@
 import { useParams } from 'react-router';
 import OperationDetailsComponent from '../components/OperationDetailsComponent';
+import OperationDetailsNavigation from '../components/OperationDetailsNavigation';
 
 export default function OperationDetails() {
     const { operationId } = useParams();
 
-    return operationId && <OperationDetailsComponent operationId={parseInt(operationId, 10)} />;
+    return (
+        operationId && (
+            <>
+                <OperationDetailsNavigation operationId={operationId} />
+                <OperationDetailsComponent operationId={parseInt(operationId, 10)} />;
+            </>
+        )
+    );
 }
