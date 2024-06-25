@@ -9,8 +9,6 @@ import FolderPicker from './FolderPicker';
 
 import 'styles/components/FolderPicker.scss';
 
-const DEFAULT_TEXT = 'Choose report...';
-
 const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
 

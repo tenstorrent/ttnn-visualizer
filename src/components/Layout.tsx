@@ -23,7 +23,7 @@ function Layout() {
                 {navigation.pathname !== '/' && (
                     <nav>
                         <Button minimal icon={IconNames.FOLDER_SHARED_OPEN} onClick={() => handleNavigate('/')}>
-                            Select new report
+                            Select report
                         </Button>
                     </nav>
                 )}

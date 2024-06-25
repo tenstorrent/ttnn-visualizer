@@ -2,6 +2,7 @@ import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useNextOperation, usePreviousOperation } from '../hooks/useAPI';
+import 'styles/components/OperationDetailsNavigation.scss';
 
 interface OperationDetailsNavigationProps {
     operationId: string;
@@ -23,7 +24,7 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
 
     return (
         <nav>
-            <ButtonGroup>
+            <ButtonGroup className='operation-details-navigation'>
                 <Tooltip
                     content={previousOperation ? `${previousOperation?.id} ${previousOperation?.name}` : ''}
                     placement={PopoverPosition.TOP}
@@ -36,11 +37,11 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                         Previous
                     </Button>
                 </Tooltip>
-                <Tooltip content='View operations' placement={PopoverPosition.TOP}>
-                    <Button icon={IconNames.LIST} onClick={() => handleNavigate('/operations')}>
-                        Operations
-                    </Button>
+
+                <Tooltip content='View operations list' placement={PopoverPosition.TOP}>
+                    <Button icon={IconNames.LIST} onClick={() => handleNavigate('/operations')} />
                 </Tooltip>
+
                 <Tooltip
                     content={nextOperation ? `${nextOperation?.id} ${nextOperation?.name}` : ''}
                     placement={PopoverPosition.TOP}
