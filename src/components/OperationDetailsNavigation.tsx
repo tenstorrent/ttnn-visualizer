@@ -28,6 +28,7 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                 <Tooltip
                     content={previousOperation ? `${previousOperation?.id} ${previousOperation?.name}` : ''}
                     placement={PopoverPosition.TOP}
+                    disabled={!previousOperation}
                 >
                     <Button
                         icon={IconNames.ArrowLeft}
@@ -45,6 +46,7 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                 <Tooltip
                     content={nextOperation ? `${nextOperation?.id} ${nextOperation?.name}` : ''}
                     placement={PopoverPosition.TOP}
+                    disabled={!nextOperation}
                 >
                     <Button
                         rightIcon={IconNames.ArrowRight}
