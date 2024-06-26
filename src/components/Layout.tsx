@@ -1,12 +1,11 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Button, FocusStyleManager } from '@blueprintjs/core';
+import { Button } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import TenstorrentLogo from './TenstorrentLogo';
 
 function Layout() {
-    FocusStyleManager.onlyShowFocusOnTabs();
     const navigate = useNavigate();
-    const navigation = useLocation();
+    const location = useLocation();
 
     const handleNavigate = (path: string) => {
         navigate(path);
@@ -20,7 +19,7 @@ function Layout() {
                 </Link>
 
                 {/* TODO: Handle navigation variations differently */}
-                {navigation.pathname !== '/' && (
+                {location.pathname !== '/' && (
                     <nav>
                         <Button minimal icon={IconNames.FOLDER_SHARED_OPEN} onClick={() => handleNavigate('/')}>
                             Select report
