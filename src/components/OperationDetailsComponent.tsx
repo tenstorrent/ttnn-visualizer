@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PlotMouseEvent } from 'plotly.js';
 import { Switch } from '@blueprintjs/core';
+import classNames from 'classnames';
 import { getBufferColor } from '../functions/colorGenerator';
 import { FragmentationEntry, TensorData } from '../model/APIData';
 import L1MemoryRenderer from './L1MemoryRenderer';
@@ -8,7 +9,7 @@ import { getMemoryData } from '../model/ChartUtils';
 import LoadingSpinner from './LoadingSpinner';
 import { useOperationDetails, usePreviousOperationDetails } from '../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
-import toHex from '../functions/math';
+import { toHex } from '../functions/math';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -61,7 +62,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     );
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
-    const memorySize = operationDetails?.l1_sizes[0] || 0; // TODO: memorysize will need to be calculated for the multichip scenario
+    const memorySize = operationDetails?.l1_sizes[0] || 0; // TODO: memorysize will need to be read from the appropriate device even though its likely going to be the same for the multichip scenario
 
     const plotZoomRangeStart =
         Math.min(memory[0]?.address || memorySize, previousMemory[0]?.address || memorySize) *
@@ -121,7 +122,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 {memoryReport.map((chunk) => (
                     <div className='legend-item' key={chunk.address}>
                         <div
-                            className={`memory-color-block ${chunk.empty ? 'empty' : ''}`}
+                            className={classNames('memory-color-block', { empty: chunk.empty === true })}
                             style={{
                                 backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
                             }}
@@ -149,7 +150,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         <div className='tensor-item' key={tensor.tensor_id}>
                             <div className='tensor-name'>
                                 <div
-                                    className={`memory-color-block ${tensor.address === null ? 'empty-tensor' : ''}`}
+                                    className={classNames('memory-color-block', {
+                                        'empty-tensor': tensor.address === null,
+                                    })}
                                     style={{
                                         backgroundColor: getBufferColor(tensor.address),
                                     }}
@@ -173,7 +176,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         <div className='tensor-item' key={tensor.tensor_id}>
                             <div className='tensor-name'>
                                 <div
-                                    className='memory-color-block'
+                                    className={classNames('memory-color-block', {
+                                        'empty-tensor': tensor.address === null,
+                                    })}
                                     style={{
                                         backgroundColor: getBufferColor(tensor.address),
                                     }}
