@@ -12,8 +12,8 @@ import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 
 const RemoteSyncConfigurator: FC = () => {
-    const [isSyncingRemoteFolder, setIsSyncingRemoteFolder] = useState(false);
-    const [isLoadingFolderList, setIsLoadingFolderList] = useState(false);
+    const [isSyncingRemoteFolder, _setIsSyncingRemoteFolder] = useState(false);
+    const [isLoadingFolderList, _setIsLoadingFolderList] = useState(false);
 
     return (
         <>
@@ -36,7 +36,6 @@ const RemoteSyncConfigurator: FC = () => {
                     disabled={isLoadingFolderList || isSyncingRemoteFolder}
                     loading={isLoadingFolderList}
                     offline={false}
-                    onEditConnection={() => {}}
                     onRemoveConnection={() => {}}
                     onSelectConnection={() => {}}
                     onSyncRemoteFolders={() => {}}
