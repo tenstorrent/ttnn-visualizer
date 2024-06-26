@@ -47,14 +47,12 @@ interface RemoteFolderDialogProps {
     title?: string;
     buttonLabel?: string;
     open: boolean;
-    onClose: () => void;
     onAddConnection: (connection: RemoteConnection) => void;
     remoteConnection?: RemoteConnection;
 }
 
 const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
     open,
-    onClose,
     onAddConnection,
     title = 'Add new remote connection',
     buttonLabel = 'Add connection',
@@ -66,8 +64,8 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
         { status: ConnectionTestStates.IDLE, message: 'Test remote folder path' },
     ];
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
-    const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
-    const [isTestingConnection, setIsTestingconnection] = useState(false);
+    const [connectionTests, _setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
+    const [isTestingConnection, _setIsTestingconnection] = useState(false);
 
     const isValidConnection = connectionTests.every((status) => status.status === ConnectionTestStates.OK);
 
