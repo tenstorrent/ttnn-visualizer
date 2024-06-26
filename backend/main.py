@@ -11,7 +11,14 @@ from sqlalchemy.orm import sessionmaker
 
 DATABASE_URL = "sqlite:///./db.sqlite"
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=60,
+    pool_recycle=1800,
+)
 metadata = MetaData()
 
 app = FastAPI()
@@ -298,7 +305,6 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
 
     # buffers_list now contains Buffer objects with unique addresses
 
-
     device_query = select(devices)
     device_data = db.execute(device_query).mappings().all()
     l1_sizes = [None] * (max(device['device_id'] for device in device_data) + 1)
@@ -319,6 +325,7 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
         l1_sizes=l1_sizes,
         # buffer_pages=buffer_pages_list
     )
+
 
 # Middleware to proxy requests to Vite development server, excluding /api/* requests
 @app.middleware("http")
