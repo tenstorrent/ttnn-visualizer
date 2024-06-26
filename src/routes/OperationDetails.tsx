@@ -9,7 +9,7 @@ export default function OperationDetails() {
         operationId && (
             <>
                 <OperationDetailsNavigation operationId={operationId} />
-                <OperationDetailsComponent operationId={parseInt(operationId, 10)} />;
+                <OperationDetailsComponent operationId={parseInt(operationId, 10)} />
             </>
         )
     );
