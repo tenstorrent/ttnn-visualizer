@@ -7,6 +7,7 @@ import L1MemoryRenderer from './L1MemoryRenderer.tsx';
 import { getMemoryData } from '../model/ChartUtils.ts';
 import LoadingSpinner from './LoadingSpinner.tsx';
 import { useOperationDetails, usePreviousOperationDetails } from '../hooks/useAPI.tsx';
+import 'styles/components/OperationDetailsComponent.scss';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -52,15 +53,27 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const inputs = operationDetails?.input_tensors;
     const outputs = operationDetails?.output_tensors;
 
-    const { chartData, memory, fragmentation } = getMemoryData(operationDetails);
-    const { chartData: previousChartData, memory: previousMemory } = getMemoryData(previousOperationDetails);
+    const { chartData, memory, fragmentation } = getMemoryData(operationDetails, zoomedinView);
+    const { chartData: previousChartData, memory: previousMemory } = getMemoryData(
+        previousOperationDetails,
+        zoomedinView,
+    );
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const memorySize = operationDetails?.l1_sizes[0] || 0; // TODO: memorysize will need to be calculated for the multichip scenario
 
-    const minPlotRangeStart =
+    const plotZoomRangeStart =
         Math.min(memory[0]?.address || memorySize, previousMemory[0]?.address || memorySize) *
         MINIMAL_MEMORY_RANGE_OFFSET;
+
+    const plotZoomRangeEnd =
+        Math.max(
+            memory.length > 0 ? memory[memory.length - 1].address + memory[memory.length - 1].size : 0,
+            previousMemory.length > 0
+                ? previousMemory[previousMemory.length - 1].address + previousMemory[previousMemory.length - 1].size
+                : 0,
+        ) *
+        (1 / MINIMAL_MEMORY_RANGE_OFFSET);
 
     const onBufferClick = (event: Readonly<PlotMouseEvent>): void => {
         // TODO: stub method for clicking on the buffer
@@ -74,120 +87,125 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     };
 
     return (
-        <>
-            <h2>{operation && `${operation?.id} ${operation.name}`}</h2>
+        <div className='operation-details-component'>
+            <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
             <Switch
                 label={zoomedinView ? 'Full buffer report' : 'Zoom buffer report'}
                 checked={zoomedinView}
                 onChange={() => setZoomedinView(!zoomedinView)}
             />
-            <L1MemoryRenderer
-                minRangeStart={minPlotRangeStart}
-                chartData={previousChartData}
-                zoomedinView={zoomedinView}
-                memorySize={memorySize}
-            />
-            <L1MemoryRenderer
-                minRangeStart={minPlotRangeStart}
-                chartData={chartData}
-                zoomedinView={zoomedinView}
-                memorySize={memorySize}
-                onBufferClick={onBufferClick}
-            />
+            {previousChartData.length !== 0 && (
+                <L1MemoryRenderer
+                    plotZoomRangeStart={plotZoomRangeStart}
+                    plotZoomRangeEnd={plotZoomRangeEnd}
+                    chartData={previousChartData}
+                    zoomedinView={zoomedinView}
+                    memorySize={memorySize}
+                />
+            )}
+            {chartData.length !== 0 && (
+                <L1MemoryRenderer
+                    plotZoomRangeStart={plotZoomRangeStart}
+                    plotZoomRangeEnd={plotZoomRangeEnd}
+                    chartData={chartData}
+                    zoomedinView={zoomedinView}
+                    memorySize={memorySize}
+                    onBufferClick={onBufferClick}
+                />
+            )}
             <hr />
             {/* ugly inline css below will be going away at the design PR */}
             {/* the below needs a lot of redesigning. */}
             <h3>Legend</h3>
-            {memoryReport.map((chunk) => (
-                // this likely needs to be a grid of sort to right alight address and size and vertically align coluns
-                <div
-                    key={chunk.address}
-                    style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '5px' }}
-                >
-                    <div
-                        style={{
-                            width: '20px',
-                            height: '20px',
-                            backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
-                            display: 'inline-block',
-                        }}
-                    />
-                    <span>
-                        {chunk.address} - {formatSize(chunk.size)}{' '}
-                        {getTensorForAddress(chunk.address) &&
-                            `Tensor ${getTensorForAddress(chunk.address)?.tensor_id}`}
-                        {chunk.empty && 'Empty'}
-                    </span>
+            <div className='legend'>
+                {memoryReport.map((chunk) => (
+                    // this likely needs to be a grid of sort to right alight address and size and vertically align coluns
+                    <div className='legend-item' key={chunk.address}>
+                        <div
+                            className={`memory-color-block ${chunk.empty ? 'empty' : ''}`}
+                            style={{
+                                backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
+                            }}
+                        />
+                        <div className='legend-details'>
+                            <div className='format-numbers'>{chunk.address}</div>
+                            <div className='format-numbers'>{formatSize(chunk.size)} </div>
+                            <div>
+                                {getTensorForAddress(chunk.address) && (
+                                    <>Tensor {getTensorForAddress(chunk.address)?.tensor_id}</>
+                                )}
+                                {chunk.empty && 'Empty'}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+            <hr />
+
+            {/* op 1422 example: some tensors dont write in L1 and appear white, we need to come up with treatment. */}
+            <div className='tensor-list'>
+                <div className='inputs'>
+                    <h3>Inputs</h3>
+                    {inputs.map((tensor) => (
+                        <div key={tensor.tensor_id}>
+                            <div
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    color: '#fff',
+                                }}
+                            >
+                                <h4>Tensor ID: {tensor.tensor_id}</h4>
+                                <div
+                                    className={`memory-color-block ${tensor.address === null ? 'empty-tensor' : ''}`}
+                                    style={{
+                                        backgroundColor: getBufferColor(tensor.address),
+                                    }}
+                                />
+                                <span>{tensor.address}</span>
+                            </div>
+
+                            <div style={{ paddingLeft: '30px' }}>
+                                <p>Shape: {tensor.shape}</p>
+                                <p>Dtype: {tensor.dtype}</p>
+                                <p>Layout: {tensor.layout}</p>
+                            </div>
+                        </div>
+                    ))}
                 </div>
-            ))}
-            <hr />
-
-            <>
-                {/* op 1422 example: some tensors dont write in L1 and appear white, we need to come up with treatment. */}
-                <h3>Inputs</h3>
-                {inputs.map((tensor) => (
-                    <div key={tensor.tensor_id}>
-                        <div
-                            style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px',
-                                color: '#fff',
-                            }}
-                        >
-                            <h4>Tensor ID: {tensor.tensor_id}</h4>
+                <div className='outputs'>
+                    <h3>Outputs</h3>
+                    {outputs.map((tensor) => (
+                        <div key={tensor.tensor_id}>
                             <div
                                 style={{
-                                    width: '20px',
-                                    height: '20px',
-                                    backgroundColor: getBufferColor(tensor.address),
-                                    display: 'inline-block',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    color: '#fff',
                                 }}
-                            />
-                            <span>{tensor.address}</span>
-                        </div>
+                            >
+                                <h4>Tensor ID: {tensor.tensor_id}</h4>
+                                <div
+                                    className='memory-color-block'
+                                    style={{
+                                        backgroundColor: getBufferColor(tensor.address),
+                                    }}
+                                />
+                                <span>{tensor.address}</span>
+                            </div>
 
-                        <div style={{ paddingLeft: '30px' }}>
-                            <p>Shape: {tensor.shape}</p>
-                            <p>Dtype: {tensor.dtype}</p>
-                            <p>Layout: {tensor.layout}</p>
+                            <div style={{ paddingLeft: '30px' }}>
+                                <p>Shape: {tensor.shape}</p>
+                                <p>Dtype: {tensor.dtype}</p>
+                                <p>Layout: {tensor.layout}</p>
+                            </div>
                         </div>
-                    </div>
-                ))}
-                <h3>Outputs</h3>
-                {outputs.map((tensor) => (
-                    <div key={tensor.tensor_id}>
-                        <div
-                            style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px',
-                                color: '#fff',
-                            }}
-                        >
-                            <h4>Tensor ID: {tensor.tensor_id}</h4>
-                            <div
-                                style={{
-                                    width: '20px',
-                                    height: '20px',
-                                    backgroundColor: getBufferColor(tensor.address),
-                                    display: 'inline-block',
-                                }}
-                            />
-                            <span>{tensor.address}</span>
-                        </div>
-
-                        <div style={{ paddingLeft: '30px' }}>
-                            <p>Shape: {tensor.shape}</p>
-                            <p>Dtype: {tensor.dtype}</p>
-                            <p>Layout: {tensor.layout}</p>
-                        </div>
-                    </div>
-                ))}
-            </>
-
-            <hr />
-        </>
+                    ))}
+                </div>
+            </div>
+        </div>
     );
 };
 export default OperationDetailsComponent;

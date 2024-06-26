@@ -7,7 +7,8 @@ export interface L1MemoryRendererProps {
     zoomedinView: boolean;
     memorySize: number;
     onBufferClick?: (event: PlotMouseEvent) => void;
-    minRangeStart?: number;
+    plotZoomRangeStart?: number;
+    plotZoomRangeEnd?: number;
 }
 
 const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
@@ -15,14 +16,15 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     zoomedinView,
     memorySize,
     onBufferClick,
-    minRangeStart,
+    plotZoomRangeStart,
+    plotZoomRangeEnd,
 }) => {
     const layout: Partial<Layout> = {
         height: 60,
         xaxis: {
             autorange: false,
             title: '',
-            range: [zoomedinView ? minRangeStart : 0, memorySize],
+            range: [zoomedinView ? plotZoomRangeStart : 0, zoomedinView ? plotZoomRangeEnd : memorySize],
             showgrid: true,
             fixedrange: true,
             zeroline: false,

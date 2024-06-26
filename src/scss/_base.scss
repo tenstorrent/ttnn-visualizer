@@ -76,3 +76,9 @@ a {
         color: $tt-purple;
     }
 }
+
+hr {
+    border: none;
+    border-bottom: 1px solid $tt-medium-gray;
+    margin: 0;
+}
