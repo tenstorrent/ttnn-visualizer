@@ -1,5 +1,5 @@
 import { useParams } from 'react-router';
-import OperationDetailsComponent from '../components/OperationDetailsComponent';
+import OperationDetailsComponent from '../components/operation-details/OperationDetailsComponent';
 import OperationDetailsNavigation from '../components/OperationDetailsNavigation';
 
 export default function OperationDetails() {
