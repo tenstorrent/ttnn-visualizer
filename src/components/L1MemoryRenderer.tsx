@@ -4,25 +4,29 @@ import { Layout, PlotData, PlotMouseEvent } from 'plotly.js';
 
 export interface L1MemoryRendererProps {
     chartData: Partial<PlotData>[];
-    zoomedinView: boolean;
+    isZoomedIn: boolean;
     memorySize: number;
+    title: string;
     onBufferClick?: (event: PlotMouseEvent) => void;
-    minRangeStart?: number;
+    plotZoomRangeStart?: number;
+    plotZoomRangeEnd?: number;
 }
 
 const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     chartData,
-    zoomedinView,
+    isZoomedIn,
     memorySize,
+    title,
     onBufferClick,
-    minRangeStart,
+    plotZoomRangeStart,
+    plotZoomRangeEnd,
 }) => {
     const layout: Partial<Layout> = {
-        height: 60,
+        height: 80,
         xaxis: {
             autorange: false,
-            title: '',
-            range: [zoomedinView ? minRangeStart : 0, memorySize],
+            title: 'L1 Address Space',
+            range: [isZoomedIn ? plotZoomRangeStart : 0, isZoomedIn ? plotZoomRangeEnd : memorySize],
             showgrid: true,
             fixedrange: true,
             zeroline: false,
@@ -40,7 +44,7 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
         margin: {
             l: 5,
             r: 5,
-            b: 20,
+            b: 40,
             t: 5,
         },
         paper_bgcolor: '#33333d',
@@ -70,13 +74,17 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     };
 
     return (
-        <Plot
-            data={chartData}
-            layout={layout}
-            style={{ width: '100%', height: '110px' }}
-            config={config}
-            onClick={onBufferClick}
-        />
+        <>
+            <h3 className='plot-title'>{title}</h3>
+            <Plot
+                //
+                className='l1-memory-plot'
+                data={chartData}
+                layout={layout}
+                config={config}
+                onClick={onBufferClick}
+            />
+        </>
     );
 };
 

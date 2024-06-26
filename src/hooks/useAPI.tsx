@@ -34,6 +34,7 @@ export const useOperationDetails = (operationId: number) => {
 };
 
 export const usePreviousOperationDetails = (operationId: number) => {
+    // TODO: change to return array and number of previous operations
     const { data: operations } = useOperationsList();
 
     const operation = operations?.find((_operation, index, operationList) => {

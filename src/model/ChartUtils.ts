@@ -2,7 +2,7 @@ import { PlotData } from 'plotly.js';
 import { getBufferColor } from '../functions/colorGenerator';
 import { BufferData, Chunk, FragmentationEntry, OperationDetailsData } from './APIData';
 
-export const getMemoryData = (operationDetails: OperationDetailsData) => {
+export const getMemoryData = (operationDetails: OperationDetailsData, isZoomedIn: boolean) => {
     const fragmentation: FragmentationEntry[] = [];
     const memory: Chunk[] =
         operationDetails?.buffers
@@ -42,7 +42,8 @@ export const getMemoryData = (operationDetails: OperationDetailsData) => {
                     simplify: false,
                 },
             },
-            text: `${address}::${size}`, // this should probably be tensor specific
+            text: isZoomedIn ? `${address}:${size}` : '',
+            hovertext: `${address}:${size}`,
             hoverinfo: 'text',
         };
     });
