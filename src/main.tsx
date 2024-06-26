@@ -2,12 +2,13 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from 'react-query';
+import { FocusStyleManager } from '@blueprintjs/core';
 import './index.scss';
 import ErrorPage from './error-page';
 import Layout from './components/Layout';
-import Home from './roots/Home';
-import Operations from './roots/Operations';
-import OperationDetails from './roots/OperationDetails';
+import Home from './routes/Home';
+import Operations from './routes/Operations';
+import OperationDetails from './routes/OperationDetails';
 
 const router = createBrowserRouter([
     {
@@ -25,12 +26,13 @@ const router = createBrowserRouter([
             },
             {
                 path: 'operations/:operationId',
-                loader: () => ({ message: "You're interested in viewing the following operation" }),
                 element: <OperationDetails />,
             },
         ],
     },
 ]);
+
+FocusStyleManager.onlyShowFocusOnTabs();
 
 const queryClient = new QueryClient();
 ReactDOM.createRoot(document.getElementById('root')!).render(
