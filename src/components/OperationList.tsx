@@ -15,7 +15,7 @@ import { Operation } from '../model/Graph';
 import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/OperationsList.scss';
-import { useOperationsList } from '../hooks/useAPI.tsx';
+import { useOperationsList } from '../hooks/useAPI';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item

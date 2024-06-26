@@ -1,6 +1,6 @@
 import { PlotData } from 'plotly.js';
-import { getBufferColor } from '../functions/colorGenerator.ts';
-import { BufferData, Chunk, FragmentationEntry, OperationDetailsData } from './APIData.ts';
+import { getBufferColor } from '../functions/colorGenerator';
+import { BufferData, Chunk, FragmentationEntry, OperationDetailsData } from './APIData';
 
 export const getMemoryData = (operationDetails: OperationDetailsData, zoomedInView: boolean) => {
     const fragmentation: FragmentationEntry[] = [];
