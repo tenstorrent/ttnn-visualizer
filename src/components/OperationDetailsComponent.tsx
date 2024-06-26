@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { PlotMouseEvent } from 'plotly.js';
 import { Switch } from '@blueprintjs/core';
-import { getBufferColor } from '../functions/colorGenerator.ts';
-import { FragmentationEntry, TensorData } from '../model/APIData.ts';
-import L1MemoryRenderer from './L1MemoryRenderer.tsx';
-import { getMemoryData } from '../model/ChartUtils.ts';
-import LoadingSpinner from './LoadingSpinner.tsx';
-import { useOperationDetails, usePreviousOperationDetails } from '../hooks/useAPI.tsx';
+import { getBufferColor } from '../functions/colorGenerator';
+import { FragmentationEntry, TensorData } from '../model/APIData';
+import L1MemoryRenderer from './L1MemoryRenderer';
+import { getMemoryData } from '../model/ChartUtils';
+import LoadingSpinner from './LoadingSpinner';
+import { useOperationDetails, usePreviousOperationDetails } from '../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
-import toHex from '../functions/math.ts';
+import toHex from '../functions/math';
 
 interface OperationDetailsProps {
     operationId: number;
