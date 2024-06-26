@@ -117,9 +117,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 />
             )}
 
-            {/* ugly inline css below will be going away at the design PR */}
-            {/* the below needs a lot of redesigning. */}
-
             <div className='legend'>
                 {memoryReport.map((chunk) => (
                     <div className='legend-item' key={chunk.address}>
@@ -145,8 +142,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 ))}
             </div>
             <hr />
-
-            {/* op 1422 example: some tensors dont write in L1 and appear white, we need to come up with treatment. */}
             <div className='tensor-list'>
                 <div className='inputs'>
                     <h3>Inputs</h3>
