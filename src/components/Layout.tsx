@@ -2,12 +2,12 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import TenstorrentLogo from './TenstorrentLogo';
-import { useReport } from '../hooks/useAPI';
+import { useReportMeta } from '../hooks/useAPI';
 
 function Layout() {
     const navigate = useNavigate();
     const location = useLocation();
-    const report = useReport();
+    const report = useReportMeta();
 
     const handleNavigate = (path: string) => {
         navigate(path);

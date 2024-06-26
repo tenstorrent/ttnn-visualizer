@@ -63,7 +63,7 @@ export const useNextOperation = (operationId: number) => {
     return operation ? { id: operation.id, name: operation.name } : undefined;
 };
 
-export const useReport = () => {
+export const useReportMeta = () => {
     // TODO: Get this information from somewhere
     return {
         cache_path: '/localdev/aknezevic/.cache/ttnn',
