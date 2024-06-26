@@ -2,7 +2,7 @@ import { PlotData } from 'plotly.js';
 import { getBufferColor } from '../functions/colorGenerator';
 import { BufferData, Chunk, FragmentationEntry, OperationDetailsData } from './APIData';
 
-export const getMemoryData = (operationDetails: OperationDetailsData, zoomedInView: boolean) => {
+export const getMemoryData = (operationDetails: OperationDetailsData, isZoomedIn: boolean) => {
     const fragmentation: FragmentationEntry[] = [];
     const memory: Chunk[] =
         operationDetails?.buffers
@@ -42,7 +42,7 @@ export const getMemoryData = (operationDetails: OperationDetailsData, zoomedInVi
                     simplify: false,
                 },
             },
-            text: zoomedInView ? `${address}:${size}` : '',
+            text: isZoomedIn ? `${address}:${size}` : '',
             hovertext: `${address}:${size}`,
             hoverinfo: 'text',
         };

@@ -4,7 +4,7 @@ import { Layout, PlotData, PlotMouseEvent } from 'plotly.js';
 
 export interface L1MemoryRendererProps {
     chartData: Partial<PlotData>[];
-    zoomedinView: boolean;
+    isZoomedIn: boolean;
     memorySize: number;
     title: string;
     onBufferClick?: (event: PlotMouseEvent) => void;
@@ -14,7 +14,7 @@ export interface L1MemoryRendererProps {
 
 const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     chartData,
-    zoomedinView,
+    isZoomedIn,
     memorySize,
     title,
     onBufferClick,
@@ -26,7 +26,7 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
         xaxis: {
             autorange: false,
             title: 'L1 Address Space',
-            range: [zoomedinView ? plotZoomRangeStart : 0, zoomedinView ? plotZoomRangeEnd : memorySize],
+            range: [isZoomedIn ? plotZoomRangeStart : 0, isZoomedIn ? plotZoomRangeEnd : memorySize],
             showgrid: true,
             fixedrange: true,
             zeroline: false,

@@ -18,7 +18,7 @@ interface OperationDetailsProps {
 const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
-    const [zoomedinView, setZoomedinView] = useState(false);
+    const [zoomedInView, setZoomedInView] = useState(false);
 
     const { operation, operationDetails: details } = useOperationDetails(operationId);
 
@@ -55,10 +55,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const inputs = operationDetails?.input_tensors;
     const outputs = operationDetails?.output_tensors;
 
-    const { chartData, memory, fragmentation } = getMemoryData(operationDetails, zoomedinView);
+    const { chartData, memory, fragmentation } = getMemoryData(operationDetails, zoomedInView);
     const { chartData: previousChartData, memory: previousMemory } = getMemoryData(
         previousOperationDetails,
-        zoomedinView,
+        zoomedInView,
     );
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
@@ -92,9 +92,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         <div className='operation-details-component'>
             <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
             <Switch
-                label={zoomedinView ? 'Full buffer report' : 'Zoom buffer report'}
-                checked={zoomedinView}
-                onChange={() => setZoomedinView(!zoomedinView)}
+                label={zoomedInView ? 'Full buffer report' : 'Zoom buffer report'}
+                checked={zoomedInView}
+                onChange={() => setZoomedInView(!zoomedInView)}
             />
             {previousChartData.length !== 0 && (
                 <L1MemoryRenderer
@@ -102,7 +102,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                     plotZoomRangeStart={plotZoomRangeStart}
                     plotZoomRangeEnd={plotZoomRangeEnd}
                     chartData={previousChartData}
-                    zoomedinView={zoomedinView}
+                    isZoomedIn={zoomedInView}
                     memorySize={memorySize}
                 />
             )}
@@ -112,7 +112,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                     plotZoomRangeStart={plotZoomRangeStart}
                     plotZoomRangeEnd={plotZoomRangeEnd}
                     chartData={chartData}
-                    zoomedinView={zoomedinView}
+                    isZoomedIn={zoomedInView}
                     memorySize={memorySize}
                     onBufferClick={onBufferClick}
                 />
