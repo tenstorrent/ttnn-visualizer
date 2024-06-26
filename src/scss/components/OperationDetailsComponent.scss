@@ -20,8 +20,8 @@
 
             .legend-details {
                 display: inline-grid;
-                grid-template-columns: 1fr 1fr 1fr;
-                gap: 5px;
+                grid-template-columns: 1fr .5fr 1fr;
+                gap: 15px;
 
                 .format-numbers {
                     text-align: right;
@@ -54,7 +54,35 @@
     .tensor-list {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 1rem;
-        margin-top: 1rem;
+        gap: 5px;
+
+
+        .tensor-item {
+            margin-top: 20px;
+        }
+
+        .tensor-name {
+            display: inline-flex;
+            align-items: center;
+            color: $tt-white-text;
+            gap: 8px;
+            margin-bottom: 10px;
+
+            h4 {
+                margin: 0;
+            }
+        }
+
+        .tensor-meta {
+            padding-left: 40px;
+        }
     }
+
+    .plot-title {
+        //font-size: 1.25rem;
+        font-weight: 500;
+        margin-bottom: 10px;
+        margin-top: 0;
+    }
+
 }

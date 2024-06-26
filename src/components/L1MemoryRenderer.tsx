@@ -6,6 +6,7 @@ export interface L1MemoryRendererProps {
     chartData: Partial<PlotData>[];
     zoomedinView: boolean;
     memorySize: number;
+    title: string;
     onBufferClick?: (event: PlotMouseEvent) => void;
     plotZoomRangeStart?: number;
     plotZoomRangeEnd?: number;
@@ -15,15 +16,16 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     chartData,
     zoomedinView,
     memorySize,
+    title,
     onBufferClick,
     plotZoomRangeStart,
     plotZoomRangeEnd,
 }) => {
     const layout: Partial<Layout> = {
-        height: 60,
+        height: 80,
         xaxis: {
             autorange: false,
-            title: '',
+            title: 'L1 Address Space',
             range: [zoomedinView ? plotZoomRangeStart : 0, zoomedinView ? plotZoomRangeEnd : memorySize],
             showgrid: true,
             fixedrange: true,
@@ -42,7 +44,7 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
         margin: {
             l: 5,
             r: 5,
-            b: 20,
+            b: 40,
             t: 5,
         },
         paper_bgcolor: '#33333d',
@@ -72,13 +74,16 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     };
 
     return (
-        <Plot
-            data={chartData}
-            layout={layout}
-            style={{ width: '100%', height: '110px' }}
-            config={config}
-            onClick={onBufferClick}
-        />
+        <>
+            <h3 className='plot-title'>{title}</h3>
+            <Plot
+                data={chartData}
+                layout={layout}
+                style={{ width: '100%', height: '110px' }}
+                config={config}
+                onClick={onBufferClick}
+            />
+        </>
     );
 };
 

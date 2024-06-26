@@ -8,6 +8,7 @@ import { getMemoryData } from '../model/ChartUtils.ts';
 import LoadingSpinner from './LoadingSpinner.tsx';
 import { useOperationDetails, usePreviousOperationDetails } from '../hooks/useAPI.tsx';
 import 'styles/components/OperationDetailsComponent.scss';
+import toHex from '../functions/math.ts';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -96,6 +97,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
             {previousChartData.length !== 0 && (
                 <L1MemoryRenderer
+                    title='Previous Summarized L1 Report'
                     plotZoomRangeStart={plotZoomRangeStart}
                     plotZoomRangeEnd={plotZoomRangeEnd}
                     chartData={previousChartData}
@@ -105,6 +107,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             )}
             {chartData.length !== 0 && (
                 <L1MemoryRenderer
+                    title='Current Summarized L1 Report'
                     plotZoomRangeStart={plotZoomRangeStart}
                     plotZoomRangeEnd={plotZoomRangeEnd}
                     chartData={chartData}
@@ -113,13 +116,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                     onBufferClick={onBufferClick}
                 />
             )}
-            <hr />
+
             {/* ugly inline css below will be going away at the design PR */}
             {/* the below needs a lot of redesigning. */}
-            <h3>Legend</h3>
+
             <div className='legend'>
                 {memoryReport.map((chunk) => (
-                    // this likely needs to be a grid of sort to right alight address and size and vertically align coluns
                     <div className='legend-item' key={chunk.address}>
                         <div
                             className={`memory-color-block ${chunk.empty ? 'empty' : ''}`}
@@ -128,13 +130,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             }}
                         />
                         <div className='legend-details'>
-                            <div className='format-numbers'>{chunk.address}</div>
+                            <div className='format-numbers'>
+                                {chunk.address} ({toHex(chunk.address)})
+                            </div>
                             <div className='format-numbers'>{formatSize(chunk.size)} </div>
                             <div>
                                 {getTensorForAddress(chunk.address) && (
                                     <>Tensor {getTensorForAddress(chunk.address)?.tensor_id}</>
                                 )}
-                                {chunk.empty && 'Empty'}
+                                {chunk.empty && 'Empty space'}
                             </div>
                         </div>
                     </div>
@@ -147,26 +151,20 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 <div className='inputs'>
                     <h3>Inputs</h3>
                     {inputs.map((tensor) => (
-                        <div key={tensor.tensor_id}>
-                            <div
-                                style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '5px',
-                                    color: '#fff',
-                                }}
-                            >
-                                <h4>Tensor ID: {tensor.tensor_id}</h4>
+                        <div className='tensor-item' key={tensor.tensor_id}>
+                            <div className='tensor-name'>
                                 <div
                                     className={`memory-color-block ${tensor.address === null ? 'empty-tensor' : ''}`}
                                     style={{
                                         backgroundColor: getBufferColor(tensor.address),
                                     }}
                                 />
+                                <h4>Tensor ID: {tensor.tensor_id}</h4>
+
                                 <span>{tensor.address}</span>
                             </div>
 
-                            <div style={{ paddingLeft: '30px' }}>
+                            <div className='tensor-meta'>
                                 <p>Shape: {tensor.shape}</p>
                                 <p>Dtype: {tensor.dtype}</p>
                                 <p>Layout: {tensor.layout}</p>
@@ -177,26 +175,20 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 <div className='outputs'>
                     <h3>Outputs</h3>
                     {outputs.map((tensor) => (
-                        <div key={tensor.tensor_id}>
-                            <div
-                                style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '5px',
-                                    color: '#fff',
-                                }}
-                            >
-                                <h4>Tensor ID: {tensor.tensor_id}</h4>
+                        <div className='tensor-item' key={tensor.tensor_id}>
+                            <div className='tensor-name'>
                                 <div
                                     className='memory-color-block'
                                     style={{
                                         backgroundColor: getBufferColor(tensor.address),
                                     }}
                                 />
+                                <h4>Tensor ID: {tensor.tensor_id}</h4>
+
                                 <span>{tensor.address}</span>
                             </div>
 
-                            <div style={{ paddingLeft: '30px' }}>
+                            <div className='tensor-meta'>
                                 <p>Shape: {tensor.shape}</p>
                                 <p>Dtype: {tensor.dtype}</p>
                                 <p>Layout: {tensor.layout}</p>
