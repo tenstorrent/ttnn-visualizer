@@ -42,9 +42,9 @@ function ExpandableTensor({ tensor }: ExpandableTensorProps) {
                 </>
             ) : (
                 <>
-                    <p>{splitTensor[0]}</p>
-                    <p>.........</p>
-                    <p>{splitTensor[splitTensor.length - 1]}</p>
+                    <p className='collapsed-tensor'>{splitTensor[0]}</p>
+                    <p className='collapsed-tensor'>.........</p>
+                    <p className='collapsed-tensor'>{splitTensor[splitTensor.length - 1]}</p>
                 </>
             )}
         </td>
