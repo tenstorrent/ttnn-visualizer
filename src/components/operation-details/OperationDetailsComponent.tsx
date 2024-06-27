@@ -29,7 +29,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
         return (
-            <div>
+            <div className='operation-details-loader'>
                 <LoadingSpinner />
             </div>
         );
