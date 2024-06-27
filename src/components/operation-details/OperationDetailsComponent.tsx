@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import { PlotMouseEvent } from 'plotly.js';
 import { Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
-import { getBufferColor } from '../functions/colorGenerator';
-import { FragmentationEntry, TensorData } from '../model/APIData';
+import { getBufferColor } from '../../functions/colorGenerator';
+import { FragmentationEntry, TensorData } from '../../model/APIData';
 import L1MemoryRenderer from './L1MemoryRenderer';
-import { getMemoryData } from '../model/ChartUtils';
-import LoadingSpinner from './LoadingSpinner';
-import { useOperationDetails, usePreviousOperationDetails } from '../hooks/useAPI';
+import { getMemoryData } from '../../model/ChartUtils';
+import LoadingSpinner from '../LoadingSpinner';
+import { useOperationDetails, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
-import { toHex } from '../functions/math';
+import { toHex } from '../../functions/math';
+import TensorDetailsComponent from './TensorDetailsComponent';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -28,7 +29,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
         return (
-            <div>
+            <div className='operation-details-loader'>
                 <LoadingSpinner />
             </div>
         );
@@ -38,22 +39,22 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         return new Intl.NumberFormat('en-US').format(number);
     };
 
+    const inputs = operationDetails?.input_tensors;
+    const outputs = operationDetails?.output_tensors;
+
     const tensorList: TensorData[] =
         [
             [
-                ...(operationDetails?.input_tensors?.map((input) => {
+                ...(inputs?.map((input) => {
                     return { ...input, io: 'input' } as TensorData;
                 }) || []),
             ],
             [
-                ...(operationDetails?.output_tensors?.map((output) => {
+                ...(outputs?.map((output) => {
                     return { ...output, io: 'output' } as TensorData;
                 }) || []),
             ],
         ].flat() || [];
-
-    const inputs = operationDetails?.input_tensors;
-    const outputs = operationDetails?.output_tensors;
 
     const { chartData, memory, fragmentation } = getMemoryData(operationDetails, zoomedInView);
     const { chartData: previousChartData, memory: previousMemory } = getMemoryData(
@@ -64,11 +65,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const memorySize = operationDetails?.l1_sizes[0] || 0; // TODO: memorysize will need to be read from the appropriate device even though its likely going to be the same for the multichip scenario
 
-    const plotZoomRangeStart =
+    let plotZoomRangeStart =
         Math.min(memory[0]?.address || memorySize, previousMemory[0]?.address || memorySize) *
         MINIMAL_MEMORY_RANGE_OFFSET;
 
-    const plotZoomRangeEnd =
+    let plotZoomRangeEnd =
         Math.max(
             memory.length > 0 ? memory[memory.length - 1].address + memory[memory.length - 1].size : 0,
             previousMemory.length > 0
@@ -76,6 +77,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 : 0,
         ) *
         (1 / MINIMAL_MEMORY_RANGE_OFFSET);
+
+    if (plotZoomRangeEnd < plotZoomRangeStart) {
+        plotZoomRangeStart = 0;
+        plotZoomRangeEnd = memorySize;
+    }
 
     const onBufferClick = (event: Readonly<PlotMouseEvent>): void => {
         // TODO: stub method for clicking on the buffer
@@ -96,27 +102,27 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 checked={zoomedInView}
                 onChange={() => setZoomedInView(!zoomedInView)}
             />
-            {previousChartData.length !== 0 && (
-                <L1MemoryRenderer
-                    title='Previous Summarized L1 Report'
-                    plotZoomRangeStart={plotZoomRangeStart}
-                    plotZoomRangeEnd={plotZoomRangeEnd}
-                    chartData={previousChartData}
-                    isZoomedIn={zoomedInView}
-                    memorySize={memorySize}
-                />
-            )}
-            {chartData.length !== 0 && (
-                <L1MemoryRenderer
-                    title='Current Summarized L1 Report'
-                    plotZoomRangeStart={plotZoomRangeStart}
-                    plotZoomRangeEnd={plotZoomRangeEnd}
-                    chartData={chartData}
-                    isZoomedIn={zoomedInView}
-                    memorySize={memorySize}
-                    onBufferClick={onBufferClick}
-                />
-            )}
+
+            <L1MemoryRenderer
+                title='Previous Summarized L1 Report'
+                className={classNames('l1-memory-renderer', { 'empty-plot': previousChartData.length === 0 })}
+                plotZoomRangeStart={plotZoomRangeStart}
+                plotZoomRangeEnd={plotZoomRangeEnd}
+                chartData={previousChartData}
+                isZoomedIn={zoomedInView}
+                memorySize={memorySize}
+            />
+
+            <L1MemoryRenderer
+                title='Current Summarized L1 Report'
+                className={classNames('l1-memory-renderer', { 'empty-plot': chartData.length === 0 })}
+                plotZoomRangeStart={plotZoomRangeStart}
+                plotZoomRangeEnd={plotZoomRangeEnd}
+                chartData={chartData}
+                isZoomedIn={zoomedInView}
+                memorySize={memorySize}
+                onBufferClick={onBufferClick}
+            />
 
             <div className='legend'>
                 {memoryReport.map((chunk) => (
@@ -147,53 +153,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 <div className='inputs'>
                     <h3>Inputs</h3>
                     {inputs.map((tensor) => (
-                        <div className='tensor-item' key={tensor.tensor_id}>
-                            <div className='tensor-name'>
-                                <div
-                                    className={classNames('memory-color-block', {
-                                        'empty-tensor': tensor.address === null,
-                                    })}
-                                    style={{
-                                        backgroundColor: getBufferColor(tensor.address),
-                                    }}
-                                />
-                                <h4>Tensor ID: {tensor.tensor_id}</h4>
-
-                                <span>{tensor.address}</span>
-                            </div>
-
-                            <div className='tensor-meta'>
-                                <p>Shape: {tensor.shape}</p>
-                                <p>Dtype: {tensor.dtype}</p>
-                                <p>Layout: {tensor.layout}</p>
-                            </div>
-                        </div>
+                        <TensorDetailsComponent tensor={tensor} key={tensor.tensor_id} />
                     ))}
                 </div>
                 <div className='outputs'>
                     <h3>Outputs</h3>
                     {outputs.map((tensor) => (
-                        <div className='tensor-item' key={tensor.tensor_id}>
-                            <div className='tensor-name'>
-                                <div
-                                    className={classNames('memory-color-block', {
-                                        'empty-tensor': tensor.address === null,
-                                    })}
-                                    style={{
-                                        backgroundColor: getBufferColor(tensor.address),
-                                    }}
-                                />
-                                <h4>Tensor ID: {tensor.tensor_id}</h4>
-
-                                <span>{tensor.address}</span>
-                            </div>
-
-                            <div className='tensor-meta'>
-                                <p>Shape: {tensor.shape}</p>
-                                <p>Dtype: {tensor.dtype}</p>
-                                <p>Layout: {tensor.layout}</p>
-                            </div>
-                        </div>
+                        <TensorDetailsComponent tensor={tensor} key={tensor.tensor_id} />
                     ))}
                 </div>
             </div>
