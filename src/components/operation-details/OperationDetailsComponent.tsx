@@ -39,22 +39,22 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         return new Intl.NumberFormat('en-US').format(number);
     };
 
+    const inputs = operationDetails?.input_tensors;
+    const outputs = operationDetails?.output_tensors;
+
     const tensorList: TensorData[] =
         [
             [
-                ...(operationDetails?.input_tensors?.map((input) => {
+                ...(inputs?.map((input) => {
                     return { ...input, io: 'input' } as TensorData;
                 }) || []),
             ],
             [
-                ...(operationDetails?.output_tensors?.map((output) => {
+                ...(outputs?.map((output) => {
                     return { ...output, io: 'output' } as TensorData;
                 }) || []),
             ],
         ].flat() || [];
-
-    const inputs = operationDetails?.input_tensors;
-    const outputs = operationDetails?.output_tensors;
 
     const { chartData, memory, fragmentation } = getMemoryData(operationDetails, zoomedInView);
     const { chartData: previousChartData, memory: previousMemory } = getMemoryData(
