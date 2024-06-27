@@ -10,7 +10,7 @@ import LoadingSpinner from '../LoadingSpinner';
 import { useOperationDetails, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
 import { toHex } from '../../functions/math';
-import TensorDetailsComponent from "./TensorDetailsComponent";
+import TensorDetailsComponent from './TensorDetailsComponent';
 
 interface OperationDetailsProps {
     operationId: number;
