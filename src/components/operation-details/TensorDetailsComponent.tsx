@@ -9,7 +9,7 @@ export interface TensorDetailsComponentProps {
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({ tensor }) => {
     return (
-        <div className='tensor-item' key={tensor.tensor_id}>
+        <div className='tensor-item'>
             <div className='tensor-name'>
                 <div
                     className={classNames('memory-color-block', {
