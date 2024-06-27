@@ -10,12 +10,14 @@ export interface L1MemoryRendererProps {
     onBufferClick?: (event: PlotMouseEvent) => void;
     plotZoomRangeStart?: number;
     plotZoomRangeEnd?: number;
+    className?: string;
 }
 
 const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     chartData,
     isZoomedIn,
     memorySize,
+    className = '',
     title,
     onBufferClick,
     plotZoomRangeStart,
@@ -74,7 +76,7 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     };
 
     return (
-        <>
+        <div className={className}>
             <h3 className='plot-title'>{title}</h3>
             <Plot
                 //
@@ -84,7 +86,7 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
                 config={config}
                 onClick={onBufferClick}
             />
-        </>
+        </div>
     );
 };
 

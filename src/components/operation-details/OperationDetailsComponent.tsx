@@ -64,11 +64,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const memorySize = operationDetails?.l1_sizes[0] || 0; // TODO: memorysize will need to be read from the appropriate device even though its likely going to be the same for the multichip scenario
 
-    const plotZoomRangeStart =
+    let plotZoomRangeStart =
         Math.min(memory[0]?.address || memorySize, previousMemory[0]?.address || memorySize) *
         MINIMAL_MEMORY_RANGE_OFFSET;
 
-    const plotZoomRangeEnd =
+    let plotZoomRangeEnd =
         Math.max(
             memory.length > 0 ? memory[memory.length - 1].address + memory[memory.length - 1].size : 0,
             previousMemory.length > 0
@@ -76,6 +76,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 : 0,
         ) *
         (1 / MINIMAL_MEMORY_RANGE_OFFSET);
+
+    if (plotZoomRangeEnd < plotZoomRangeStart) {
+        plotZoomRangeStart = 0;
+        plotZoomRangeEnd = memorySize;
+    }
 
     const onBufferClick = (event: Readonly<PlotMouseEvent>): void => {
         // TODO: stub method for clicking on the buffer
@@ -96,27 +101,27 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 checked={zoomedInView}
                 onChange={() => setZoomedInView(!zoomedInView)}
             />
-            {previousChartData.length !== 0 && (
-                <L1MemoryRenderer
-                    title='Previous Summarized L1 Report'
-                    plotZoomRangeStart={plotZoomRangeStart}
-                    plotZoomRangeEnd={plotZoomRangeEnd}
-                    chartData={previousChartData}
-                    isZoomedIn={zoomedInView}
-                    memorySize={memorySize}
-                />
-            )}
-            {chartData.length !== 0 && (
-                <L1MemoryRenderer
-                    title='Current Summarized L1 Report'
-                    plotZoomRangeStart={plotZoomRangeStart}
-                    plotZoomRangeEnd={plotZoomRangeEnd}
-                    chartData={chartData}
-                    isZoomedIn={zoomedInView}
-                    memorySize={memorySize}
-                    onBufferClick={onBufferClick}
-                />
-            )}
+
+            <L1MemoryRenderer
+                title='Previous Summarized L1 Report'
+                className={classNames('l1-memory-renderer', { 'empty-plot': previousChartData.length === 0 })}
+                plotZoomRangeStart={plotZoomRangeStart}
+                plotZoomRangeEnd={plotZoomRangeEnd}
+                chartData={previousChartData}
+                isZoomedIn={zoomedInView}
+                memorySize={memorySize}
+            />
+
+            <L1MemoryRenderer
+                title='Current Summarized L1 Report'
+                className={classNames('l1-memory-renderer', { 'empty-plot': chartData.length === 0 })}
+                plotZoomRangeStart={plotZoomRangeStart}
+                plotZoomRangeEnd={plotZoomRangeEnd}
+                chartData={chartData}
+                isZoomedIn={zoomedInView}
+                memorySize={memorySize}
+                onBufferClick={onBufferClick}
+            />
 
             <div className='legend'>
                 {memoryReport.map((chunk) => (
