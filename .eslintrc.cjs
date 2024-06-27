@@ -40,7 +40,10 @@ module.exports = {
         "import/resolver": {
             "typescript": {
                 "alwaysTryTypes": true
-            }
+            },
+            "alias": [
+                ["styles/*", "./src/scss/*"]
+            ]
         }
 
     },
@@ -66,7 +69,6 @@ module.exports = {
         curly: ['error', 'all'],
         'import/extensions': ['warn', 'never', { css: 'always', scss: 'always', json: 'always' }],
         'import/no-import-module-exports': 'off',
-        'import/no-unresolved': 'error',
         'max-classes-per-file': 'off',
         'no-shadow': 'off',
         'no-unused-vars': 'off',
@@ -86,10 +88,12 @@ module.exports = {
         ],
         'import/first': 'error',
         'import/no-duplicates': 'error',
+        'import/prefer-default-export': 'off',
         'unused-imports/no-unused-imports': 'error',
         'unused-imports/no-unused-vars': [
             'warn',
             { vars: 'all', varsIgnorePattern: '^_', args: 'after-used', argsIgnorePattern: '^_' },
         ],
+        'react/require-default-props': 'off',
     },
 };

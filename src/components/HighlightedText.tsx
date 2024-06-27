@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
-
-import React, { FC } from 'react';
+import React from 'react';
 
 interface HighlightedTextProps {
     text: string;
     filter: string;
 }
 
-const HighlightedText: FC<HighlightedTextProps> = ({ text, filter }) => {
+const HighlightedText: React.FC<HighlightedTextProps> = ({ text, filter }) => {
     const index = text.toLowerCase().indexOf(filter.toLowerCase());
 
     if (index === -1) {
@@ -28,6 +27,7 @@ const HighlightedText: FC<HighlightedTextProps> = ({ text, filter }) => {
         <span
             title={text}
             className='highlighted-text'
+            // eslint-disable-next-line react/no-danger
             dangerouslySetInnerHTML={{ __html: `${before}<mark>${match}</mark>${after}` }}
         />
     );

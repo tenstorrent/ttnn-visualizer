@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
+@use 'styles/definitions/colours' as *;
+
+.operation-component {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: $tt-white-text;
+    font-size: 20px;
+
+    [type="button"] .bp5-icon {
+        color: $tt-white-text;
+    }
+
+    .operation-icon.bp5-icon svg {
+        fill: $tt-yellow;
+    }
+    .highlighted-text {
+        color: $tt-white-text;
+        font-size: 20px;
+    }
+}

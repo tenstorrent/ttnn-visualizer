@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
+@use '../definitions/colours' as *;
+
+.operation-arguments {
+    border-collapse: collapse;
+    color: $tt-white-text;
+    width: 100%;
+
+    caption {
+        text-align: left;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    tr {
+        background-color: $tt-slight-off-background;
+
+        &:nth-of-type(odd) {
+            background-color: $tt-off-background;
+        }
+
+        td {
+            padding: 6px 12px;
+
+            &:first-child {
+                font-weight: 700;
+                vertical-align: top;
+            }
+
+            &.expandable-tensor {
+                word-break: break-word; // Can get really long strings in the table cell which cause horizontal overflows
+            }
+        }
+    }
+}

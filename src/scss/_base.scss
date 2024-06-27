@@ -31,7 +31,9 @@ body {
     margin: 0;
     font-family: 'Arial Nova', Arial, sans-serif;
     height: 100vh;
-    padding: 1rem
+    padding: 15px;
+    color: $tt-white-text;
+    background: $tt-background;
 }
 
 button {
@@ -46,7 +48,6 @@ button {
     box-shadow:
         0 8px 28px -6px rgb(24 39 75 / 12%),
         0 18px 88px -4px rgb(24 39 75 / 14%);
-    transition: all ease-in 0.1s;
     cursor: pointer;
     opacity: 0.9;
     transition: border-color 0.25s;
@@ -62,7 +63,6 @@ button {
 }
 
 a {
-    text-decoration: none;
     height: fit-content;
     width: fit-content;
     margin: 10px;
@@ -73,6 +73,12 @@ a {
     &:hover {
         opacity: 1;
         text-decoration: none;
-        color: #535bf2;
+        color: $tt-purple;
     }
+}
+
+hr {
+    border: none;
+    border-bottom: 1px solid $tt-medium-gray;
+    margin: 0;
 }

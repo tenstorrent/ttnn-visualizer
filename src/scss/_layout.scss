@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
+@use 'definitions/colours' as *;
+
+.app-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+    justify-content: space-between;
+}
+
+.report-title {
+    font-size: 18px;
+    font-weight: 700;
+}
