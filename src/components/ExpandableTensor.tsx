@@ -32,7 +32,7 @@ function ExpandableTensor({ tensor }: ExpandableTensorProps) {
             />
             {isExpanded ? (
                 <>
-                    <pre className='full-tensor'>{tensor}</pre>
+                    <p className='full-tensor'>{tensor}</p>
                     <Switch
                         className='expand-button'
                         label='Hide full tensor'
