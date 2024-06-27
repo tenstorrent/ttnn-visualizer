@@ -77,7 +77,6 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
         <>
             <h3 className='plot-title'>{title}</h3>
             <Plot
-                //
                 className='l1-memory-plot'
                 data={chartData}
                 layout={layout}
