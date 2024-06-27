@@ -10,6 +10,7 @@ import LoadingSpinner from '../LoadingSpinner';
 import { useOperationDetails, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
 import { toHex } from '../../functions/math';
+import TensorDetailsComponent from "./TensorDetailsComponent";
 
 interface OperationDetailsProps {
     operationId: number;
@@ -152,53 +153,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 <div className='inputs'>
                     <h3>Inputs</h3>
                     {inputs.map((tensor) => (
-                        <div className='tensor-item' key={tensor.tensor_id}>
-                            <div className='tensor-name'>
-                                <div
-                                    className={classNames('memory-color-block', {
-                                        'empty-tensor': tensor.address === null,
-                                    })}
-                                    style={{
-                                        backgroundColor: getBufferColor(tensor.address),
-                                    }}
-                                />
-                                <h4>Tensor ID: {tensor.tensor_id}</h4>
-
-                                <span>{tensor.address}</span>
-                            </div>
-
-                            <div className='tensor-meta'>
-                                <p>Shape: {tensor.shape}</p>
-                                <p>Dtype: {tensor.dtype}</p>
-                                <p>Layout: {tensor.layout}</p>
-                            </div>
-                        </div>
+                        <TensorDetailsComponent tensor={tensor} key={tensor.tensor_id} />
                     ))}
                 </div>
                 <div className='outputs'>
                     <h3>Outputs</h3>
                     {outputs.map((tensor) => (
-                        <div className='tensor-item' key={tensor.tensor_id}>
-                            <div className='tensor-name'>
-                                <div
-                                    className={classNames('memory-color-block', {
-                                        'empty-tensor': tensor.address === null,
-                                    })}
-                                    style={{
-                                        backgroundColor: getBufferColor(tensor.address),
-                                    }}
-                                />
-                                <h4>Tensor ID: {tensor.tensor_id}</h4>
-
-                                <span>{tensor.address}</span>
-                            </div>
-
-                            <div className='tensor-meta'>
-                                <p>Shape: {tensor.shape}</p>
-                                <p>Dtype: {tensor.dtype}</p>
-                                <p>Layout: {tensor.layout}</p>
-                            </div>
-                        </div>
+                        <TensorDetailsComponent tensor={tensor} key={tensor.tensor_id} />
                     ))}
                 </div>
             </div>
