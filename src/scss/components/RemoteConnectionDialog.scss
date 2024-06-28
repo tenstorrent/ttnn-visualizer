@@ -31,4 +31,18 @@
     .connection-status-icon {
         animation: 0.7s steps(2) infinite alternate both;
     }
+
+    &.status-idle .connection-status-icon { color: $tt-medium-gray; }
+
+    &.status-progress .connection-status-icon {
+        animation-name: connection-test-progress;
+        color: $node-select;
+    }
+    &.status-failed .connection-status-icon { color: $core-highlight-inout; }
+    &.status-ok .connection-status-icon { color: $bright-highlight; }
+}
+
+@keyframes connection-test-progress {
+    from { color: $tt-medium-gray; }
+    to { color: $node-select; }
 }
