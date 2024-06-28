@@ -53,6 +53,7 @@
     "sass": "^1.77.4",
     "stylelint": "^16.6.1",
     "stylelint-config-standard-scss": "^13.1.0",
+    "stylelint-prettier": "^5.0.0",
     "typescript": "^5.2.2",
     "vite": "^5.2.0"
   },

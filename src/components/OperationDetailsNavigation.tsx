@@ -3,6 +3,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useNextOperation, usePreviousOperation } from '../hooks/useAPI';
 import 'styles/components/OperationDetailsNavigation.scss';
+import ROUTES from '../definitions/routes';
 
 interface OperationDetailsNavigationProps {
     operationId: string;
@@ -33,14 +34,14 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                     <Button
                         icon={IconNames.ArrowLeft}
                         disabled={!previousOperation}
-                        onClick={() => handleNavigate(`/operations/${previousOperation?.id}`)}
+                        onClick={() => handleNavigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`)}
                     >
                         Previous
                     </Button>
                 </Tooltip>
 
                 <Tooltip content='View operations list' placement={PopoverPosition.TOP}>
-                    <Button icon={IconNames.LIST} onClick={() => handleNavigate('/operations')} />
+                    <Button icon={IconNames.LIST} onClick={() => handleNavigate(ROUTES.OPERATIONS)} />
                 </Tooltip>
 
                 <Tooltip
@@ -51,7 +52,7 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                     <Button
                         rightIcon={IconNames.ArrowRight}
                         disabled={!nextOperation}
-                        onClick={() => handleNavigate(`/operations/${nextOperation?.id}`)}
+                        onClick={() => handleNavigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`)}
                     >
                         Next
                     </Button>

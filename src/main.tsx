@@ -9,10 +9,11 @@ import Layout from './components/Layout';
 import Home from './routes/Home';
 import Operations from './routes/Operations';
 import OperationDetails from './routes/OperationDetails';
+import ROUTES from './definitions/routes';
 
 const router = createBrowserRouter([
     {
-        path: '/',
+        path: ROUTES.HOME,
         element: <Layout />,
         errorElement: <ErrorPage />,
         children: [

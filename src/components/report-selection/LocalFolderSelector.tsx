@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router';
 import FolderPicker from './FolderPicker';
 
 import 'styles/components/FolderPicker.scss';
+import ROUTES from '../../definitions/routes';
 
 const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
@@ -19,7 +20,7 @@ const LocalFolderOptions: FC = () => {
             subLabel='Select a local directory containing a report'
         >
             <div className='buttons-container'>
-                <FolderPicker onSelectFolder={() => navigate('/operations')} />
+                <FolderPicker onSelectFolder={() => navigate(ROUTES.OPERATIONS)} />
             </div>
         </FormGroup>
     );
