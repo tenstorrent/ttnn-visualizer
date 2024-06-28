@@ -1,0 +1,65 @@
+.footnote-anchor {
+    display: none;
+}
+
+[popovertarget] {
+    background: #42a5f5;
+    color: white;
+    width: 1.2rem;
+    height: 1.2rem;
+    border-radius: 50%;
+    display: inline-grid;
+    place-items: center;
+    text-align: center;
+    font-size: 60%;
+    margin-inline-start: 0.1rem;
+    inset-block-end: 0.33rem;
+    position: relative;
+    border: 0;
+    padding: 0.1rem;
+
+    &:hover,
+    &:focus {
+        background: black;
+    }
+}
+
+/* Display as a footnote */
+[popover] {
+    position: relative;
+    border: 0;
+    padding: 0;
+    width: auto;
+    overflow: visible;
+
+    code {
+        max-width: 100%;
+        text-wrap: balance;
+    }
+
+    /* Display as a drawer */
+    &:popover-open {
+        z-index: 1;
+        position: fixed;
+        inset: auto;
+        bottom: 0;
+        left: 0;
+        box-shadow: 0 -1rem 5rem oklch(0% 0 0deg / 33%);
+        animation: slide-open 0.2s;
+        width: 100%;
+
+        /* Make sure the popup isn't screen-covering */
+        max-block-size: 50dvh;
+        overflow: auto;
+    }
+}
+
+@keyframes slide-open {
+    0% {
+        transform: translate(0, 100%);
+    }
+
+    100% {
+        transform: translate(0, 0);
+    }
+}

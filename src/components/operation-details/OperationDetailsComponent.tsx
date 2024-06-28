@@ -11,6 +11,7 @@ import { useOperationDetails, usePreviousOperationDetails } from '../../hooks/us
 import 'styles/components/OperationDetailsComponent.scss';
 import { toHex } from '../../functions/math';
 import TensorDetailsComponent from './TensorDetailsComponent';
+import StackTrace from './StackTrace';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -123,6 +124,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 memorySize={memorySize}
                 onBufferClick={onBufferClick}
             />
+
+            <StackTrace stackTrace={operationDetails.stack_traces[0].stack_trace} />
 
             <div className='legend'>
                 {memoryReport.map((chunk) => (
