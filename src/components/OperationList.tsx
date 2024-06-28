@@ -16,6 +16,7 @@ import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/OperationsList.scss';
 import { useOperationsList } from '../hooks/useAPI';
+import ROUTES from '../definitions/routes';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -193,7 +194,7 @@ const OperationList = () => {
                                             }
                                             keepChildrenMounted={false}
                                             additionalElements={
-                                                <Link to={`/operations/${operation.id}`}>
+                                                <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
                                                     <Button
                                                         title='Buffer view'
                                                         minimal
