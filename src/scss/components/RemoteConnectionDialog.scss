@@ -31,18 +31,4 @@
     .connection-status-icon {
         animation: 0.7s steps(2) infinite alternate both;
     }
-
-    &.status-IDLE .connection-status-icon { color: gray; }
-
-    &.status-PROGRESS .connection-status-icon {
-        animation-name: connection-test-progress;
-        color: gold;
-    }
-    &.status-FAILED .connection-status-icon { color: orangered; }
-    &.status-OK .connection-status-icon { color: greenyellow; }
-}
-
-@keyframes connection-test-progress {
-    from { color: gray; }
-    to { color: gold; }
 }
