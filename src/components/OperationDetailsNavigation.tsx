@@ -40,8 +40,14 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                     </Button>
                 </Tooltip>
 
-                <Tooltip content='View operations list' placement={PopoverPosition.TOP}>
-                    <Button icon={IconNames.LIST} onClick={() => handleNavigate(ROUTES.OPERATIONS)} />
+                <Tooltip
+                    content='View operations list'
+                    placement={PopoverPosition.TOP}
+                >
+                    <Button
+                        icon={IconNames.LIST}
+                        onClick={() => handleNavigate(`${ROUTES.OPERATIONS}?operation=${operationId}`)}
+                    />
                 </Tooltip>
 
                 <Tooltip
