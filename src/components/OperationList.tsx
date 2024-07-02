@@ -5,7 +5,7 @@
 import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import SearchField from './SearchField';
@@ -32,7 +32,8 @@ const OperationList = () => {
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
 
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
-    const { state: routerState } = useLocation();
+    const location = useLocation();
+    const navigate = useNavigate();
 
     const scrollElementRef = useRef(null);
     const virtualizer = useVirtualizer({
@@ -96,7 +97,7 @@ const OperationList = () => {
     }, [fetchedOperations, filterQuery, shouldSortDescending]);
 
     useEffect(() => {
-        const initialOperationId = routerState?.previousOperationId;
+        const initialOperationId = location.state?.previousOperationId;
 
         if (initialOperationId && virtualizer) {
             const operationIndex =
@@ -108,8 +109,11 @@ const OperationList = () => {
             virtualizer.scrollToIndex(operationIndex - 1, {
                 align: 'start',
             });
+
+            // Navigating to the same page just replaces the entry in the browser history
+            navigate(ROUTES.OPERATIONS, { replace: true });
         }
-    }, [virtualizer, fetchedOperations, routerState]);
+    }, [virtualizer, fetchedOperations, location, navigate]);
 
     return (
         <fieldset className='operations-wrap'>
