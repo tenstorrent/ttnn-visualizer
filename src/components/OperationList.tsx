@@ -32,7 +32,7 @@ const OperationList = () => {
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
 
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
-    const { search } = useLocation();
+    const { state: routerState } = useLocation();
 
     const scrollElementRef = useRef(null);
     const virtualizer = useVirtualizer({
@@ -96,10 +96,7 @@ const OperationList = () => {
     }, [fetchedOperations, filterQuery, shouldSortDescending]);
 
     useEffect(() => {
-        // TODO: polyfill URLSearchParams
-        // eslint-disable-next-line compat/compat
-        const queryParams = new URLSearchParams(search);
-        const initialOperationId = queryParams.get('operation');
+        const initialOperationId = routerState.operationId;
 
         if (initialOperationId && virtualizer) {
             const operationIndex =
@@ -112,7 +109,7 @@ const OperationList = () => {
                 align: 'start',
             });
         }
-    }, [virtualizer, fetchedOperations, search]);
+    }, [virtualizer, fetchedOperations, routerState]);
 
     return (
         <fieldset className='operations-wrap'>
