@@ -96,7 +96,7 @@ const OperationList = () => {
     }, [fetchedOperations, filterQuery, shouldSortDescending]);
 
     useEffect(() => {
-        const initialOperationId = routerState?.operationId;
+        const initialOperationId = routerState?.previousOperationId;
 
         if (initialOperationId && virtualizer) {
             const operationIndex =

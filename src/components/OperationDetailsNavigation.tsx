@@ -38,7 +38,9 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                 >
                     <Button
                         icon={IconNames.LIST}
-                        onClick={() => navigate(`${ROUTES.OPERATIONS}`, { state: { operationId } })}
+                        onClick={() =>
+                            navigate(`${ROUTES.OPERATIONS}`, { state: { previousOperationId: operationId } })
+                        }
                     />
                 </Tooltip>
 
