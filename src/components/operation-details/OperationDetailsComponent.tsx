@@ -125,11 +125,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 onBufferClick={onBufferClick}
             />
 
-            <StackTrace stackTrace={operationDetails.stack_traces[0].stack_trace} />
-
             <div className='legend'>
                 {memoryReport.map((chunk) => (
-                    <div className='legend-item' key={chunk.address}>
+                    <div
+                        className='legend-item'
+                        key={chunk.address}
+                    >
                         <div
                             className={classNames('memory-color-block', { empty: chunk.empty === true })}
                             style={{
@@ -151,21 +152,34 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                     </div>
                 ))}
             </div>
+
             <hr />
+
             <div className='tensor-list'>
                 <div className='inputs'>
                     <h3>Inputs</h3>
                     {inputs.map((tensor) => (
-                        <TensorDetailsComponent tensor={tensor} key={tensor.tensor_id} />
+                        <TensorDetailsComponent
+                            tensor={tensor}
+                            key={tensor.tensor_id}
+                        />
                     ))}
                 </div>
                 <div className='outputs'>
                     <h3>Outputs</h3>
                     {outputs.map((tensor) => (
-                        <TensorDetailsComponent tensor={tensor} key={tensor.tensor_id} />
+                        <TensorDetailsComponent
+                            tensor={tensor}
+                            key={tensor.tensor_id}
+                        />
                     ))}
                 </div>
             </div>
+
+            <hr />
+
+            <h3>Stack trace</h3>
+            <StackTrace stackTrace={operationDetails.stack_traces[0].stack_trace} />
         </div>
     );
 };

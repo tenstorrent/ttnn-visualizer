@@ -1,10 +1,21 @@
+@use '../definitions/colours' as *;
+
 .footnote-anchor {
     display: none;
 }
 
+.code-output {
+    text-wrap: balance;
+}
+
+.code-output-summary {
+    padding: 10px;
+    background: $tt-black;
+}
+
 [popovertarget] {
     background: #42a5f5;
-    color: white;
+    color: $tt-white-text;
     width: 1.2rem;
     height: 1.2rem;
     border-radius: 50%;
@@ -20,7 +31,7 @@
 
     &:hover,
     &:focus {
-        background: black;
+        background: $tt-black;
     }
 }
 
@@ -31,11 +42,6 @@
     padding: 0;
     width: auto;
     overflow: visible;
-
-    code {
-        max-width: 100%;
-        text-wrap: balance;
-    }
 
     /* Display as a drawer */
     &:popover-open {
