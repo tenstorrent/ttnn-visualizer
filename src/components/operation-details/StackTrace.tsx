@@ -6,7 +6,6 @@ import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/StackTrace.scss';
 import { Button, Intent } from '@blueprintjs/core';
 
-// Then register the languages you need
 hljs.registerLanguage('python', python);
 
 interface StackTraceProps {

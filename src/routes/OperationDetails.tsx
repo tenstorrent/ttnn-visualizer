@@ -4,12 +4,13 @@ import OperationDetailsNavigation from '../components/OperationDetailsNavigation
 
 export default function OperationDetails() {
     const { operationId } = useParams();
+    const parsedOperationId = operationId ? parseInt(operationId, 10) : 0;
 
     return (
         operationId && (
             <>
-                <OperationDetailsNavigation operationId={operationId} />
-                <OperationDetailsComponent operationId={parseInt(operationId, 10)} />
+                <OperationDetailsNavigation operationId={parsedOperationId} />
+                <OperationDetailsComponent operationId={parsedOperationId} />
             </>
         )
     );

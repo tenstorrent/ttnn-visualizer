@@ -1,16 +1,17 @@
 import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
-import { useNextOperation, usePreviousOperation } from '../hooks/useAPI';
+import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
 import 'styles/components/OperationDetailsNavigation.scss';
 import ROUTES from '../definitions/routes';
 
 interface OperationDetailsNavigationProps {
-    operationId: string;
+    operationId: number;
 }
 
 function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationProps) {
     const navigate = useNavigate();
+    const { operation } = useOperationDetails(operationId);
 
     const handleNavigate = (path: string | undefined) => {
         if (path) {
@@ -18,10 +19,8 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
         }
     };
 
-    const parsedOperationId = parseInt(operationId, 10);
-
-    const previousOperation = usePreviousOperation(parsedOperationId);
-    const nextOperation = useNextOperation(parsedOperationId);
+    const previousOperation = usePreviousOperation(operationId);
+    const nextOperation = useNextOperation(operationId);
 
     return (
         <nav>
@@ -40,8 +39,14 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                     </Button>
                 </Tooltip>
 
-                <Tooltip content='View operations list' placement={PopoverPosition.TOP}>
-                    <Button icon={IconNames.LIST} onClick={() => handleNavigate(ROUTES.OPERATIONS)} />
+                <Tooltip
+                    content='View operations list'
+                    placement={PopoverPosition.TOP}
+                >
+                    <Button
+                        icon={IconNames.LIST}
+                        onClick={() => handleNavigate(ROUTES.OPERATIONS)}
+                    />
                 </Tooltip>
 
                 <Tooltip
@@ -57,6 +62,7 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                         Next
                     </Button>
                 </Tooltip>
+                <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
             </ButtonGroup>
         </nav>
     );

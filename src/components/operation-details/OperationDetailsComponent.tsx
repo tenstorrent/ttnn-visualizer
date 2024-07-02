@@ -97,7 +97,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     return (
         <div className='operation-details-component'>
-            <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
+            {/* <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2> */}
+
+            <StackTrace stackTrace={operationDetails.stack_traces[0].stack_trace} />
+
             <Switch
                 label={zoomedInView ? 'Full buffer report' : 'Zoom buffer report'}
                 checked={zoomedInView}
@@ -175,11 +178,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                     ))}
                 </div>
             </div>
-
-            <hr />
-
-            <h3>Stack trace</h3>
-            <StackTrace stackTrace={operationDetails.stack_traces[0].stack_trace} />
         </div>
     );
 };
