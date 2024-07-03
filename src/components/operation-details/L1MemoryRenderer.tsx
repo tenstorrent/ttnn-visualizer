@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import Plot from 'react-plotly.js';
 import { Layout, PlotData, PlotMouseEvent } from 'plotly.js';
+import useOutsideClick from '../../hooks/useOutsideClick';
 
 export interface L1MemoryRendererProps {
     chartData: Partial<PlotData>[];
@@ -8,6 +9,7 @@ export interface L1MemoryRendererProps {
     memorySize: number;
     title: string;
     onBufferClick?: (event: PlotMouseEvent) => void;
+    onClickOutside?: (event: MouseEvent) => void;
     plotZoomRangeStart?: number;
     plotZoomRangeEnd?: number;
     className?: string;
@@ -20,6 +22,7 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     className = '',
     title,
     onBufferClick,
+    onClickOutside,
     plotZoomRangeStart,
     plotZoomRangeEnd,
 }) => {
@@ -75,16 +78,14 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
         displaylogo: false,
     };
 
+    const plotRef = useRef<HTMLDivElement>(null);
+
+    useOutsideClick(plotRef, onClickOutside);
+
     return (
-        <div className={className}>
+        <div className={className} ref={plotRef}>
             <h3 className='plot-title'>{title}</h3>
-            <Plot
-                className='l1-memory-plot'
-                data={chartData}
-                layout={layout}
-                config={config}
-                onClick={onBufferClick}
-            />
+            <Plot className='l1-memory-plot' data={chartData} layout={layout} config={config} onClick={onBufferClick} />
         </div>
     );
 };

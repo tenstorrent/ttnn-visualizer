@@ -27,6 +27,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
 
+    const [selectedTensorAddress, setSelectedTensorAddress] = useState<number | null>(null);
+
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
         return (
             <div className='operation-details-loader'>
@@ -84,10 +86,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     }
 
     const onBufferClick = (event: Readonly<PlotMouseEvent>): void => {
-        // TODO: stub method for clicking on the buffer
         const { address } = memory[event.points[0].curveNumber];
-        // eslint-disable-next-line no-console
-        console.log(address);
+        setSelectedTensorAddress(address);
+    };
+    const onClickOutside = () => {
+        setSelectedTensorAddress(null);
     };
 
     const getTensorForAddress = (address: number): TensorData | null => {
@@ -122,11 +125,16 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 isZoomedIn={zoomedInView}
                 memorySize={memorySize}
                 onBufferClick={onBufferClick}
+                onClickOutside={onClickOutside}
             />
 
             <div className='legend'>
                 {memoryReport.map((chunk) => (
-                    <div className='legend-item' key={chunk.address}>
+                    <div
+                        className={classNames('legend-item', {
+                            dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
+                        })}
+                    >
                         <div
                             className={classNames('memory-color-block', { empty: chunk.empty === true })}
                             style={{
@@ -153,13 +161,21 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 <div className='inputs'>
                     <h3>Inputs</h3>
                     {inputs.map((tensor) => (
-                        <TensorDetailsComponent tensor={tensor} key={tensor.tensor_id} />
+                        <TensorDetailsComponent
+                            tensor={tensor}
+                            key={tensor.tensor_id}
+                            selectedAddress={selectedTensorAddress}
+                        />
                     ))}
                 </div>
                 <div className='outputs'>
                     <h3>Outputs</h3>
                     {outputs.map((tensor) => (
-                        <TensorDetailsComponent tensor={tensor} key={tensor.tensor_id} />
+                        <TensorDetailsComponent
+                            tensor={tensor}
+                            key={tensor.tensor_id}
+                            selectedAddress={selectedTensorAddress}
+                        />
                     ))}
                 </div>
             </div>
