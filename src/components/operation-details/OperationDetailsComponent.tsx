@@ -22,7 +22,7 @@ const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const [zoomedInView, setZoomedInView] = useState(false);
 
-    const { operation, operationDetails: details } = useOperationDetails(operationId);
+    const { operationDetails: details } = useOperationDetails(operationId);
 
     const { data: operationDetails, isLoading } = details;
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
