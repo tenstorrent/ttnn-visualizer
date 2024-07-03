@@ -110,7 +110,8 @@ const OperationList = () => {
                 align: 'start',
             });
 
-            // Navigating to the same page just replaces the entry in the browser history
+            // Navigating to the same page replaces the entry in the browser history
+            // TODO: Revisit this code later to make sure it's not causing any weird side effects
             navigate(ROUTES.OPERATIONS, { replace: true });
         }
     }, [virtualizer, fetchedOperations, location, navigate]);
