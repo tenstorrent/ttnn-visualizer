@@ -11,15 +11,7 @@ interface OperationDetailsNavigationProps {
 
 function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationProps) {
     const navigate = useNavigate();
-
-    const handleNavigate = (path: string | undefined) => {
-        if (path) {
-            navigate(path);
-        }
-    };
-
     const parsedOperationId = parseInt(operationId, 10);
-
     const previousOperation = usePreviousOperation(parsedOperationId);
     const nextOperation = useNextOperation(parsedOperationId);
 
@@ -34,14 +26,22 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                     <Button
                         icon={IconNames.ArrowLeft}
                         disabled={!previousOperation}
-                        onClick={() => handleNavigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`)}
+                        onClick={() => navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`)}
                     >
                         Previous
                     </Button>
                 </Tooltip>
 
-                <Tooltip content='View operations list' placement={PopoverPosition.TOP}>
-                    <Button icon={IconNames.LIST} onClick={() => handleNavigate(ROUTES.OPERATIONS)} />
+                <Tooltip
+                    content='View operations list'
+                    placement={PopoverPosition.TOP}
+                >
+                    <Button
+                        icon={IconNames.LIST}
+                        onClick={() =>
+                            navigate(`${ROUTES.OPERATIONS}`, { state: { previousOperationId: operationId } })
+                        }
+                    />
                 </Tooltip>
 
                 <Tooltip
@@ -52,7 +52,7 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                     <Button
                         rightIcon={IconNames.ArrowRight}
                         disabled={!nextOperation}
-                        onClick={() => handleNavigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`)}
+                        onClick={() => navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`)}
                     >
                         Next
                     </Button>
