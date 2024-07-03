@@ -11,6 +11,12 @@
 .code-output-summary {
     padding: 10px;
     background: $tt-black;
+
+    .show-full-stack-trace  {
+        float: right;
+        position: relative;
+        z-index: 1;
+    }
 }
 
 [popovertarget] {
@@ -43,7 +49,6 @@
     width: auto;
     overflow: visible;
 
-    /* Display as a drawer */
     &:popover-open {
         z-index: 1;
         position: fixed;
