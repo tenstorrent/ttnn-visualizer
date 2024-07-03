@@ -12,13 +12,6 @@ interface OperationDetailsNavigationProps {
 function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationProps) {
     const navigate = useNavigate();
     const { operation } = useOperationDetails(operationId);
-
-    const handleNavigate = (path: string | undefined) => {
-        if (path) {
-            navigate(path);
-        }
-    };
-
     const previousOperation = usePreviousOperation(operationId);
     const nextOperation = useNextOperation(operationId);
 
@@ -33,7 +26,7 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                     <Button
                         icon={IconNames.ArrowLeft}
                         disabled={!previousOperation}
-                        onClick={() => handleNavigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`)}
+                        onClick={() => navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`)}
                     >
                         Previous
                     </Button>
@@ -45,7 +38,9 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                 >
                     <Button
                         icon={IconNames.LIST}
-                        onClick={() => handleNavigate(ROUTES.OPERATIONS)}
+                        onClick={() =>
+                            navigate(`${ROUTES.OPERATIONS}`, { state: { previousOperationId: operationId } })
+                        }
                     />
                 </Tooltip>
 
@@ -57,7 +52,7 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                     <Button
                         rightIcon={IconNames.ArrowRight}
                         disabled={!nextOperation}
-                        onClick={() => handleNavigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`)}
+                        onClick={() => navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`)}
                     >
                         Next
                     </Button>
