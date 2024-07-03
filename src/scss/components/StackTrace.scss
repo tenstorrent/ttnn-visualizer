@@ -18,4 +18,10 @@
     .code-output {
         text-wrap: balance;
     }
+
+    .is-sticky {
+        position: sticky;
+        top: 0;
+        right: 0;
+    }
 }
