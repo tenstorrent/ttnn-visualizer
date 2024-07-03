@@ -14,7 +14,7 @@ interface StackTraceProps {
 
 function StackTrace({ stackTrace }: StackTraceProps) {
     const [isFullStackTrace, setIsFullStackTrace] = useState(false);
-    const highlightedCode = useMemo(() => hljs.highlight(stackTrace, { language: 'python' }), [stackTrace]);
+    const stackTraceWithHighlights = useMemo(() => hljs.highlight(stackTrace, { language: 'python' }), [stackTrace]);
 
     return (
         <pre className='stack-trace'>
@@ -27,7 +27,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                     <code
                         className='language-python code-output'
                         // eslint-disable-next-line react/no-danger
-                        dangerouslySetInnerHTML={{ __html: highlightedCode.value }}
+                        dangerouslySetInnerHTML={{ __html: stackTraceWithHighlights.value }}
                     />
                 </Collapse>
             ) : (
@@ -35,7 +35,9 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                     <code
                         className='language-python code-output'
                         // eslint-disable-next-line react/no-danger
-                        dangerouslySetInnerHTML={{ __html: `  File${highlightedCode.value.split('File')[1]}` }}
+                        dangerouslySetInnerHTML={{
+                            __html: `  File ${stackTraceWithHighlights.value.split('File')[1].trim()}`,
+                        }}
                     />
                 </div>
             )}
