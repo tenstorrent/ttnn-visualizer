@@ -1,19 +1,21 @@
 // Using ES6 import syntax
 import hljs from 'highlight.js/lib/core';
 import python from 'highlight.js/lib/languages/python';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/StackTrace.scss';
 import { Button, Collapse, Intent } from '@blueprintjs/core';
+import classNames from 'classnames';
 
 hljs.registerLanguage('python', python);
 
 interface StackTraceProps {
     stackTrace: string;
+    isFullStackTrace: boolean;
+    toggleStackTraceHandler: (condition: boolean) => void;
 }
 
-function StackTrace({ stackTrace }: StackTraceProps) {
-    const [isFullStackTrace, setIsFullStackTrace] = useState(false);
+function StackTrace({ stackTrace, isFullStackTrace, toggleStackTraceHandler }: StackTraceProps) {
     const stackTraceWithHighlights = useMemo(() => hljs.highlight(stackTrace, { language: 'python' }), [stackTrace]);
 
     return (
@@ -43,11 +45,13 @@ function StackTrace({ stackTrace }: StackTraceProps) {
             )}
 
             <Button
-                className='show-full-stack-trace'
+                className={classNames({
+                    'is-sticky': isFullStackTrace,
+                })}
                 type='button'
                 minimal
                 intent={Intent.PRIMARY}
-                onClick={() => setIsFullStackTrace(!isFullStackTrace)}
+                onClick={() => toggleStackTraceHandler(!isFullStackTrace)}
             >
                 {isFullStackTrace ? 'Hide full stack trace' : 'Show full stack trace'}
             </Button>

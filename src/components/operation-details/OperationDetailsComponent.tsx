@@ -15,11 +15,17 @@ import StackTrace from './StackTrace';
 
 interface OperationDetailsProps {
     operationId: number;
+    isFullStackTrace: boolean;
+    toggleStackTraceHandler: (condition: boolean) => void;
 }
 
 const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
 
-const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
+const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
+    operationId,
+    isFullStackTrace,
+    toggleStackTraceHandler,
+}) => {
     const [zoomedInView, setZoomedInView] = useState(false);
 
     const { operationDetails: details } = useOperationDetails(operationId);
@@ -99,7 +105,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         <div className='operation-details-component'>
             {/* <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2> */}
 
-            <StackTrace stackTrace={operationDetails.stack_traces[0].stack_trace} />
+            <StackTrace
+                stackTrace={operationDetails.stack_traces[0].stack_trace}
+                isFullStackTrace={isFullStackTrace}
+                toggleStackTraceHandler={toggleStackTraceHandler}
+            />
 
             <Switch
                 label={zoomedInView ? 'Full buffer report' : 'Zoom buffer report'}

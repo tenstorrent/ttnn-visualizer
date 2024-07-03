@@ -7,9 +7,10 @@ import ROUTES from '../definitions/routes';
 
 interface OperationDetailsNavigationProps {
     operationId: number;
+    isFullStackTrace: boolean;
 }
 
-function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationProps) {
+function OperationDetailsNavigation({ operationId, isFullStackTrace }: OperationDetailsNavigationProps) {
     const navigate = useNavigate();
     const { operation } = useOperationDetails(operationId);
     const previousOperation = usePreviousOperation(operationId);
@@ -26,7 +27,10 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                     <Button
                         icon={IconNames.ArrowLeft}
                         disabled={!previousOperation}
-                        onClick={() => navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`)}
+                        onClick={() =>
+                            navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`, { state: { isFullStackTrace } })
+                        }
+                        outlined
                     />
                 </Tooltip>
 
@@ -39,6 +43,7 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                         onClick={() =>
                             navigate(`${ROUTES.OPERATIONS}`, { state: { previousOperationId: operationId } })
                         }
+                        outlined
                     />
                 </Tooltip>
 
@@ -50,7 +55,10 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                     <Button
                         rightIcon={IconNames.ArrowRight}
                         disabled={!nextOperation}
-                        onClick={() => navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`)}
+                        onClick={() =>
+                            navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`, { state: { isFullStackTrace } })
+                        }
+                        outlined
                     />
                 </Tooltip>
                 <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
