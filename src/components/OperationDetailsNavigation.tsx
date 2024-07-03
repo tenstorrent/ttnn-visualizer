@@ -27,9 +27,7 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                         icon={IconNames.ArrowLeft}
                         disabled={!previousOperation}
                         onClick={() => navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`)}
-                    >
-                        Previous
-                    </Button>
+                    />
                 </Tooltip>
 
                 <Tooltip
@@ -53,9 +51,7 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                         rightIcon={IconNames.ArrowRight}
                         disabled={!nextOperation}
                         onClick={() => navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`)}
-                    >
-                        Next
-                    </Button>
+                    />
                 </Tooltip>
                 <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
             </ButtonGroup>
