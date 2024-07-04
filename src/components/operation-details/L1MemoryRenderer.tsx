@@ -27,7 +27,7 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     plotZoomRangeEnd,
 }) => {
     const layout: Partial<Layout> = {
-        height: 80,
+        height: 110,
         xaxis: {
             autorange: false,
             title: 'L1 Address Space',
@@ -50,9 +50,10 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
             l: 5,
             r: 5,
             b: 40,
-            t: 5,
+            t: 25,
         },
-        paper_bgcolor: '#33333d',
+
+        paper_bgcolor: 'transparent',
         plot_bgcolor: 'white',
         shapes: [
             {
@@ -70,7 +71,7 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
             },
         ],
         showlegend: false,
-        hovermode: 'x',
+        hovermode: 'closest',
     };
 
     const config = {
@@ -83,9 +84,18 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     useOutsideClick(plotRef, onClickOutside);
 
     return (
-        <div className={className} ref={plotRef}>
+        <div
+            className={className}
+            ref={plotRef}
+        >
             <h3 className='plot-title'>{title}</h3>
-            <Plot className='l1-memory-plot' data={chartData} layout={layout} config={config} onClick={onBufferClick} />
+            <Plot
+                className='l1-memory-plot'
+                data={chartData}
+                layout={layout}
+                config={config}
+                onClick={onBufferClick}
+            />
         </div>
     );
 };

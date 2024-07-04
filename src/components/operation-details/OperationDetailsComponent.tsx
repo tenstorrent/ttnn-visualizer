@@ -9,7 +9,7 @@ import { getMemoryData } from '../../model/ChartUtils';
 import LoadingSpinner from '../LoadingSpinner';
 import { useOperationDetails, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
-import { toHex } from '../../functions/math';
+import { formatSize, prettyPrintAddress, toHex } from '../../functions/math';
 import TensorDetailsComponent from './TensorDetailsComponent';
 
 interface OperationDetailsProps {
@@ -37,10 +37,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         );
     }
 
-    const formatSize = (number: number): string => {
-        return new Intl.NumberFormat('en-US').format(number);
-    };
-
     const inputs = operationDetails?.input_tensors;
     const outputs = operationDetails?.output_tensors;
 
@@ -58,11 +54,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             ],
         ].flat() || [];
 
-    const { chartData, memory, fragmentation } = getMemoryData(operationDetails, zoomedInView);
-    const { chartData: previousChartData, memory: previousMemory } = getMemoryData(
-        previousOperationDetails,
-        zoomedInView,
-    );
+    const { chartData, memory, fragmentation } = getMemoryData(operationDetails);
+    const { chartData: previousChartData, memory: previousMemory } = getMemoryData(previousOperationDetails);
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const memorySize = operationDetails?.l1_sizes[0] || 0; // TODO: memorysize will need to be read from the appropriate device even though its likely going to be the same for the multichip scenario
@@ -127,10 +120,16 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 onBufferClick={onBufferClick}
                 onClickOutside={onClickOutside}
             />
+            <aside className={classNames('plot-instructions', { hidden: chartData.length === 0 })}>
+                {selectedTensorAddress === null
+                    ? 'Click on a buffer to focus'
+                    : 'Buffer focused, click anywhere to reset'}
+            </aside>
 
             <div className='legend'>
                 {memoryReport.map((chunk) => (
                     <div
+                        key={chunk.address}
                         className={classNames('legend-item', {
                             dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
                         })}
@@ -142,9 +141,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             }}
                         />
                         <div className='legend-details'>
-                            <div className='format-numbers'>
-                                {chunk.address} ({toHex(chunk.address)})
-                            </div>
+                            <div className='format-numbers'>{prettyPrintAddress(chunk.address, memorySize)}</div>
+                            <div className='format-numbers keep-left'>({toHex(chunk.address)})</div>
                             <div className='format-numbers'>{formatSize(chunk.size)} </div>
                             <div>
                                 {getTensorForAddress(chunk.address) && (
