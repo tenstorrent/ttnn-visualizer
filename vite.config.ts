@@ -1,7 +1,10 @@
 import { defineConfig } from 'vite';
 import path, { join } from 'path';
 import react from '@vitejs/plugin-react';
+// @ts-expect-error don't have types declaration for node-build-scripts
 import { sassNodeModulesLoadPaths } from '@blueprintjs/node-build-scripts';
+// @ts-expect-error don't have types declaration for legacySassSvgInlinerFactory
+// eslint-disable-next-line import/extensions
 import { legacySassSvgInlinerFactory } from './src/functions/legacySassSvgInlinerFactory.js';
 
 // https://vitejs.dev/config/
