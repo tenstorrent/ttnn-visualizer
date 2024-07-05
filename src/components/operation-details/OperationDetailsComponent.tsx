@@ -9,7 +9,7 @@ import { getMemoryData } from '../../model/ChartUtils';
 import LoadingSpinner from '../LoadingSpinner';
 import { useOperationDetails, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
-import { toHex } from '../../functions/math';
+import { formatSize, prettyPrintAddress, toHex } from '../../functions/math';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import StackTrace from './StackTrace';
 
@@ -34,6 +34,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
 
+    const [selectedTensorAddress, setSelectedTensorAddress] = useState<number | null>(null);
+
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
         return (
             <div className='operation-details-loader'>
@@ -41,10 +43,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
             </div>
         );
     }
-
-    const formatSize = (number: number): string => {
-        return new Intl.NumberFormat('en-US').format(number);
-    };
 
     const inputs = operationDetails?.input_tensors;
     const outputs = operationDetails?.output_tensors;
@@ -63,11 +61,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
             ],
         ].flat() || [];
 
-    const { chartData, memory, fragmentation } = getMemoryData(operationDetails, zoomedInView);
-    const { chartData: previousChartData, memory: previousMemory } = getMemoryData(
-        previousOperationDetails,
-        zoomedInView,
-    );
+    const { chartData, memory, fragmentation } = getMemoryData(operationDetails);
+    const { chartData: previousChartData, memory: previousMemory } = getMemoryData(previousOperationDetails);
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const memorySize = operationDetails?.l1_sizes[0] || 0; // TODO: memorysize will need to be read from the appropriate device even though its likely going to be the same for the multichip scenario
@@ -91,10 +86,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
     }
 
     const onBufferClick = (event: Readonly<PlotMouseEvent>): void => {
-        // TODO: stub method for clicking on the buffer
         const { address } = memory[event.points[0].curveNumber];
-        // eslint-disable-next-line no-console
-        console.log(address);
+        setSelectedTensorAddress(address);
+    };
+    const onClickOutside = () => {
+        setSelectedTensorAddress(null);
     };
 
     const getTensorForAddress = (address: number): TensorData | null => {
@@ -134,13 +130,23 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
                 isZoomedIn={zoomedInView}
                 memorySize={memorySize}
                 onBufferClick={onBufferClick}
+                onClickOutside={onClickOutside}
             />
+            <aside className={classNames('plot-instructions', { hidden: chartData.length === 0 })}>
+                Click on a buffer to focus
+            </aside>
+
+            <aside className={classNames('plot-instructions-floating', { hidden: selectedTensorAddress === null })}>
+                Buffer focused, click anywhere to reset
+            </aside>
 
             <div className='legend'>
                 {memoryReport.map((chunk) => (
                     <div
-                        className='legend-item'
                         key={chunk.address}
+                        className={classNames('legend-item', {
+                            dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
+                        })}
                     >
                         <div
                             className={classNames('memory-color-block', { empty: chunk.empty === true })}
@@ -149,9 +155,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
                             }}
                         />
                         <div className='legend-details'>
-                            <div className='format-numbers'>
-                                {chunk.address} ({toHex(chunk.address)})
-                            </div>
+                            <div className='format-numbers'>{prettyPrintAddress(chunk.address, memorySize)}</div>
+                            <div className='format-numbers keep-left'>({toHex(chunk.address)})</div>
                             <div className='format-numbers'>{formatSize(chunk.size)} </div>
                             <div>
                                 {getTensorForAddress(chunk.address) && (
@@ -173,6 +178,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
                         <TensorDetailsComponent
                             tensor={tensor}
                             key={tensor.tensor_id}
+                            selectedAddress={selectedTensorAddress}
                         />
                     ))}
                 </div>
@@ -182,6 +188,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
                         <TensorDetailsComponent
                             tensor={tensor}
                             key={tensor.tensor_id}
+                            selectedAddress={selectedTensorAddress}
                         />
                     ))}
                 </div>

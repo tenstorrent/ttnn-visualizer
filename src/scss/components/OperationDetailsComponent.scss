@@ -40,14 +40,22 @@
             gap: 5px;
             grid-template-columns: 20px 1fr;
 
+            &.dimmed {
+                opacity: 0.4;
+            }
+
             .legend-details {
                 display: inline-grid;
-                grid-template-columns: 1fr .5fr 1fr;
+                grid-template-columns: 1fr 1fr .75fr 1fr;
                 gap: 15px;
 
                 .format-numbers {
                     text-align: right;
                     font-family: monospace;
+
+                    &.keep-left {
+                        text-align: left;
+                    }
                 }
             }
 
@@ -82,6 +90,10 @@
 
         .tensor-item {
             margin-top: 20px;
+
+            &.dimmed {
+                opacity: 0.5;
+            }
         }
 
         .tensor-name {
@@ -103,8 +115,32 @@
 
     .plot-title {
         font-weight: 500;
-        margin-bottom: 10px;
+        margin-bottom: -14px;
         margin-top: 0;
     }
 
+    .plot-instructions {
+        margin-top: -25px;
+        margin-bottom: 20px;
+        text-align: right;
+        padding-right: 5px;
+        padding-left: 5px;
+
+        &.hidden {
+            display: none;
+        }
+    }
+
+    .plot-instructions-floating {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: $tt-white-text;
+        color: $tt-black;
+        padding: 10px;
+
+        &.hidden {
+            display: none;
+        }
+    }
 }
