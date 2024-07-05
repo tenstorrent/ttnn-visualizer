@@ -17,8 +17,6 @@
 // resulting in invalid d="..." attributes rendered by the <Icon> component.
 import SVGO from 'svgo';
 
-const svgOptimizer = new SVGO({ plugins: [{ convertShapeToPath: { convertArcs: true } }] });
-
 // Taken from https://github.com/palantir/blueprint/blob/develop/packages/node-build-scripts/src/sass/sassSvgInliner.mjs
 /*
  * (c) Copyright 2023 Palantir Technologies Inc. All rights reserved.
@@ -40,41 +38,47 @@ import { resolve } from 'node:path';
 import * as sass from 'sass';
 import { OrderedMap } from 'immutable';
 
+const svgOptimizer = new SVGO({ plugins: [{ convertShapeToPath: { convertArcs: true } }] });
+
 /**
  * @param {sass.LegacyValue} value
  * @returns {sass.SassString | sass.SassNumber | sass.SassBoolean | sass.SassColor | sass.SassList | sass.SassMap}
  */
 function legacyToSass(value) {
     if (value instanceof sass.types.String) {
-        let s = value.getValue();
+        const s = value.getValue();
         return new sass.SassString(s, { quotes: false });
-    } else if (value instanceof sass.types.Number) {
+    }
+    if (value instanceof sass.types.Number) {
         return new sass.SassNumber(value.getValue());
-    } else if (value instanceof sass.types.Boolean) {
+    }
+    if (value instanceof sass.types.Boolean) {
         if (value.getValue() === true) {
             return sass.sassTrue;
-        } else {
-            return sass.sassFalse;
         }
-    } else if (value instanceof sass.types.Color) {
+        return sass.sassFalse;
+    }
+    if (value instanceof sass.types.Color) {
         return new sass.SassColor({
             red: value.getR(),
             green: value.getG(),
             blue: value.getB(),
             alpha: value.getA(),
         });
-    } else if (value instanceof sass.types.List) {
-        let out = [];
+    }
+    if (value instanceof sass.types.List) {
+        const out = [];
         for (let i = 0; i < value.getLength(); i++) {
-            let v = value.getValue(i);
+            const v = value.getValue(i);
             if (v != undefined) {
                 out.push(legacyToSass(v));
             }
         }
         return new sass.SassList(out);
-    } else if (value instanceof sass.types.Map) {
+    }
+    if (value instanceof sass.types.Map) {
         // Iterable<[sass.value, sass.Value]>
-        let out = [];
+        const out = [];
         for (let i = 0; i < value.getLength(); i++) {
             let k = value.getKey(i);
             let v = value.getValue(i);
@@ -90,7 +94,8 @@ function legacyToSass(value) {
         }
         // @ts-ignore   Typescript isn't quite smart enough to figure out that the ordered map type is correct.
         return new sass.SassMap(OrderedMap(out));
-    } else if (value instanceof sass.types.Number) {
+    }
+    if (value instanceof sass.types.Number) {
         return new sass.SassNumber(value.getValue());
     }
     throw `unable to convert legacy value: ${value}`;
@@ -116,7 +121,7 @@ export function legacySassSvgInlinerFactory(base, opts) {
             let svgContents = readFileSync(resolvedPath, { encoding: 'utf8' });
 
             if (selectors !== undefined && selectors.getLength() > 0) {
-                let selectorsMap = legacyToSass(selectors);
+                const selectorsMap = legacyToSass(selectors);
                 if (selectorsMap instanceof sass.SassMap) {
                     svgContents = changeStyle(svgContents, selectorsMap);
                 } else {
@@ -126,7 +131,7 @@ export function legacySassSvgInlinerFactory(base, opts) {
 
             // sass legacy can't work with promises... for some reason
 
-            let out = encode(svgContents, { encodingFormat });
+            const out = encode(svgContents, { encodingFormat });
             return out;
         } catch (err) {
             console.error('[node-build-scripts]', err);
