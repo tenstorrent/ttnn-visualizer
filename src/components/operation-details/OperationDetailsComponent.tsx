@@ -11,17 +11,24 @@ import { useOperationDetails, usePreviousOperationDetails } from '../../hooks/us
 import 'styles/components/OperationDetailsComponent.scss';
 import { toHex } from '../../functions/math';
 import TensorDetailsComponent from './TensorDetailsComponent';
+import StackTrace from './StackTrace';
 
 interface OperationDetailsProps {
     operationId: number;
+    isFullStackTrace: boolean;
+    toggleStackTraceHandler: (condition: boolean) => void;
 }
 
 const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
 
-const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
+const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
+    operationId,
+    isFullStackTrace,
+    toggleStackTraceHandler,
+}) => {
     const [zoomedInView, setZoomedInView] = useState(false);
 
-    const { operation, operationDetails: details } = useOperationDetails(operationId);
+    const { operationDetails: details } = useOperationDetails(operationId);
 
     const { data: operationDetails, isLoading } = details;
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
@@ -96,7 +103,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     return (
         <div className='operation-details-component'>
-            <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
+            <StackTrace
+                stackTrace={operationDetails.stack_traces[0].stack_trace}
+                isFullStackTrace={isFullStackTrace}
+                toggleStackTraceHandler={toggleStackTraceHandler}
+            />
+
             <Switch
                 label={zoomedInView ? 'Full buffer report' : 'Zoom buffer report'}
                 checked={zoomedInView}
@@ -126,7 +138,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
             <div className='legend'>
                 {memoryReport.map((chunk) => (
-                    <div className='legend-item' key={chunk.address}>
+                    <div
+                        className='legend-item'
+                        key={chunk.address}
+                    >
                         <div
                             className={classNames('memory-color-block', { empty: chunk.empty === true })}
                             style={{
@@ -148,18 +163,26 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                     </div>
                 ))}
             </div>
+
             <hr />
+
             <div className='tensor-list'>
                 <div className='inputs'>
                     <h3>Inputs</h3>
                     {inputs.map((tensor) => (
-                        <TensorDetailsComponent tensor={tensor} key={tensor.tensor_id} />
+                        <TensorDetailsComponent
+                            tensor={tensor}
+                            key={tensor.tensor_id}
+                        />
                     ))}
                 </div>
                 <div className='outputs'>
                     <h3>Outputs</h3>
                     {outputs.map((tensor) => (
-                        <TensorDetailsComponent tensor={tensor} key={tensor.tensor_id} />
+                        <TensorDetailsComponent
+                            tensor={tensor}
+                            key={tensor.tensor_id}
+                        />
                     ))}
                 </div>
             </div>

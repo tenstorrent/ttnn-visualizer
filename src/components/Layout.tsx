@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Button } from '@blueprintjs/core';
+import { Button, Classes } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import TenstorrentLogo from './TenstorrentLogo';
 import { useReportMeta } from '../hooks/useAPI';
@@ -15,7 +15,7 @@ function Layout() {
     };
 
     return (
-        <div className='bp5-dark'>
+        <div className={Classes.DARK}>
             <header className='app-header'>
                 <Link to={ROUTES.HOME}>
                     <TenstorrentLogo />
