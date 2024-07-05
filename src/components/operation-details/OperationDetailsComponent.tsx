@@ -121,9 +121,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 onClickOutside={onClickOutside}
             />
             <aside className={classNames('plot-instructions', { hidden: chartData.length === 0 })}>
-                {selectedTensorAddress === null
-                    ? 'Click on a buffer to focus'
-                    : 'Buffer focused, click anywhere to reset'}
+                Click on a buffer to focus
+            </aside>
+
+            <aside className={classNames('plot-instructions-floating', { hidden: selectedTensorAddress === null })}>
+                Buffer focused, click anywhere to reset
             </aside>
 
             <div className='legend'>
