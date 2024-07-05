@@ -135,8 +135,8 @@
         position: fixed;
         bottom: 20px;
         right: 20px;
-        background-color: white;
-        color: black;
+        background-color: $tt-white-text;
+        color: $tt-black;
         padding: 10px;
 
         &.hidden {
