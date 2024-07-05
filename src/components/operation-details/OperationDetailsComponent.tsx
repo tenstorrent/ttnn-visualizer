@@ -103,8 +103,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
 
     return (
         <div className='operation-details-component'>
-            {/* <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2> */}
-
             <StackTrace
                 stackTrace={operationDetails.stack_traces[0].stack_trace}
                 isFullStackTrace={isFullStackTrace}

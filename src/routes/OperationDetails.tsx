@@ -6,17 +6,17 @@ import OperationDetailsNavigation from '../components/OperationDetailsNavigation
 export default function OperationDetails() {
     const [isFullStackTrace, setIsFullStackTrace] = useState(false);
     const { operationId } = useParams();
-    const operationIdAsInt = operationId ? parseInt(operationId, 10) : 0;
+    const intOperationId = operationId ? parseInt(operationId, 10) : 0;
 
     return (
         operationId && (
             <>
                 <OperationDetailsNavigation
-                    operationId={operationIdAsInt}
+                    operationId={intOperationId}
                     isFullStackTrace={isFullStackTrace}
                 />
                 <OperationDetailsComponent
-                    operationId={operationIdAsInt}
+                    operationId={intOperationId}
                     isFullStackTrace={isFullStackTrace}
                     toggleStackTraceHandler={setIsFullStackTrace}
                 />
