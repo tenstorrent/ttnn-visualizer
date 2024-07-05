@@ -1,19 +1,20 @@
 import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
-import { useNextOperation, usePreviousOperation } from '../hooks/useAPI';
+import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
 import 'styles/components/OperationDetailsNavigation.scss';
 import ROUTES from '../definitions/routes';
 
 interface OperationDetailsNavigationProps {
-    operationId: string;
+    operationId: number;
+    isFullStackTrace: boolean;
 }
 
-function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationProps) {
+function OperationDetailsNavigation({ operationId, isFullStackTrace }: OperationDetailsNavigationProps) {
     const navigate = useNavigate();
-    const parsedOperationId = parseInt(operationId, 10);
-    const previousOperation = usePreviousOperation(parsedOperationId);
-    const nextOperation = useNextOperation(parsedOperationId);
+    const { operation } = useOperationDetails(operationId);
+    const previousOperation = usePreviousOperation(operationId);
+    const nextOperation = useNextOperation(operationId);
 
     return (
         <nav>
@@ -26,10 +27,11 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                     <Button
                         icon={IconNames.ArrowLeft}
                         disabled={!previousOperation}
-                        onClick={() => navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`)}
-                    >
-                        Previous
-                    </Button>
+                        onClick={() =>
+                            navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`, { state: { isFullStackTrace } })
+                        }
+                        outlined
+                    />
                 </Tooltip>
 
                 <Tooltip
@@ -41,6 +43,7 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                         onClick={() =>
                             navigate(`${ROUTES.OPERATIONS}`, { state: { previousOperationId: operationId } })
                         }
+                        outlined
                     />
                 </Tooltip>
 
@@ -52,11 +55,13 @@ function OperationDetailsNavigation({ operationId }: OperationDetailsNavigationP
                     <Button
                         rightIcon={IconNames.ArrowRight}
                         disabled={!nextOperation}
-                        onClick={() => navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`)}
-                    >
-                        Next
-                    </Button>
+                        onClick={() =>
+                            navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`, { state: { isFullStackTrace } })
+                        }
+                        outlined
+                    />
                 </Tooltip>
+                <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
             </ButtonGroup>
         </nav>
     );

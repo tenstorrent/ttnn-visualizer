@@ -100,6 +100,9 @@ class GraphData(BaseModel):
     buffers: List[Buffer]
     buffer_pages: List[BufferPage]
 
+class StackTrace(BaseModel):
+    operation_id: int
+    stack_trace: str
 
 class OperationDetails(BaseModel):
     operation_id: int
@@ -108,6 +111,7 @@ class OperationDetails(BaseModel):
     buffers: List[Buffer]
     l1_sizes: List[int]
     # buffer_pages: List[BufferPage]
+    stack_traces: List[StackTrace]
 
 
 class GlyphData(BaseModel):
@@ -125,7 +129,6 @@ class PlotData(BaseModel):
     l1_size: int
     memory_data: GlyphData
     buffer_data: GlyphData
-
 
 operations = Table(
     "operations",
@@ -218,6 +221,13 @@ devices = Table(
     Column("total_l1_for_interleaved_buffers", Integer),
     Column("total_l1_for_sharded_buffers", Integer),
     Column("cb_limit", Integer),
+)
+
+stack_traces = Table(
+    "stack_traces",
+    metadata,
+    Column("operation_id", Integer, primary_key=True),
+    Column("stack_trace", Text)
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -317,13 +327,17 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
     #
     # buffer_pages_list = [BufferPage(**row) for row in buffer_pages_data]
 
+    # Fetch stack trace
+    stack_trace_query = select(stack_traces).where(stack_traces.c.operation_id == operation_id)
+    stack_trace_results = db.execute(stack_trace_query).mappings().all()
+
     return OperationDetails(
         operation_id=operation_id,
         input_tensors=input_tensors_list,
         output_tensors=output_tensors_list,
         buffers=buffers_list,
         l1_sizes=l1_sizes,
-        # buffer_pages=buffer_pages_list
+        stack_traces=stack_trace_results
     )
 
 
