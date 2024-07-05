@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import Plot from 'react-plotly.js';
-import { Layout, PlotData, PlotMouseEvent } from 'plotly.js';
+import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
 import useOutsideClick from '../../hooks/useOutsideClick';
 
 export interface L1MemoryRendererProps {
@@ -74,9 +74,10 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
         hovermode: 'closest',
     };
 
-    const config = {
+    const config: Partial<Config> = {
         displayModeBar: false,
         displaylogo: false,
+        staticPlot: onBufferClick === undefined,
     };
 
     const plotRef = useRef<HTMLDivElement>(null);
