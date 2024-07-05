@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
-@use './scss/definitions/colours' as *;
 
 // Third party
 @use 'normalize.css/normalize.css';
-@use "@blueprintjs/core/src/blueprint.scss" with (
-    $pt-dark-icon-color: $tt-light-gray
-);
+@use "scss/blueprintjs";
 
 // Our styles
 @use 'scss/base';
