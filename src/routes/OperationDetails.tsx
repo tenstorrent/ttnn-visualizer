@@ -1,5 +1,6 @@
 import { useParams } from 'react-router';
 import { useState } from 'react';
+import { Helmet } from 'react-helmet-async';
 import OperationDetailsComponent from '../components/operation-details/OperationDetailsComponent';
 import OperationDetailsNavigation from '../components/OperationDetailsNavigation';
 
@@ -11,6 +12,7 @@ export default function OperationDetails() {
     return (
         operationId && (
             <>
+                <Helmet title={`Operation ${operationId}`} />
                 <OperationDetailsNavigation
                     operationId={intOperationId}
                     isFullStackTrace={isFullStackTrace}
