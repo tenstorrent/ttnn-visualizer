@@ -1,3 +1,4 @@
+import { useCallback, useEffect } from 'react';
 import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
@@ -16,6 +17,34 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace }: Operation
     const previousOperation = usePreviousOperation(operationId);
     const nextOperation = useNextOperation(operationId);
 
+    const navigateToPreviousOperation = useCallback(() => {
+        navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`, { state: { isFullStackTrace } });
+    }, [navigate, previousOperation, isFullStackTrace]);
+
+    const navigateToNextOperation = useCallback(() => {
+        navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`, { state: { isFullStackTrace } });
+    }, [navigate, nextOperation, isFullStackTrace]);
+
+    useEffect(() => {
+        const handleKeyPress = (e: KeyboardEvent) => {
+            const { key } = e;
+
+            if (key === 'ArrowLeft') {
+                navigateToPreviousOperation();
+            }
+
+            if (key === 'ArrowRight') {
+                navigateToNextOperation();
+            }
+        };
+
+        window.document.addEventListener('keyup', handleKeyPress);
+
+        return () => {
+            window.document.removeEventListener('keyup', handleKeyPress);
+        };
+    }, [navigateToPreviousOperation, navigateToNextOperation]);
+
     return (
         <nav>
             <ButtonGroup className='operation-details-navigation'>
@@ -27,9 +56,7 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace }: Operation
                     <Button
                         icon={IconNames.ArrowLeft}
                         disabled={!previousOperation}
-                        onClick={() =>
-                            navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`, { state: { isFullStackTrace } })
-                        }
+                        onClick={navigateToPreviousOperation}
                         outlined
                     />
                 </Tooltip>
@@ -55,9 +82,7 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace }: Operation
                     <Button
                         rightIcon={IconNames.ArrowRight}
                         disabled={!nextOperation}
-                        onClick={() =>
-                            navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`, { state: { isFullStackTrace } })
-                        }
+                        onClick={navigateToNextOperation}
                         outlined
                     />
                 </Tooltip>
