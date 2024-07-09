@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Button, Classes } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { Helmet } from 'react-helmet-async';
 import TenstorrentLogo from './TenstorrentLogo';
 import { useReportMeta } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
@@ -16,6 +17,13 @@ function Layout() {
 
     return (
         <div className={Classes.DARK}>
+            <Helmet
+                defaultTitle='TTNN Visualizer'
+                titleTemplate='%s | TTNN Visualizer'
+            >
+                <meta charSet='utf-8' />
+            </Helmet>
+
             <header className='app-header'>
                 <Link to={ROUTES.HOME}>
                     <TenstorrentLogo />
