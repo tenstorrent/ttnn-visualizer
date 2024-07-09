@@ -19,7 +19,7 @@ function Layout() {
         <div className={Classes.DARK}>
             <Helmet
                 defaultTitle='TTNN Visualizer'
-                titleTemplate='%s | TNN Visualizer'
+                titleTemplate='%s | TTNN Visualizer'
             >
                 <meta charSet='utf-8' />
             </Helmet>

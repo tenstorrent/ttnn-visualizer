@@ -4,7 +4,7 @@ import OperationList from '../components/OperationList';
 export default function Operations() {
     return (
         <>
-            <Helmet title='Operations list' />
+            <Helmet title='Operations' />
             <OperationList />;
         </>
     );
