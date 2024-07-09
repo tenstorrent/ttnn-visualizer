@@ -5,13 +5,15 @@ import { useNavigate } from 'react-router';
 import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
 import 'styles/components/OperationDetailsNavigation.scss';
 import ROUTES from '../definitions/routes';
+import LoadingSpinner from './LoadingSpinner';
 
 interface OperationDetailsNavigationProps {
     operationId: number;
     isFullStackTrace: boolean;
+    isLoading: boolean;
 }
 
-function OperationDetailsNavigation({ operationId, isFullStackTrace }: OperationDetailsNavigationProps) {
+function OperationDetailsNavigation({ operationId, isFullStackTrace, isLoading }: OperationDetailsNavigationProps) {
     const navigate = useNavigate();
     const { operation } = useOperationDetails(operationId);
     const previousOperation = usePreviousOperation(operationId);
@@ -46,8 +48,8 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace }: Operation
     }, [navigateToPreviousOperation, navigateToNextOperation]);
 
     return (
-        <nav>
-            <ButtonGroup className='operation-details-navigation'>
+        <nav className='operation-details-navigation'>
+            <ButtonGroup className='button-group'>
                 <Tooltip
                     content={previousOperation ? `${previousOperation?.id} ${previousOperation?.name}` : ''}
                     placement={PopoverPosition.TOP}
@@ -88,6 +90,12 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace }: Operation
                 </Tooltip>
                 <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
             </ButtonGroup>
+
+            {isLoading && (
+                <div className='operation-details-loader'>
+                    <LoadingSpinner />
+                </div>
+            )}
         </nav>
     );
 }

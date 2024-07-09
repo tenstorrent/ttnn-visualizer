@@ -4,19 +4,7 @@
 
 @use '../definitions/colours' as *;
 
-.operation-details-loader {
-    position: absolute;
-    top: 78px;
-    left: 233px;
-    scale: 0.4;
-
-    .loading-spinner {
-        color: $tt-medium-light-gray;
-    }
-}
-
 .operation-details-component {
-
     .l1-memory-renderer {
         &.empty-plot {
             opacity: 0.4;
