@@ -1,0 +1,27 @@
+@use '../definitions/colours' as *;
+
+
+.stack-trace {
+    display: flex;
+    flex-wrap: nowrap;
+    padding: 10px;
+    background: $tt-very-dark-gray;
+    align-items: flex-start;
+    gap: 10px;
+
+    .code-wrapper {
+        flex-basis: 85%;
+        flex-shrink: 1;
+        padding: 6px 0
+    }
+
+    .code-output {
+        text-wrap: balance;
+    }
+
+    .is-sticky {
+        position: sticky;
+        top: 0;
+        right: 0;
+    }
+}

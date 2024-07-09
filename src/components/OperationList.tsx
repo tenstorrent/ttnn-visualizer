@@ -2,10 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import { UIEvent, useMemo, useRef, useState } from 'react';
+import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import SearchField from './SearchField';
@@ -16,6 +16,7 @@ import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/OperationsList.scss';
 import { useOperationsList } from '../hooks/useAPI';
+import ROUTES from '../definitions/routes';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -31,6 +32,8 @@ const OperationList = () => {
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
 
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
+    const location = useLocation();
+    const navigate = useNavigate();
 
     const scrollElementRef = useRef(null);
     const virtualizer = useVirtualizer({
@@ -93,6 +96,26 @@ const OperationList = () => {
         }
     }, [fetchedOperations, filterQuery, shouldSortDescending]);
 
+    useEffect(() => {
+        const initialOperationId = location.state?.previousOperationId;
+
+        if (initialOperationId && virtualizer) {
+            const operationIndex =
+                fetchedOperations?.findIndex(
+                    (operation: Operation) => operation.id === parseInt(initialOperationId, 10),
+                ) || 0;
+
+            // Looks better if we scroll to the previous index
+            virtualizer.scrollToIndex(operationIndex - 1, {
+                align: 'start',
+            });
+
+            // Navigating to the same page replaces the entry in the browser history
+            // TODO: Revisit this code later to make sure it's not causing any weird side effects
+            navigate(ROUTES.OPERATIONS, { replace: true });
+        }
+    }, [virtualizer, fetchedOperations, location, navigate]);
+
     return (
         <fieldset className='operations-wrap'>
             <legend>Operations</legend>
@@ -123,7 +146,10 @@ const OperationList = () => {
                         />
                     </Tooltip>
 
-                    <Tooltip content='Scroll to top' placement={PopoverPosition.TOP}>
+                    <Tooltip
+                        content='Scroll to top'
+                        placement={PopoverPosition.TOP}
+                    >
                         <Button
                             onClick={() => {
                                 virtualizer.scrollToIndex(0);
@@ -132,7 +158,10 @@ const OperationList = () => {
                         />
                     </Tooltip>
 
-                    <Tooltip content='Scroll to bottom' placement={PopoverPosition.TOP}>
+                    <Tooltip
+                        content='Scroll to bottom'
+                        placement={PopoverPosition.TOP}
+                    >
                         <Button
                             onClick={() => {
                                 virtualizer.scrollToIndex(numberOfOperations - 1);
@@ -193,7 +222,7 @@ const OperationList = () => {
                                             }
                                             keepChildrenMounted={false}
                                             additionalElements={
-                                                <Link to={`/operations/${operation.id}`}>
+                                                <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
                                                     <Button
                                                         title='Buffer view'
                                                         minimal

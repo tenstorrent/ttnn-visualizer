@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import Plot from 'react-plotly.js';
-import { Layout, PlotData, PlotMouseEvent } from 'plotly.js';
+import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
+import useOutsideClick from '../../hooks/useOutsideClick';
 
 export interface L1MemoryRendererProps {
     chartData: Partial<PlotData>[];
@@ -8,6 +9,7 @@ export interface L1MemoryRendererProps {
     memorySize: number;
     title: string;
     onBufferClick?: (event: PlotMouseEvent) => void;
+    onClickOutside?: (event: MouseEvent) => void;
     plotZoomRangeStart?: number;
     plotZoomRangeEnd?: number;
     className?: string;
@@ -20,11 +22,12 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     className = '',
     title,
     onBufferClick,
+    onClickOutside,
     plotZoomRangeStart,
     plotZoomRangeEnd,
 }) => {
     const layout: Partial<Layout> = {
-        height: 80,
+        height: 110,
         xaxis: {
             autorange: false,
             title: 'L1 Address Space',
@@ -47,9 +50,10 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
             l: 5,
             r: 5,
             b: 40,
-            t: 5,
+            t: 25,
         },
-        paper_bgcolor: '#33333d',
+
+        paper_bgcolor: 'transparent',
         plot_bgcolor: 'white',
         shapes: [
             {
@@ -67,19 +71,26 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
             },
         ],
         showlegend: false,
-        hovermode: 'x',
+        hovermode: 'closest',
     };
 
-    const config = {
+    const config: Partial<Config> = {
         displayModeBar: false,
         displaylogo: false,
+        staticPlot: onBufferClick === undefined,
     };
 
+    const plotRef = useRef<HTMLDivElement>(null);
+
+    useOutsideClick(plotRef, onClickOutside);
+
     return (
-        <div className={className}>
+        <div
+            className={className}
+            ref={plotRef}
+        >
             <h3 className='plot-title'>{title}</h3>
             <Plot
-                //
                 className='l1-memory-plot'
                 data={chartData}
                 layout={layout}
