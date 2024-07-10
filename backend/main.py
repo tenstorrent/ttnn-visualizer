@@ -100,9 +100,11 @@ class GraphData(BaseModel):
     buffers: List[Buffer]
     buffer_pages: List[BufferPage]
 
+
 class StackTrace(BaseModel):
     operation_id: int
     stack_trace: str
+
 
 class OperationDetails(BaseModel):
     operation_id: int
@@ -129,6 +131,24 @@ class PlotData(BaseModel):
     l1_size: int
     memory_data: GlyphData
     buffer_data: GlyphData
+
+
+class TensorDetails(BaseModel):
+    tensor_id: int
+    shape: Optional[str]
+    dtype: Optional[str]
+    layout: Optional[str]
+    memory_config: Optional[str]
+    device_id: Optional[int]
+    address: Optional[int]
+    buffer_type: Optional[int]
+
+
+class TensorDetailsResponse(BaseModel):
+    tensor: TensorDetails
+    producers: List[int]
+    consumers: List[int]
+
 
 operations = Table(
     "operations",
@@ -338,6 +358,45 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
         buffers=buffers_list,
         l1_sizes=l1_sizes,
         stack_traces=stack_trace_results
+    )
+
+
+@app.get("/api/get-tensor-details/{tensor_id}", response_model=TensorDetailsResponse)
+async def get_tensor_details(tensor_id: int = Path(..., description="The ID of the tensor")):
+    db = SessionLocal()
+
+    # Fetch tensor details
+    tensor_query = select(tensors).where(tensors.c.tensor_id == tensor_id)
+    tensor_result = db.execute(tensor_query).first()
+
+    if not tensor_result:
+        raise HTTPException(status_code=404, detail="Tensor not found")
+
+    tensor_details = TensorDetails(
+        tensor_id=tensor_result[0],
+        shape=tensor_result[1],
+        dtype=tensor_result[2],
+        layout=tensor_result[3],
+        memory_config=tensor_result[4],
+        device_id=tensor_result[5],
+        address=tensor_result[6],
+        buffer_type=tensor_result[7]
+    )
+
+    # Fetch producers
+    producers_query = select(output_tensors.c.operation_id).where(output_tensors.c.tensor_id == tensor_id)
+    producers_results = db.execute(producers_query).fetchall()
+    producers_list = [result[0] for result in producers_results]
+
+    # Fetch consumers
+    consumers_query = select(input_tensors.c.operation_id).where(input_tensors.c.tensor_id == tensor_id)
+    consumers_results = db.execute(consumers_query).fetchall()
+    consumers_list = [result[0] for result in consumers_results]
+
+    return TensorDetailsResponse(
+        tensor=tensor_details,
+        producers=producers_list,
+        consumers=consumers_list
     )
 
 
