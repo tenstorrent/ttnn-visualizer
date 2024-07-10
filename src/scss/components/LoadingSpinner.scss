@@ -5,45 +5,69 @@
 @use '../definitions/colours' as *;
 
 .loading-spinner {
-    color: $tt-purple;
-    display: inline-block;
-    position: relative;
-    width: 80px;
-    height: 80px;
+  display: inline-block;
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
 
-    div {
-        box-sizing: border-box;
-        display: block;
-        position: absolute;
-        width: 64px;
-        height: 64px;
-        margin: 8px;
-        border: 6px solid currentcolor;
-        border-radius: 50%;
-        animation: loading-spinner 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
-        border-color: currentcolor transparent transparent;
-    }
+.loading-spinner div {
+  position: absolute;
+  top: 33.3333px;
+  width: 13.3333px;
+  height: 13.3333px;
+  border-radius: 50%;
+  background-color: $tt-light-gray;
+  animation-timing-function: cubic-bezier(0, 1, 1, 0);
 }
 
 .loading-spinner div:nth-child(1) {
-  animation-delay: -0.45s;
+  left: 8px;
+  animation: loading-spinner1 0.6s infinite;
 }
 
 .loading-spinner div:nth-child(2) {
-  animation-delay: -0.3s;
+  left: 8px;
+  animation: loading-spinner2 0.6s infinite;
 }
 
 .loading-spinner div:nth-child(3) {
-  animation-delay: -0.15s;
+  left: 32px;
+  animation: loading-spinner2 0.6s infinite;
 }
 
-@keyframes loading-spinner {
+.loading-spinner div:nth-child(4) {
+  left: 56px;
+  animation: loading-spinner3 0.6s infinite;
+}
+
+@keyframes loading-spinner1 {
   0% {
-    transform: rotate(0deg);
+    transform: scale(0);
   }
 
   100% {
-    transform: rotate(360deg);
+    transform: scale(1);
+  }
+}
+
+@keyframes loading-spinner3 {
+  0% {
+    transform: scale(1);
+  }
+
+  100% {
+    transform: scale(0);
+  }
+}
+
+@keyframes loading-spinner2 {
+  0% {
+    transform: translate(0, 0);
+  }
+
+  100% {
+    transform: translate(24px, 0);
   }
 }
 

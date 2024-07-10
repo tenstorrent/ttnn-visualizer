@@ -1,8 +1,9 @@
 import { PlotData } from 'plotly.js';
 import { getBufferColor } from '../functions/colorGenerator';
 import { BufferData, Chunk, FragmentationEntry, OperationDetailsData } from './APIData';
+import { formatSize, toHex } from '../functions/math';
 
-export const getMemoryData = (operationDetails: OperationDetailsData, isZoomedIn: boolean) => {
+export const getMemoryData = (operationDetails: OperationDetailsData) => {
     const fragmentation: FragmentationEntry[] = [];
     const memory: Chunk[] =
         operationDetails?.buffers
@@ -29,22 +30,41 @@ export const getMemoryData = (operationDetails: OperationDetailsData, isZoomedIn
     });
     const chartData: Partial<PlotData>[] = memory.map((chunk) => {
         const { address, size } = chunk;
+        const color = getBufferColor(address);
         return {
             x: [address + size / 2],
             y: [1],
             type: 'bar',
             width: [size],
             marker: {
-                color: getBufferColor(address),
+                color,
                 line: {
                     width: 0,
                     opacity: 0,
                     simplify: false,
                 },
             },
-            text: isZoomedIn ? `${address}:${size}` : '',
-            hovertext: `${address}:${size}`,
-            hoverinfo: 'text',
+
+            hoverinfo: 'none',
+            hovertemplate: `
+<span style="color:${color};font-size:20px;">&#9632;</span>
+${address} (${toHex(address)}) <br>Size: ${formatSize(size)} <extra></extra>`,
+            hoverlabel: {
+                align: 'right',
+                bgcolor: 'white',
+                padding: {
+                    t: 10,
+                    b: 10,
+                    l: 10,
+                    r: 10,
+                },
+
+                font: {
+                    color: 'black',
+                    weight: 'bold',
+                    size: 14,
+                },
+            },
         };
     });
     return { chartData, memory, fragmentation };

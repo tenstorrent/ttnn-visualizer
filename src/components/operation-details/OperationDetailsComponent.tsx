@@ -6,27 +6,22 @@ import { getBufferColor } from '../../functions/colorGenerator';
 import { FragmentationEntry, TensorData } from '../../model/APIData';
 import L1MemoryRenderer from './L1MemoryRenderer';
 import { getMemoryData } from '../../model/ChartUtils';
-import LoadingSpinner from '../LoadingSpinner';
 import { useOperationDetails, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
-import { toHex } from '../../functions/math';
+import { formatSize, prettyPrintAddress, toHex } from '../../functions/math';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import StackTrace from './StackTrace';
+import OperationDetailsNavigation from '../OperationDetailsNavigation';
 
 interface OperationDetailsProps {
     operationId: number;
-    isFullStackTrace: boolean;
-    toggleStackTraceHandler: (condition: boolean) => void;
 }
 
 const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
 
-const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
-    operationId,
-    isFullStackTrace,
-    toggleStackTraceHandler,
-}) => {
+const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const [zoomedInView, setZoomedInView] = useState(false);
+    const [isFullStackTrace, setIsFullStackTrace] = useState(false);
 
     const { operationDetails: details } = useOperationDetails(operationId);
 
@@ -34,17 +29,17 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
 
+    const [selectedTensorAddress, setSelectedTensorAddress] = useState<number | null>(null);
+
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
         return (
-            <div className='operation-details-loader'>
-                <LoadingSpinner />
-            </div>
+            <OperationDetailsNavigation
+                operationId={operationId}
+                isFullStackTrace={isFullStackTrace}
+                isLoading={isLoading}
+            />
         );
     }
-
-    const formatSize = (number: number): string => {
-        return new Intl.NumberFormat('en-US').format(number);
-    };
 
     const inputs = operationDetails?.input_tensors;
     const outputs = operationDetails?.output_tensors;
@@ -63,11 +58,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
             ],
         ].flat() || [];
 
-    const { chartData, memory, fragmentation } = getMemoryData(operationDetails, zoomedInView);
-    const { chartData: previousChartData, memory: previousMemory } = getMemoryData(
-        previousOperationDetails,
-        zoomedInView,
-    );
+    const { chartData, memory, fragmentation } = getMemoryData(operationDetails);
+    const { chartData: previousChartData, memory: previousMemory } = getMemoryData(previousOperationDetails);
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const memorySize = operationDetails?.l1_sizes[0] || 0; // TODO: memorysize will need to be read from the appropriate device even though its likely going to be the same for the multichip scenario
@@ -91,10 +83,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
     }
 
     const onBufferClick = (event: Readonly<PlotMouseEvent>): void => {
-        // TODO: stub method for clicking on the buffer
         const { address } = memory[event.points[0].curveNumber];
-        // eslint-disable-next-line no-console
-        console.log(address);
+        setSelectedTensorAddress(address);
+    };
+    const onClickOutside = () => {
+        setSelectedTensorAddress(null);
     };
 
     const getTensorForAddress = (address: number): TensorData | null => {
@@ -102,91 +95,112 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
     };
 
     return (
-        <div className='operation-details-component'>
-            <StackTrace
-                stackTrace={operationDetails.stack_traces[0].stack_trace}
+        <>
+            <OperationDetailsNavigation
+                operationId={operationId}
                 isFullStackTrace={isFullStackTrace}
-                toggleStackTraceHandler={toggleStackTraceHandler}
+                isLoading={isLoading}
             />
 
-            <Switch
-                label={zoomedInView ? 'Full buffer report' : 'Zoom buffer report'}
-                checked={zoomedInView}
-                onChange={() => setZoomedInView(!zoomedInView)}
-            />
+            <div className='operation-details-component'>
+                <StackTrace
+                    stackTrace={operationDetails.stack_traces[0].stack_trace}
+                    isFullStackTrace={isFullStackTrace}
+                    toggleStackTraceHandler={setIsFullStackTrace}
+                />
 
-            <L1MemoryRenderer
-                title='Previous Summarized L1 Report'
-                className={classNames('l1-memory-renderer', { 'empty-plot': previousChartData.length === 0 })}
-                plotZoomRangeStart={plotZoomRangeStart}
-                plotZoomRangeEnd={plotZoomRangeEnd}
-                chartData={previousChartData}
-                isZoomedIn={zoomedInView}
-                memorySize={memorySize}
-            />
+                <Switch
+                    label={zoomedInView ? 'Full buffer report' : 'Zoom buffer report'}
+                    checked={zoomedInView}
+                    onChange={() => setZoomedInView(!zoomedInView)}
+                />
 
-            <L1MemoryRenderer
-                title='Current Summarized L1 Report'
-                className={classNames('l1-memory-renderer', { 'empty-plot': chartData.length === 0 })}
-                plotZoomRangeStart={plotZoomRangeStart}
-                plotZoomRangeEnd={plotZoomRangeEnd}
-                chartData={chartData}
-                isZoomedIn={zoomedInView}
-                memorySize={memorySize}
-                onBufferClick={onBufferClick}
-            />
+                <L1MemoryRenderer
+                    title='Previous Summarized L1 Report'
+                    className={classNames('l1-memory-renderer', { 'empty-plot': previousChartData.length === 0 })}
+                    plotZoomRangeStart={plotZoomRangeStart}
+                    plotZoomRangeEnd={plotZoomRangeEnd}
+                    chartData={previousChartData}
+                    isZoomedIn={zoomedInView}
+                    memorySize={memorySize}
+                />
 
-            <div className='legend'>
-                {memoryReport.map((chunk) => (
-                    <div
-                        className='legend-item'
-                        key={chunk.address}
-                    >
+                <L1MemoryRenderer
+                    title='Current Summarized L1 Report'
+                    className={classNames('l1-memory-renderer', { 'empty-plot': chartData.length === 0 })}
+                    plotZoomRangeStart={plotZoomRangeStart}
+                    plotZoomRangeEnd={plotZoomRangeEnd}
+                    chartData={chartData}
+                    isZoomedIn={zoomedInView}
+                    memorySize={memorySize}
+                    onBufferClick={onBufferClick}
+                    onClickOutside={onClickOutside}
+                />
+
+                <aside className={classNames('plot-instructions', { hidden: chartData.length === 0 })}>
+                    Click on a buffer to focus
+                </aside>
+
+                <aside className={classNames('plot-instructions-floating', { hidden: selectedTensorAddress === null })}>
+                    Buffer focused, click anywhere to reset
+                </aside>
+
+                <div className='legend'>
+                    {memoryReport.map((chunk) => (
                         <div
-                            className={classNames('memory-color-block', { empty: chunk.empty === true })}
-                            style={{
-                                backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
-                            }}
-                        />
-                        <div className='legend-details'>
-                            <div className='format-numbers'>
-                                {chunk.address} ({toHex(chunk.address)})
-                            </div>
-                            <div className='format-numbers'>{formatSize(chunk.size)} </div>
-                            <div>
-                                {getTensorForAddress(chunk.address) && (
-                                    <>Tensor {getTensorForAddress(chunk.address)?.tensor_id}</>
-                                )}
-                                {chunk.empty && 'Empty space'}
+                            key={chunk.address}
+                            className={classNames('legend-item', {
+                                dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
+                            })}
+                        >
+                            <div
+                                className={classNames('memory-color-block', { empty: chunk.empty === true })}
+                                style={{
+                                    backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
+                                }}
+                            />
+                            <div className='legend-details'>
+                                <div className='format-numbers'>{prettyPrintAddress(chunk.address, memorySize)}</div>
+                                <div className='format-numbers keep-left'>({toHex(chunk.address)})</div>
+                                <div className='format-numbers'>{formatSize(chunk.size)} </div>
+                                <div>
+                                    {getTensorForAddress(chunk.address) && (
+                                        <>Tensor {getTensorForAddress(chunk.address)?.tensor_id}</>
+                                    )}
+                                    {chunk.empty && 'Empty space'}
+                                </div>
                             </div>
                         </div>
+                    ))}
+                </div>
+
+                <hr />
+
+                <div className='tensor-list'>
+                    <div className='inputs'>
+                        <h3>Inputs</h3>
+                        {inputs.map((tensor) => (
+                            <TensorDetailsComponent
+                                tensor={tensor}
+                                key={tensor.tensor_id}
+                                selectedAddress={selectedTensorAddress}
+                            />
+                        ))}
                     </div>
-                ))}
-            </div>
 
-            <hr />
-
-            <div className='tensor-list'>
-                <div className='inputs'>
-                    <h3>Inputs</h3>
-                    {inputs.map((tensor) => (
-                        <TensorDetailsComponent
-                            tensor={tensor}
-                            key={tensor.tensor_id}
-                        />
-                    ))}
-                </div>
-                <div className='outputs'>
-                    <h3>Outputs</h3>
-                    {outputs.map((tensor) => (
-                        <TensorDetailsComponent
-                            tensor={tensor}
-                            key={tensor.tensor_id}
-                        />
-                    ))}
+                    <div className='outputs'>
+                        <h3>Outputs</h3>
+                        {outputs.map((tensor) => (
+                            <TensorDetailsComponent
+                                tensor={tensor}
+                                key={tensor.tensor_id}
+                                selectedAddress={selectedTensorAddress}
+                            />
+                        ))}
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 };
 export default OperationDetailsComponent;

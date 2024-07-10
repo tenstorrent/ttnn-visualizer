@@ -15,5 +15,6 @@
             "source.fixAll.eslint": "always",
             "source.fixAll.stylelint": "always",
         },
+        "cSpell.words": ["blueprintjs", "TTNN"],
     },
 }

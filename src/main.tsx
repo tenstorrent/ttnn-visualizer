@@ -4,6 +4,7 @@ import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from 'react-query';
 import { FocusStyleManager } from '@blueprintjs/core';
 import './index.scss';
+import { HelmetProvider } from 'react-helmet-async';
 import ErrorPage from './error-page';
 import Layout from './components/Layout';
 import Home from './routes/Home';
@@ -38,8 +39,10 @@ FocusStyleManager.onlyShowFocusOnTabs();
 const queryClient = new QueryClient();
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
-        <React.StrictMode>
-            <RouterProvider router={router} />
-        </React.StrictMode>
+        <HelmetProvider>
+            <React.StrictMode>
+                <RouterProvider router={router} />
+            </React.StrictMode>
+        </HelmetProvider>
     </QueryClientProvider>,
 );

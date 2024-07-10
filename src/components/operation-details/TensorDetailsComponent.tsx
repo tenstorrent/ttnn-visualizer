@@ -5,11 +5,16 @@ import { TensorData } from '../../model/APIData';
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
+    selectedAddress: number | null;
 }
 
-const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({ tensor }) => {
+const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({ tensor, selectedAddress = null }) => {
     return (
-        <div className='tensor-item'>
+        <div
+            className={classNames('tensor-item', {
+                dimmed: tensor.address !== selectedAddress && selectedAddress !== null,
+            })}
+        >
             <div className='tensor-name'>
                 <div
                     className={classNames('memory-color-block', {
