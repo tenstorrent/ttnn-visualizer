@@ -5,26 +5,10 @@
 import { Button, Dialog, DialogBody, DialogFooter, FormGroup, Icon, IconName, InputGroup } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { FC, useState } from 'react';
+
+import useRemoteConnection, { ConnectionStatus, ConnectionTestStates, RemoteConnection } from '../../hooks/useRemote';
+
 import 'styles/components/RemoteConnectionDialog.scss';
-
-interface RemoteConnection {
-    name: string;
-    host: string;
-    port: number;
-    path: string;
-}
-
-enum ConnectionTestStates {
-    IDLE,
-    PROGRESS,
-    FAILED,
-    OK,
-}
-
-interface ConnectionStatus {
-    status: ConnectionTestStates;
-    message: string;
-}
 
 const ConnectionTestMessage: FC<ConnectionStatus> = ({ status, message }) => {
     const iconMap: Record<ConnectionTestStates, IconName> = {
@@ -37,7 +21,11 @@ const ConnectionTestMessage: FC<ConnectionStatus> = ({ status, message }) => {
 
     return (
         <div className={`verify-connection-item status-${ConnectionTestStates[status]}`}>
-            <Icon className='connection-status-icon' icon={icon} size={20} />
+            <Icon
+                className='connection-status-icon'
+                icon={icon}
+                size={20}
+            />
             <span className='connection-status-text'>{message}</span>
         </div>
     );
@@ -47,12 +35,14 @@ interface RemoteFolderDialogProps {
     title?: string;
     buttonLabel?: string;
     open: boolean;
+    onClose: () => void;
     onAddConnection: (connection: RemoteConnection) => void;
     remoteConnection?: RemoteConnection;
 }
 
 const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
     open,
+    onClose,
     onAddConnection,
     title = 'Add new remote connection',
     buttonLabel = 'Add connection',
@@ -64,14 +54,53 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
         { status: ConnectionTestStates.IDLE, message: 'Test remote folder path' },
     ];
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
-    const [connectionTests, _setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
-    const [isTestingConnection, _setIsTestingconnection] = useState(false);
+    const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
+    const { testConnection, testRemoteFolder } = useRemoteConnection();
+    const [isTestingConnection, setIsTestingconnection] = useState(false);
+    // const logging = useLogging();
 
     const isValidConnection = connectionTests.every((status) => status.status === ConnectionTestStates.OK);
 
-    const testConnectionStatus = async () => {};
+    const testConnectionStatus = async () => {
+        setIsTestingconnection(true);
 
-    const closeDialog = () => {};
+        const sshProgressStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing connection' };
+        const folderProgressStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing remote folder path' };
+
+        setConnectionTests([sshProgressStatus, folderProgressStatus]);
+
+        try {
+            const sshStatus = await testConnection(connection);
+            let folderStatus = folderProgressStatus;
+
+            if (sshStatus.status === ConnectionTestStates.FAILED) {
+                folderStatus = { status: ConnectionTestStates.FAILED, message: 'Could not connect to SSH server' };
+            }
+
+            setConnectionTests([sshStatus, folderStatus]);
+
+            if (sshStatus.status === ConnectionTestStates.OK) {
+                folderStatus = await testRemoteFolder(connection);
+
+                setConnectionTests([sshStatus, folderStatus]);
+            }
+        } catch (err) {
+            // logging.error((err as Error)?.message ?? err?.toString() ?? 'Unknown error');
+
+            setConnectionTests([
+                { status: ConnectionTestStates.FAILED, message: 'Connection failed' },
+                { status: ConnectionTestStates.FAILED, message: 'Remote folder path failed' },
+            ]);
+        } finally {
+            setIsTestingconnection(false);
+        }
+    };
+
+    const closeDialog = () => {
+        setConnection(defaultConnection);
+        setConnectionTests(defaultConnectionTests);
+        onClose();
+    };
 
     return (
         <Dialog
@@ -83,15 +112,23 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
             onClose={closeDialog}
         >
             <DialogBody>
-                <FormGroup label='Name' labelFor='text-input' subLabel='Connection name'>
+                <FormGroup
+                    label='Name'
+                    labelFor='text-input'
+                    subLabel='Connection name'
+                >
                     <InputGroup
-                        className='bp5-light'
+                        className='bp4-light'
                         key='name'
                         value={connection.name}
                         onChange={(e) => setConnection({ ...connection, name: e.target.value })}
                     />
                 </FormGroup>
-                <FormGroup label='SSH Host' labelFor='text-input' subLabel='SSH host name. E.g.: localhost'>
+                <FormGroup
+                    label='SSH Host'
+                    labelFor='text-input'
+                    subLabel='SSH host name. E.g.: localhost'
+                >
                     <InputGroup
                         key='host'
                         value={connection.host}
@@ -131,8 +168,14 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
                 <fieldset>
                     <legend>Test Connection</legend>
 
-                    <ConnectionTestMessage status={connectionTests[0].status} message={connectionTests[0].message} />
-                    <ConnectionTestMessage status={connectionTests[1].status} message={connectionTests[1].message} />
+                    <ConnectionTestMessage
+                        status={connectionTests[0].status}
+                        message={connectionTests[0].message}
+                    />
+                    <ConnectionTestMessage
+                        status={connectionTests[1].status}
+                        message={connectionTests[1].message}
+                    />
 
                     <br />
                     <Button
@@ -160,6 +203,12 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
             />
         </Dialog>
     );
+};
+
+RemoteFolderDialog.defaultProps = {
+    title: 'Add new remote connection',
+    buttonLabel: 'Add connection',
+    remoteConnection: undefined,
 };
 
 export default RemoteFolderDialog;

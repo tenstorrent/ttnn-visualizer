@@ -76,7 +76,13 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                 disabled={disabled}
                 filterable
                 itemPredicate={filterRemoteConnections}
-                noResults={<MenuItem disabled text='No results' roleStructure='listoption' />}
+                noResults={
+                    <MenuItem
+                        disabled
+                        text='No results'
+                        roleStructure='listoption'
+                    />
+                }
                 onItemSelect={onSelectConnection}
             >
                 <Button
@@ -108,6 +114,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                 title='Edit remote connection'
                 buttonLabel='Save connection'
                 remoteConnection={selectedConnection}
+                onClose={() => setIsEditDialogOpen(false)}
             />
             <Button
                 icon={IconNames.LOG_IN}

@@ -7,13 +7,28 @@ import { FC, useState } from 'react';
 import { AnchorButton, FormGroup, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 
+import useRemote, { RemoteConnection, RemoteFolder } from '../../hooks/useRemote';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 
 const RemoteSyncConfigurator: FC = () => {
+    const remote = useRemote();
+    const [remoteFolders, setRemoteFolders] = useState<RemoteFolder[]>(
+        remote.persistentState.getSavedRemoteFolders(remote.persistentState.selectedConnection),
+    );
+    // const selectedFolder = useSelector(getSelectedRemoteFolder) ?? remoteFolders[0];
+    // const selectedFolderLocationType = useSelector(getSelectedFolderLocationType);
+
     const [isSyncingRemoteFolder, _setIsSyncingRemoteFolder] = useState(false);
     const [isLoadingFolderList, _setIsLoadingFolderList] = useState(false);
+
+    const updateSelectedConnection = async (connection: RemoteConnection) => {
+        remote.persistentState.selectedConnection = connection;
+        setRemoteFolders(remote.persistentState.getSavedRemoteFolders(connection));
+
+        // await updateSelectedFolder(remote.persistentState.getSavedRemoteFolders(connection)[0]);
+    };
 
     return (
         <>
@@ -22,7 +37,17 @@ const RemoteSyncConfigurator: FC = () => {
                 labelFor='text-input'
                 subLabel='Add new server connection details'
             >
-                <AddRemoteConnection disabled={isLoadingFolderList || isSyncingRemoteFolder} />
+                <AddRemoteConnection
+                    disabled={isLoadingFolderList || isSyncingRemoteFolder}
+                    onAddConnection={async (newConnection) => {
+                        remote.persistentState.savedConnectionList = [
+                            ...remote.persistentState.savedConnectionList,
+                            newConnection,
+                        ];
+
+                        await updateSelectedConnection(newConnection);
+                    }}
+                />
             </FormGroup>
 
             <FormGroup
@@ -49,10 +74,20 @@ const RemoteSyncConfigurator: FC = () => {
             >
                 <RemoteFolderSelector
                     // remoteFolder={selectedFolder}
-                    remoteFolders={[]}
+                    remoteFolders={remoteFolders}
                     loading={isSyncingRemoteFolder || isLoadingFolderList}
                     // updatingFolderList={isFetchingFolderStatus}
                     onSelectFolder={() => {}}
+                    // onSelectFolder={async (folder) => {
+                    //     await updateSelectedFolder(folder);
+
+                    //     if (remote.persistentState.selectedConnection) {
+                    //         sendEventToMain(
+                    //             ElectronEvents.UPDATE_WINDOW_TITLE,
+                    //             `${remote.persistentState.selectedConnection.name} — ${folder.testName}`,
+                    //         );
+                    //     }
+                    // }}
                 >
                     <Tooltip content='Sync remote folder'>
                         <AnchorButton
