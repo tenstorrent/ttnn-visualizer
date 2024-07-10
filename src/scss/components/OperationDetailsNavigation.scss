@@ -23,9 +23,9 @@ $loader-width: 32px;
 
 .operation-details-loader {
     position: absolute;
-    top: -26px; // Height is not uniform so need to adjust to a different value than $loader-width
+    top: -25px; // Height is not uniform so need to adjust to a different value than $loader-width
     right: -$loader-width;
-    scale: 0.4;
+    scale: 0.5;
 
     .loading-spinner {
         color: $tt-medium-light-gray;
