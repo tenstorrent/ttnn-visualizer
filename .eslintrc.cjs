@@ -15,7 +15,7 @@ module.exports = {
         'prettier',
         'plugin:prettier/recommended',
     ],
-    ignorePatterns: ['dist', '.eslintrc.cjs', '*.svg', '*.scss'],
+    ignorePatterns: ['dist', '.eslintrc.cjs', '*.svg', '*.scss', 'legacySassSvgInlinerFactory.js'],
     parser: '@typescript-eslint/parser',
     parserOptions: {
         project: './tsconfig.json',

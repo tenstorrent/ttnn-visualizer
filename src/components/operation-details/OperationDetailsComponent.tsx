@@ -6,27 +6,22 @@ import { getBufferColor } from '../../functions/colorGenerator';
 import { FragmentationEntry, TensorData } from '../../model/APIData';
 import L1MemoryRenderer from './L1MemoryRenderer';
 import { getMemoryData } from '../../model/ChartUtils';
-import LoadingSpinner from '../LoadingSpinner';
 import { useOperationDetails, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
 import { formatSize, prettyPrintAddress, toHex } from '../../functions/math';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import StackTrace from './StackTrace';
+import OperationDetailsNavigation from '../OperationDetailsNavigation';
 
 interface OperationDetailsProps {
     operationId: number;
-    isFullStackTrace: boolean;
-    toggleStackTraceHandler: (condition: boolean) => void;
 }
 
 const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
 
-const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
-    operationId,
-    isFullStackTrace,
-    toggleStackTraceHandler,
-}) => {
+const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const [zoomedInView, setZoomedInView] = useState(false);
+    const [isFullStackTrace, setIsFullStackTrace] = useState(false);
 
     const { operationDetails: details } = useOperationDetails(operationId);
 
@@ -38,9 +33,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
         return (
-            <div className='operation-details-loader'>
-                <LoadingSpinner />
-            </div>
+            <OperationDetailsNavigation
+                operationId={operationId}
+                isFullStackTrace={isFullStackTrace}
+                isLoading={isLoading}
+            />
         );
     }
 
@@ -98,102 +95,112 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({
     };
 
     return (
-        <div className='operation-details-component'>
-            <StackTrace
-                stackTrace={operationDetails.stack_traces[0].stack_trace}
+        <>
+            <OperationDetailsNavigation
+                operationId={operationId}
                 isFullStackTrace={isFullStackTrace}
-                toggleStackTraceHandler={toggleStackTraceHandler}
+                isLoading={isLoading}
             />
 
-            <Switch
-                label={zoomedInView ? 'Full buffer report' : 'Zoom buffer report'}
-                checked={zoomedInView}
-                onChange={() => setZoomedInView(!zoomedInView)}
-            />
+            <div className='operation-details-component'>
+                <StackTrace
+                    stackTrace={operationDetails.stack_traces[0].stack_trace}
+                    isFullStackTrace={isFullStackTrace}
+                    toggleStackTraceHandler={setIsFullStackTrace}
+                />
 
-            <L1MemoryRenderer
-                title='Previous Summarized L1 Report'
-                className={classNames('l1-memory-renderer', { 'empty-plot': previousChartData.length === 0 })}
-                plotZoomRangeStart={plotZoomRangeStart}
-                plotZoomRangeEnd={plotZoomRangeEnd}
-                chartData={previousChartData}
-                isZoomedIn={zoomedInView}
-                memorySize={memorySize}
-            />
+                <Switch
+                    label={zoomedInView ? 'Full buffer report' : 'Zoom buffer report'}
+                    checked={zoomedInView}
+                    onChange={() => setZoomedInView(!zoomedInView)}
+                />
 
-            <L1MemoryRenderer
-                title='Current Summarized L1 Report'
-                className={classNames('l1-memory-renderer', { 'empty-plot': chartData.length === 0 })}
-                plotZoomRangeStart={plotZoomRangeStart}
-                plotZoomRangeEnd={plotZoomRangeEnd}
-                chartData={chartData}
-                isZoomedIn={zoomedInView}
-                memorySize={memorySize}
-                onBufferClick={onBufferClick}
-                onClickOutside={onClickOutside}
-            />
-            <aside className={classNames('plot-instructions', { hidden: chartData.length === 0 })}>
-                Click on a buffer to focus
-            </aside>
+                <L1MemoryRenderer
+                    title='Previous Summarized L1 Report'
+                    className={classNames('l1-memory-renderer', { 'empty-plot': previousChartData.length === 0 })}
+                    plotZoomRangeStart={plotZoomRangeStart}
+                    plotZoomRangeEnd={plotZoomRangeEnd}
+                    chartData={previousChartData}
+                    isZoomedIn={zoomedInView}
+                    memorySize={memorySize}
+                />
 
-            <aside className={classNames('plot-instructions-floating', { hidden: selectedTensorAddress === null })}>
-                Buffer focused, click anywhere to reset
-            </aside>
+                <L1MemoryRenderer
+                    title='Current Summarized L1 Report'
+                    className={classNames('l1-memory-renderer', { 'empty-plot': chartData.length === 0 })}
+                    plotZoomRangeStart={plotZoomRangeStart}
+                    plotZoomRangeEnd={plotZoomRangeEnd}
+                    chartData={chartData}
+                    isZoomedIn={zoomedInView}
+                    memorySize={memorySize}
+                    onBufferClick={onBufferClick}
+                    onClickOutside={onClickOutside}
+                />
 
-            <div className='legend'>
-                {memoryReport.map((chunk) => (
-                    <div
-                        key={chunk.address}
-                        className={classNames('legend-item', {
-                            dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
-                        })}
-                    >
+                <aside className={classNames('plot-instructions', { hidden: chartData.length === 0 })}>
+                    Click on a buffer to focus
+                </aside>
+
+                <aside className={classNames('plot-instructions-floating', { hidden: selectedTensorAddress === null })}>
+                    Buffer focused, click anywhere to reset
+                </aside>
+
+                <div className='legend'>
+                    {memoryReport.map((chunk) => (
                         <div
-                            className={classNames('memory-color-block', { empty: chunk.empty === true })}
-                            style={{
-                                backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
-                            }}
-                        />
-                        <div className='legend-details'>
-                            <div className='format-numbers'>{prettyPrintAddress(chunk.address, memorySize)}</div>
-                            <div className='format-numbers keep-left'>({toHex(chunk.address)})</div>
-                            <div className='format-numbers'>{formatSize(chunk.size)} </div>
-                            <div>
-                                {getTensorForAddress(chunk.address) && (
-                                    <>Tensor {getTensorForAddress(chunk.address)?.tensor_id}</>
-                                )}
-                                {chunk.empty && 'Empty space'}
+                            key={chunk.address}
+                            className={classNames('legend-item', {
+                                dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
+                            })}
+                        >
+                            <div
+                                className={classNames('memory-color-block', { empty: chunk.empty === true })}
+                                style={{
+                                    backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
+                                }}
+                            />
+                            <div className='legend-details'>
+                                <div className='format-numbers'>{prettyPrintAddress(chunk.address, memorySize)}</div>
+                                <div className='format-numbers keep-left'>({toHex(chunk.address)})</div>
+                                <div className='format-numbers'>{formatSize(chunk.size)} </div>
+                                <div>
+                                    {getTensorForAddress(chunk.address) && (
+                                        <>Tensor {getTensorForAddress(chunk.address)?.tensor_id}</>
+                                    )}
+                                    {chunk.empty && 'Empty space'}
+                                </div>
                             </div>
                         </div>
+                    ))}
+                </div>
+
+                <hr />
+
+                <div className='tensor-list'>
+                    <div className='inputs'>
+                        <h3>Inputs</h3>
+                        {inputs.map((tensor) => (
+                            <TensorDetailsComponent
+                                tensor={tensor}
+                                key={tensor.tensor_id}
+                                selectedAddress={selectedTensorAddress}
+                            />
+                        ))}
                     </div>
-                ))}
-            </div>
 
-            <hr />
-
-            <div className='tensor-list'>
-                <div className='inputs'>
-                    <h3>Inputs</h3>
-                    {inputs.map((tensor) => (
-                        <TensorDetailsComponent
-                            tensor={tensor}
-                            key={tensor.tensor_id}
-                            selectedAddress={selectedTensorAddress}
-                        />
-                    ))}
-                </div>
-                <div className='outputs'>
-                    <h3>Outputs</h3>
-                    {outputs.map((tensor) => (
-                        <TensorDetailsComponent
-                            tensor={tensor}
-                            key={tensor.tensor_id}
-                            selectedAddress={selectedTensorAddress}
-                        />
-                    ))}
+                    <div className='outputs'>
+                        <h3>Outputs</h3>
+                        {outputs.map((tensor) => (
+                            <TensorDetailsComponent
+                                tensor={tensor}
+                                key={tensor.tensor_id}
+                                selectedAddress={selectedTensorAddress}
+                            />
+                        ))}
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 };
 export default OperationDetailsComponent;
