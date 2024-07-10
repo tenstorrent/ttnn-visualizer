@@ -4,8 +4,7 @@ import react from '@vitejs/plugin-react';
 // @ts-expect-error don't have types declaration for node-build-scripts
 import { sassNodeModulesLoadPaths } from '@blueprintjs/node-build-scripts';
 // @ts-expect-error don't have types declaration for legacySassSvgInlinerFactory
-// eslint-disable-next-line import/extensions
-import { legacySassSvgInlinerFactory } from './src/functions/legacySassSvgInlinerFactory.js';
+import { legacySassSvgInlinerFactory } from './src/libs/blueprintjs/legacySassSvgInlinerFactory';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -27,10 +26,13 @@ export default defineConfig({
         preprocessorOptions: {
             scss: {
                 functions: {
-                    'svg-icon($path, $selectors: null)': legacySassSvgInlinerFactory(join(__dirname, '/src/icons'), {
-                        optimize: true,
-                        encodingFormat: 'uri',
-                    }),
+                    'svg-icon($path, $selectors: null)': legacySassSvgInlinerFactory(
+                        join(__dirname, '/src/libs/blueprintjs/icons'),
+                        {
+                            optimize: true,
+                            encodingFormat: 'uri',
+                        },
+                    ),
                 },
                 loadPaths: sassNodeModulesLoadPaths,
             },
