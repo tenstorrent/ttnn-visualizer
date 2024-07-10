@@ -6,14 +6,8 @@ import { AnchorButton, Button, MenuItem, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, useState } from 'react';
-import RemoteConnectionDialog from './RemoteConnectionDialog';
-
-interface RemoteConnection {
-    name: string;
-    host: string;
-    port: number;
-    path: string;
-}
+import { RemoteConnection } from '../../hooks/useRemote';
+import RemoteFolderDialog from './RemoteConnectionDialog';
 
 const formatConnectionString = (connection?: RemoteConnection) => {
     if (!connection) {
@@ -50,6 +44,7 @@ interface RemoteConnectionSelectorProps {
     loading: boolean;
     offline: boolean;
     onSelectConnection: (connection: RemoteConnection) => void;
+    onEditConnection: (newConnection: RemoteConnection, oldConnection?: RemoteConnection) => void;
     onRemoveConnection: (connection: RemoteConnection) => void;
     onSyncRemoteFolders: (connection: RemoteConnection) => void;
 }
@@ -61,6 +56,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
     loading,
     offline,
     onSelectConnection,
+    onEditConnection,
     onRemoveConnection,
     onSyncRemoteFolders,
 }) => {
@@ -107,14 +103,19 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                 />
             </Tooltip>
 
-            <RemoteConnectionDialog
+            <RemoteFolderDialog
                 key={`${selectedConnection?.name}${selectedConnection?.host}${selectedConnection?.port}${selectedConnection?.path}`}
                 open={isEditdialogOpen}
-                onAddConnection={() => {}}
+                onAddConnection={(updatedConnection) => {
+                    setIsEditDialogOpen(false);
+                    onEditConnection(updatedConnection, connection);
+                }}
+                onClose={() => {
+                    setIsEditDialogOpen(false);
+                }}
                 title='Edit remote connection'
                 buttonLabel='Save connection'
                 remoteConnection={selectedConnection}
-                onClose={() => setIsEditDialogOpen(false)}
             />
             <Button
                 icon={IconNames.LOG_IN}
@@ -125,6 +126,10 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
             />
         </div>
     );
+};
+
+RemoteConnectionSelector.defaultProps = {
+    connection: undefined,
 };
 
 export default RemoteConnectionSelector;

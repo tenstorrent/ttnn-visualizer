@@ -2,34 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Button, Dialog, DialogBody, DialogFooter, FormGroup, Icon, IconName, InputGroup } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
+import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup } from '@blueprintjs/core';
 import { FC, useState } from 'react';
-
 import useRemoteConnection, { ConnectionStatus, ConnectionTestStates, RemoteConnection } from '../../hooks/useRemote';
-
+import ConnectionTestMessage from './ConnectionTestMessage';
 import 'styles/components/RemoteConnectionDialog.scss';
-
-const ConnectionTestMessage: FC<ConnectionStatus> = ({ status, message }) => {
-    const iconMap: Record<ConnectionTestStates, IconName> = {
-        [ConnectionTestStates.IDLE]: IconNames.DOT,
-        [ConnectionTestStates.PROGRESS]: IconNames.DOT,
-        [ConnectionTestStates.FAILED]: IconNames.CROSS,
-        [ConnectionTestStates.OK]: IconNames.TICK,
-    };
-    const icon = iconMap[status];
-
-    return (
-        <div className={`verify-connection-item status-${ConnectionTestStates[status]}`}>
-            <Icon
-                className='connection-status-icon'
-                icon={icon}
-                size={20}
-            />
-            <span className='connection-status-text'>{message}</span>
-        </div>
-    );
-};
 
 interface RemoteFolderDialogProps {
     title?: string;
@@ -57,7 +34,6 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
     const { testConnection, testRemoteFolder } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
-    // const logging = useLogging();
 
     const isValidConnection = connectionTests.every((status) => status.status === ConnectionTestStates.OK);
 
@@ -85,8 +61,6 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
                 setConnectionTests([sshStatus, folderStatus]);
             }
         } catch (err) {
-            // logging.error((err as Error)?.message ?? err?.toString() ?? 'Unknown error');
-
             setConnectionTests([
                 { status: ConnectionTestStates.FAILED, message: 'Connection failed' },
                 { status: ConnectionTestStates.FAILED, message: 'Remote folder path failed' },
@@ -203,12 +177,6 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
             />
         </Dialog>
     );
-};
-
-RemoteFolderDialog.defaultProps = {
-    title: 'Add new remote connection',
-    buttonLabel: 'Add connection',
-    remoteConnection: undefined,
 };
 
 export default RemoteFolderDialog;

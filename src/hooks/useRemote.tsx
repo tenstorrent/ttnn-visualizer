@@ -103,65 +103,65 @@ const useRemoteConnection = () => {
         return connectionStatus;
     };
 
-    // const listRemoteFolders = async (connection?: RemoteConnection) => {
-    //     if (!connection || !connection.host || !connection.port) {
-    //         throw new Error('No connection provided');
-    //     }
+    const listRemoteFolders = async (connection?: RemoteConnection) => {
+        if (!connection || !connection.host || !connection.port) {
+            throw new Error('No connection provided');
+        }
 
-    //     // const remote = await import('@electron/remote');
+        // const remote = await import('@electron/remote');
 
-    //     // const parseResults = (results: string) =>
-    //     //     results
-    //     //         .split('\n')
-    //     //         .filter((s) => s.length > 0)
-    //     //         .map<RemoteFolder>((folderInfo) => {
-    //     //             const [_createdDate, lastModified, remoteFolderPath] = folderInfo.split(';');
-    //     //             const configDir = remote.app.getPath('userData');
-    //     //             const folderName = path.basename(remoteFolderPath);
-    //     //             const localFolderForRemote = `${connection.name}-${connection.host}${connection.port}`;
+        // const parseResults = (results: string) =>
+        //     results
+        //         .split('\n')
+        //         .filter((s) => s.length > 0)
+        //         .map<RemoteFolder>((folderInfo) => {
+        //             const [_createdDate, lastModified, remoteFolderPath] = folderInfo.split(';');
+        //             const configDir = remote.app.getPath('userData');
+        //             const folderName = path.basename(remoteFolderPath);
+        //             const localFolderForRemote = `${connection.name}-${connection.host}${connection.port}`;
 
-    //     //             return {
-    //     //                 testName: folderName,
-    //     //                 remotePath: remoteFolderPath,
-    //     //                 localPath: path.join(configDir, 'remote-tests', localFolderForRemote, folderName),
-    //     //                 lastModified: new Date(lastModified).toISOString(),
-    //     //             };
-    //     //         });
+        //             return {
+        //                 testName: folderName,
+        //                 remotePath: remoteFolderPath,
+        //                 localPath: path.join(configDir, 'remote-tests', localFolderForRemote, folderName),
+        //                 lastModified: new Date(lastModified).toISOString(),
+        //             };
+        //         });
 
-    //     /**
-    //      * This command will be executed on the ssh server, and run the foolowing steps:
-    //      * 1. Find all files named `runtime_data.yaml` or `device_desc.yaml` in the remote path
-    //      * 2. Get the directory that contains the files.
-    //      * 3. Remove duplicates
-    //      * 4. For each directory, separated by a `;`, print:
-    //      *   - The creation date (as an ISO timestamp)
-    //      *   - The last modified date (as an ISO timestamp)
-    //      *   - The directory absolute path on the server
-    //      *
-    //      * The output will look like this:
-    //      * ```csv
-    //      * 2000-01-01T00:00:00.000Z;2000-01-01T00:00:00.000Z;/path/to/remote/folder
-    //      * 2000-01-01T00:00:00.000Z;2000-01-01T00:00:00.000Z;/path/to/remote/folder2
-    //      * ```
-    //      */
-    //     // const shellCommand = [
-    //     //     `find -L "${connection.path}" -mindepth 1 -maxdepth 3 -type f \\( -name "runtime_data.yaml" -o -name "device_desc.yaml" \\) -print0`,
-    //     //     'xargs -0 -I{} dirname {}',
-    //     //     'uniq',
-    //     //     `xargs -I{} sh -c "echo \\"\\$(date -d \\"\\$(stat -c %w \\"{}\\")\\" --iso-8601=seconds);\\$(date -d \\"\\$(stat -c %y \\"{}\\")\\" --iso-8601=seconds);$(echo \\"{}\\")\\""`,
-    //     // ].join(' | ');
-    //     // const sshParams = [
-    //     //     ...defaultSshOptions,
-    //     //     connection.host,
-    //     //     '-p',
-    //     //     connection.port.toString(),
-    //     //     `'${shellCommand}'`,
-    //     // ];
+        /**
+         * This command will be executed on the ssh server, and run the foolowing steps:
+         * 1. Find all files named `runtime_data.yaml` or `device_desc.yaml` in the remote path
+         * 2. Get the directory that contains the files.
+         * 3. Remove duplicates
+         * 4. For each directory, separated by a `;`, print:
+         *   - The creation date (as an ISO timestamp)
+         *   - The last modified date (as an ISO timestamp)
+         *   - The directory absolute path on the server
+         *
+         * The output will look like this:
+         * ```csv
+         * 2000-01-01T00:00:00.000Z;2000-01-01T00:00:00.000Z;/path/to/remote/folder
+         * 2000-01-01T00:00:00.000Z;2000-01-01T00:00:00.000Z;/path/to/remote/folder2
+         * ```
+         */
+        // const shellCommand = [
+        //     `find -L "${connection.path}" -mindepth 1 -maxdepth 3 -type f \\( -name "runtime_data.yaml" -o -name "device_desc.yaml" \\) -print0`,
+        //     'xargs -0 -I{} dirname {}',
+        //     'uniq',
+        //     `xargs -I{} sh -c "echo \\"\\$(date -d \\"\\$(stat -c %w \\"{}\\")\\" --iso-8601=seconds);\\$(date -d \\"\\$(stat -c %y \\"{}\\")\\" --iso-8601=seconds);$(echo \\"{}\\")\\""`,
+        // ].join(' | ');
+        // const sshParams = [
+        //     ...defaultSshOptions,
+        //     connection.host,
+        //     '-p',
+        //     connection.port.toString(),
+        //     `'${shellCommand}'`,
+        // ];
 
-    //     // const stdout = await runShellCommand('ssh', sshParams);
+        // const stdout = await runShellCommand('ssh', sshParams);
 
-    //     // return stdout ? parseResults(stdout) : ([] as RemoteFolder[]);
-    // };
+        // return stdout ? parseResults(stdout) : ([] as RemoteFolder[]);
+    };
 
     // const syncRemoteFolder = async (connection?: RemoteConnection, remoteFolder?: RemoteFolder) => {
     //     if (!connection || !connection.host || !connection.port || !connection.path) {
@@ -243,7 +243,7 @@ const useRemoteConnection = () => {
         testConnection,
         testRemoteFolder,
         // syncRemoteFolder,
-        // listRemoteFolders,
+        listRemoteFolders,
         persistentState,
     };
 };
