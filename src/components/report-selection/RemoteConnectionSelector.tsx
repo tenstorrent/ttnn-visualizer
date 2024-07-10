@@ -128,8 +128,4 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
     );
 };
 
-RemoteConnectionSelector.defaultProps = {
-    connection: undefined,
-};
-
 export default RemoteConnectionSelector;

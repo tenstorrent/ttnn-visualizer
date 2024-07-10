@@ -108,104 +108,26 @@ const useRemoteConnection = () => {
             throw new Error('No connection provided');
         }
 
-        // const remote = await import('@electron/remote');
+        // TODO: Get real folder list
+        const response = await getTestFolders();
 
-        // const parseResults = (results: string) =>
-        //     results
-        //         .split('\n')
-        //         .filter((s) => s.length > 0)
-        //         .map<RemoteFolder>((folderInfo) => {
-        //             const [_createdDate, lastModified, remoteFolderPath] = folderInfo.split(';');
-        //             const configDir = remote.app.getPath('userData');
-        //             const folderName = path.basename(remoteFolderPath);
-        //             const localFolderForRemote = `${connection.name}-${connection.host}${connection.port}`;
-
-        //             return {
-        //                 testName: folderName,
-        //                 remotePath: remoteFolderPath,
-        //                 localPath: path.join(configDir, 'remote-tests', localFolderForRemote, folderName),
-        //                 lastModified: new Date(lastModified).toISOString(),
-        //             };
-        //         });
-
-        /**
-         * This command will be executed on the ssh server, and run the foolowing steps:
-         * 1. Find all files named `runtime_data.yaml` or `device_desc.yaml` in the remote path
-         * 2. Get the directory that contains the files.
-         * 3. Remove duplicates
-         * 4. For each directory, separated by a `;`, print:
-         *   - The creation date (as an ISO timestamp)
-         *   - The last modified date (as an ISO timestamp)
-         *   - The directory absolute path on the server
-         *
-         * The output will look like this:
-         * ```csv
-         * 2000-01-01T00:00:00.000Z;2000-01-01T00:00:00.000Z;/path/to/remote/folder
-         * 2000-01-01T00:00:00.000Z;2000-01-01T00:00:00.000Z;/path/to/remote/folder2
-         * ```
-         */
-        // const shellCommand = [
-        //     `find -L "${connection.path}" -mindepth 1 -maxdepth 3 -type f \\( -name "runtime_data.yaml" -o -name "device_desc.yaml" \\) -print0`,
-        //     'xargs -0 -I{} dirname {}',
-        //     'uniq',
-        //     `xargs -I{} sh -c "echo \\"\\$(date -d \\"\\$(stat -c %w \\"{}\\")\\" --iso-8601=seconds);\\$(date -d \\"\\$(stat -c %y \\"{}\\")\\" --iso-8601=seconds);$(echo \\"{}\\")\\""`,
-        // ].join(' | ');
-        // const sshParams = [
-        //     ...defaultSshOptions,
-        //     connection.host,
-        //     '-p',
-        //     connection.port.toString(),
-        //     `'${shellCommand}'`,
-        // ];
-
-        // const stdout = await runShellCommand('ssh', sshParams);
-
-        // return stdout ? parseResults(stdout) : ([] as RemoteFolder[]);
+        return response;
     };
 
-    // const syncRemoteFolder = async (connection?: RemoteConnection, remoteFolder?: RemoteFolder) => {
-    //     if (!connection || !connection.host || !connection.port || !connection.path) {
-    //         throw new Error('No connection provided');
-    //     }
+    const syncRemoteFolder = async (connection?: RemoteConnection, remoteFolder?: RemoteFolder) => {
+        if (!connection || !connection.host || !connection.port || !connection.path) {
+            throw new Error('No connection provided');
+        }
 
-    //     if (!remoteFolder) {
-    //         throw new Error('No remote folder provided');
-    //     }
+        if (!remoteFolder) {
+            throw new Error('No remote folder provided');
+        }
 
-    //     if (!existsSync(remoteFolder.localPath)) {
-    //         await mkdir(remoteFolder.localPath, { recursive: true });
-    //     }
+        // TODO: Get real folder list
+        const response = await getTestFolders();
 
-    //     // const sourcePath = `${connection.host}:${escapeWhitespace(remoteFolder.remotePath)}`;
-    //     // const baseOptions = ['-az', '-e', `'ssh -p ${connection.port.toString()}'`];
-    //     // const pathOptions = [
-    //     //     '--delete',
-    //     //     `'${sourcePath}'`,
-    //     //     escapeWhitespace(remoteFolder.localPath.replace(remoteFolder.testName, '')),
-    //     // ];
-
-    //     try {
-    //         /**
-    //          * First try running with the `-s` option.
-    //          * This option handles the case where the file path has spaces in it.
-    //          * This option is not supported on Mac, so if it fails, we will try again without it.
-    //          *
-    //          * See: https://linux.die.net/man/1/rsync#:~:text=receiving%20host%27s%20charset.-,%2Ds%2C%20%2D%2Dprotect%2Dargs,-This%20option%20sends
-    //          */
-    //         // TODO: review the need for the `-s` option
-    //         // await runShellCommand('rsync', ['-s', ...baseOptions, ...pathOptions]);
-    //     } catch (err: any) {
-    //         console.info(
-    //             `Initial RSYNC attempt failed: ${(err as Error)?.message ?? err?.toString() ?? 'Unknown error'}`,
-    //         );
-
-    //         /**
-    //          * If the `-s` option fails, try running without it.
-    //          * On Mac, this will work as expected.
-    //          */
-    //         // await runShellCommand('rsync', [...baseOptions, ...pathOptions]);
-    //     }
-    // };
+        return response;
+    };
 
     const persistentState = {
         get savedConnectionList() {
@@ -242,7 +164,7 @@ const useRemoteConnection = () => {
     return {
         testConnection,
         testRemoteFolder,
-        // syncRemoteFolder,
+        syncRemoteFolder,
         listRemoteFolders,
         persistentState,
     };
@@ -258,6 +180,18 @@ const getTestConnection = async (status: number) => {
         status,
         message: '',
     };
+};
+const getTestFolders = async () => {
+    await delay(1000);
+
+    return [
+        {
+            testName: 'resnet',
+            remotePath: '/generated/ttnn/reports',
+            localPath: '/tmp/local',
+            lastModified: new Date().toISOString(),
+        },
+    ];
 };
 
 export default useRemoteConnection;

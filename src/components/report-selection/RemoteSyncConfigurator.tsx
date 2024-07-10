@@ -25,11 +25,17 @@ const RemoteSyncConfigurator: FC = () => {
     const [isFetchingFolderStatus, setIsFetchingFolderStatus] = useState(false);
     const [isRemoteOffline, setIsRemoteOffline] = useState(false);
 
+    const updateSelectedFolder = async (folder?: RemoteFolder) => {
+        // dispatch(setSelectedRemoteFolder(folder));
+        // dispatch(setSelectedFolderLocationType('remote'));
+        // dispatch(setSelectedRemoteFolder(folder));
+    };
+
     const updateSelectedConnection = async (connection: RemoteConnection) => {
         remote.persistentState.selectedConnection = connection;
         setRemoteFolders(remote.persistentState.getSavedRemoteFolders(connection));
 
-        // await updateSelectedFolder(remote.persistentState.getSavedRemoteFolders(connection)[0]);
+        await updateSelectedFolder(remote.persistentState.getSavedRemoteFolders(connection)[0]);
     };
 
     const updateSavedRemoteFolders = (connection: RemoteConnection | undefined, updatedFolders: RemoteFolder[]) => {
@@ -111,7 +117,6 @@ const RemoteSyncConfigurator: FC = () => {
                     disabled={isLoadingFolderList || isSyncingRemoteFolder}
                     loading={isLoadingFolderList}
                     offline={isRemoteOffline}
-                    onSelectConnection={() => {}}
                     onEditConnection={async (updatedConnection, oldConnection) => {
                         const updatedConnections = [...remote.persistentState.savedConnectionList];
 
@@ -129,36 +134,38 @@ const RemoteSyncConfigurator: FC = () => {
                         remote.persistentState.deleteSavedRemoteFolders(connection);
 
                         await updateSelectedConnection(updatedConnections[0]);
-                        // await updateSelectedFolder(undefined);
+                        await updateSelectedFolder(undefined);
                     }}
-                    // onSelectConnection={async (connection) => {
-                    //     try {
-                    //         setIsFetchingFolderStatus(true);
-                    //         await updateSelectedConnection(connection);
+                    onSelectConnection={async (connection) => {
+                        try {
+                            setIsFetchingFolderStatus(true);
+                            await updateSelectedConnection(connection);
 
-                    //         const fetchedRemoteFolders = await remote.listRemoteFolders(connection);
-                    //         const updatedFolders = updateSavedRemoteFolders(connection, fetchedRemoteFolders);
+                            const fetchedRemoteFolders = await remote.listRemoteFolders(connection);
+                            const updatedFolders = updateSavedRemoteFolders(connection, fetchedRemoteFolders);
 
-                    //         setIsRemoteOffline(false);
-                    //         await updateSelectedFolder(updatedFolders[0]);
-                    //     } catch {
-                    //         setIsRemoteOffline(true);
-                    //     } finally {
-                    //         setIsFetchingFolderStatus(false);
-                    //     }
-                    // }}
+                            setIsRemoteOffline(false);
+                            await updateSelectedFolder(updatedFolders[0]);
+                        } catch {
+                            setIsRemoteOffline(true);
+                        } finally {
+                            setIsFetchingFolderStatus(false);
+                        }
+                    }}
                     onSyncRemoteFolders={async () => {
                         try {
                             setIsLoadingFolderList(true);
+
                             const savedRemotefolders = await remote.listRemoteFolders(
                                 remote.persistentState.selectedConnection,
                             );
+
                             const updatedfolders = updateSavedRemoteFolders(
                                 remote.persistentState.selectedConnection,
                                 savedRemotefolders,
                             );
 
-                            // await updateSelectedFolder(updatedfolders[0]);
+                            await updateSelectedFolder(updatedfolders[0]);
                         } catch {
                             // eslint-disable-next-line no-alert
                             alert('Unable to connect to remote server.');
