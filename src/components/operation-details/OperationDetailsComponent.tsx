@@ -156,7 +156,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             <div
                                 className={classNames('memory-color-block', { empty: chunk.empty === true })}
                                 style={{
-                                    backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
+                                    backgroundColor: chunk.empty
+                                        ? '#fff'
+                                        : getBufferColor(chunk.address, getTensorForAddress(chunk.address)?.tensor_id),
                                 }}
                             />
                             <div className='legend-details'>
@@ -184,6 +186,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 tensor={tensor}
                                 key={tensor.tensor_id}
                                 selectedAddress={selectedTensorAddress}
+                                memorySize={memorySize}
                             />
                         ))}
                     </div>
@@ -195,6 +198,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 tensor={tensor}
                                 key={tensor.tensor_id}
                                 selectedAddress={selectedTensorAddress}
+                                memorySize={memorySize}
                             />
                         ))}
                     </div>

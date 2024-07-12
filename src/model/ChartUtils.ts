@@ -1,9 +1,30 @@
 import { PlotData } from 'plotly.js';
 import { getBufferColor } from '../functions/colorGenerator';
-import { BufferData, Chunk, FragmentationEntry, OperationDetailsData } from './APIData';
+import { BufferData, Chunk, FragmentationEntry, OperationDetailsData, TensorData } from './APIData';
 import { formatSize, toHex } from '../functions/math';
 
 export const getMemoryData = (operationDetails: OperationDetailsData) => {
+    const inputs = operationDetails?.input_tensors;
+    const outputs = operationDetails?.output_tensors;
+
+    const tensorList: TensorData[] =
+        [
+            [
+                ...(inputs?.map((input) => {
+                    return { ...input, io: 'input' } as TensorData;
+                }) || []),
+            ],
+            [
+                ...(outputs?.map((output) => {
+                    return { ...output, io: 'output' } as TensorData;
+                }) || []),
+            ],
+        ].flat() || [];
+
+    const getTensorForAddress = (address: number): TensorData | null => {
+        return tensorList.find((tensor) => tensor.address === address) || null;
+    };
+
     const fragmentation: FragmentationEntry[] = [];
     const memory: Chunk[] =
         operationDetails?.buffers
@@ -30,7 +51,7 @@ export const getMemoryData = (operationDetails: OperationDetailsData) => {
     });
     const chartData: Partial<PlotData>[] = memory.map((chunk) => {
         const { address, size } = chunk;
-        const color = getBufferColor(address);
+        const color = getBufferColor(address, getTensorForAddress(chunk.address)?.tensor_id);
         return {
             x: [address + size / 2],
             y: [1],

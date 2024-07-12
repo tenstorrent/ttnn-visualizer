@@ -67,6 +67,8 @@ class Tensor(BaseModel):
     device_id: Optional[int]
     address: Optional[int]
     buffer_type: Optional[int]
+    producers: List[int]
+    consumers: List[int]
 
 
 class Buffer(BaseModel):
@@ -306,7 +308,34 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
     input_tensors_query = select(tensors).where(tensors.c.tensor_id.in_(input_tensor_ids))
     input_tensors_data = db.execute(input_tensors_query).mappings().all()
 
-    input_tensors_list = [Tensor(**row) for row in input_tensors_data]
+    # Add producers and consumers to input tensors
+    input_tensors_list = []
+    for row in input_tensors_data:
+        tensor_id = row['tensor_id']
+
+        # Fetch producers
+        producers_query = select(output_tensors.c.operation_id).where(output_tensors.c.tensor_id == tensor_id)
+        producers_results = db.execute(producers_query).fetchall()
+        producers_list = [result[0] for result in producers_results]
+
+        # Fetch consumers
+        consumers_query = select(input_tensors.c.operation_id).where(input_tensors.c.tensor_id == tensor_id)
+        consumers_results = db.execute(consumers_query).fetchall()
+        consumers_list = [result[0] for result in consumers_results]
+
+        tensor = Tensor(
+            tensor_id=row['tensor_id'],
+            shape=row['shape'],
+            dtype=row['dtype'],
+            layout=row['layout'],
+            memory_config=row['memory_config'],
+            device_id=row['device_id'],
+            address=row['address'],
+            buffer_type=row['buffer_type'],
+            producers=producers_list,
+            consumers=consumers_list
+        )
+        input_tensors_list.append(tensor)
 
     # Fetch output tensors
     output_query = select(output_tensors).where(output_tensors.c.operation_id == operation_id)
@@ -316,14 +345,39 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
     output_tensors_query = select(tensors).where(tensors.c.tensor_id.in_(output_tensor_ids))
     output_tensors_data = db.execute(output_tensors_query).mappings().all()
 
-    output_tensors_list = [Tensor(**row) for row in output_tensors_data]
+    # Add producers and consumers to output tensors
+    output_tensors_list = []
+    for row in output_tensors_data:
+        tensor_id = row['tensor_id']
+
+        # Fetch producers
+        producers_query = select(output_tensors.c.operation_id).where(output_tensors.c.tensor_id == tensor_id)
+        producers_results = db.execute(producers_query).fetchall()
+        producers_list = [result[0] for result in producers_results]
+
+        # Fetch consumers
+        consumers_query = select(input_tensors.c.operation_id).where(input_tensors.c.tensor_id == tensor_id)
+        consumers_results = db.execute(consumers_query).fetchall()
+        consumers_list = [result[0] for result in consumers_results]
+
+        tensor = Tensor(
+            tensor_id=row['tensor_id'],
+            shape=row['shape'],
+            dtype=row['dtype'],
+            layout=row['layout'],
+            memory_config=row['memory_config'],
+            device_id=row['device_id'],
+            address=row['address'],
+            buffer_type=row['buffer_type'],
+            producers=producers_list,
+            consumers=consumers_list
+        )
+        output_tensors_list.append(tensor)
 
     # Fetch buffers
-    # Query buffers with the specified operation_id
     buffers_query = select(buffers).where(buffers.c.operation_id == operation_id)
     buffers_data = db.execute(buffers_query).mappings().all()
 
-    # Use a set to track unique addresses and a list to store unique Buffer objects
     unique_addresses = set()
     buffers_list = []
 
@@ -333,23 +387,17 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
             unique_addresses.add(buffer.address)
             buffers_list.append(buffer)
 
-    # buffers_list now contains Buffer objects with unique addresses
-
     device_query = select(devices)
     device_data = db.execute(device_query).mappings().all()
     l1_sizes = [None] * (max(device['device_id'] for device in device_data) + 1)
     for device in device_data:
         l1_sizes[device['device_id']] = device['worker_l1_size']
 
-    # Fetch buffer pages
-    # buffer_pages_query = select(buffer_pages).where(buffer_pages.c.operation_id == operation_id)
-    # buffer_pages_data = db.execute(buffer_pages_query).mappings().all()
-    #
-    # buffer_pages_list = [BufferPage(**row) for row in buffer_pages_data]
-
     # Fetch stack trace
     stack_trace_query = select(stack_traces).where(stack_traces.c.operation_id == operation_id)
     stack_trace_results = db.execute(stack_trace_query).mappings().all()
+
+    stack_traces_list = [StackTrace(**row) for row in stack_trace_results]
 
     return OperationDetails(
         operation_id=operation_id,
@@ -357,7 +405,7 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
         output_tensors=output_tensors_list,
         buffers=buffers_list,
         l1_sizes=l1_sizes,
-        stack_traces=stack_trace_results
+        stack_traces=stack_traces_list
     )
 
 

@@ -8,6 +8,8 @@ export interface TensorData {
     address: number | null;
     buffer_type: number | null;
     io: 'input' | 'output' | null;
+    producers: number[];
+    consumers: number[];
 }
 
 export interface BufferData {

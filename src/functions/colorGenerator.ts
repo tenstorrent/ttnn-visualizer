@@ -33,14 +33,37 @@ function* colorGenerator(): IterableIterator<string> {
 }
 
 const getNextGroupColor = colorGenerator();
-const bufferColorCache = new Map<number, string>();
+const bufferColorCache = new Map<number | string, string>();
+const colorsByTensor = new Map<number, string>();
+const colorsByBufferForTensorsOnly = new Map<number, string>();
 
-export const getBufferColor = (address: number | null): string | undefined => {
-    if (address === null) {
+/**
+ * Get a color for a buffer based on its address and tensorId - semi-accurate atm. will require an overhaul to be based on entire history.
+ * @param address
+ * @param tensorId
+ */
+export const getBufferColor = (address: number | null, tensorId?: number | undefined): string | undefined => {
+    // TODO: load all data and assign tensor colors from the start. Read colors based on HISTORICAL data to assume tensors.
+    if (address === null && tensorId === undefined) {
         return 'rgb(255,255,255)';
     }
-    if (!bufferColorCache.has(address)) {
-        bufferColorCache.set(address, getNextGroupColor.next().value);
+    if (tensorId !== undefined && colorsByTensor.has(tensorId)) {
+        return colorsByTensor.get(tensorId);
     }
-    return bufferColorCache.get(address);
+    if (address !== null && tensorId === undefined && colorsByBufferForTensorsOnly.has(address)) {
+        return colorsByBufferForTensorsOnly.get(address);
+    }
+    const tensorKey = tensorId === undefined ? '' : tensorId;
+    const mapKey = `${address}-${tensorKey}`;
+    const color = getNextGroupColor.next().value;
+    if (!bufferColorCache.has(mapKey)) {
+        bufferColorCache.set(mapKey, color);
+    }
+    if (tensorId !== undefined) {
+        colorsByTensor.set(tensorId, color);
+        if (address !== null) {
+            colorsByBufferForTensorsOnly.set(address, color);
+        }
+    }
+    return bufferColorCache.get(mapKey);
 };
