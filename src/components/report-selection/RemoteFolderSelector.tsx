@@ -2,10 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Button, Icon, MenuItem, Spinner, Tooltip } from '@blueprintjs/core';
+import { Button, MenuItem } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
+import { useNavigate } from 'react-router';
 
 interface RemoteConnection {
     name: string;
@@ -70,39 +71,46 @@ const remoteFolderRenderer =
 
         const { lastSynced, lastModified } = folder;
 
-        let statusIcon = (
-            <Tooltip
-                content={`Fetching folder status, last sync: ${
-                    lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
-                }`}
-            >
-                <Spinner size={16} />
-            </Tooltip>
-        );
+        // TODO: Possibly delete because it isn't used with Greg's remote query approach
+        // let statusIcon = (
+        //     <Tooltip
+        //         content={`Fetching folder status, last sync: ${
+        //             lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
+        //         }`}
+        //     >
+        //         <Spinner size={16} />
+        //     </Tooltip>
+        // );
 
-        if (!syncingFolderList) {
-            if (isLocalFolderOutdated(folder)) {
-                statusIcon = (
-                    <Tooltip
-                        content={`Folder is stale, last sync: ${
-                            lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
-                        }`}
-                    >
-                        <Icon icon={IconNames.HISTORY} color='goldenrod' />
-                    </Tooltip>
-                );
-            } else {
-                statusIcon = (
-                    <Tooltip
-                        content={`Folder is up to date, last sync: ${
-                            lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
-                        }`}
-                    >
-                        <Icon icon={IconNames.UPDATED} color='green' />
-                    </Tooltip>
-                );
-            }
-        }
+        // if (!syncingFolderList) {
+        //     if (isLocalFolderOutdated(folder)) {
+        //         statusIcon = (
+        //             <Tooltip
+        //                 content={`Folder is stale, last sync: ${
+        //                     lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
+        //                 }`}
+        //             >
+        //                 <Icon
+        //                     icon={IconNames.HISTORY}
+        //                     color='goldenrod'
+        //                 />
+        //             </Tooltip>
+        //         );
+        //     } else {
+        //         statusIcon = (
+        //             <Tooltip
+        //                 content={`Folder is up to date, last sync: ${
+        //                     lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
+        //                 }`}
+        //             >
+        //                 <Icon
+        //                     icon={IconNames.UPDATED}
+        //                     color='green'
+        //                 />
+        //             </Tooltip>
+        //         );
+        //     }
+        // }
 
         return (
             <MenuItem
@@ -112,8 +120,8 @@ const remoteFolderRenderer =
                 key={`${formatRemoteFolderName(folder, connection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
                 text={formatRemoteFolderName(folder)}
-                // @ts-expect-error - Hack abusing label, it actually works.
-                label={statusIcon}
+                // // @ts-expect-error - Hack abusing label, it actually works.
+                // label={statusIcon}
                 labelClassName='remote-folder-status-icon'
             />
         );
@@ -141,6 +149,8 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     fallbackLabel = '(No selection)',
     icon = IconNames.FOLDER_OPEN,
 }) => {
+    const navigate = useNavigate();
+
     return (
         <div className='buttons-container'>
             <Select
@@ -149,17 +159,24 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
                 itemRenderer={remoteFolderRenderer(updatingFolderList, remoteConnection)}
                 filterable
                 itemPredicate={filterFolders(remoteConnection)}
-                noResults={<MenuItem disabled text='No results' roleStructure='listoption' />}
+                noResults={
+                    <MenuItem
+                        disabled
+                        text='No results'
+                        roleStructure='listoption'
+                    />
+                }
                 disabled={loading || remoteFolders?.length === 0}
                 onItemSelect={onSelectFolder}
             >
                 <Button
                     icon={icon as IconName}
-                    rightIcon={remoteFolders && remoteFolders?.length > 0 ? IconNames.CARET_DOWN : undefined}
+                    // rightIcon={remoteFolders && remoteFolders?.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={loading || remoteFolders?.length === 0}
                     text={remoteFolder ? formatRemoteFolderName(remoteFolder, remoteConnection) : fallbackLabel}
                 />
             </Select>
+
             {children}
         </div>
     );

@@ -154,7 +154,7 @@ const useRemoteConnection = () => {
     };
 };
 
-// Delay is a function for development so we can simulate async calls
+// delay is a function for development so we can simulate async calls
 // eslint-disable-next-line compat/compat, no-promise-executor-return
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const getTestConnection = async (status: number) => {
@@ -175,6 +175,12 @@ const getTestFolders = async () => {
     return [
         {
             testName: 'resnet',
+            remotePath: '/generated/ttnn/reports',
+            localPath: '/tmp/local',
+            lastModified: new Date().toISOString(),
+        },
+        {
+            testName: 'debug',
             remotePath: '/generated/ttnn/reports',
             localPath: '/tmp/local',
             lastModified: new Date().toISOString(),

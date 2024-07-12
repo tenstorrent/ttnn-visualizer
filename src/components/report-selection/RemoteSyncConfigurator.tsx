@@ -4,20 +4,23 @@
 
 import { FC, useEffect, useState } from 'react';
 
-import { FormGroup } from '@blueprintjs/core';
+import { Button, FormGroup } from '@blueprintjs/core';
 
+import { useNavigate } from 'react-router';
 import useRemote, { RemoteConnection, RemoteFolder } from '../../hooks/useRemote';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
+import ROUTES from '../../definitions/routes';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
+    const navigate = useNavigate();
     const [remoteFolders, setRemoteFolders] = useState<RemoteFolder[]>(
         remote.persistentState.getSavedRemoteFolders(remote.persistentState.selectedConnection),
     );
 
-    const [isSyncingRemoteFolder, setIsSyncingRemoteFolder] = useState(false);
+    const [isSyncingRemoteFolder, _setIsSyncingRemoteFolder] = useState(false);
     const [isLoadingFolderList, setIsLoadingFolderList] = useState(false);
     const [isFetchingFolderStatus, setIsFetchingFolderStatus] = useState(false);
     const [isRemoteOffline, setIsRemoteOffline] = useState(false);
@@ -191,6 +194,12 @@ const RemoteSyncConfigurator: FC = () => {
                         // }
                     }}
                 >
+                    <Button
+                        disabled={isSyncingRemoteFolder || isLoadingFolderList || remoteFolders?.length === 0}
+                        onClick={() => navigate(ROUTES.OPERATIONS)}
+                    >
+                        View report
+                    </Button>
                     {/* // TODO: Possibly delete because it isn't used with Greg's remote query approach */}
                     {/* <Tooltip content='Sync remote folder'>
                         <AnchorButton
