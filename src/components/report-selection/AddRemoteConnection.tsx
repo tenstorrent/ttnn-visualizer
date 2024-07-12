@@ -8,7 +8,7 @@ import { Button } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 
 import { RemoteConnection } from '../../hooks/useRemote';
-import RemoteFolderDialog from './RemoteConnectionDialog';
+import RemoteConnectionDialog from './RemoteConnectionDialog';
 
 interface AddRemoteConnectionProps {
     disabled: boolean;
@@ -27,7 +27,7 @@ const AddRemoteConnection: FC<AddRemoteConnectionProps> = ({ disabled, onAddConn
                 onClick={() => setIsAddConnectionDialogOpen(true)}
             />
 
-            <RemoteFolderDialog
+            <RemoteConnectionDialog
                 open={isAddConnectionDialogOpen}
                 onAddConnection={(newConnection) => {
                     onAddConnection(newConnection);

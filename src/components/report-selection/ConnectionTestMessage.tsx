@@ -18,7 +18,7 @@ const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.OK]: IconNames.TICK,
 };
 
-const STATUS_MAP: Record<ConnectionTestStates, Intent> = {
+const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
     [ConnectionTestStates.IDLE]: Intent.NONE,
     [ConnectionTestStates.PROGRESS]: Intent.WARNING,
     [ConnectionTestStates.FAILED]: Intent.DANGER,
@@ -32,7 +32,7 @@ function ConnectionTestMessage({ status, message }: ConnectionTestMessageProps) 
                 className='connection-status-icon'
                 icon={ICON_MAP[status]}
                 size={20}
-                intent={STATUS_MAP[status]}
+                intent={INTENT_MAP[status]}
             />
             <span className='connection-status-text'>{message}</span>
         </div>

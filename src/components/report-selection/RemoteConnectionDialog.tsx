@@ -8,7 +8,7 @@ import useRemoteConnection, { ConnectionStatus, ConnectionTestStates, RemoteConn
 import ConnectionTestMessage from './ConnectionTestMessage';
 import 'styles/components/RemoteConnectionDialog.scss';
 
-interface RemoteFolderDialogProps {
+interface RemoteConnectionDialogProps {
     title?: string;
     buttonLabel?: string;
     open: boolean;
@@ -17,7 +17,7 @@ interface RemoteFolderDialogProps {
     remoteConnection?: RemoteConnection;
 }
 
-const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
+const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     open,
     onClose,
     onAddConnection,
@@ -82,7 +82,7 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
                     subLabel='Connection name'
                 >
                     <InputGroup
-                        className='bp4-light'
+                        className='bp5-light'
                         key='name'
                         value={connection.name}
                         onChange={(e) => setConnection({ ...connection, name: e.target.value })}
@@ -136,12 +136,14 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
                         status={connectionTests[0].status}
                         message={connectionTests[0].message}
                     />
+
                     <ConnectionTestMessage
                         status={connectionTests[1].status}
                         message={connectionTests[1].message}
                     />
 
                     <br />
+
                     <Button
                         text='Test Connection'
                         disabled={isTestingConnection}
@@ -169,4 +171,4 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
     );
 };
 
-export default RemoteFolderDialog;
+export default RemoteConnectionDialog;
