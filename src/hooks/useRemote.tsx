@@ -40,64 +40,48 @@ const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
 
     const testConnection = async (connection: Partial<RemoteConnection>) => {
-        const connectionStatus: ConnectionStatus = {
-            status: ConnectionTestStates.IDLE,
-            message: '',
-        };
+        let connectionStatus: ConnectionStatus[] = [
+            {
+                status: ConnectionTestStates.FAILED,
+                message: 'No connection provided',
+            },
+            {
+                status: ConnectionTestStates.FAILED,
+                message: 'No connection provided',
+            },
+        ];
 
         if (!connection.host || !connection.port) {
-            connectionStatus.status = ConnectionTestStates.FAILED;
-            connectionStatus.message = 'No connection provided';
-
             return connectionStatus;
         }
 
-        connectionStatus.status = ConnectionTestStates.PROGRESS;
-
         // TODO: Replace with real call to API
-        const response = await getTestConnection(200);
+        const response = await getTestConnection(500);
 
         if (response.status === 200) {
-            connectionStatus.status = ConnectionTestStates.OK;
-            connectionStatus.message = 'Connection successful';
-        } else {
-            connectionStatus.status = ConnectionTestStates.FAILED;
-            connectionStatus.message = 'Could not connect to SSH server';
-
-            // TODO: Handle errors more better
-            console.error(response?.message ?? 'Unknown error');
+            connectionStatus = [
+                {
+                    status: ConnectionTestStates.OK,
+                    message: 'Connection successful',
+                },
+                {
+                    status: ConnectionTestStates.OK,
+                    message: 'Remote folder path exists',
+                },
+            ];
         }
 
-        return connectionStatus;
-    };
-
-    const testRemoteFolder = async (connection: Partial<RemoteConnection>) => {
-        const connectionStatus: ConnectionStatus = {
-            status: ConnectionTestStates.IDLE,
-            message: '',
-        };
-
-        if (!connection.host || !connection.port || !connection.path) {
-            connectionStatus.status = ConnectionTestStates.FAILED;
-            connectionStatus.message = 'No connection provided';
-
-            return connectionStatus;
-        }
-
-        connectionStatus.status = ConnectionTestStates.PROGRESS;
-
-        // TODO: Replace with real call to API
-        const response = await getTestConnection(200);
-
-        if (response.status === 200) {
-            connectionStatus.status = ConnectionTestStates.OK;
-            connectionStatus.message = 'Remote folder path exists';
-        } else {
-            connectionStatus.status = ConnectionTestStates.FAILED;
-            connectionStatus.message = 'Remote folder path does not exist';
-
-            // TODO: Handle errors more better
-            console.error(response?.message ?? 'Unknown error');
+        if (response.status === 400) {
+            connectionStatus = [
+                {
+                    status: ConnectionTestStates.OK,
+                    message: 'Connection successful',
+                },
+                {
+                    status: ConnectionTestStates.FAILED,
+                    message: 'Remote folder path does not exist',
+                },
+            ];
         }
 
         return connectionStatus;
@@ -164,7 +148,6 @@ const useRemoteConnection = () => {
 
     return {
         testConnection,
-        testRemoteFolder,
         // syncRemoteFolder,
         listRemoteFolders,
         persistentState,
@@ -177,7 +160,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const getTestConnection = async (status: number) => {
     await delay(1000);
 
-    // fetch('/api/test-remote-connection)
+    // fetch('/api/remote/test')
 
     return {
         status,
@@ -187,7 +170,7 @@ const getTestConnection = async (status: number) => {
 const getTestFolders = async () => {
     await delay(1000);
 
-    // fetch('/api/test-remote-connection-folders)
+    // fetch('/api/remote/folders')
 
     return [
         {

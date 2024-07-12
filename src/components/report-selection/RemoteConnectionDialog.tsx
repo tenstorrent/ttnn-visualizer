@@ -32,7 +32,7 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
     ];
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
-    const { testConnection, testRemoteFolder } = useRemoteConnection();
+    const { testConnection } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
 
     const isValidConnection = connectionTests.every((status) => status.status === ConnectionTestStates.OK);
@@ -46,21 +46,11 @@ const RemoteFolderDialog: FC<RemoteFolderDialogProps> = ({
         setConnectionTests([sshProgressStatus, folderProgressStatus]);
 
         try {
-            const sshStatus = await testConnection(connection);
-            let folderStatus = folderProgressStatus;
-
-            if (sshStatus.status === ConnectionTestStates.FAILED) {
-                folderStatus = { status: ConnectionTestStates.FAILED, message: 'Could not connect to SSH server' };
-            }
+            const [sshStatus, folderStatus] = await testConnection(connection);
 
             setConnectionTests([sshStatus, folderStatus]);
-
-            if (sshStatus.status === ConnectionTestStates.OK) {
-                folderStatus = await testRemoteFolder(connection);
-
-                setConnectionTests([sshStatus, folderStatus]);
-            }
         } catch (err) {
+            // TODO: Look at error handling
             setConnectionTests([
                 { status: ConnectionTestStates.FAILED, message: 'Connection failed' },
                 { status: ConnectionTestStates.FAILED, message: 'Remote folder path failed' },
