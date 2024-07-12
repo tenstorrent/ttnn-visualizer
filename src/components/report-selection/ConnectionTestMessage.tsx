@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { Icon, Intent } from '@blueprintjs/core';
 import { ConnectionTestStates } from '../../hooks/useRemote';
