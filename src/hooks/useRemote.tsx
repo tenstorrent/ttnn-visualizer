@@ -114,20 +114,21 @@ const useRemoteConnection = () => {
         return response;
     };
 
-    const syncRemoteFolder = async (connection?: RemoteConnection, remoteFolder?: RemoteFolder) => {
-        if (!connection || !connection.host || !connection.port || !connection.path) {
-            throw new Error('No connection provided');
-        }
+    // TODO: Possibly delete because it isn't used with Greg's remote query approach
+    // const syncRemoteFolder = async (connection?: RemoteConnection, remoteFolder?: RemoteFolder) => {
+    //     if (!connection || !connection.host || !connection.port || !connection.path) {
+    //         throw new Error('No connection provided');
+    //     }
 
-        if (!remoteFolder) {
-            throw new Error('No remote folder provided');
-        }
+    //     if (!remoteFolder) {
+    //         throw new Error('No remote folder provided');
+    //     }
 
-        // TODO: Get real folder list
-        const response = await getTestFolders();
+    //     // TODO: Get real folder list
+    //     const response = await getTestFolders();
 
-        return response;
-    };
+    //     return response;
+    // };
 
     const persistentState = {
         get savedConnectionList() {
@@ -164,7 +165,7 @@ const useRemoteConnection = () => {
     return {
         testConnection,
         testRemoteFolder,
-        syncRemoteFolder,
+        // syncRemoteFolder,
         listRemoteFolders,
         persistentState,
     };
@@ -176,6 +177,8 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const getTestConnection = async (status: number) => {
     await delay(1000);
 
+    // fetch('/api/test-remote-connection)
+
     return {
         status,
         message: '',
@@ -183,6 +186,8 @@ const getTestConnection = async (status: number) => {
 };
 const getTestFolders = async () => {
     await delay(1000);
+
+    // fetch('/api/test-remote-connection-folders)
 
     return [
         {

@@ -4,8 +4,7 @@
 
 import { FC, useEffect, useState } from 'react';
 
-import { AnchorButton, FormGroup, Tooltip } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
+import { FormGroup } from '@blueprintjs/core';
 
 import useRemote, { RemoteConnection, RemoteFolder } from '../../hooks/useRemote';
 import AddRemoteConnection from './AddRemoteConnection';
@@ -192,7 +191,8 @@ const RemoteSyncConfigurator: FC = () => {
                         // }
                     }}
                 >
-                    <Tooltip content='Sync remote folder'>
+                    {/* // TODO: Possibly delete because it isn't used with Greg's remote query approach */}
+                    {/* <Tooltip content='Sync remote folder'>
                         <AnchorButton
                             icon={IconNames.REFRESH}
                             loading={isSyncingRemoteFolder}
@@ -232,7 +232,7 @@ const RemoteSyncConfigurator: FC = () => {
                                 }
                             }}
                         />
-                    </Tooltip>
+                    </Tooltip> */}
                 </RemoteFolderSelector>
             </FormGroup>
         </>
