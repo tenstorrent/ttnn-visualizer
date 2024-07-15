@@ -23,19 +23,19 @@ const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
 
 const OperationList = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { data: fetchedOperations, error, isLoading } = useOperationsList();
+    const scrollElementRef = useRef(null);
+
     const [filterQuery, setFilterQuery] = useState('');
     const [filteredOperationsList, setFilteredOperationsList] = useState<Operation[]>([]);
-    const [expandedOperations, setExpandedOperations] = useState<number[]>([]);
+    const [expandedOperations, setExpandedOperations] = useState<number[]>([location.state?.previousOperationId]);
     const [shouldSortDescending, setShouldSortDescending] = useState(false);
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
 
-    const { data: fetchedOperations, error, isLoading } = useOperationsList();
-    const location = useLocation();
-    const navigate = useNavigate();
-
-    const scrollElementRef = useRef(null);
     const virtualizer = useVirtualizer({
         count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => scrollElementRef.current,
@@ -126,6 +126,7 @@ const OperationList = () => {
                     searchQuery={filterQuery}
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
+
                 <ButtonGroup minimal>
                     <Tooltip
                         content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
@@ -136,6 +137,7 @@ const OperationList = () => {
                             rightIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
                         />
                     </Tooltip>
+
                     <Tooltip
                         content={shouldSortDescending ? 'Sort ascending' : 'Sort descending'}
                         placement={PopoverPosition.TOP}
@@ -238,7 +240,9 @@ const OperationList = () => {
                                                 {operation.arguments && (
                                                     <OperationArguments
                                                         operationId={operation.id}
+                                                        operationIndex={virtualRow.index}
                                                         data={operation.arguments}
+                                                        scrollTo={virtualizer.scrollToIndex}
                                                     />
                                                 )}
                                             </div>
