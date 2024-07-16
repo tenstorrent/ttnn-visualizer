@@ -1,15 +1,15 @@
-from fastapi import FastAPI, HTTPException, Path, Request
-from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from typing import List, Optional
+
 import httpx
 import uvicorn
-from typing import List, Optional, Dict
-import sqlalchemy
+from fastapi import FastAPI, Path, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, select
 from sqlalchemy.orm import sessionmaker
 
-from backend.remotes import RemoteConnection, check_remote_path
+from backend.remotes import RemoteConnection, check_remote_path, StatusMessage, RemoteFolder
 
 DATABASE_URL = "sqlite:///./db.sqlite"
 
@@ -253,11 +253,12 @@ async def read_root():
     return {"message": "Hello from FastAPI"}
 
 
-@app.post("/api/remote/folder")
+@app.post("/api/remote/folder", response_model=List[RemoteFolder])
 async def get_remote_folders(remote_connection: RemoteConnection):
     return get_remote_folders(remote_connection)
 
-@app.post("/api/remote/test")
+
+@app.post("/api/remote/test", response_model=StatusMessage)
 async def get_remote_folders(remote_connection: RemoteConnection):
     return check_remote_path(remote_connection)
 
