@@ -9,6 +9,8 @@ import sqlalchemy
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, select
 from sqlalchemy.orm import sessionmaker
 
+from backend.remotes import RemoteConnection, check_remote_path
+
 DATABASE_URL = "sqlite:///./db.sqlite"
 
 engine = create_engine(
@@ -100,9 +102,11 @@ class GraphData(BaseModel):
     buffers: List[Buffer]
     buffer_pages: List[BufferPage]
 
+
 class StackTrace(BaseModel):
     operation_id: int
     stack_trace: str
+
 
 class OperationDetails(BaseModel):
     operation_id: int
@@ -129,6 +133,7 @@ class PlotData(BaseModel):
     l1_size: int
     memory_data: GlyphData
     buffer_data: GlyphData
+
 
 operations = Table(
     "operations",
@@ -246,6 +251,15 @@ def shutdown():
 @app.get("/api")
 async def read_root():
     return {"message": "Hello from FastAPI"}
+
+
+@app.post("/api/remote/folder")
+async def get_remote_folders(remote_connection: RemoteConnection):
+    return get_remote_folders(remote_connection)
+
+@app.post("/api/remote/test")
+async def get_remote_folders(remote_connection: RemoteConnection):
+    return check_remote_path(remote_connection)
 
 
 @app.get("/api/get-operations", response_model=List[OperationWithArguments])
