@@ -83,7 +83,7 @@ const useRemoteConnection = () => {
 
     const fetchFolderList = async (connection: Partial<RemoteConnection>) => {
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_ROOT}/api/remote/folder`, {
+            const response = await fetch(`${import.meta.env.VITE_API_ROOT}/remote/folder`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -120,7 +120,7 @@ const useRemoteConnection = () => {
         if (!remoteFolder) {
             throw new Error('No remote folder provided');
         }
-        return fetch(`${import.meta.env.VITE_API_ROOT}/api/remote/sync`, {
+        return fetch(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -130,7 +130,7 @@ const useRemoteConnection = () => {
     };
 
     const mountRemoteFolder = async (connection: RemoteConnection, remoteFolder: RemoteFolder) => {
-        const response = await fetch(`${import.meta.env.VITE_API_ROOT}/api/remote/use`, {
+        const response = await fetch(`${import.meta.env.VITE_API_ROOT}/remote/use`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -187,7 +187,7 @@ const useRemoteConnection = () => {
 
 async function testFolderConnection(connection: Partial<RemoteConnection>) {
     try {
-        const response = await fetch(`${import.meta.env.VITE_API_ROOT}/api/remote/test`, {
+        const response = await fetch(`${import.meta.env.VITE_API_ROOT}/remote/test`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
