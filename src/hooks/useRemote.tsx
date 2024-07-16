@@ -110,6 +110,28 @@ const useRemoteConnection = () => {
         return fetchFolderList(connection);
     };
 
+    const syncRemoteFolder = async (connection?: RemoteConnection, remoteFolder?: RemoteFolder) => {
+        if (!connection || !connection.host || !connection.port || !connection.path) {
+            throw new Error('No connection provided');
+        }
+
+        if (!remoteFolder) {
+            throw new Error('No remote folder provided');
+        }
+        if (!remoteFolder) {
+            throw new Error('No remote folder provided');
+        }
+        const response = await fetch(`/api/remote/sync`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ connection, remoteFolder }),
+        });
+
+        return response;
+    };
+
     const persistentState = {
         get savedConnectionList() {
             return JSON.parse(getAppConfig('remoteConnections') ?? '[]') as RemoteConnection[];
@@ -144,6 +166,7 @@ const useRemoteConnection = () => {
 
     return {
         testConnection,
+        syncRemoteFolder,
         listRemoteFolders,
         persistentState,
     };
