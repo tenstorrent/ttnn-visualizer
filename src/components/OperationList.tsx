@@ -5,7 +5,7 @@
 import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import SearchField from './SearchField';
@@ -30,7 +30,7 @@ const OperationList = () => {
 
     const [filterQuery, setFilterQuery] = useState('');
     const [filteredOperationsList, setFilteredOperationsList] = useState<Operation[]>([]);
-    const [expandedOperations, setExpandedOperations] = useState<number[]>([location.state?.previousOperationId]);
+    const [expandedOperations, setExpandedOperations] = useState<number[]>(location.state?.expandedOperations || []);
     const [shouldSortDescending, setShouldSortDescending] = useState(false);
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
@@ -224,15 +224,18 @@ const OperationList = () => {
                                             }
                                             keepChildrenMounted={false}
                                             additionalElements={
-                                                <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
-                                                    <Button
-                                                        title='Buffer view'
-                                                        minimal
-                                                        small
-                                                        className='buffer-view'
-                                                        icon={IconNames.SEGMENTED_CONTROL}
-                                                    />
-                                                </Link>
+                                                <Button
+                                                    title='Buffer view'
+                                                    minimal
+                                                    small
+                                                    className='buffer-view'
+                                                    icon={IconNames.SEGMENTED_CONTROL}
+                                                    onClick={() =>
+                                                        navigate(`${ROUTES.OPERATIONS}/${operation.id}`, {
+                                                            state: { expandedOperations },
+                                                        })
+                                                    }
+                                                />
                                             }
                                             isOpen={expandedOperations.includes(operation.id)}
                                         >
