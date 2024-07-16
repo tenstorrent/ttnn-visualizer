@@ -24,15 +24,10 @@ export interface ConnectionStatus {
 }
 
 export interface RemoteFolder {
-    /** Name of the test results folder */
     testName: string;
-    /** Remote absolute path to the test results folder */
     remotePath: string;
-    /** Local absolute path to the test results folder */
     localPath: string;
-    /** Last time the folder was modified on remote */
     lastModified: string;
-    /** Last time the folder was synced */
     lastSynced?: string;
 }
 
@@ -56,7 +51,6 @@ const useRemoteConnection = () => {
         }
 
         const response = await testFolderConnection(connection);
-
 
         if (response.status === 200) {
             connectionStatus = [
@@ -86,7 +80,6 @@ const useRemoteConnection = () => {
 
         return connectionStatus;
     };
-
 
     const fetchFolderList = async (connection: Partial<RemoteConnection>) => {
         try {
@@ -151,7 +144,6 @@ const useRemoteConnection = () => {
 
     return {
         testConnection,
-        // syncRemoteFolder,
         listRemoteFolders,
         persistentState,
     };
@@ -177,6 +169,5 @@ async function testFolderConnection(connection: Partial<RemoteConnection>) {
         throw error; // rethrow the error so callers can handle it
     }
 }
-
 
 export default useRemoteConnection;
