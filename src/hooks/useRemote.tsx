@@ -201,7 +201,7 @@ async function testFolderConnection(connection: Partial<RemoteConnection>) {
         return await response.json();
     } catch (error) {
         console.error('Error during POST request:', error);
-        throw error; // rethrow the error so callers can handle it
+        throw error;
     }
 }
 

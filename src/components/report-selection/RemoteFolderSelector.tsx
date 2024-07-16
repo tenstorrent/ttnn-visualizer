@@ -6,7 +6,6 @@ import { Button, Icon, MenuItem, Spinner, Tooltip } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
-import { useNavigate } from 'react-router';
 
 interface RemoteConnection {
     name: string;
@@ -16,15 +15,10 @@ interface RemoteConnection {
 }
 
 interface RemoteFolder {
-    /** Name of the test results folder */
     testName: string;
-    /** Remote absolute path to the test results folder */
     remotePath: string;
-    /** Local absolute path to the test results folder */
     localPath: string;
-    /** Last time the folder was modified on remote */
     lastModified: string;
-    /** Last time the folder was synced */
     lastSynced?: string;
 }
 
@@ -118,7 +112,7 @@ const remoteFolderRenderer =
                 key={`${formatRemoteFolderName(folder, connection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
                 text={formatRemoteFolderName(folder)}
-                // // @ts-expect-error - Hack abusing label, it actually works.
+                // @ts-expect-error - Hack abusing label, it actually works.
                 label={statusIcon}
                 labelClassName='remote-folder-status-icon'
             />
@@ -147,8 +141,6 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     fallbackLabel = '(No selection)',
     icon = IconNames.FOLDER_OPEN,
 }) => {
-    const navigate = useNavigate();
-
     return (
         <div className='buttons-container'>
             <Select
@@ -169,7 +161,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
             >
                 <Button
                     icon={icon as IconName}
-                    // rightIcon={remoteFolders && remoteFolders?.length > 0 ? IconNames.CARET_DOWN : undefined}
+                    rightIcon={remoteFolders && remoteFolders?.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={loading || remoteFolders?.length === 0}
                     text={remoteFolder ? formatRemoteFolderName(remoteFolder, remoteConnection) : fallbackLabel}
                 />
