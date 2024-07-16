@@ -33,13 +33,13 @@ export default {
 ```shell
 nvm use
 npm install
-npm run dev  
+npm run dev
 ```
 
 ## Backend
 create env
 ```shell
-python3 -m venv myenv 
+python3 -m venv myenv
 ```
 activate env
 ```shell
@@ -51,8 +51,7 @@ pip install -r requirements.txt
 ```
 run server
 ```shell
-cd backend
-uvicorn main:app --reload 
+npm run start-flask
 ```
 access on localhost:8000/
 
