@@ -63,7 +63,7 @@ def get_remote_folder_config_paths(ssh_client, remote_path):
             dirname = Path(remote_path).joinpath(directory.filename)
             directory_files = sftp.listdir(str(dirname))
             if TEST_CONFIG_FILE in directory_files:
-                project_configs.append(Path(dirname).joinpath(TEST_CONFIG_FILE))
+                project_configs.append(str(Path(dirname).joinpath(TEST_CONFIG_FILE)))
     return project_configs
 
 
@@ -125,9 +125,9 @@ def sync_test_folders(remote_connection):
                 test_directory = Path(directory).name
                 output_directory = Path(destination_dir).joinpath(test_directory)
                 output_directory.mkdir(parents=True, exist_ok=True)
-                sftp.chdir(directory)
+                sftp.chdir(str(directory))
                 for file in files:
-                    sftp.get(file, Path(output_directory).joinpath(file))
+                    sftp.get(file, str(Path(output_directory).joinpath(file)))
 
 
 def check_remote_path(remote_connection):
@@ -137,8 +137,10 @@ def check_remote_path(remote_connection):
         return StatusMessage(status=ConnectionTestStates.FAILED, message=str(error))
     with ssh_client.open_sftp() as sftp:
         try:
-            sftp.stat(remote_connection.path)
-        except FileNotFoundError:
+            path_to_check = remote_connection.path
+            sftp.listdir(str(path_to_check))
+        except FileNotFoundError as err:
+            print(err)
             return StatusMessage(status=ConnectionTestStates.FAILED,
                                  message=f"Path {remote_connection.path} does not exist")
         try:
