@@ -25,9 +25,9 @@ class StatusMessage(BaseModel):
 
 
 class RemoteFolder(BaseModel):
-    test_name: str
-    remote_path: str
-    last_modified: str
+    testName: str
+    remotePath: str
+    lastModified: str
 
 
 class NoProjectsException(BaseException):
@@ -70,9 +70,9 @@ def get_remote_folders(ssh_client, remote_configs):
                 data = json.loads(f.read())
                 remote_folder_data.append(
                     RemoteFolder(
-                        test_name=data['report_name'],
-                        remote_path=data['root_report_path'],
-                        last_modified=str(attributes.st_mtime))
+                        testName=data['report_name'],
+                        remotePath=data['root_report_path'],
+                        lastModified=str(attributes.st_mtime))
                 )
                 f.close()
             except IOError as err:
