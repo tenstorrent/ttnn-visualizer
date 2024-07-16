@@ -83,7 +83,7 @@ const useRemoteConnection = () => {
 
     const fetchFolderList = async (connection: Partial<RemoteConnection>) => {
         try {
-            const response = await fetch(`/api/remote/folder`, {
+            const response = await fetch(`${import.meta.env.VITE_API_ROOT}/remote/folder`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -101,7 +101,6 @@ const useRemoteConnection = () => {
             throw error;
         }
     };
-
     const listRemoteFolders = async (connection?: RemoteConnection) => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
@@ -121,15 +120,13 @@ const useRemoteConnection = () => {
         if (!remoteFolder) {
             throw new Error('No remote folder provided');
         }
-        const response = await fetch(`/api/remote/sync`, {
+        return await fetch(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ connection, remoteFolder }),
         });
-
-        return response;
     };
 
     const persistentState = {
@@ -148,10 +145,10 @@ const useRemoteConnection = () => {
             setAppConfig('selectedConnection', JSON.stringify(connection ?? null));
         },
         getSavedRemoteFolders: (connection?: RemoteConnection) => {
-            return JSON.parse(getAppConfig(`${connection?.name}-remoteFolders`) ?? '[]') as RemoteFolder[];
+            return JSON.parse(getAppConfig(`${connection?.name} - remoteFolders`) ?? '[]') as RemoteFolder[];
         },
         setSavedRemoteFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
-            setAppConfig(`${connection?.name}-remoteFolders`, JSON.stringify(folders));
+            setAppConfig(`${connection?.name} - remoteFolders`, JSON.stringify(folders));
         },
         updateSavedRemoteFoldersConnection(oldConnection?: RemoteConnection, newConnection?: RemoteConnection) {
             const folders = this.getSavedRemoteFolders(oldConnection);
@@ -160,7 +157,7 @@ const useRemoteConnection = () => {
             this.setSavedRemoteFolders(newConnection, folders);
         },
         deleteSavedRemoteFolders: (connection?: RemoteConnection) => {
-            deleteAppConfig(`${connection?.name}-remoteFolders`);
+            deleteAppConfig(`${connection?.name} - remoteFolders`);
         },
     };
 
@@ -174,7 +171,7 @@ const useRemoteConnection = () => {
 
 async function testFolderConnection(connection: Partial<RemoteConnection>) {
     try {
-        const response = await fetch(`api/remote/test`, {
+        const response = await fetch(`${import.meta.env.VITE_API_ROOT}/remote/test`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -183,9 +180,8 @@ async function testFolderConnection(connection: Partial<RemoteConnection>) {
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
+            throw new Error(`HTTP error!`);
         }
-
         return await response.json();
     } catch (error) {
         console.error('Error during POST request:', error);
