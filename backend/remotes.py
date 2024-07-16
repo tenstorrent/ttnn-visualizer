@@ -152,6 +152,3 @@ def check_remote_path(remote_connection):
             return StatusMessage(status=ConnectionTestStates.FAILED, message=str(err))
     return StatusMessage(status=ConnectionTestStates.OK, message="success")
 
-
-if __name__ == '__main__':
-    sync_test_folders(RemoteConnection(name="Test", host="localhost", port=2222, path="/home/w0269804/data/reports"))
