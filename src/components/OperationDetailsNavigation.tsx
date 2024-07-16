@@ -37,11 +37,11 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace, isLoading }
         const handleKeyPress = (e: KeyboardEvent) => {
             const { key } = e;
 
-            if (key === 'ArrowLeft') {
+            if (key === 'ArrowLeft' && previousOperation) {
                 navigateToPreviousOperation();
             }
 
-            if (key === 'ArrowRight') {
+            if (key === 'ArrowRight' && nextOperation) {
                 navigateToNextOperation();
             }
         };
@@ -51,7 +51,7 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace, isLoading }
         return () => {
             window.document.removeEventListener('keyup', handleKeyPress);
         };
-    }, [navigateToPreviousOperation, navigateToNextOperation]);
+    }, [navigateToPreviousOperation, navigateToNextOperation, previousOperation, nextOperation]);
 
     return (
         <nav className='operation-details-navigation'>
