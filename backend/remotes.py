@@ -1,9 +1,10 @@
 import json
-import os.path
 from pathlib import Path
 from stat import S_ISDIR
+from typing import List
 
 import paramiko
+from paramiko.client import SSHClient
 from paramiko.ssh_exception import SSHException
 from pydantic import BaseModel
 
@@ -34,62 +35,94 @@ class NoProjectsException(BaseException):
     pass
 
 
-def get_client(remote_connection, ssh_config="~/.ssh/config"):
+def get_client(remote_connection: RemoteConnection, ssh_config="~/.ssh/config") -> SSHClient:
+    """
+    Read user's SSH config for identify file for given host
+    TODO All configuring key/config location through env
+    :param remote_connection:
+    :param ssh_config:
+    :return:
+    """
     config_path = Path(ssh_config).expanduser()
     config = paramiko.SSHConfig.from_path(config_path).lookup(remote_connection.host)
+
     if not config:
-        raise SSHException(f"Host not found in SSH config {remote_connection.host}")
+        raise SSHException(f"Host {remote_connection.host} not found in SSH config")
+    keyfile_path = config['identityfile'].pop()
 
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.load_system_host_keys()
-    keyfile_path = config['identityfile'][0]
     ssh.connect(remote_connection.host, look_for_keys=False, key_filename=keyfile_path, port=remote_connection.port)
     return ssh
 
 
-def get_remote_folder_config_paths(ssh_client, remote_path):
+def get_remote_folder_config_paths(ssh_client, remote_path) -> List[str]:
+    """
+    Given a remote path return a list of report config files
+    :param ssh_client:
+    :param remote_path:
+    :return:
+    """
     project_configs = []
     with ssh_client.open_sftp() as sftp:
-        top_level_directories = list(filter(lambda e: S_ISDIR(e.st_mode), sftp.listdir_attr(remote_path)))
+        all_files = sftp.listdir_attr(remote_path)
+        top_level_directories = filter(lambda e: S_ISDIR(e.st_mode), all_files)
         for directory in top_level_directories:
-            dirname = Path(remote_path).joinpath(directory.filename)
-            directory_files = sftp.listdir(str(dirname))
+            dirname = Path(remote_path, directory.filename)
+            directory_files = sftp.listdir(dirname)
             if TEST_CONFIG_FILE in directory_files:
-                project_configs.append(str(Path(dirname).joinpath(TEST_CONFIG_FILE)))
+                project_configs.append(Path(dirname, TEST_CONFIG_FILE))
     return project_configs
 
 
-def get_remote_folders(ssh_client, remote_configs):
+def get_remote_folders(ssh_client: SSHClient, remote_configs: List[str]) -> List[RemoteFolder]:
+    """
+    Given a list of remote config paths return a list of RemoteFolder objects
+    :param ssh_client:
+    :param remote_configs:
+    :return:
+    """
     remote_folder_data = []
     with ssh_client.open_sftp() as sftp:
         for config in remote_configs:
-            report_directory = str(Path(config).parent)
+            report_directory = Path(config).parent
             try:
                 attributes = sftp.lstat(config)
-                f = sftp.open(config, 'rb')
-                data = json.loads(f.read())
+                config_file = sftp.open(config, 'rb')
+                data = json.loads(config_file.read())
                 remote_folder_data.append(
                     RemoteFolder(
-                        remotePath=report_directory,
+                        remotePath=str(report_directory),
                         testName=data['report_name'],
                         lastModified=str(attributes.st_mtime))
                 )
-                f.close()
+                config_file.close()
             except IOError as err:
                 raise FileNotFoundError(f"Failed to read config from {config}: {err}")
 
     return remote_folder_data
 
 
-def get_remote_test_folders(remote_connection):
+def get_remote_test_folders(remote_connection: RemoteConnection) -> List[RemoteFolder]:
+    """
+    Return a list of remote folders given a remote connection
+    Checks for directories containing a config.json file
+    :param remote_connection:
+    :return:
+    """
     client = get_client(remote_connection)
-    remote_config_paths = get_remote_folder_config_paths(client, remote_path=remote_connection.path)
-    folders = get_remote_folders(client, remote_configs=remote_config_paths)
-    return folders
+    remote_config_paths = get_remote_folder_config_paths(client, remote_connection.path)
+    return get_remote_folders(client, remote_config_paths)
 
 
 def sftp_walk(sftp, remote_path):
+    """
+    SFTP implementation of os.walk
+    :param sftp: Connected SFTP client
+    :param remote_path:
+    :return:
+    """
     path_to_copy = remote_path
     files = []
     folders = []
@@ -101,22 +134,29 @@ def sftp_walk(sftp, remote_path):
     if files:
         yield path_to_copy, files
     for folder in folders:
-        new_path = os.path.join(remote_path, folder)
+        new_path = Path(remote_path, folder)
         for x in sftp_walk(sftp, new_path):
             yield x
 
 
 def sync_test_folders(remote_connection: RemoteConnection, remote_folder: RemoteFolder):
+    """
+    Synchronize remote test folders to local storage
+    Remote folders will be synchronized to REPORT_DATA_DIR
+    :param remote_connection:
+    :param remote_folder:
+    :return:
+    """
     client = get_client(remote_connection)
     with client.open_sftp() as sftp:
         report_folder = Path(remote_folder.remotePath).name
-        destination_dir = Path(REPORT_DATA_DIRECTORY).joinpath(remote_connection.name).joinpath(report_folder)
+        destination_dir = Path(REPORT_DATA_DIRECTORY, remote_connection.name, report_folder)
         if not Path(destination_dir).exists():
             Path(destination_dir).mkdir(parents=True, exist_ok=True)
         for directory, files in sftp_walk(sftp, remote_folder.remotePath):
             sftp.chdir(str(directory))
             for file in files:
-                sftp.get(file, str(Path(destination_dir).joinpath(file)))
+                sftp.get(file, str(Path(destination_dir, file)))
 
 
 def check_remote_path(remote_connection):
@@ -126,10 +166,8 @@ def check_remote_path(remote_connection):
         return StatusMessage(status=500, message=str(error))
     with ssh_client.open_sftp() as sftp:
         try:
-            path_to_check = remote_connection.path
-            sftp.listdir(str(path_to_check))
-        except FileNotFoundError as err:
-            print(err)
+            sftp.listdir(remote_connection.path)
+        except FileNotFoundError:
             return StatusMessage(status=400,
                                  message=f"Path {remote_connection.path} does not exist")
         try:

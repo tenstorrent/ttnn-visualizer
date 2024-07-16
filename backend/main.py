@@ -275,7 +275,7 @@ async def sync_remote_folder(connection: RemoteConnection, folder: RemoteFolder)
 @app.post("/api/remote/use", response_model=StatusMessage)
 async def use_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
     report_folder = PathlibPath(folder.remotePath).name
-    connection_directory = PathlibPath(REPORT_DATA_DIRECTORY).joinpath(connection.name).joinpath(report_folder)
+    connection_directory = PathlibPath(REPORT_DATA_DIRECTORY, connection.name, report_folder)
     shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
     return StatusMessage(status=200, message="success")
 
