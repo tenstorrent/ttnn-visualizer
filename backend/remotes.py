@@ -1,4 +1,3 @@
-import enum
 import json
 import os.path
 from pathlib import Path
@@ -64,14 +63,15 @@ def get_remote_folders(ssh_client, remote_configs):
     remote_folder_data = []
     with ssh_client.open_sftp() as sftp:
         for config in remote_configs:
+            report_directory = str(Path(config).parent)
             try:
                 attributes = sftp.lstat(config)
                 f = sftp.open(config, 'rb')
                 data = json.loads(f.read())
                 remote_folder_data.append(
                     RemoteFolder(
+                        remotePath=report_directory,
                         testName=data['report_name'],
-                        remotePath=data['root_report_path'],
                         lastModified=str(attributes.st_mtime))
                 )
                 f.close()
@@ -105,22 +105,17 @@ def sftp_walk(sftp, remote_path):
             yield x
 
 
-def sync_test_folders(remote_connection):
+def sync_test_folders(remote_connection: RemoteConnection, remote_folder: RemoteFolder):
     client = get_client(remote_connection)
-    remote_config_paths = get_remote_folder_config_paths(client, remote_path=remote_connection.path)
     with client.open_sftp() as sftp:
-        destination_dir = Path(DATADIR).joinpath(remote_connection.name)
+        report_folder = Path(remote_folder.remotePath).name
+        destination_dir = Path(DATADIR).joinpath(remote_connection.name).joinpath(report_folder)
         if not Path(destination_dir).exists():
             Path(destination_dir).mkdir(parents=True, exist_ok=True)
-        for remote_config in remote_config_paths:
-            test_folder = Path(remote_config).parent
-            for directory, files in sftp_walk(sftp, str(test_folder)):
-                test_directory = Path(directory).name
-                output_directory = Path(destination_dir).joinpath(test_directory)
-                output_directory.mkdir(parents=True, exist_ok=True)
-                sftp.chdir(str(directory))
-                for file in files:
-                    sftp.get(file, str(Path(output_directory).joinpath(file)))
+        for directory, files in sftp_walk(sftp, remote_folder.remotePath):
+            sftp.chdir(str(directory))
+            for file in files:
+                sftp.get(file, str(Path(destination_dir).joinpath(file)))
 
 
 def check_remote_path(remote_connection):
@@ -144,4 +139,3 @@ def check_remote_path(remote_connection):
         except FileNotFoundError as err:
             return StatusMessage(status=500, message=str(err))
     return StatusMessage(status=200, message="success")
-
