@@ -55,8 +55,8 @@ const useRemoteConnection = () => {
             return connectionStatus;
         }
 
-        // TODO: Replace with real call to API
-        const response = await getTestConnection(500);
+        const response = await testFolderConnection(connection);
+
 
         if (response.status === 200) {
             connectionStatus = [
@@ -87,32 +87,35 @@ const useRemoteConnection = () => {
         return connectionStatus;
     };
 
+
+    const fetchFolderList = async (connection: Partial<RemoteConnection>) => {
+        try {
+            const response = await fetch(`/api/remote/folder`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(connection),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Error during POST request:', error);
+            throw error;
+        }
+    };
+
     const listRemoteFolders = async (connection?: RemoteConnection) => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
 
-        // TODO: Get real folder list
-        const response = await getTestFolders();
-
-        return response;
+        return fetchFolderList(connection);
     };
-
-    // TODO: Possibly delete because it isn't used with Greg's remote query approach
-    // const syncRemoteFolder = async (connection?: RemoteConnection, remoteFolder?: RemoteFolder) => {
-    //     if (!connection || !connection.host || !connection.port || !connection.path) {
-    //         throw new Error('No connection provided');
-    //     }
-
-    //     if (!remoteFolder) {
-    //         throw new Error('No remote folder provided');
-    //     }
-
-    //     // TODO: Get real folder list
-    //     const response = await getTestFolders();
-
-    //     return response;
-    // };
 
     const persistentState = {
         get savedConnectionList() {
@@ -154,38 +157,26 @@ const useRemoteConnection = () => {
     };
 };
 
-// delay is a function for development so we can simulate async calls
-// eslint-disable-next-line compat/compat, no-promise-executor-return
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const getTestConnection = async (status: number) => {
-    await delay(1000);
+async function testFolderConnection(connection: Partial<RemoteConnection>) {
+    try {
+        const response = await fetch(`api/remote/test`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(connection),
+        });
 
-    // fetch('/api/remote/test')
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
 
-    return {
-        status,
-        message: '',
-    };
-};
-const getTestFolders = async () => {
-    await delay(1000);
+        return await response.json();
+    } catch (error) {
+        console.error('Error during POST request:', error);
+        throw error; // rethrow the error so callers can handle it
+    }
+}
 
-    // fetch('/api/remote/folders')
-
-    return [
-        {
-            testName: 'resnet',
-            remotePath: '/generated/ttnn/reports',
-            localPath: '/tmp/local',
-            lastModified: new Date().toISOString(),
-        },
-        {
-            testName: 'debug',
-            remotePath: '/generated/ttnn/reports',
-            localPath: '/tmp/local',
-            lastModified: new Date().toISOString(),
-        },
-    ];
-};
 
 export default useRemoteConnection;
