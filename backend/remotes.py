@@ -8,7 +8,7 @@ from paramiko.ssh_exception import SSHException
 from pydantic import BaseModel
 
 TEST_CONFIG_FILE = 'config.json'
-DATADIR = Path(__file__).parent.absolute().joinpath('data')
+REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath('data')
 
 
 class RemoteConnection(BaseModel):
@@ -109,7 +109,7 @@ def sync_test_folders(remote_connection: RemoteConnection, remote_folder: Remote
     client = get_client(remote_connection)
     with client.open_sftp() as sftp:
         report_folder = Path(remote_folder.remotePath).name
-        destination_dir = Path(DATADIR).joinpath(remote_connection.name).joinpath(report_folder)
+        destination_dir = Path(REPORT_DATA_DIRECTORY).joinpath(remote_connection.name).joinpath(report_folder)
         if not Path(destination_dir).exists():
             Path(destination_dir).mkdir(parents=True, exist_ok=True)
         for directory, files in sftp_walk(sftp, remote_folder.remotePath):

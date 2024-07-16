@@ -55,3 +55,7 @@ cd backend
 uvicorn main:app --reload 
 ```
 access on localhost:8000/
+
+## Development
+
+Copy report contents to `backend/data/active` - IE - `backend/data/active/db.sqlite`
