@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, select
 from sqlalchemy.orm import sessionmaker
 
-from backend.remotes import RemoteConnection, check_remote_path, StatusMessage, RemoteFolder
+from backend.remotes import RemoteConnection, check_remote_path, StatusMessage, RemoteFolder, get_remote_test_folders
 
 DATABASE_URL = "sqlite:///./db.sqlite"
 
@@ -255,7 +255,7 @@ async def read_root():
 
 @app.post("/api/remote/folder", response_model=List[RemoteFolder])
 async def get_remote_folders(remote_connection: RemoteConnection):
-    return get_remote_folders(remote_connection)
+    return get_remote_test_folders(remote_connection)
 
 
 @app.post("/api/remote/test", response_model=StatusMessage)
