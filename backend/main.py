@@ -281,7 +281,7 @@ async def use_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
 
 
 @app.get("/api/get-operations", response_model=List[OperationWithArguments])
-async def get_operations(remote_path):
+async def get_operations():
     db = SessionLocal()
     operations_query = select(operations)
     operations_list = db.execute(operations_query).fetchall()
