@@ -30,13 +30,6 @@ class RemoteFolder(BaseModel):
     last_modified: str
 
 
-class ConnectionTestStates(enum.Enum):
-    IDLE = 0
-    PROGRESS = 1
-    FAILED = 2
-    OK = 4
-
-
 class NoProjectsException(BaseException):
     pass
 
@@ -134,21 +127,21 @@ def check_remote_path(remote_connection):
     try:
         ssh_client = get_client(remote_connection)
     except SSHException as error:
-        return StatusMessage(status=ConnectionTestStates.FAILED, message=str(error))
+        return StatusMessage(status=500, message=str(error))
     with ssh_client.open_sftp() as sftp:
         try:
             path_to_check = remote_connection.path
             sftp.listdir(str(path_to_check))
         except FileNotFoundError as err:
             print(err)
-            return StatusMessage(status=ConnectionTestStates.FAILED,
+            return StatusMessage(status=400,
                                  message=f"Path {remote_connection.path} does not exist")
         try:
             remote_folders = get_remote_test_folders(remote_connection)
             if not remote_folders:
-                return StatusMessage(status=ConnectionTestStates.FAILED,
+                return StatusMessage(status=400,
                                      message=f"No test folders found in {remote_connection.path}")
         except FileNotFoundError as err:
-            return StatusMessage(status=ConnectionTestStates.FAILED, message=str(err))
-    return StatusMessage(status=ConnectionTestStates.OK, message="success")
+            return StatusMessage(status=500, message=str(err))
+    return StatusMessage(status=200, message="success")
 
