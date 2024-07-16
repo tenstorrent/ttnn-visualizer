@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 TEST_CONFIG_FILE = 'config.json'
 REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath('data')
+ACTIVE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath('active')
 
 
 class RemoteConnection(BaseModel):

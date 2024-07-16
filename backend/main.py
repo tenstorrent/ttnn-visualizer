@@ -1,3 +1,5 @@
+import shutil
+from pathlib import Path as PathlibPath
 from typing import List, Optional
 
 import httpx
@@ -10,9 +12,9 @@ from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, 
 from sqlalchemy.orm import sessionmaker
 
 from backend.remotes import RemoteConnection, check_remote_path, StatusMessage, RemoteFolder, get_remote_test_folders, \
-    sync_test_folders
+    sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY
 
-DATABASE_URL = "sqlite:///./db.sqlite"
+DATABASE_URL = f"sqlite:////{ACTIVE_DATA_DIRECTORY}/db.sqlite"
 
 engine = create_engine(
     DATABASE_URL,
@@ -266,8 +268,15 @@ async def get_remote_folders(remote_connection: RemoteConnection):
 
 @app.post("/api/remote/sync", response_model=StatusMessage)
 async def sync_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
-    # TODO Add error handling
     sync_test_folders(connection, folder)
+    return StatusMessage(status=200, message="success")
+
+
+@app.post("/api/remote/use", response_model=StatusMessage)
+async def use_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
+    report_folder = PathlibPath(folder.remotePath).name
+    connection_directory = PathlibPath(REPORT_DATA_DIRECTORY).joinpath(connection.name).joinpath(report_folder)
+    shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
     return StatusMessage(status=200, message="success")
 
 
