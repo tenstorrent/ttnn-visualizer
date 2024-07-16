@@ -4,9 +4,10 @@
 
 import { FC, useEffect, useState } from 'react';
 
-import { Button, FormGroup } from '@blueprintjs/core';
+import { AnchorButton, Button, FormGroup, Tooltip } from '@blueprintjs/core';
 
 import { useNavigate } from 'react-router';
+import { IconNames } from '@blueprintjs/icons';
 import useRemote, { RemoteConnection, RemoteFolder } from '../../hooks/useRemote';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteFolderSelector from './RemoteFolderSelector';
@@ -20,7 +21,7 @@ const RemoteSyncConfigurator: FC = () => {
         remote.persistentState.getSavedRemoteFolders(remote.persistentState.selectedConnection),
     );
 
-    const [isSyncingRemoteFolder, _setIsSyncingRemoteFolder] = useState(false);
+    const [isSyncingRemoteFolder, setIsSyncingRemoteFolder] = useState(false);
     const [isLoadingFolderList, setIsLoadingFolderList] = useState(false);
     const [isFetchingFolderStatus, setIsFetchingFolderStatus] = useState(false);
     const [isRemoteOffline, setIsRemoteOffline] = useState(false);
@@ -200,8 +201,7 @@ const RemoteSyncConfigurator: FC = () => {
                     >
                         View report
                     </Button>
-                    {/* // TODO: Possibly delete because it isn't used with Greg's remote query approach */}
-                    {/* <Tooltip content='Sync remote folder'>
+                    <Tooltip content='Sync remote folder'>
                         <AnchorButton
                             icon={IconNames.REFRESH}
                             loading={isSyncingRemoteFolder}
@@ -241,7 +241,7 @@ const RemoteSyncConfigurator: FC = () => {
                                 }
                             }}
                         />
-                    </Tooltip> */}
+                    </Tooltip>
                 </RemoteFolderSelector>
             </FormGroup>
         </>
