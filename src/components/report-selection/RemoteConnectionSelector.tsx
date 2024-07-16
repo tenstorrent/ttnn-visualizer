@@ -118,7 +118,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                 remoteConnection={selectedConnection}
             />
             <Button
-                icon={IconNames.LOG_IN}
+                icon={IconNames.LOCATE}
                 disabled={disabled || !selectedConnection}
                 loading={loading}
                 text='Fetch remote folders list'

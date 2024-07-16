@@ -69,6 +69,19 @@ const RemoteSyncConfigurator: FC = () => {
         });
     };
 
+    const viewReport = async () => {
+        if (remote.persistentState.selectedConnection && selectedRemoteFolder) {
+            const response = await remote.mountRemoteFolder(
+                remote.persistentState.selectedConnection,
+                selectedRemoteFolder,
+            );
+
+            if (response.ok) {
+                navigate(ROUTES.OPERATIONS);
+            }
+        }
+    };
+
     useEffect(() => {
         (async () => {
             try {
@@ -188,19 +201,8 @@ const RemoteSyncConfigurator: FC = () => {
                     updatingFolderList={isFetchingFolderStatus}
                     onSelectFolder={(folder) => {
                         updateSelectedFolder(folder);
-
-                        // TODO: Need this?
-                        // if (remote.persistentState.selectedConnection) {
-                        //     document.title = `${remote.persistentState.selectedConnection.name} — ${folder.testName}`;
-                        // }
                     }}
                 >
-                    <Button
-                        disabled={isSyncingRemoteFolder || isLoadingFolderList || remoteFolders?.length === 0}
-                        onClick={() => navigate(ROUTES.OPERATIONS)}
-                    >
-                        View report
-                    </Button>
                     <Tooltip content='Sync remote folder'>
                         <AnchorButton
                             icon={IconNames.REFRESH}
@@ -242,6 +244,14 @@ const RemoteSyncConfigurator: FC = () => {
                             }}
                         />
                     </Tooltip>
+
+                    <Button
+                        disabled={isSyncingRemoteFolder || isLoadingFolderList || remoteFolders?.length === 0}
+                        onClick={viewReport}
+                        icon={IconNames.EYE_OPEN}
+                    >
+                        View report
+                    </Button>
                 </RemoteFolderSelector>
             </FormGroup>
         </>

@@ -257,13 +257,13 @@ async def read_root():
 
 
 @app.post("/api/remote/folder", response_model=List[RemoteFolder])
-async def get_remote_folders(remote_connection: RemoteConnection):
-    return get_remote_test_folders(remote_connection)
+async def get_remote_folders(connection: RemoteConnection):
+    return get_remote_test_folders(connection)
 
 
 @app.post("/api/remote/test", response_model=StatusMessage)
-async def get_remote_folders(remote_connection: RemoteConnection):
-    return check_remote_path(remote_connection)
+async def get_remote_folders(connection: RemoteConnection):
+    return check_remote_path(connection)
 
 
 @app.post("/api/remote/sync", response_model=StatusMessage)

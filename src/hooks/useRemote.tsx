@@ -83,7 +83,7 @@ const useRemoteConnection = () => {
 
     const fetchFolderList = async (connection: Partial<RemoteConnection>) => {
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_ROOT}/remote/folder`, {
+            const response = await fetch(`${import.meta.env.VITE_API_ROOT}/api/remote/folder`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -120,13 +120,28 @@ const useRemoteConnection = () => {
         if (!remoteFolder) {
             throw new Error('No remote folder provided');
         }
-        return await fetch(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
+        return fetch(`${import.meta.env.VITE_API_ROOT}/api/remote/sync`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ connection, remoteFolder }),
+            body: JSON.stringify({ connection, folder: remoteFolder }),
         });
+    };
+
+    const mountRemoteFolder = async (connection: RemoteConnection, remoteFolder: RemoteFolder) => {
+        const response = await fetch(`${import.meta.env.VITE_API_ROOT}/api/remote/use`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                connection,
+                folder: remoteFolder,
+            }),
+        });
+
+        return response;
     };
 
     const persistentState = {
@@ -165,13 +180,14 @@ const useRemoteConnection = () => {
         testConnection,
         syncRemoteFolder,
         listRemoteFolders,
+        mountRemoteFolder,
         persistentState,
     };
 };
 
 async function testFolderConnection(connection: Partial<RemoteConnection>) {
     try {
-        const response = await fetch(`${import.meta.env.VITE_API_ROOT}/remote/test`, {
+        const response = await fetch(`${import.meta.env.VITE_API_ROOT}/api/remote/test`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

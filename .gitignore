@@ -31,3 +31,6 @@ myenv
 /docker/SSH/data/
 *.pub
 *.key
+
+# Backend
+/backend/data
