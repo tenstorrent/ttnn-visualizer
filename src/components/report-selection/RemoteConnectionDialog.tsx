@@ -4,9 +4,10 @@
 
 import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup } from '@blueprintjs/core';
 import { FC, useState } from 'react';
-import useRemoteConnection, { Connection, ConnectionStatus, ConnectionTestStates } from '../../hooks/useRemote';
+import useRemoteConnection from '../../hooks/useRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
 import 'styles/components/RemoteConnectionDialog.scss';
+import { Connection, ConnectionStatus, ConnectionTestStates } from '../../model/Connection';
 
 interface RemoteConnectionDialogProps {
     title?: string;

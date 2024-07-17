@@ -7,7 +7,7 @@ import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
 import isLocalFolderOutdated from '../../functions/isLocalFolderOutdated';
-import { Connection, ReportFolder } from '../../hooks/useRemote';
+import { Connection, ReportFolder } from '../../model/Connection';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',

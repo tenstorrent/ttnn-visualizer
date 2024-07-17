@@ -1,4 +1,4 @@
-import { ReportFolder } from '../hooks/useRemote';
+import { ReportFolder } from '../model/Connection';
 
 const isLocalFolderOutdated = (folder: ReportFolder) => {
     if (!folder.lastSynced) {

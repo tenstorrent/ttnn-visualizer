@@ -6,8 +6,8 @@ import { AnchorButton, Button, MenuItem, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, useState } from 'react';
-import { Connection } from '../../hooks/useRemote';
 import RemoteConnectionDialog from './RemoteConnectionDialog';
+import { Connection } from '../../model/Connection';
 
 const formatConnectionString = (connection?: Connection) => {
     if (!connection) {

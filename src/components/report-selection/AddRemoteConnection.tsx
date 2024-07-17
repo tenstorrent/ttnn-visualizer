@@ -7,8 +7,8 @@ import { FC, useState } from 'react';
 import { Button } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 
-import { Connection } from '../../hooks/useRemote';
 import RemoteConnectionDialog from './RemoteConnectionDialog';
+import { Connection } from '../../model/Connection';
 
 interface AddRemoteConnectionProps {
     disabled: boolean;
