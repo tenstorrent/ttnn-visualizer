@@ -4,34 +4,14 @@
 
 import axios from 'axios';
 import useAppConfig from './useAppConfig';
-import { MountRemoteFolderData, SyncRemoteFolderData } from '../model/Remote';
-
-export interface Connection {
-    name: string;
-    host: string;
-    port: number;
-    path: string;
-}
-
-export enum ConnectionTestStates {
-    IDLE,
-    PROGRESS,
-    FAILED,
-    OK,
-}
-
-export interface ConnectionStatus {
-    status: ConnectionTestStates;
-    message: string;
-}
-
-export interface ReportFolder {
-    testName: string;
-    remotePath: string;
-    localPath: string;
-    lastModified: string;
-    lastSynced?: string;
-}
+import {
+    Connection,
+    ConnectionStatus,
+    ConnectionTestStates,
+    MountRemoteFolderData,
+    ReportFolder,
+    SyncRemoteFolderData,
+} from '../model/Connection';
 
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();

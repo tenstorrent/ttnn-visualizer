@@ -8,12 +8,13 @@ import { AnchorButton, Button, FormGroup, Tooltip } from '@blueprintjs/core';
 
 import { useNavigate } from 'react-router';
 import { IconNames } from '@blueprintjs/icons';
-import useRemote, { Connection, ReportFolder } from '../../hooks/useRemote';
+import useRemote from '../../hooks/useRemote';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import ROUTES from '../../definitions/routes';
 import isLocalFolderOutdated from '../../functions/isLocalFolderOutdated';
+import { Connection, ReportFolder } from '../../model/Connection';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
