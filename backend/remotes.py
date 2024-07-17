@@ -70,7 +70,7 @@ def get_remote_folder_config_paths(ssh_client, remote_path) -> List[str]:
         top_level_directories = filter(lambda e: S_ISDIR(e.st_mode), all_files)
         for directory in top_level_directories:
             dirname = Path(remote_path, directory.filename)
-            directory_files = sftp.listdir(dirname)
+            directory_files = sftp.listdir(str(dirname))
             if TEST_CONFIG_FILE in directory_files:
                 project_configs.append(Path(dirname, TEST_CONFIG_FILE))
     return project_configs
@@ -88,8 +88,8 @@ def get_remote_folders(ssh_client: SSHClient, remote_configs: List[str]) -> List
         for config in remote_configs:
             report_directory = Path(config).parent
             try:
-                attributes = sftp.lstat(config)
-                config_file = sftp.open(config, 'rb')
+                attributes = sftp.lstat(str(config))
+                config_file = sftp.open(str(config), 'rb')
                 data = json.loads(config_file.read())
                 remote_folder_data.append(
                     RemoteFolder(
@@ -135,7 +135,7 @@ def sftp_walk(sftp, remote_path):
         yield path_to_copy, files
     for folder in folders:
         new_path = Path(remote_path, folder)
-        for x in sftp_walk(sftp, new_path):
+        for x in sftp_walk(sftp, str(new_path)):
             yield x
 
 
