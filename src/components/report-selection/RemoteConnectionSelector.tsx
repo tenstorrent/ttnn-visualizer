@@ -6,10 +6,10 @@ import { AnchorButton, Button, MenuItem, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, useState } from 'react';
-import { RemoteConnection } from '../../hooks/useRemote';
+import { Connection } from '../../hooks/useRemote';
 import RemoteConnectionDialog from './RemoteConnectionDialog';
 
-const formatConnectionString = (connection?: RemoteConnection) => {
+const formatConnectionString = (connection?: Connection) => {
     if (!connection) {
         return '(No connection)';
     }
@@ -17,11 +17,11 @@ const formatConnectionString = (connection?: RemoteConnection) => {
     return `${connection.name} - ssh://${connection.host}:${connection.port}/${connection.path.replace(/^\//gi, '')}`;
 };
 
-const filterRemoteConnections = (query: string, connection: RemoteConnection) => {
+const filterRemoteConnections = (query: string, connection: Connection) => {
     return formatConnectionString(connection).toLowerCase().includes(query.toLowerCase());
 };
 
-const renderRemoteConnection: ItemRenderer<RemoteConnection> = (connection, { handleClick, modifiers }) => {
+const renderRemoteConnection: ItemRenderer<Connection> = (connection, { handleClick, modifiers }) => {
     if (!modifiers.matchesPredicate) {
         return null;
     }
@@ -38,15 +38,15 @@ const renderRemoteConnection: ItemRenderer<RemoteConnection> = (connection, { ha
 };
 
 interface RemoteConnectionSelectorProps {
-    connections: RemoteConnection[];
-    connection?: RemoteConnection;
+    connections: Connection[];
+    connection?: Connection;
     disabled: boolean;
     loading: boolean;
     offline: boolean;
-    onSelectConnection: (connection: RemoteConnection) => void;
-    onEditConnection: (newConnection: RemoteConnection, oldConnection?: RemoteConnection) => void;
-    onRemoveConnection: (connection: RemoteConnection) => void;
-    onSyncRemoteFolders: (connection: RemoteConnection) => void;
+    onSelectConnection: (connection: Connection) => void;
+    onEditConnection: (newConnection: Connection, oldConnection?: Connection) => void;
+    onRemoveConnection: (connection: Connection) => void;
+    onSyncRemoteFolders: (connection: Connection) => void;
 }
 
 const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({

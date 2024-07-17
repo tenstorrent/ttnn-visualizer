@@ -7,28 +7,14 @@ import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
 import isLocalFolderOutdated from '../../functions/isLocalFolderOutdated';
-
-interface RemoteConnection {
-    name: string;
-    host: string;
-    port: number;
-    path: string;
-}
-
-interface RemoteFolder {
-    testName: string;
-    remotePath: string;
-    localPath: string;
-    lastModified: string;
-    lastSynced?: string;
-}
+import { Connection, ReportFolder } from '../../hooks/useRemote';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
     timeStyle: 'short',
 });
 
-const formatRemoteFolderName = (folder?: RemoteFolder, connection?: RemoteConnection) => {
+const formatRemoteFolderName = (folder?: ReportFolder, connection?: Connection) => {
     if (!folder) {
         return 'n/a';
     }
@@ -41,13 +27,13 @@ const formatRemoteFolderName = (folder?: RemoteFolder, connection?: RemoteConnec
 };
 
 const filterFolders =
-    (connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
+    (connection?: Connection): ItemPredicate<ReportFolder> =>
     (query, folder) => {
         return formatRemoteFolderName(folder, connection).toLowerCase().includes(query.toLowerCase());
     };
 
 const remoteFolderRenderer =
-    (syncingFolderList: boolean, connection?: RemoteConnection): ItemRenderer<RemoteFolder> =>
+    (syncingFolderList: boolean, connection?: Connection): ItemRenderer<ReportFolder> =>
     (folder, { handleClick, modifiers }) => {
         if (!modifiers.matchesPredicate) {
             return null;
@@ -110,14 +96,14 @@ const remoteFolderRenderer =
     };
 
 interface RemoteFolderSelectorProps {
-    remoteFolder?: RemoteFolder;
-    remoteFolders?: RemoteFolder[];
-    remoteConnection?: RemoteConnection;
+    remoteFolder?: ReportFolder;
+    remoteFolders?: ReportFolder[];
+    remoteConnection?: Connection;
     loading?: boolean;
     updatingFolderList?: boolean;
     fallbackLabel?: string;
     icon?: string;
-    onSelectFolder: (folder: RemoteFolder) => void;
+    onSelectFolder: (folder: ReportFolder) => void;
 }
 
 const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = ({
