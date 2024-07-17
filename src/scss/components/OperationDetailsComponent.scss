@@ -5,6 +5,33 @@
 @use '../definitions/colours' as *;
 
 .operation-details-component {
+    a, a:active, a:visited {
+        color: $link-color;
+        margin: 0;
+        padding: 2px 0;
+
+        transition: color 150ms linear, background-color 150ms linear;
+        transition-delay: 10ms;
+
+        &.current {
+            color: initial;
+            cursor: default;
+            &:before{
+                display: inline-block;
+                content: "\2794";
+                margin-right: 5px;
+                color: $tt-yellow;
+            }
+        }
+    }
+
+    a:hover:not(.current) {
+        color: $tt-black;
+        background-color: $link-color;
+        transition: color 0ms linear, background-color 0ms linear;
+
+    }
+
     .l1-memory-renderer {
         &.empty-plot {
             opacity: 0.4;
@@ -13,6 +40,31 @@
         .l1-memory-plot {
             width: 100%;
             height: 110px;
+        }
+    }
+
+    .plot-tensor-details {
+        display: inline-grid;
+        grid-template-columns: 1fr auto;
+        align-items: start;
+        gap: 25px;
+    }
+
+    .producer-consumer {
+        &.hidden {
+            display: none;
+        }
+
+        .title {
+            font-size: 18px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .operation-link {
+            margin-left: #{14px+8px};
+            margin-bottom: 3px;
         }
     }
 

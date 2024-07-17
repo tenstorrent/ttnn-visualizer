@@ -8,12 +8,14 @@ export interface TensorDetailsComponentProps {
     tensor: TensorData;
     selectedAddress: number | null;
     memorySize: number;
+    onTensorClick: (tensorId: number) => void;
 }
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     tensor,
     selectedAddress = null,
     memorySize,
+    onTensorClick,
 }) => {
     return (
         <div
@@ -27,10 +29,17 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         'empty-tensor': tensor.address === null,
                     })}
                     style={{
-                        backgroundColor: getBufferColor(tensor.address, tensor.tensor_id),
+                        backgroundColor: getBufferColor(tensor.address),
                     }}
                 />
-                <h4>Tensor ID: {tensor.tensor_id}</h4>
+                <h4
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => {
+                        onTensorClick(tensor.tensor_id);
+                    }}
+                >
+                    Tensor ID: {tensor.tensor_id}
+                </h4>
 
                 <span className='format-numbers'>{prettyPrintAddress(tensor.address, memorySize)}</span>
             </div>
