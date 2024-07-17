@@ -80,6 +80,12 @@ const RemoteSyncConfigurator: FC = () => {
         }
     };
 
+    const isViewReportDisabled =
+        isSyncingRemoteFolder ||
+        isLoadingFolderList ||
+        remoteFolderList?.length === 0 ||
+        (selectedRemoteFolder && isLocalFolderOutdated(selectedRemoteFolder));
+
     useEffect(() => {
         (async () => {
             try {
@@ -244,12 +250,7 @@ const RemoteSyncConfigurator: FC = () => {
                     </Tooltip>
 
                     <Button
-                        disabled={
-                            isSyncingRemoteFolder ||
-                            isLoadingFolderList ||
-                            remoteFolderList?.length === 0 ||
-                            (selectedRemoteFolder && isLocalFolderOutdated(selectedRemoteFolder))
-                        }
+                        disabled={isViewReportDisabled}
                         onClick={viewReport}
                         icon={IconNames.EYE_OPEN}
                     >
