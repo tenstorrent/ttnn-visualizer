@@ -68,7 +68,9 @@ const useRemoteConnection = () => {
             throw new Error('No connection provided');
         }
 
-        return axios.post<Connection, ReportFolder[]>(`${import.meta.env.VITE_API_ROOT}/remote/folder`, connection);
+        const response = await axios.post<ReportFolder[]>(`${import.meta.env.VITE_API_ROOT}/remote/folder`, connection);
+
+        return response.data;
     };
 
     const syncRemoteFolder = async (connection?: Connection, remoteFolder?: ReportFolder) => {
@@ -97,8 +99,8 @@ const useRemoteConnection = () => {
         get savedConnectionList() {
             return JSON.parse(getAppConfig('remoteConnections') ?? '[]') as Connection[];
         },
-        set savedConnectionList(connections: Connection[]) {
-            setAppConfig('remoteConnections', JSON.stringify(connections));
+        set savedConnectionList(connectionList: Connection[]) {
+            setAppConfig('remoteConnections', JSON.stringify(connectionList));
         },
         get selectedConnection() {
             const savedSelectedConnection = JSON.parse(getAppConfig('selectedConnection') ?? 'null');

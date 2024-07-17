@@ -6,7 +6,7 @@ const isLocalFolderOutdated = (folder: ReportFolder) => {
     }
 
     const lastSynced = new Date(folder.lastSynced);
-    const lastModified = new Date(parseInt(folder.lastModified, 10));
+    const lastModified = new Date(folder.lastModified);
 
     return lastModified > lastSynced;
 };
