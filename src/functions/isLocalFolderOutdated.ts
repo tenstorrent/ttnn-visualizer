@@ -1,6 +1,6 @@
-import { RemoteFolder } from '../hooks/useRemote';
+import { ReportFolder } from '../hooks/useRemote';
 
-const isLocalFolderOutdated = (folder: RemoteFolder) => {
+const isLocalFolderOutdated = (folder: ReportFolder) => {
     if (!folder.lastSynced) {
         return true;
     }
