@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 import 'styles/components/OperationArguments.scss';
+import { ScrollToOptions } from '@tanstack/react-virtual';
 import ExpandableTensor from './ExpandableTensor';
 
 interface Arguments {
@@ -11,10 +12,12 @@ interface Arguments {
 
 interface OperationArgumentsProps {
     operationId: number;
+    operationIndex: number;
     data: Array<Arguments>;
+    scrollTo: (index: number, { align, behavior }: ScrollToOptions) => void;
 }
 
-function OperationArguments({ operationId, data }: OperationArgumentsProps) {
+function OperationArguments({ operationId, operationIndex, data, scrollTo }: OperationArgumentsProps) {
     return (
         <table className='operation-arguments'>
             <caption>Arguments</caption>
@@ -22,7 +25,15 @@ function OperationArguments({ operationId, data }: OperationArgumentsProps) {
                 {data?.map((arg) => (
                     <tr key={`${operationId}-${arg.name}`}>
                         <td>{arg.name}</td>
-                        {isLengthyTensor(arg.value) ? <ExpandableTensor tensor={arg.value} /> : <td>{arg.value}</td>}
+                        {isLengthyTensor(arg.value) ? (
+                            <ExpandableTensor
+                                tensor={arg.value}
+                                operationIndex={operationIndex}
+                                scrollTo={scrollTo}
+                            />
+                        ) : (
+                            <td>{arg.value}</td>
+                        )}
                     </tr>
                 ))}
             </tbody>
