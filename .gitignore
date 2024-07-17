@@ -34,4 +34,5 @@ myenv
 *.key
 
 # Backend
-/backend/data
+backend/data
+
