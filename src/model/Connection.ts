@@ -23,7 +23,7 @@ export interface ReportFolder {
     testName: string;
     remotePath: string;
     localPath: string;
-    lastModified: string;
+    lastModified: number;
     lastSynced?: string;
 }
 

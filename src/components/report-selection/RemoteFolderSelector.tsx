@@ -14,7 +14,7 @@ const formatter = new Intl.DateTimeFormat('en-US', {
     timeStyle: 'short',
 });
 
-const formatRemoteFolderName = (folder?: ReportFolder, connection?: Connection) => {
+const formatReportFolderName = (folder?: ReportFolder, connection?: Connection) => {
     if (!folder) {
         return 'n/a';
     }
@@ -29,7 +29,7 @@ const formatRemoteFolderName = (folder?: ReportFolder, connection?: Connection) 
 const filterFolders =
     (connection?: Connection): ItemPredicate<ReportFolder> =>
     (query, folder) => {
-        return formatRemoteFolderName(folder, connection).toLowerCase().includes(query.toLowerCase());
+        return formatReportFolderName(folder, connection).toLowerCase().includes(query.toLowerCase());
     };
 
 const remoteFolderRenderer =
@@ -85,9 +85,9 @@ const remoteFolderRenderer =
                 className='remote-folder-item'
                 active={modifiers.active}
                 disabled={modifiers.disabled}
-                key={`${formatRemoteFolderName(folder, connection)}${lastSynced ?? lastModified}`}
+                key={`${formatReportFolderName(folder, connection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
-                text={formatRemoteFolderName(folder)}
+                text={formatReportFolderName(folder)}
                 // @ts-expect-error - Hack abusing label, it actually works.
                 label={statusIcon}
                 labelClassName='remote-folder-status-icon'
@@ -97,7 +97,7 @@ const remoteFolderRenderer =
 
 interface RemoteFolderSelectorProps {
     remoteFolder?: ReportFolder;
-    remoteFolders?: ReportFolder[];
+    remoteFolderList?: ReportFolder[];
     remoteConnection?: Connection;
     loading?: boolean;
     updatingFolderList?: boolean;
@@ -108,7 +108,7 @@ interface RemoteFolderSelectorProps {
 
 const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = ({
     remoteFolder,
-    remoteFolders = [],
+    remoteFolderList = [],
     remoteConnection,
     loading = false,
     updatingFolderList = false,
@@ -121,7 +121,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
         <div className='buttons-container'>
             <Select
                 className='remote-folder-select'
-                items={remoteFolders ?? []}
+                items={remoteFolderList ?? []}
                 itemRenderer={remoteFolderRenderer(updatingFolderList, remoteConnection)}
                 filterable
                 itemPredicate={filterFolders(remoteConnection)}
@@ -132,14 +132,14 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
                         roleStructure='listoption'
                     />
                 }
-                disabled={loading || remoteFolders?.length === 0}
+                disabled={loading || remoteFolderList?.length === 0}
                 onItemSelect={onSelectFolder}
             >
                 <Button
                     icon={icon as IconName}
-                    rightIcon={remoteFolders && remoteFolders?.length > 0 ? IconNames.CARET_DOWN : undefined}
-                    disabled={loading || remoteFolders?.length === 0}
-                    text={remoteFolder ? formatRemoteFolderName(remoteFolder, remoteConnection) : fallbackLabel}
+                    rightIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
+                    disabled={loading || remoteFolderList?.length === 0}
+                    text={remoteFolder ? formatReportFolderName(remoteFolder, remoteConnection) : fallbackLabel}
                 />
             </Select>
 

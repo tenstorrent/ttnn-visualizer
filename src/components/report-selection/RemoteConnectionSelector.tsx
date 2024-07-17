@@ -38,19 +38,19 @@ const renderRemoteConnection: ItemRenderer<Connection> = (connection, { handleCl
 };
 
 interface RemoteConnectionSelectorProps {
-    connections: Connection[];
+    connectionList: Connection[];
     connection?: Connection;
     disabled: boolean;
     loading: boolean;
     offline: boolean;
     onSelectConnection: (connection: Connection) => void;
-    onEditConnection: (newConnection: Connection, oldConnection?: Connection) => void;
+    onEditConnection: (updatedConnection: Connection, currentConnection?: Connection) => void;
     onRemoveConnection: (connection: Connection) => void;
-    onSyncRemoteFolders: (connection: Connection) => void;
+    onSyncRemoteFolderList: (connection: Connection) => void;
 }
 
 const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
-    connections,
+    connectionList,
     connection,
     disabled,
     loading,
@@ -58,16 +58,16 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
     onSelectConnection,
     onEditConnection,
     onRemoveConnection,
-    onSyncRemoteFolders,
+    onSyncRemoteFolderList,
 }) => {
     const [isEditdialogOpen, setIsEditDialogOpen] = useState(false);
-    const selectedConnection = connection ?? connections[0];
+    const selectedConnection = connection ?? connectionList[0];
 
     return (
         <div className='buttons-container'>
             <Select
                 className='remote-connection-select'
-                items={connections}
+                items={connectionList}
                 itemRenderer={renderRemoteConnection}
                 disabled={disabled}
                 filterable
@@ -122,7 +122,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                 disabled={disabled || !selectedConnection}
                 loading={loading}
                 text='Fetch remote folders list'
-                onClick={() => onSyncRemoteFolders(selectedConnection)}
+                onClick={() => onSyncRemoteFolderList(selectedConnection)}
             />
         </div>
     );
