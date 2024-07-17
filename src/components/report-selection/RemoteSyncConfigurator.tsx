@@ -13,6 +13,7 @@ import AddRemoteConnection from './AddRemoteConnection';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import ROUTES from '../../definitions/routes';
+import isLocalFolderOutdated from '../../functions/isLocalFolderOutdated';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
@@ -27,15 +28,11 @@ const RemoteSyncConfigurator: FC = () => {
     const [isRemoteOffline, setIsRemoteOffline] = useState(false);
     const [selectedRemoteFolder, setSelectedRemoteFolder] = useState<RemoteFolder | undefined>(remoteFolders[0]);
 
-    const updateSelectedFolder = (folder?: RemoteFolder) => {
-        setSelectedRemoteFolder(folder);
-    };
-
     const updateSelectedConnection = (connection: RemoteConnection) => {
         remote.persistentState.selectedConnection = connection;
         setRemoteFolders(remote.persistentState.getSavedRemoteFolders(connection));
 
-        updateSelectedFolder(remote.persistentState.getSavedRemoteFolders(connection)[0]);
+        setSelectedRemoteFolder(remote.persistentState.getSavedRemoteFolders(connection)[0]);
     };
 
     const updateSavedRemoteFolders = (connection: RemoteConnection | undefined, updatedFolders: RemoteFolder[]) => {
@@ -76,7 +73,7 @@ const RemoteSyncConfigurator: FC = () => {
                 selectedRemoteFolder,
             );
 
-            if (response.ok) {
+            if (response.status === 200) {
                 navigate(ROUTES.OPERATIONS);
             }
         }
@@ -147,7 +144,7 @@ const RemoteSyncConfigurator: FC = () => {
                         remote.persistentState.deleteSavedRemoteFolders(connection);
 
                         updateSelectedConnection(updatedConnections[0]);
-                        updateSelectedFolder(undefined);
+                        setSelectedRemoteFolder(undefined);
                     }}
                     onSelectConnection={async (connection) => {
                         try {
@@ -158,7 +155,7 @@ const RemoteSyncConfigurator: FC = () => {
                             const updatedFolders = updateSavedRemoteFolders(connection, fetchedRemoteFolders);
 
                             setIsRemoteOffline(false);
-                            updateSelectedFolder(updatedFolders[0]);
+                            setSelectedRemoteFolder(updatedFolders[0]);
                         } catch {
                             setIsRemoteOffline(true);
                         } finally {
@@ -178,7 +175,7 @@ const RemoteSyncConfigurator: FC = () => {
                                 savedRemotefolders,
                             );
 
-                            updateSelectedFolder(updatedfolders[0]);
+                            setSelectedRemoteFolder(updatedfolders[0]);
                         } catch {
                             // eslint-disable-next-line no-alert
                             alert('Unable to connect to remote server.');
@@ -200,7 +197,7 @@ const RemoteSyncConfigurator: FC = () => {
                     loading={isSyncingRemoteFolder || isLoadingFolderList}
                     updatingFolderList={isFetchingFolderStatus}
                     onSelectFolder={(folder) => {
-                        updateSelectedFolder(folder);
+                        setSelectedRemoteFolder(folder);
                     }}
                 >
                     <Tooltip content='Sync remote folder'>
@@ -234,7 +231,7 @@ const RemoteSyncConfigurator: FC = () => {
                                         savedRemoteFolders,
                                     );
 
-                                    updateSelectedFolder(selectedRemoteFolder);
+                                    setSelectedRemoteFolder(selectedRemoteFolder);
                                 } catch {
                                     // eslint-disable-next-line no-alert
                                     alert('Unable to sync remote folder');
@@ -246,7 +243,12 @@ const RemoteSyncConfigurator: FC = () => {
                     </Tooltip>
 
                     <Button
-                        disabled={isSyncingRemoteFolder || isLoadingFolderList || remoteFolders?.length === 0}
+                        disabled={
+                            isSyncingRemoteFolder ||
+                            isLoadingFolderList ||
+                            remoteFolders?.length === 0 ||
+                            (selectedRemoteFolder && isLocalFolderOutdated(selectedRemoteFolder))
+                        }
                         onClick={viewReport}
                         icon={IconNames.EYE_OPEN}
                     >

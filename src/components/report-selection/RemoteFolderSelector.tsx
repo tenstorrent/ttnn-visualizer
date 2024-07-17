@@ -6,6 +6,7 @@ import { Button, Icon, MenuItem, Spinner, Tooltip } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
+import isLocalFolderOutdated from '../../functions/isLocalFolderOutdated';
 
 interface RemoteConnection {
     name: string;
@@ -44,17 +45,6 @@ const filterFolders =
     (query, folder) => {
         return formatRemoteFolderName(folder, connection).toLowerCase().includes(query.toLowerCase());
     };
-
-const isLocalFolderOutdated = (folder: RemoteFolder) => {
-    if (!folder.lastSynced) {
-        return true;
-    }
-
-    const lastSynced = new Date(folder.lastSynced);
-    const lastModified = new Date(folder.lastModified);
-
-    return lastModified > lastSynced;
-};
 
 const remoteFolderRenderer =
     (syncingFolderList: boolean, connection?: RemoteConnection): ItemRenderer<RemoteFolder> =>

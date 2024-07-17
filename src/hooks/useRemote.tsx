@@ -2,7 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import axios from 'axios';
 import useAppConfig from './useAppConfig';
+import { MountRemoteFolderData, SyncRemoteFolderData } from '../model/Remote';
 
 export interface RemoteConnection {
     name: string;
@@ -50,7 +52,7 @@ const useRemoteConnection = () => {
             return connectionStatus;
         }
 
-        const response = await testFolderConnection(connection);
+        const response = await axios.post(`${import.meta.env.VITE_API_ROOT}/remote/test`, connection);
 
         if (response.status === 200) {
             connectionStatus = [
@@ -81,32 +83,15 @@ const useRemoteConnection = () => {
         return connectionStatus;
     };
 
-    const fetchFolderList = async (connection: Partial<RemoteConnection>) => {
-        try {
-            const response = await fetch(`${import.meta.env.VITE_API_ROOT}/remote/folder`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(connection),
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('Error during POST request:', error);
-            throw error;
-        }
-    };
     const listRemoteFolders = async (connection?: RemoteConnection) => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
 
-        return fetchFolderList(connection);
+        return axios.post<RemoteConnection, RemoteFolder[]>(
+            `${import.meta.env.VITE_API_ROOT}/remote/folder`,
+            connection,
+        );
     };
 
     const syncRemoteFolder = async (connection?: RemoteConnection, remoteFolder?: RemoteFolder) => {
@@ -117,31 +102,18 @@ const useRemoteConnection = () => {
         if (!remoteFolder) {
             throw new Error('No remote folder provided');
         }
-        if (!remoteFolder) {
-            throw new Error('No remote folder provided');
-        }
-        return fetch(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ connection, folder: remoteFolder }),
+
+        return axios.post<SyncRemoteFolderData>(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
+            connection,
+            folder: remoteFolder,
         });
     };
 
     const mountRemoteFolder = async (connection: RemoteConnection, remoteFolder: RemoteFolder) => {
-        const response = await fetch(`${import.meta.env.VITE_API_ROOT}/remote/use`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                connection,
-                folder: remoteFolder,
-            }),
+        return axios.post<MountRemoteFolderData>(`${import.meta.env.VITE_API_ROOT}/remote/use`, {
+            connection,
+            folder: remoteFolder,
         });
-
-        return response;
     };
 
     const persistentState = {
@@ -184,25 +156,5 @@ const useRemoteConnection = () => {
         persistentState,
     };
 };
-
-async function testFolderConnection(connection: Partial<RemoteConnection>) {
-    try {
-        const response = await fetch(`${import.meta.env.VITE_API_ROOT}/remote/test`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(connection),
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error!`);
-        }
-        return await response.json();
-    } catch (error) {
-        console.error('Error during POST request:', error);
-        throw error;
-    }
-}
 
 export default useRemoteConnection;
