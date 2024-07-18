@@ -5,7 +5,7 @@
 import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import SearchField from './SearchField';
@@ -23,19 +23,19 @@ const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
 
 const OperationList = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { data: fetchedOperations, error, isLoading } = useOperationsList();
+    const scrollElementRef = useRef(null);
+
     const [filterQuery, setFilterQuery] = useState('');
     const [filteredOperationsList, setFilteredOperationsList] = useState<Operation[]>([]);
-    const [expandedOperations, setExpandedOperations] = useState<number[]>([]);
+    const [expandedOperations, setExpandedOperations] = useState<number[]>(location.state?.expandedOperations || []);
     const [shouldSortDescending, setShouldSortDescending] = useState(false);
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
 
-    const { data: fetchedOperations, error, isLoading } = useOperationsList();
-    const location = useLocation();
-    const navigate = useNavigate();
-
-    const scrollElementRef = useRef(null);
     const virtualizer = useVirtualizer({
         count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => scrollElementRef.current,
@@ -126,6 +126,7 @@ const OperationList = () => {
                     searchQuery={filterQuery}
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
+
                 <ButtonGroup minimal>
                     <Tooltip
                         content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
@@ -136,6 +137,7 @@ const OperationList = () => {
                             rightIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
                         />
                     </Tooltip>
+
                     <Tooltip
                         content={shouldSortDescending ? 'Sort ascending' : 'Sort descending'}
                         placement={PopoverPosition.TOP}
@@ -222,15 +224,18 @@ const OperationList = () => {
                                             }
                                             keepChildrenMounted={false}
                                             additionalElements={
-                                                <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
-                                                    <Button
-                                                        title='Buffer view'
-                                                        minimal
-                                                        small
-                                                        className='buffer-view'
-                                                        icon={IconNames.SEGMENTED_CONTROL}
-                                                    />
-                                                </Link>
+                                                <Button
+                                                    title='Buffer view'
+                                                    minimal
+                                                    small
+                                                    className='buffer-view'
+                                                    icon={IconNames.SEGMENTED_CONTROL}
+                                                    onClick={() =>
+                                                        navigate(`${ROUTES.OPERATIONS}/${operation.id}`, {
+                                                            state: { expandedOperations },
+                                                        })
+                                                    }
+                                                />
                                             }
                                             isOpen={expandedOperations.includes(operation.id)}
                                         >
@@ -238,7 +243,9 @@ const OperationList = () => {
                                                 {operation.arguments && (
                                                     <OperationArguments
                                                         operationId={operation.id}
+                                                        operationIndex={virtualRow.index}
                                                         data={operation.arguments}
+                                                        scrollTo={virtualizer.scrollToIndex}
                                                     />
                                                 )}
                                             </div>

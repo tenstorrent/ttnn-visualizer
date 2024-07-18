@@ -1,7 +1,7 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
 import 'styles/components/OperationDetailsNavigation.scss';
 import ROUTES from '../definitions/routes';
@@ -15,27 +15,33 @@ interface OperationDetailsNavigationProps {
 
 function OperationDetailsNavigation({ operationId, isFullStackTrace, isLoading }: OperationDetailsNavigationProps) {
     const navigate = useNavigate();
+    const location = useLocation();
     const { operation } = useOperationDetails(operationId);
     const previousOperation = usePreviousOperation(operationId);
     const nextOperation = useNextOperation(operationId);
 
+    const expandedOperations = useMemo(
+        () => location.state?.expandedOperations || [],
+        [location.state?.expandedOperations],
+    );
+
     const navigateToPreviousOperation = useCallback(() => {
-        navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`, { state: { isFullStackTrace } });
-    }, [navigate, previousOperation, isFullStackTrace]);
+        navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`, { state: { isFullStackTrace, expandedOperations } });
+    }, [navigate, previousOperation, isFullStackTrace, expandedOperations]);
 
     const navigateToNextOperation = useCallback(() => {
-        navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`, { state: { isFullStackTrace } });
-    }, [navigate, nextOperation, isFullStackTrace]);
+        navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`, { state: { isFullStackTrace, expandedOperations } });
+    }, [navigate, nextOperation, isFullStackTrace, expandedOperations]);
 
     useEffect(() => {
         const handleKeyPress = (e: KeyboardEvent) => {
             const { key } = e;
 
-            if (key === 'ArrowLeft') {
+            if (key === 'ArrowLeft' && previousOperation) {
                 navigateToPreviousOperation();
             }
 
-            if (key === 'ArrowRight') {
+            if (key === 'ArrowRight' && nextOperation) {
                 navigateToNextOperation();
             }
         };
@@ -45,7 +51,7 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace, isLoading }
         return () => {
             window.document.removeEventListener('keyup', handleKeyPress);
         };
-    }, [navigateToPreviousOperation, navigateToNextOperation]);
+    }, [navigateToPreviousOperation, navigateToNextOperation, previousOperation, nextOperation]);
 
     return (
         <nav className='operation-details-navigation'>
@@ -70,7 +76,12 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace, isLoading }
                     <Button
                         icon={IconNames.LIST}
                         onClick={() =>
-                            navigate(`${ROUTES.OPERATIONS}`, { state: { previousOperationId: operationId } })
+                            navigate(`${ROUTES.OPERATIONS}`, {
+                                state: {
+                                    previousOperationId: operationId,
+                                    expandedOperations,
+                                },
+                            })
                         }
                         outlined
                     />

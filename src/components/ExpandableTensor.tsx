@@ -2,14 +2,17 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 import { Switch } from '@blueprintjs/core';
+import { ScrollToOptions } from '@tanstack/react-virtual';
 import { useRef, useState } from 'react';
 import 'styles/components/ExpandableTensor.scss';
 
 interface ExpandableTensorProps {
     tensor: string;
+    operationIndex: number;
+    scrollTo: (index: number, { align, behavior }: ScrollToOptions) => void;
 }
 
-function ExpandableTensor({ tensor }: ExpandableTensorProps) {
+function ExpandableTensor({ tensor, operationIndex, scrollTo }: ExpandableTensorProps) {
     const [isExpanded, setIsExpanded] = useState(false);
     const splitTensor = tensor.split('\n');
     const cellRef = useRef<null | HTMLTableCellElement>(null);
@@ -18,18 +21,25 @@ function ExpandableTensor({ tensor }: ExpandableTensorProps) {
         setIsExpanded((previousValue) => !previousValue);
 
         if (shouldScrollTo && cellRef.current && !isElementCompletelyInViewPort(cellRef.current)) {
-            cellRef.current.scrollIntoView();
+            // Looks better if we scroll to the previous index
+            scrollTo(operationIndex - 1, {
+                align: 'start',
+            });
         }
     };
 
     return (
-        <td className='expandable-tensor' ref={cellRef}>
+        <td
+            className='expandable-tensor'
+            ref={cellRef}
+        >
             <Switch
                 className='expand-button'
                 label={isExpanded ? 'Hide full tensor' : 'Show full tensor'}
                 onChange={() => handleExpandToggle()}
                 checked={isExpanded}
             />
+
             {isExpanded ? (
                 <>
                     <pre className='full-tensor'>{tensor}</pre>
