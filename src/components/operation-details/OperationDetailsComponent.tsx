@@ -112,7 +112,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
             <div className='operation-details-component'>
                 <StackTrace
-                    stackTrace={details.stack_traces[0].stack_trace}
+                    stackTrace={details.stack_trace}
                     isFullStackTrace={isFullStackTrace}
                     toggleStackTraceHandler={setIsFullStackTrace}
                 />

@@ -17,7 +17,9 @@ interface StackTraceProps {
 
 function StackTrace({ stackTrace, isFullStackTrace, toggleStackTraceHandler }: StackTraceProps) {
     const stackTraceWithHighlights = useMemo(() => hljs.highlight(stackTrace, { language: 'python' }), [stackTrace]);
-
+    if (!stackTrace) {
+        return null;
+    }
     return (
         <pre className='stack-trace'>
             {isFullStackTrace ? (

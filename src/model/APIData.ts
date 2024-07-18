@@ -22,18 +22,13 @@ export interface BufferData {
     buffer_type: number;
 }
 
-export interface StackTraceData {
-    operation_id: number;
-    stack_trace: string;
-}
-
 export interface OperationDetailsData {
     operation_id: number;
     input_tensors: TensorData[];
     output_tensors: TensorData[];
     buffers: BufferData[];
     l1_sizes: number[];
-    stack_traces: StackTraceData[];
+    stack_trace: string;
 }
 
 export interface Chunk {

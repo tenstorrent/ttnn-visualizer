@@ -2,7 +2,7 @@ import { PlotData } from 'plotly.js';
 import { Operation } from './Graph';
 import { getBufferColor } from '../functions/colorGenerator';
 import { formatSize, toHex } from '../functions/math';
-import { BufferData, Chunk, FragmentationEntry, OperationDetailsData, StackTraceData, TensorData } from './APIData';
+import { BufferData, Chunk, FragmentationEntry, OperationDetailsData, TensorData } from './APIData';
 
 export enum BufferType {
     L1 = 1,
@@ -20,7 +20,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     l1_sizes: number[];
 
-    stack_traces: StackTraceData[];
+    stack_trace: string
 
     tensorList: TensorData[];
 
@@ -30,7 +30,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.outputs = data.output_tensors;
         this.buffers = data.buffers;
         this.l1_sizes = data.l1_sizes;
-        this.stack_traces = data.stack_traces;
+        this.stack_trace = data.stack_trace;
 
         const { inputs, outputs } = this;
 

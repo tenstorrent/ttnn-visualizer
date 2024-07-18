@@ -115,7 +115,7 @@ class OperationDetails(BaseModel):
     buffers: List[Buffer]
     l1_sizes: List[int]
     # buffer_pages: List[BufferPage]
-    stack_traces: List[StackTrace]
+    stack_trace: str
 
 
 class GlyphData(BaseModel):
@@ -393,11 +393,10 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
     for device in device_data:
         l1_sizes[device['device_id']] = device['worker_l1_size']
 
-    # Fetch stack trace
-    stack_trace_query = select(stack_traces).where(stack_traces.c.operation_id == operation_id)
-    stack_trace_results = db.execute(stack_trace_query).mappings().all()
-
-    stack_traces_list = [StackTrace(**row) for row in stack_trace_results]
+        # Fetch stack trace
+        stack_trace_query = select(stack_traces).where(stack_traces.c.operation_id == operation_id)
+        stack_trace_result = db.execute(stack_trace_query).mappings().first()
+        stack_trace = stack_trace_result['stack_trace'] if stack_trace_result else ""
 
     return OperationDetails(
         operation_id=operation_id,
@@ -405,7 +404,7 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
         output_tensors=output_tensors_list,
         buffers=buffers_list,
         l1_sizes=l1_sizes,
-        stack_traces=stack_traces_list
+        stack_trace=stack_trace
     )
 
 
