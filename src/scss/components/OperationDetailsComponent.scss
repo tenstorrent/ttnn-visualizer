@@ -134,6 +134,10 @@
             &.dimmed {
                 opacity: 0.5;
             }
+
+            h4{
+                cursor: pointer;
+            }
         }
 
         .tensor-name {

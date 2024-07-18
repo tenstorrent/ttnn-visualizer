@@ -4,6 +4,11 @@ import { getBufferColor } from '../functions/colorGenerator';
 import { formatSize, toHex } from '../functions/math';
 import { BufferData, Chunk, FragmentationEntry, OperationDetailsData, StackTraceData, TensorData } from './APIData';
 
+export enum BufferType {
+    L1 = 1,
+    DRAM = 2,
+}
+
 export class OperationDetails implements Partial<OperationDetailsData> {
     id: number;
 
@@ -111,12 +116,16 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         };
     }
 
+    /**
+     * Get memory data for the operation L1 only
+     * TODO: add DRAM buffer types and create separation
+     */
     get memoryData(): { chartData: Partial<PlotData>[]; memory: Chunk[]; fragmentation: FragmentationEntry[] } {
         const { buffers } = this;
         const fragmentation: FragmentationEntry[] = [];
         const memory: Chunk[] =
             buffers
-                .filter((buffer: BufferData) => buffer.buffer_type === 1)
+                .filter((buffer: BufferData) => buffer.buffer_type === BufferType.L1)
                 .map((buffer: BufferData) => {
                     return {
                         address: buffer.address,

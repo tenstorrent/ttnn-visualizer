@@ -131,7 +131,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                     chartData={previousChartData}
                     isZoomedIn={zoomedInView}
                     memorySize={memorySize}
-                    // onBufferClick={onPreviousBufferClick}
                 />
 
                 <L1MemoryRenderer

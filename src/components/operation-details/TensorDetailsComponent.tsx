@@ -33,7 +33,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     }}
                 />
                 <h4
-                    style={{ cursor: 'pointer' }}
                     onClick={() => {
                         onTensorClick(tensor.tensor_id);
                     }}
