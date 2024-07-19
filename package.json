@@ -10,8 +10,7 @@
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
     "flask:start": "python -m backend.main",
-    "docker:build:backend": "docker build -t backend backend",
-    "docker:run:backend": "docker run --rm -p 8000:8000 backend:latest"
+    "compose:up" : "docker-compose up web --build"
   },
   "dependencies": {
     "@blueprintjs/core": "^5.10.3",
