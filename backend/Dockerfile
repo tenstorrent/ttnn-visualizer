@@ -3,4 +3,4 @@ WORKDIR /api
 COPY ./requirements.txt /api/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /api/requirements.txt
 COPY ./ /api/
-CMD ["gunicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["gunicorn", "-c ./config/gunicorn.py", "main:app"]
