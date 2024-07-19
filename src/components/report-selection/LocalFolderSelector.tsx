@@ -4,20 +4,13 @@
 
 import { Button, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { type FC, useState } from 'react';
+import { type FC, useEffect, useState } from 'react';
 
 import 'styles/components/FolderPicker.scss';
-import { FileWithDirectoryAndFileHandle, directoryOpen } from 'browser-fs-access';
+import { useNavigate } from 'react-router';
 import { ConnectionStatus, ConnectionTestStates } from '../../model/Connection';
-
-const OPEN_FOLDER_OPTIONS = {
-    recursive: false,
-    id: 'projects',
-};
-
-interface LocalFile extends FileWithDirectoryAndFileHandle {
-    webkitRelativePath: string;
-}
+import ROUTES from '../../definitions/routes';
+import useLocalConnection from '../../hooks/useLocal';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -34,38 +27,41 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 };
 
 const LocalFolderOptions: FC = () => {
-    const [status, setStatus] = useState<ConnectionTestStates | undefined>();
-    const [message, setMessage] = useState<string | undefined>();
+    const navigate = useNavigate();
+    const { uploadLocalFolder, selectDirectory } = useLocalConnection();
+    const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
+    const [isUploading, setIsUploading] = useState(false);
 
     const handleDirectoryOpen = async () => {
-        const files = (await directoryOpen(OPEN_FOLDER_OPTIONS)) as LocalFile[];
+        const files = await selectDirectory();
         const connectionStatus: ConnectionStatus = {
             status: ConnectionTestStates.FAILED,
             message: 'Some kind of error with this',
         };
 
-        // TODO: Confirm this is the correct way to POST files
-        // let response = await axios.post('/api/local/directory', files, {
-        //     headers: {
-        //         'Content-Type': 'multipart/form-data',
-        //     },
-        // });
+        setIsUploading(true);
 
-        const response = {
-            status: 200,
-            message: 'all good chum',
-        };
+        // TODO: Confirm this is the correct way to POST files
+        const response = await uploadLocalFolder(files);
 
         if (response.status === 200) {
             connectionStatus.status = ConnectionTestStates.OK;
             connectionStatus.message = 'Files uploaded successful';
         }
 
-        // TODO: Handle other errors more betterly
-
-        setStatus(connectionStatus.status);
-        setMessage(connectionStatus.message);
+        // TODO: Handle errors more betterly
+        setIsUploading(false);
+        setFolderStatus(connectionStatus);
     };
+
+    useEffect(() => {
+        if (isUploading) {
+            setFolderStatus({
+                status: ConnectionTestStates.PROGRESS,
+                message: 'Files uploading...',
+            });
+        }
+    }, [isUploading]);
 
     return (
         <FormGroup
@@ -80,15 +76,24 @@ const LocalFolderOptions: FC = () => {
                 >
                     Open Directory
                 </Button>
-                {status && message && (
-                    <div className={`verify-connection-item status-${ConnectionTestStates[status]}`}>
+
+                <Button
+                    disabled={folderStatus?.status !== ConnectionTestStates.OK}
+                    onClick={() => navigate(ROUTES.OPERATIONS)}
+                    icon={IconNames.EYE_OPEN}
+                >
+                    View report
+                </Button>
+
+                {folderStatus && (
+                    <div className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}>
                         <Icon
                             className='connection-status-icon'
-                            icon={ICON_MAP[status]}
+                            icon={ICON_MAP[folderStatus.status]}
                             size={20}
-                            intent={INTENT_MAP[status]}
+                            intent={INTENT_MAP[folderStatus.status]}
                         />
-                        <span className='connection-status-text'>{message}</span>
+                        <span className='connection-status-text'>{folderStatus.message}</span>
                     </div>
                 )}
             </div>
