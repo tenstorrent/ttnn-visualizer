@@ -20,9 +20,6 @@ USER python
 
 COPY --chown=python:python ./requirements.txt ./
 COPY --chown=python:python ./bin/ ./bin
-RUN mkdir -p ./config
-COPY ./config/gunicorn.py /app/config/gunicorn
-
 
 RUN chmod 0755 bin/* && bin/pip3-install
 
