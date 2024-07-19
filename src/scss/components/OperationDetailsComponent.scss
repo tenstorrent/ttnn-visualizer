@@ -14,7 +14,7 @@
         transition-delay: 10ms;
 
         &.current {
-            color: initial;
+            color: $tt-white-text;
             cursor: default;
             &:before{
                 display: inline-block;
