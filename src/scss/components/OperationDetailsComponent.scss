@@ -18,9 +18,8 @@
             cursor: default;
             &:before{
                 display: inline-block;
-                content: "\2794";
+                content: "\2714"; // checkmark
                 margin-right: 5px;
-                color: $tt-yellow;
             }
         }
     }
