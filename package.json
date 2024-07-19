@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\""
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
+    "docker:build:backend": "docker build -t backend backend"
   },
   "dependencies": {
     "@blueprintjs/core": "^5.10.3",
