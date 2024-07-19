@@ -378,3 +378,6 @@ if os.environ.get("FLASK_ENV", "development") == "production":
     parent_dir = pathlib.Path(__file__).parent.parent.resolve()
     dist_dir = pathlib.Path(parent_dir, "/public")
     app.mount("/", StaticFiles(directory=dist_dir, html=True))
+else:
+    if __name__ == "__main__":
+        uvicorn.run(app, host="0.0.0.0", port=8000)
