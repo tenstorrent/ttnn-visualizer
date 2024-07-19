@@ -6,7 +6,6 @@ import { Button, MenuItem } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
-import { useNavigate } from 'react-router';
 
 interface RemoteConnection {
     name: string;
@@ -28,10 +27,6 @@ interface RemoteFolder {
     lastSynced?: string;
 }
 
-const formatter = new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'long',
-    timeStyle: 'short',
-});
 
 const formatRemoteFolderName = (folder?: RemoteFolder, connection?: RemoteConnection) => {
     if (!folder) {
@@ -51,19 +46,9 @@ const filterFolders =
         return formatRemoteFolderName(folder, connection).toLowerCase().includes(query.toLowerCase());
     };
 
-const isLocalFolderOutdated = (folder: RemoteFolder) => {
-    if (!folder.lastSynced) {
-        return true;
-    }
-
-    const lastSynced = new Date(folder.lastSynced);
-    const lastModified = new Date(folder.lastModified);
-
-    return lastModified > lastSynced;
-};
 
 const remoteFolderRenderer =
-    (syncingFolderList: boolean, connection?: RemoteConnection): ItemRenderer<RemoteFolder> =>
+    (connection?: RemoteConnection): ItemRenderer<RemoteFolder> =>
     (folder, { handleClick, modifiers }) => {
         if (!modifiers.matchesPredicate) {
             return null;
@@ -143,20 +128,21 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     remoteFolders = [],
     remoteConnection,
     loading = false,
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-expect-error
     updatingFolderList = false,
     onSelectFolder,
     children,
     fallbackLabel = '(No selection)',
     icon = IconNames.FOLDER_OPEN,
 }) => {
-    const navigate = useNavigate();
 
     return (
         <div className='buttons-container'>
             <Select
                 className='remote-folder-select'
                 items={remoteFolders ?? []}
-                itemRenderer={remoteFolderRenderer(updatingFolderList, remoteConnection)}
+                itemRenderer={remoteFolderRenderer(remoteConnection)}
                 filterable
                 itemPredicate={filterFolders(remoteConnection)}
                 noResults={
