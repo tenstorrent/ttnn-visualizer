@@ -13,6 +13,7 @@ export interface L1MemoryRendererProps {
     plotZoomRangeStart?: number;
     plotZoomRangeEnd?: number;
     className?: string;
+    additionalReferences?: React.RefObject<HTMLDivElement>[];
 }
 
 const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
@@ -25,6 +26,7 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     onClickOutside,
     plotZoomRangeStart,
     plotZoomRangeEnd,
+    additionalReferences = [],
 }) => {
     const layout: Partial<Layout> = {
         height: 110,
@@ -82,7 +84,7 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
 
     const plotRef = useRef<HTMLDivElement>(null);
 
-    useOutsideClick(plotRef, onClickOutside);
+    useOutsideClick([plotRef, ...additionalReferences], onClickOutside);
 
     return (
         <div
