@@ -55,3 +55,8 @@ cd backend
 uvicorn main:app --reload 
 ```
 access on localhost:8000/
+
+## Docker 
+
+### Running project
+`docker-compose up web --build`

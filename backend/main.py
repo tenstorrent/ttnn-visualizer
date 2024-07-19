@@ -1,4 +1,7 @@
+import os
+
 from fastapi import FastAPI, HTTPException, Path, Request
+import pathlib
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -6,8 +9,19 @@ import httpx
 import uvicorn
 from typing import List, Optional, Dict
 import sqlalchemy
-from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, select
+from sqlalchemy import (
+    create_engine,
+    MetaData,
+    Table,
+    Column,
+    Integer,
+    String,
+    Float,
+    Text,
+    select,
+)
 from sqlalchemy.orm import sessionmaker
+from fastapi.staticfiles import StaticFiles
 
 DATABASE_URL = "sqlite:///./db.sqlite"
 
@@ -100,9 +114,11 @@ class GraphData(BaseModel):
     buffers: List[Buffer]
     buffer_pages: List[BufferPage]
 
+
 class StackTrace(BaseModel):
     operation_id: int
     stack_trace: str
+
 
 class OperationDetails(BaseModel):
     operation_id: int
@@ -129,6 +145,7 @@ class PlotData(BaseModel):
     l1_size: int
     memory_data: GlyphData
     buffer_data: GlyphData
+
 
 operations = Table(
     "operations",
@@ -227,7 +244,7 @@ stack_traces = Table(
     "stack_traces",
     metadata,
     Column("operation_id", Integer, primary_key=True),
-    Column("stack_trace", Text)
+    Column("stack_trace", Text),
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -254,22 +271,27 @@ async def get_operations():
     operations_query = select(operations)
     operations_list = db.execute(operations_query).fetchall()
 
-    operations_dict = {operation.operation_id: {
-        "id": operation.operation_id,
-        "name": operation.name,
-        "duration": operation.duration,
-        "arguments": []
-    } for operation in operations_list}
+    operations_dict = {
+        operation.operation_id: {
+            "id": operation.operation_id,
+            "name": operation.name,
+            "duration": operation.duration,
+            "arguments": [],
+        }
+        for operation in operations_list
+    }
 
     arguments_query = select(operation_arguments)
     arguments_list = db.execute(arguments_query).fetchall()
 
     for argument in arguments_list:
-        if not any(arg["name"] == argument.name for arg in operations_dict[argument.operation_id]["arguments"]):
-            operations_dict[argument.operation_id]["arguments"].append({
-                "name": argument.name,
-                "value": argument.value
-            })
+        if not any(
+            arg["name"] == argument.name
+            for arg in operations_dict[argument.operation_id]["arguments"]
+        ):
+            operations_dict[argument.operation_id]["arguments"].append(
+                {"name": argument.name, "value": argument.value}
+            )
 
     return list(operations_dict.values())
 
@@ -279,21 +301,29 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
     db = SessionLocal()
 
     # Fetch input tensors
-    input_query = select(input_tensors).where(input_tensors.c.operation_id == operation_id)
+    input_query = select(input_tensors).where(
+        input_tensors.c.operation_id == operation_id
+    )
     input_results = db.execute(input_query).mappings().all()
 
-    input_tensor_ids = [result['tensor_id'] for result in input_results]
-    input_tensors_query = select(tensors).where(tensors.c.tensor_id.in_(input_tensor_ids))
+    input_tensor_ids = [result["tensor_id"] for result in input_results]
+    input_tensors_query = select(tensors).where(
+        tensors.c.tensor_id.in_(input_tensor_ids)
+    )
     input_tensors_data = db.execute(input_tensors_query).mappings().all()
 
     input_tensors_list = [Tensor(**row) for row in input_tensors_data]
 
     # Fetch output tensors
-    output_query = select(output_tensors).where(output_tensors.c.operation_id == operation_id)
+    output_query = select(output_tensors).where(
+        output_tensors.c.operation_id == operation_id
+    )
     output_results = db.execute(output_query).mappings().all()
 
-    output_tensor_ids = [result['tensor_id'] for result in output_results]
-    output_tensors_query = select(tensors).where(tensors.c.tensor_id.in_(output_tensor_ids))
+    output_tensor_ids = [result["tensor_id"] for result in output_results]
+    output_tensors_query = select(tensors).where(
+        tensors.c.tensor_id.in_(output_tensor_ids)
+    )
     output_tensors_data = db.execute(output_tensors_query).mappings().all()
 
     output_tensors_list = [Tensor(**row) for row in output_tensors_data]
@@ -317,9 +347,9 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
 
     device_query = select(devices)
     device_data = db.execute(device_query).mappings().all()
-    l1_sizes = [None] * (max(device['device_id'] for device in device_data) + 1)
+    l1_sizes = [None] * (max(device["device_id"] for device in device_data) + 1)
     for device in device_data:
-        l1_sizes[device['device_id']] = device['worker_l1_size']
+        l1_sizes[device["device_id"]] = device["worker_l1_size"]
 
     # Fetch buffer pages
     # buffer_pages_query = select(buffer_pages).where(buffer_pages.c.operation_id == operation_id)
@@ -328,7 +358,9 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
     # buffer_pages_list = [BufferPage(**row) for row in buffer_pages_data]
 
     # Fetch stack trace
-    stack_trace_query = select(stack_traces).where(stack_traces.c.operation_id == operation_id)
+    stack_trace_query = select(stack_traces).where(
+        stack_traces.c.operation_id == operation_id
+    )
     stack_trace_results = db.execute(stack_trace_query).mappings().all()
 
     return OperationDetails(
@@ -337,32 +369,12 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
         output_tensors=output_tensors_list,
         buffers=buffers_list,
         l1_sizes=l1_sizes,
-        stack_traces=stack_trace_results
+        stack_traces=stack_trace_results,
     )
 
 
-# Middleware to proxy requests to Vite development server, excluding /api/* requests
-@app.middleware("http")
-async def proxy_middleware(request: Request, call_next):
-    if request.url.path.startswith("/api"):
-        response = await call_next(request)
-        return response
-
-    vite_url = f"http://localhost:5173{request.url.path}"
-    async with httpx.AsyncClient() as client:
-        try:
-            vite_response = await client.request(
-                method=request.method,
-                url=vite_url,
-                content=await request.body(),
-                headers=request.headers,
-                params=request.query_params,
-            )
-            headers = {k: v for k, v in vite_response.headers.items() if k.lower() != 'content-encoding'}
-            return StreamingResponse(vite_response.aiter_bytes(), headers=headers)
-        except httpx.RequestError as exc:
-            return JSONResponse(status_code=500, content={"message": f"Error connecting to Vite server: {exc}"})
-
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# TODO Parameterize dist location for dev
+if os.environ.get("FLASK_ENV", "development") == "production":
+    parent_dir = pathlib.Path(__file__).parent.parent.resolve()
+    dist_dir = pathlib.Path(parent_dir, "/public")
+    app.mount("/", StaticFiles(directory=dist_dir, html=True))

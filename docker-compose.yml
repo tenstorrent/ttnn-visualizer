@@ -5,14 +5,15 @@ x-app: &default-app
     args:
       - "UID=${UID:-1000}"
       - "GID=${GID:-1000}"
-      - "NODE_ENV=${NODE_ENV:-development}"
+      - "NODE_ENV=${NODE_ENV:-production}"
   env_file:
     - ".env"
   restart: "${DOCKER_RESTART_POLICY:-unless-stopped}"
   stop_grace_period: "3s"
   tty: true
-  volumes:
-    - "${DOCKER_WEB_VOLUME:-./public:/app/public}"
+  # TODO Add local dev config
+  # volumes:
+  #   - "${DOCKER_WEB_VOLUME:-./public:/app/public}"
 
 services:
   web:
