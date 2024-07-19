@@ -25,4 +25,4 @@ dist-ssr
 
 myenv
 **.sqlite
-backend/__pycache__/*
+**/__pycache__/
