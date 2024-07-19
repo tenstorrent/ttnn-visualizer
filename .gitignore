@@ -25,4 +25,12 @@ dist-ssr
 
 myenv
 **.sqlite
-backend/__pycache__/*
+**/__pycache__/
+
+# Docker
+/docker/SSH/data/
+*.pub
+*.key
+
+# Backend
+/backend/data

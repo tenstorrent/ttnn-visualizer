@@ -4,7 +4,7 @@
 
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { Icon, Intent } from '@blueprintjs/core';
-import { ConnectionTestStates } from '../../hooks/useRemote';
+import { ConnectionTestStates } from '../../model/Connection';
 
 interface ConnectionTestMessageProps {
     status: ConnectionTestStates;
