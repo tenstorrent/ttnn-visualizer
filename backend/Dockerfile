@@ -35,7 +35,7 @@ ENV FLASK_DEBUG="${FLASK_DEBUG}" \
     PATH="${PATH}:/home/python/.local/bin" \
     USER="python"
 
-COPY --chown=python:python ./public/ ./public
+COPY --chown=python:python . .
 
 ENTRYPOINT ["/app/bin/docker-entrypoint-web"]
 
