@@ -10,6 +10,7 @@ $loader-width: 32px;
     position: relative;
     display: inline-block;
     padding-right: $loader-width;
+    margin-bottom: 10px;
 
     .button-group {
         gap: 10px;

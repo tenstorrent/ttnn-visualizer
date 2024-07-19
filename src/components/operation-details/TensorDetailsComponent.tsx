@@ -2,13 +2,21 @@ import React from 'react';
 import classNames from 'classnames';
 import { getBufferColor } from '../../functions/colorGenerator';
 import { TensorData } from '../../model/APIData';
+import { prettyPrintAddress } from '../../functions/math';
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
     selectedAddress: number | null;
+    memorySize: number;
+    onTensorClick: (tensorId: number) => void;
 }
 
-const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({ tensor, selectedAddress = null }) => {
+const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
+    tensor,
+    selectedAddress = null,
+    memorySize,
+    onTensorClick,
+}) => {
     return (
         <div
             className={classNames('tensor-item', {
@@ -24,9 +32,15 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({ tensor,
                         backgroundColor: getBufferColor(tensor.address),
                     }}
                 />
-                <h4>Tensor ID: {tensor.tensor_id}</h4>
+                <h4
+                    onClick={() => {
+                        onTensorClick(tensor.tensor_id);
+                    }}
+                >
+                    Tensor ID: {tensor.tensor_id}
+                </h4>
 
-                <span>{tensor.address}</span>
+                <span className='format-numbers'>{prettyPrintAddress(tensor.address, memorySize)}</span>
             </div>
 
             <div className='tensor-meta'>

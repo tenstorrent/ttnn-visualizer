@@ -8,7 +8,7 @@ import { FileWithDirectoryAndFileHandle, directoryOpen } from 'browser-fs-access
 import React, { useState } from 'react';
 
 import 'styles/components/FolderPicker.scss';
-import { ConnectionStatus, ConnectionTestStates } from '../../hooks/useRemote';
+import { ConnectionStatus, ConnectionTestStates } from '../../model/Connection';
 
 const OPEN_FOLDER_OPTIONS = {
     recursive: false,
@@ -69,7 +69,12 @@ const FolderPicker = (): React.ReactElement => {
 
     return (
         <>
-            <Button onClick={handleDirectoryOpen}>Open Directory</Button>
+            <Button
+                onClick={handleDirectoryOpen}
+                icon={IconNames.FOLDER_OPEN}
+            >
+                Open Directory
+            </Button>
             {status && message && (
                 <div className={`verify-connection-item status-${ConnectionTestStates[status]}`}>
                     <Icon

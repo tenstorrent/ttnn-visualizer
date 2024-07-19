@@ -4,17 +4,18 @@
 
 import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup } from '@blueprintjs/core';
 import { FC, useState } from 'react';
-import useRemoteConnection, { ConnectionStatus, ConnectionTestStates, RemoteConnection } from '../../hooks/useRemote';
+import useRemoteConnection from '../../hooks/useRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
 import 'styles/components/RemoteConnectionDialog.scss';
+import { Connection, ConnectionStatus, ConnectionTestStates } from '../../model/Connection';
 
 interface RemoteConnectionDialogProps {
     title?: string;
     buttonLabel?: string;
     open: boolean;
     onClose: () => void;
-    onAddConnection: (connection: RemoteConnection) => void;
-    remoteConnection?: RemoteConnection;
+    onAddConnection: (connection: Connection) => void;
+    remoteConnection?: Connection;
 }
 
 const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
@@ -30,7 +31,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
         { status: ConnectionTestStates.IDLE, message: 'Test connection' },
         { status: ConnectionTestStates.IDLE, message: 'Test remote folder path' },
     ];
-    const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
+    const [connection, setConnection] = useState<Partial<Connection>>(defaultConnection);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
     const { testConnection } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
@@ -160,7 +161,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                         disabled={!isValidConnection}
                         onClick={() => {
                             if (isValidConnection) {
-                                onAddConnection(connection as RemoteConnection);
+                                onAddConnection(connection as Connection);
                                 closeDialog();
                             }
                         }}
