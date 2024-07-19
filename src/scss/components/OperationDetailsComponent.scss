@@ -63,7 +63,7 @@
         }
 
         .operation-link {
-            margin-left: #{14px+8px};
+            margin-left: #{14px+8px}; // icon width + gap
             margin-bottom: 3px;
         }
     }
