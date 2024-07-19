@@ -1,15 +1,20 @@
-from fastapi import FastAPI, HTTPException, Path, Request
-from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+import shutil
+from pathlib import Path as PathlibPath
+from typing import List, Optional
+
 import httpx
 import uvicorn
-from typing import List, Optional, Dict
-import sqlalchemy
+from fastapi import FastAPI, Path, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, select
 from sqlalchemy.orm import sessionmaker
 
-DATABASE_URL = "sqlite:///./db.sqlite"
+from backend.remotes import RemoteConnection, check_remote_path, StatusMessage, RemoteFolder, get_remote_test_folders, \
+    sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY
+
+DATABASE_URL = f"sqlite:////{ACTIVE_DATA_DIRECTORY}/db.sqlite"
 
 engine = create_engine(
     DATABASE_URL,
@@ -100,9 +105,11 @@ class GraphData(BaseModel):
     buffers: List[Buffer]
     buffer_pages: List[BufferPage]
 
+
 class StackTrace(BaseModel):
     operation_id: int
     stack_trace: str
+
 
 class OperationDetails(BaseModel):
     operation_id: int
@@ -129,6 +136,7 @@ class PlotData(BaseModel):
     l1_size: int
     memory_data: GlyphData
     buffer_data: GlyphData
+
 
 operations = Table(
     "operations",
@@ -246,6 +254,30 @@ def shutdown():
 @app.get("/api")
 async def read_root():
     return {"message": "Hello from FastAPI"}
+
+
+@app.post("/api/remote/folder", response_model=List[RemoteFolder])
+async def get_remote_folders(connection: RemoteConnection):
+    return get_remote_test_folders(connection)
+
+
+@app.post("/api/remote/test", response_model=StatusMessage)
+async def get_remote_folders(connection: RemoteConnection):
+    return check_remote_path(connection)
+
+
+@app.post("/api/remote/sync", response_model=StatusMessage)
+async def sync_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
+    sync_test_folders(connection, folder)
+    return StatusMessage(status=200, message="success")
+
+
+@app.post("/api/remote/use", response_model=StatusMessage)
+async def use_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
+    report_folder = PathlibPath(folder.remotePath).name
+    connection_directory = PathlibPath(REPORT_DATA_DIRECTORY, connection.name, report_folder)
+    shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
+    return StatusMessage(status=200, message="success")
 
 
 @app.get("/api/get-operations", response_model=List[OperationWithArguments])
