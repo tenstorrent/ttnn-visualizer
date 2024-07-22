@@ -9,14 +9,14 @@
         color: $link-color;
         margin: 0;
         padding: 2px 0;
-
         transition: color 150ms linear, background-color 150ms linear;
         transition-delay: 10ms;
 
         &.current {
             color: $tt-white-text;
             cursor: default;
-            &:before{
+
+            &::before{
                 display: inline-block;
                 content: "\2714"; // checkmark
                 margin-right: 5px;
@@ -62,7 +62,7 @@
         }
 
         .operation-link {
-            margin-left: #{14px+8px}; // icon width + gap
+            margin-left: #{14px + 8px}; // icon width + gap
             margin-bottom: 3px;
         }
     }
@@ -115,8 +115,8 @@
                     45deg,
                     transparent,
                     transparent 5px,
-                    red 5px,
-                    red 7px
+                    $tt-red 5px,
+                    $tt-red 7px
             );
         }
     }
@@ -185,5 +185,10 @@
         &.hidden {
             display: none;
         }
+    }
+
+    .not-found-message {
+        font-size: 20px;
+        margin-top: 10px;
     }
 }

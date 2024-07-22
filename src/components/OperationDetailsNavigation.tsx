@@ -100,9 +100,7 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace, isLoading }
                     />
                 </Tooltip>
 
-                <h2 className='title'>
-                    {operation?.id ? `${operation?.id} ${operation.name}` : `Operation ${operationId} not found`}
-                </h2>
+                <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
             </ButtonGroup>
 
             {isLoading && (
