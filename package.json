@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
     "flask:start": "python -m backend.main",
-    "compose:up" : "docker-compose up web --build"
+    "compose:up" : "docker-compose up web --build",
     "docker:build:ssh": "docker build docker/SSH --build-arg username=$(logname) -t local-ssh-image",
     "docker:run:ssh": "docker run -dit --rm -p 2222:22 --name local-ssh-server local-ssh-image:latest"
   },
