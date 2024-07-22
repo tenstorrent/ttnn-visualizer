@@ -111,11 +111,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
 
             <div className='operation-details-component'>
-                <StackTrace
-                    stackTrace={details.stack_trace}
-                    isFullStackTrace={isFullStackTrace}
-                    toggleStackTraceHandler={setIsFullStackTrace}
-                />
+                {details.stack_trace && (
+                    <StackTrace
+                        stackTrace={details.stack_trace}
+                        isFullStackTrace={isFullStackTrace}
+                        toggleStackTraceHandler={setIsFullStackTrace}
+                    />
+                )}
 
                 <Switch
                     label={zoomedInView ? 'Full buffer report' : 'Zoom buffer report'}
@@ -247,7 +249,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 <div className='tensor-list'>
                     <div className='inputs'>
                         <h3>Inputs</h3>
-                        {details.inputs.map((tensor) => (
+                        {details.inputs?.map((tensor) => (
                             <TensorDetailsComponent
                                 tensor={tensor}
                                 key={tensor.tensor_id}
@@ -260,7 +262,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                     <div className='outputs'>
                         <h3>Outputs</h3>
-                        {details.outputs.map((tensor) => (
+                        {details.outputs?.map((tensor) => (
                             <TensorDetailsComponent
                                 tensor={tensor}
                                 key={tensor.tensor_id}
