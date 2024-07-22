@@ -41,7 +41,6 @@ const LocalFolderOptions: FC = () => {
 
         setIsUploading(true);
 
-        // TODO: Confirm this is the correct way to POST files
         const response = await uploadLocalFolder(files);
 
         if (response.status === 200) {
