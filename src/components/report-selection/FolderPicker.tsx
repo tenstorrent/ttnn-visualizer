@@ -13,7 +13,13 @@ interface FolderPickerProps {
 }
 
 const FolderPicker = ({ text, onSelectFolder }: FolderPickerProps): React.ReactElement => {
-    return <FileInput text={text} onInputChange={(event) => onSelectFolder(event.currentTarget.value)} fill={false} />;
+    return (
+        <FileInput
+            text={text}
+            onInputChange={(event) => onSelectFolder(event.currentTarget.value)}
+            fill={false}
+        />
+    );
 };
 
 export default FolderPicker;
