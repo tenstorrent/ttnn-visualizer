@@ -31,6 +31,8 @@ myenv
 /docker/SSH/data/
 *.pub
 *.key
+id_ed*
+/docker/SSH/config
 
 # Backend
 /backend/data
