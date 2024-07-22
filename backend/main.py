@@ -1,15 +1,16 @@
 import shutil
 from pathlib import Path as PathlibPath
-from typing import List, Optional
+from typing import List, Optional, Annotated
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, Path, Request
+from fastapi import FastAPI, Path, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, select
 from sqlalchemy.orm import sessionmaker
+from starlette.responses import Response
 
 from backend.remotes import RemoteConnection, check_remote_path, StatusMessage, RemoteFolder, get_remote_test_folders, \
     sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY
@@ -273,6 +274,25 @@ def shutdown():
 @app.get("/api")
 async def read_root():
     return {"message": "Hello from FastAPI"}
+
+
+@app.post("/api/local/upload")
+async def create_upload_files(
+    files: List[UploadFile] = File(...)
+):
+    """
+    Copies the folder upload into the active data directory
+    :param files:
+    :return:
+    """
+    filenames = [PathlibPath(f.filename).name for f in files]
+    if not 'db.sqlite' in filenames or not 'config.json' in filenames:
+        return Response(status_code=500, content="Invalid project directory.")
+    for file in files:
+        destination_file = PathlibPath(ACTIVE_DATA_DIRECTORY, PathlibPath(file.filename).name)
+        with open(destination_file, 'wb') as f:
+            shutil.copyfileobj(file.file, f)
+    return Response(status_code=200)
 
 
 @app.post("/api/remote/folder", response_model=List[RemoteFolder])
