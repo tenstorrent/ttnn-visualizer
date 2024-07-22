@@ -1,3 +1,7 @@
+# TODO Allow access to private keys in backend container
+#   1. Could potentially mount ~/.ssh and use GID/UID
+#   2. Could copy the private key but this may be insecure (investigate)
+
 x-app: &default-app
   build:
     context: "."
@@ -30,8 +34,3 @@ services:
     ports:
       - "${DOCKER_WEB_PORT_FORWARD:-127.0.0.1:8000}:${PORT:-8000}"
     profiles: ["web"]
-  ssh:
-      build:
-          context: './docker/SSH/'
-      ports:
-          - "${SSH_HOST_PORT:-2222}:22"
