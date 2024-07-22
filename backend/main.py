@@ -294,6 +294,18 @@ async def create_upload_files(
             shutil.copyfileobj(file.file, f)
     return Response(status_code=200)
 
+@app.post("/api/local/test-upload")
+async def create_upload_files(
+    files: List[UploadFile] = File(...)
+):
+    """
+    Copies the folder upload into the active data directory
+    :param files:
+    :return:
+    """
+    filenames = [PathlibPath(f.filename).name for f in files]
+    return filenames
+
 
 @app.post("/api/remote/folder", response_model=List[RemoteFolder])
 async def get_remote_folders(connection: RemoteConnection):
