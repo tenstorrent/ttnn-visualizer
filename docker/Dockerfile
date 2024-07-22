@@ -15,7 +15,7 @@ RUN apt-get update \
 
 USER node
 
-COPY --chown=node:node package.json *yarn* index.html ./
+COPY --chown=node:node ../package.json *yarn* index.html ./
 
 RUN yarn install && yarn cache clean
 
@@ -24,7 +24,7 @@ ENV NODE_ENV="${NODE_ENV}" \
     PATH="${PATH}:/node_modules/.bin" \
     USER="node"
 
-COPY --chown=node:node . .
+COPY --chown=node:node .. .
 
 RUN yarn vite build
 
@@ -50,8 +50,8 @@ RUN mkdir -p /public
 
 USER python
 
-COPY --chown=python:python ./backend/requirements.txt ./
-COPY --chown=python:python ./backend/bin/ ./bin
+COPY --chown=python:python ../backend/requirements.txt ./
+COPY --chown=python:python ../backend/bin ./bin
 
 RUN chmod 0755 bin/* && bin/pip3-install
 
@@ -66,7 +66,7 @@ ENV FLASK_DEBUG="${FLASK_DEBUG}" \
     PATH="${PATH}:/home/python/.local/bin" \
     USER="python"
 
-COPY --chown=python:python ./backend .
+COPY --chown=python:python ../backend .
 COPY --chown=python:python --from=assets /app/assets/dist /public
 
 ENTRYPOINT ["/app/bin/docker-entrypoint-web"]
