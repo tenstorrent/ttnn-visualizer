@@ -1,9 +1,11 @@
+import os
+import pathlib
 import shutil
 from pathlib import Path as PathlibPath
 from typing import List, Optional
 
 import uvicorn
-from fastapi import FastAPI, Path
+from fastapi import FastAPI, Path, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -11,7 +13,7 @@ from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, 
 from sqlalchemy.orm import sessionmaker
 from fastapi.staticfiles import StaticFiles
 
-from backend.remotes import RemoteConnection, check_remote_path, StatusMessage, RemoteFolder, get_remote_test_folders, \
+from remotes import RemoteConnection, check_remote_path, StatusMessage, RemoteFolder, get_remote_test_folders, \
     sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY
 
 DATABASE_URL = f"sqlite:////{ACTIVE_DATA_DIRECTORY}/db.sqlite"
