@@ -244,7 +244,7 @@ const OperationList = () => {
                                                     <OperationArguments
                                                         operationId={operation.id}
                                                         operationIndex={virtualRow.index}
-                                                        data={operation.arguments}
+                                                        argumentsData={operation.arguments}
                                                         scrollTo={virtualizer.scrollToIndex}
                                                     />
                                                 )}
