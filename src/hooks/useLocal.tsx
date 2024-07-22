@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import axios from 'axios';
-import { FileWithDirectoryAndFileHandle, directoryOpen } from 'browser-fs-access';
+import { directoryOpen, FileWithDirectoryAndFileHandle } from 'browser-fs-access';
 
 export interface LocalFile extends FileWithDirectoryAndFileHandle {
     webkitRelativePath: string;
@@ -19,8 +19,13 @@ const useLocalConnection = () => {
         return (await directoryOpen(OPEN_FOLDER_OPTIONS)) as LocalFile[];
     };
 
+
     const uploadLocalFolder = async (files: LocalFile[]) => {
-        const response = await axios.post(`${import.meta.env.VITE_API_ROOT}/local/upload`, files, {
+        const formData = new FormData();
+        files.forEach((file: LocalFile) => {
+            formData.append('files', file);
+        });
+        const response = await axios.post(`${import.meta.env.VITE_API_ROOT}/local/upload`, formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
