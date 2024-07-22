@@ -2,11 +2,10 @@ import shutil
 from pathlib import Path as PathlibPath
 from typing import List, Optional
 
-import httpx
 import uvicorn
-from fastapi import FastAPI, Path, Request
+from fastapi import FastAPI, Path
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, select
 from sqlalchemy.orm import sessionmaker
@@ -271,9 +270,9 @@ def shutdown():
     engine.dispose()
 
 
-@app.get("/api")
+@app.get("/api/up")
 async def read_root():
-    return {"message": "Hello from FastAPI"}
+    return Response(status_code=200)
 
 
 @app.post("/api/remote/folder", response_model=List[RemoteFolder])
