@@ -30,3 +30,8 @@ services:
     ports:
       - "${DOCKER_WEB_PORT_FORWARD:-127.0.0.1:8000}:${PORT:-8000}"
     profiles: ["web"]
+  ssh:
+      build:
+          context: './docker/SSH/'
+      ports:
+          - "${SSH_HOST_PORT:-2222}:22"
