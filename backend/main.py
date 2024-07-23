@@ -300,7 +300,7 @@ async def create_upload_files(
             shutil.copyfileobj(file.file, f)
 
     shutil.copytree(destination_dir, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
-    return StatusMessage(status=200)
+    return StatusMessage(status=200, message="success")
 
 
 @app.post("/api/remote/folder", response_model=List[RemoteFolder])
