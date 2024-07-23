@@ -327,9 +327,6 @@ async def get_operations():
 
 @app.get("/api/get-operation-details/{operation_id}", response_model=OperationDetails)
 async def get_operation_details(operation_id: int = Path(..., description="")):
-    # if operation_id == -1:
-    #     return JSONResponse(status_code=200, content={"message": f"No previous operation"})
-
     db = SessionLocal()
     operation_query = select(operations).where(operations.c.operation_id == operation_id)
 
