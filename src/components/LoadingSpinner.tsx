@@ -1,8 +1,21 @@
+import classNames from 'classnames';
 import 'styles/components/LoadingSpinner.scss';
 
-function LoadingSpinner() {
+export enum LoadingSpinnerSizes {
+    SMALL = 'small',
+}
+
+interface LoadingSpinnerProps {
+    size?: LoadingSpinnerSizes;
+}
+
+function LoadingSpinner({ size }: LoadingSpinnerProps) {
     return (
-        <div className='loading-spinner'>
+        <div
+            className={classNames('loading-spinner', {
+                small: size === LoadingSpinnerSizes.SMALL,
+            })}
+        >
             <div />
             <div />
             <div />

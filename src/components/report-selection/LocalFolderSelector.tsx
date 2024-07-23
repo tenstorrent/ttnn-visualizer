@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router';
 import { ConnectionStatus, ConnectionTestStates } from '../../model/Connection';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
+import LoadingSpinner, { LoadingSpinnerSizes } from '../LoadingSpinner';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -84,7 +85,9 @@ const LocalFolderOptions: FC = () => {
                     View report
                 </Button>
 
-                {folderStatus && (
+                {isUploading && <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />}
+
+                {folderStatus && !isUploading && (
                     <div className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}>
                         <Icon
                             className='connection-status-icon'

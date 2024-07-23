@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
 import 'styles/components/OperationDetailsNavigation.scss';
 import ROUTES from '../definitions/routes';
-import LoadingSpinner from './LoadingSpinner';
+import LoadingSpinner, { LoadingSpinnerSizes } from './LoadingSpinner';
 
 interface OperationDetailsNavigationProps {
     operationId: number;
@@ -99,14 +99,13 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace, isLoading }
                         outlined
                     />
                 </Tooltip>
-                <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
-            </ButtonGroup>
 
-            {isLoading && (
-                <div className='operation-details-loader'>
-                    <LoadingSpinner />
-                </div>
-            )}
+                {isLoading ? (
+                    <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
+                ) : (
+                    <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
+                )}
+            </ButtonGroup>
         </nav>
     );
 }
