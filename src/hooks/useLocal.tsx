@@ -21,17 +21,18 @@ const useLocalConnection = () => {
 
     const uploadLocalFolder = async (files: LocalFile[]) => {
         const formData = new FormData();
+
         files.forEach((file: LocalFile) => {
             formData.append('files', file);
         });
-        // /local/test-upload for debugging
+
         const response = await axios.post(`${import.meta.env.VITE_API_ROOT}/local/upload`, formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
         });
 
-        return response.data;
+        return response;
     };
 
     return {
