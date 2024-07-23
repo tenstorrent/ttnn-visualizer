@@ -1,6 +1,6 @@
 import shutil
 from pathlib import Path as PathlibPath
-from typing import List, Optional, Annotated
+from typing import List, Optional
 
 import httpx
 import uvicorn
@@ -10,7 +10,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, select
 from sqlalchemy.orm import sessionmaker
-from starlette.responses import Response
 
 from backend.remotes import RemoteConnection, check_remote_path, StatusMessage, RemoteFolder, get_remote_test_folders, \
     sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY
@@ -285,26 +284,19 @@ async def create_upload_files(
     :param files:
     :return:
     """
-    filenames = [PathlibPath(f.filename).name for f in files]
-    if not 'db.sqlite' in filenames or not 'config.json' in filenames:
-        return Response(status_code=500, content="Invalid project directory.")
+
+    # Grab a file path to get the top level path
+    file_path = PathlibPath(PathlibPath(files[0].filename))
+    top_level_directory = file_path.parents[0].name
+    destination_dir = PathlibPath(REPORT_DATA_DIRECTORY, top_level_directory)
     for file in files:
-        destination_file = PathlibPath(ACTIVE_DATA_DIRECTORY, PathlibPath(file.filename).name)
+        destination_file = PathlibPath(REPORT_DATA_DIRECTORY, PathlibPath(file.filename))
+        destination_file.parent.mkdir(exist_ok=True, parents=True)
         with open(destination_file, 'wb') as f:
             shutil.copyfileobj(file.file, f)
-    return Response(status_code=200)
 
-@app.post("/api/local/test-upload")
-async def create_upload_files(
-    files: List[UploadFile] = File(...)
-):
-    """
-    Copies the folder upload into the active data directory
-    :param files:
-    :return:
-    """
-    filenames = [PathlibPath(f.filename).name for f in files]
-    return filenames
+    shutil.copytree(destination_dir, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
+    return StatusMessage(status_code=200)
 
 
 @app.post("/api/remote/folder", response_model=List[RemoteFolder])
