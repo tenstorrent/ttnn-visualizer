@@ -285,6 +285,10 @@ async def create_upload_files(
     :return:
     """
 
+    filenames = [PathlibPath(f.filename).name for f in files]
+    if 'db.sqlite' not in filenames or 'config.json' not in filenames:
+        return StatusMessage(status=500, message="Invalid project directory.")
+
     # Grab a file path to get the top level path
     file_path = PathlibPath(PathlibPath(files[0].filename))
     top_level_directory = file_path.parents[0].name
@@ -296,7 +300,7 @@ async def create_upload_files(
             shutil.copyfileobj(file.file, f)
 
     shutil.copytree(destination_dir, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
-    return StatusMessage(status_code=200)
+    return StatusMessage(status=200)
 
 
 @app.post("/api/remote/folder", response_model=List[RemoteFolder])
