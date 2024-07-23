@@ -15,6 +15,7 @@ ACTIVE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath('active')
 
 class RemoteConnection(BaseModel):
     name: str
+    username: str
     host: str
     port: int
     path: str
@@ -35,25 +36,17 @@ class NoProjectsException(BaseException):
     pass
 
 
-def get_client(remote_connection: RemoteConnection, ssh_config="~/.ssh/config") -> SSHClient:
+def get_client(remote_connection: RemoteConnection) -> SSHClient:
     """
-    Read user's SSH config for identify file for given host
-    TODO All configuring key/config location through env
+    Paramiko will use the local SSH agent for keys
     :param remote_connection:
-    :param ssh_config:
     :return:
     """
-    config_path = Path(ssh_config).expanduser()
-    config = paramiko.SSHConfig.from_path(config_path).lookup(remote_connection.host)
-
-    if not config:
-        raise SSHException(f"Host {remote_connection.host} not found in SSH config")
-    keyfile_path = config['identityfile'].pop()
-
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.load_system_host_keys()
-    ssh.connect(remote_connection.host, look_for_keys=False, key_filename=keyfile_path, port=remote_connection.port)
+    ssh.connect(remote_connection.host, look_for_keys=True, port=remote_connection.port,
+                username=remote_connection.username)
     return ssh
 
 

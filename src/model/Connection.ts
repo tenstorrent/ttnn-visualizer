@@ -2,6 +2,7 @@ import { HttpStatusCode } from 'axios';
 
 export interface Connection {
     name: string;
+    username: string;
     host: string;
     port: number;
     path: string;
