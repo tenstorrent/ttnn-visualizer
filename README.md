@@ -58,3 +58,12 @@ access on localhost:8000/
 ## Development
 
 Copy report contents to `backend/data/active` - IE - `backend/data/active/db.sqlite`
+
+
+### !fix for python random errors not finding modules:
+```shell
+deactivate
+rm -rf myenv
+```
+then follow steps for creating virtual environment and reinstalling dependencies
+
