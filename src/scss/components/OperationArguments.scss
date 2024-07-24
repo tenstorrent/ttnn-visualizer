@@ -26,6 +26,7 @@
 
         td {
             padding: 6px 12px;
+            vertical-align: top;
 
             &:first-child {
                 font-weight: 700;
@@ -36,5 +37,22 @@
                 word-break: break-word; // Can get really long strings in the table cell which cause horizontal overflows
             }
         }
+    }
+}
+
+$micro-op-gap: 20px;
+
+.microops {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $micro-op-gap;
+
+    > table {
+        flex-basis: calc(50% - calc($micro-op-gap / 2));
+        margin-bottom: 0;
+    }
+
+    .memory-config {
+        width: 100%;
     }
 }
