@@ -1,5 +1,5 @@
 # Frontend Docker Build
-FROM node:20.11.0-bookworm-slim AS assets
+FROM node:20-bookworm-slim AS assets
 
 WORKDIR /app/assets
 
@@ -48,21 +48,12 @@ RUN apt-get update \
 
 RUN mkdir -p /public
 
-
-
+# Backend Build steps
 
 USER python
 
 COPY --chown=python:python ../backend/requirements.txt ./
 COPY --chown=python:python ../backend/bin ./bin
-
-
-# Temporary - Copy the passwordless key to the container
-# Expect the user to copy the .ssh keys
-# TODO Parameterize this - investigate further options
-RUN mkdir /home/python/.ssh/
-COPY --chown=python:python ../docker/SSH/id_ed* /home/python/.ssh/
-COPY --chown=python:python ../docker/SSH/config /home/python/.ssh/
 
 RUN chmod 0755 bin/* && bin/pip3-install
 
