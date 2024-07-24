@@ -62,11 +62,11 @@ ENV PYTHONUNBUFFERED="true" \
     PATH="${PATH}:/home/python/.local/bin" \
     USER="python"
 
-COPY --chown=python:python ../backend .
+COPY --chown=python:python ../backend /app/backend
 COPY --chown=python:python --from=assets /app/assets/dist /public
 
 ENTRYPOINT ["/app/bin/docker-entrypoint-web"]
 
 EXPOSE 8000
 
-CMD ["gunicorn", "-c", "python:config.gunicorn", "-k", "uvicorn.workers.UvicornWorker",  "main:app"]
+CMD ["gunicorn", "-c", "python:backend.config.gunicorn", "-k", "uvicorn.workers.UvicornWorker",  "backend.main:app"]
