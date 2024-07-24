@@ -11,7 +11,9 @@ export default function OperationDetails() {
     return (
         operationId && (
             <>
-                <Helmet title={`${operationId} ${operation?.name}`} />
+                <Helmet
+                    title={operation?.name ? `${operationId} ${operation?.name}` : `Not found Operation ${operationId}`}
+                />
                 <OperationDetailsComponent operationId={intOperationId} />
             </>
         )

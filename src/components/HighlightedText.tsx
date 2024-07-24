@@ -13,7 +13,10 @@ const HighlightedText: React.FC<HighlightedTextProps> = ({ text, filter }) => {
 
     if (index === -1) {
         return (
-            <span title={text} className='highlighted-text'>
+            <span
+                title={text}
+                className='highlighted-text'
+            >
                 {text}
             </span>
         );

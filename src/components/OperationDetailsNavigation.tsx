@@ -99,6 +99,7 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace, isLoading }
                         outlined
                     />
                 </Tooltip>
+
                 <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
             </ButtonGroup>
 

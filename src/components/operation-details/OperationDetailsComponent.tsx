@@ -111,166 +111,186 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
 
             <div className='operation-details-component'>
-                <StackTrace
-                    stackTrace={details.stack_trace}
-                    isFullStackTrace={isFullStackTrace}
-                    toggleStackTraceHandler={setIsFullStackTrace}
-                />
+                {!isLoading && operationDetails?.operation_id ? (
+                    <>
+                        {details.stack_trace && (
+                            <StackTrace
+                                stackTrace={details.stack_trace}
+                                isFullStackTrace={isFullStackTrace}
+                                toggleStackTraceHandler={setIsFullStackTrace}
+                            />
+                        )}
 
-                <Switch
-                    label={zoomedInView ? 'Full buffer report' : 'Zoom buffer report'}
-                    checked={zoomedInView}
-                    onChange={() => setZoomedInView(!zoomedInView)}
-                />
+                        <Switch
+                            label={zoomedInView ? 'Full buffer report' : 'Zoom buffer report'}
+                            checked={zoomedInView}
+                            onChange={() => setZoomedInView(!zoomedInView)}
+                        />
 
-                <L1MemoryRenderer
-                    title='Previous Summarized L1 Report'
-                    className={classNames('l1-memory-renderer', { 'empty-plot': previousChartData.length === 0 })}
-                    plotZoomRangeStart={plotZoomRangeStart}
-                    plotZoomRangeEnd={plotZoomRangeEnd}
-                    chartData={previousChartData}
-                    isZoomedIn={zoomedInView}
-                    memorySize={memorySize}
-                />
+                        <L1MemoryRenderer
+                            title='Previous Summarized L1 Report'
+                            className={classNames('l1-memory-renderer', {
+                                'empty-plot': previousChartData.length === 0,
+                            })}
+                            plotZoomRangeStart={plotZoomRangeStart}
+                            plotZoomRangeEnd={plotZoomRangeEnd}
+                            chartData={previousChartData}
+                            isZoomedIn={zoomedInView}
+                            memorySize={memorySize}
+                        />
 
-                <L1MemoryRenderer
-                    title='Current Summarized L1 Report'
-                    className={classNames('l1-memory-renderer', { 'empty-plot': chartData.length === 0 })}
-                    plotZoomRangeStart={plotZoomRangeStart}
-                    plotZoomRangeEnd={plotZoomRangeEnd}
-                    chartData={chartData}
-                    isZoomedIn={zoomedInView}
-                    memorySize={memorySize}
-                    onBufferClick={onBufferClick}
-                    onClickOutside={onClickOutside}
-                    additionalReferences={[navRef]}
-                />
+                        <L1MemoryRenderer
+                            title='Current Summarized L1 Report'
+                            className={classNames('l1-memory-renderer', { 'empty-plot': chartData.length === 0 })}
+                            plotZoomRangeStart={plotZoomRangeStart}
+                            plotZoomRangeEnd={plotZoomRangeEnd}
+                            chartData={chartData}
+                            isZoomedIn={zoomedInView}
+                            memorySize={memorySize}
+                            onBufferClick={onBufferClick}
+                            onClickOutside={onClickOutside}
+                            additionalReferences={[navRef]}
+                        />
 
-                <aside className={classNames('plot-instructions', { hidden: chartData.length === 0 })}>
-                    Click on a buffer to focus
-                </aside>
+                        <aside className={classNames('plot-instructions', { hidden: chartData.length === 0 })}>
+                            Click on a buffer to focus
+                        </aside>
 
-                <aside className={classNames('plot-instructions-floating', { hidden: selectedTensorAddress === null })}>
-                    Buffer focused, click anywhere to reset
-                </aside>
-                <div className='plot-tensor-details'>
-                    <div className='legend'>
-                        {memoryReport.map((chunk) => (
+                        <aside
+                            className={classNames('plot-instructions-floating', {
+                                hidden: selectedTensorAddress === null,
+                            })}
+                        >
+                            Buffer focused, click anywhere to reset
+                        </aside>
+                        <div className='plot-tensor-details'>
+                            <div className='legend'>
+                                {memoryReport.map((chunk) => (
+                                    <div
+                                        key={chunk.address}
+                                        className={classNames('legend-item', {
+                                            dimmed:
+                                                selectedTensorAddress !== null &&
+                                                selectedTensorAddress !== chunk.address,
+                                        })}
+                                    >
+                                        <div
+                                            className={classNames('memory-color-block', {
+                                                empty: chunk.empty === true,
+                                            })}
+                                            style={{
+                                                backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
+                                            }}
+                                        />
+                                        <div className='legend-details'>
+                                            <div className='format-numbers'>
+                                                {prettyPrintAddress(chunk.address, memorySize)}
+                                            </div>
+                                            <div className='format-numbers keep-left'>({toHex(chunk.address)})</div>
+                                            <div className='format-numbers'>{formatSize(chunk.size)} </div>
+                                            <div>
+                                                {!chunk.empty && details.getTensorForAddress(chunk.address) && (
+                                                    <>Tensor {details.getTensorForAddress(chunk.address)?.tensor_id}</>
+                                                )}
+                                                {chunk.empty && 'Empty space'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                             <div
-                                key={chunk.address}
-                                className={classNames('legend-item', {
-                                    dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
-                                })}
+                                ref={navRef}
+                                className={classNames('producer-consumer', { hidden: selectedTensor === null })}
                             >
                                 <div
-                                    className={classNames('memory-color-block', { empty: chunk.empty === true })}
-                                    style={{
-                                        backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
-                                    }}
-                                />
-                                <div className='legend-details'>
-                                    <div className='format-numbers'>
-                                        {prettyPrintAddress(chunk.address, memorySize)}
-                                    </div>
-                                    <div className='format-numbers keep-left'>({toHex(chunk.address)})</div>
-                                    <div className='format-numbers'>{formatSize(chunk.size)} </div>
-                                    <div>
-                                        {!chunk.empty && details.getTensorForAddress(chunk.address) && (
-                                            <>Tensor {details.getTensorForAddress(chunk.address)?.tensor_id}</>
-                                        )}
-                                        {chunk.empty && 'Empty space'}
-                                    </div>
+                                    className={classNames('title', {
+                                        hidden:
+                                            details.getTensorProducerConsumer(selectedTensor).producers.length === 0,
+                                    })}
+                                >
+                                    <Icon
+                                        size={14}
+                                        icon={IconNames.EXPORT}
+                                        className='producer-icon'
+                                    />
+                                    Producers
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-                    <div
-                        ref={navRef}
-                        className={classNames('producer-consumer', { hidden: selectedTensor === null })}
-                    >
-                        <div
-                            className={classNames('title', {
-                                hidden: details.getTensorProducerConsumer(selectedTensor).producers.length === 0,
-                            })}
-                        >
-                            <Icon
-                                size={14}
-                                icon={IconNames.EXPORT}
-                                className='producer-icon'
-                            />
-                            Producers
-                        </div>
-                        {details.getTensorProducerConsumer(selectedTensor).producers.map((op) => (
-                            <div
-                                key={op.id}
-                                className='operation-link'
-                            >
-                                <Link
-                                    to={`${ROUTES.OPERATIONS}/${op.id}`}
-                                    className={classNames('', { current: operationId === op.id })}
+                                {details.getTensorProducerConsumer(selectedTensor).producers.map((op) => (
+                                    <div
+                                        key={op.id}
+                                        className='operation-link'
+                                    >
+                                        <Link
+                                            to={`${ROUTES.OPERATIONS}/${op.id}`}
+                                            className={classNames('', { current: operationId === op.id })}
+                                        >
+                                            {op.id} {op.name}
+                                        </Link>
+                                    </div>
+                                ))}
+
+                                <div
+                                    className={classNames('title', {
+                                        hidden:
+                                            details.getTensorProducerConsumer(selectedTensor).consumers.length === 0,
+                                    })}
                                 >
-                                    {op.id} {op.name}
-                                </Link>
+                                    <Icon
+                                        size={14}
+                                        icon={IconNames.IMPORT}
+                                        className='consumer-icon'
+                                    />{' '}
+                                    Consumers
+                                </div>
+                                {details.getTensorProducerConsumer(selectedTensor).consumers.map((op) => (
+                                    <div
+                                        key={op.id}
+                                        className='operation-link'
+                                    >
+                                        <Link
+                                            to={`${ROUTES.OPERATIONS}/${op.id}`}
+                                            className={classNames('', { current: operationId === op.id })}
+                                        >
+                                            {op.id} {op.name}
+                                        </Link>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-
-                        <div
-                            className={classNames('title', {
-                                hidden: details.getTensorProducerConsumer(selectedTensor).consumers.length === 0,
-                            })}
-                        >
-                            <Icon
-                                size={14}
-                                icon={IconNames.IMPORT}
-                                className='consumer-icon'
-                            />{' '}
-                            Consumers
                         </div>
-                        {details.getTensorProducerConsumer(selectedTensor).consumers.map((op) => (
-                            <div
-                                key={op.id}
-                                className='operation-link'
-                            >
-                                <Link
-                                    to={`${ROUTES.OPERATIONS}/${op.id}`}
-                                    className={classNames('', { current: operationId === op.id })}
-                                >
-                                    {op.id} {op.name}
-                                </Link>
+
+                        <hr />
+
+                        <div className='tensor-list'>
+                            <div className='inputs'>
+                                <h3>Inputs</h3>
+                                {details.inputs?.map((tensor) => (
+                                    <TensorDetailsComponent
+                                        tensor={tensor}
+                                        key={tensor.tensor_id}
+                                        selectedAddress={selectedTensorAddress}
+                                        onTensorClick={onTensorClick}
+                                        memorySize={memorySize}
+                                    />
+                                ))}
                             </div>
-                        ))}
-                    </div>
-                </div>
 
-                <hr />
-
-                <div className='tensor-list'>
-                    <div className='inputs'>
-                        <h3>Inputs</h3>
-                        {details.inputs.map((tensor) => (
-                            <TensorDetailsComponent
-                                tensor={tensor}
-                                key={tensor.tensor_id}
-                                selectedAddress={selectedTensorAddress}
-                                onTensorClick={onTensorClick}
-                                memorySize={memorySize}
-                            />
-                        ))}
-                    </div>
-
-                    <div className='outputs'>
-                        <h3>Outputs</h3>
-                        {details.outputs.map((tensor) => (
-                            <TensorDetailsComponent
-                                tensor={tensor}
-                                key={tensor.tensor_id}
-                                selectedAddress={selectedTensorAddress}
-                                onTensorClick={onTensorClick}
-                                memorySize={memorySize}
-                            />
-                        ))}
-                    </div>
-                </div>
+                            <div className='outputs'>
+                                <h3>Outputs</h3>
+                                {details.outputs?.map((tensor) => (
+                                    <TensorDetailsComponent
+                                        tensor={tensor}
+                                        key={tensor.tensor_id}
+                                        selectedAddress={selectedTensorAddress}
+                                        onTensorClick={onTensorClick}
+                                        memorySize={memorySize}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <p className='not-found-message'>Operation {operationId} not found</p>
+                )}
             </div>
         </>
     );

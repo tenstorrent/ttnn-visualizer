@@ -114,7 +114,7 @@ class StackTrace(BaseModel):
 
 
 class OperationDetails(BaseModel):
-    operation_id: int
+    operation_id: Optional[int] = None
     input_tensors: List[Tensor]
     output_tensors: List[Tensor]
     buffers: List[Buffer]
@@ -328,6 +328,19 @@ async def get_operations():
 @app.get("/api/get-operation-details/{operation_id}", response_model=OperationDetails)
 async def get_operation_details(operation_id: int = Path(..., description="")):
     db = SessionLocal()
+    operation_query = select(operations).where(operations.c.operation_id == operation_id)
+
+    try:
+        db.execute(operation_query).one()
+    except:
+        return OperationDetails(
+        operation_id=None,
+        input_tensors=[],
+        output_tensors=[],
+        buffers=[],
+        l1_sizes=[],
+        stack_trace=''
+    )
 
     # Fetch input tensors
     input_query = select(input_tensors).where(input_tensors.c.operation_id == operation_id)
@@ -435,6 +448,8 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
         l1_sizes=l1_sizes,
         stack_trace=stack_trace
     )
+
+
 
 
 @app.get("/api/get-tensor-details/{tensor_id}", response_model=TensorDetailsResponse)

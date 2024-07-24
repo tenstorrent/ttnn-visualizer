@@ -20,7 +20,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     l1_sizes: number[];
 
-    stack_trace: string
+    stack_trace: string;
 
     tensorList: TensorData[];
 
@@ -51,7 +51,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     get memorySize(): number {
         // TODO: memorysize will need to be read from the appropriate device even though its likely going to be the same for the multichip scenario
-        return this.l1_sizes[0] || 0;
+        return this.l1_sizes?.[0] || 0;
     }
 
     getTensorForAddress(address: number): TensorData | null {
@@ -64,7 +64,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         }
         const { inputs, outputs } = this;
 
-        inputs.forEach((tensor) => {
+        inputs?.forEach((tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
                 return operations.find((operation) => operation.id === op)?.name || '';
             });
@@ -73,7 +73,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             });
         });
 
-        outputs.forEach((tensor) => {
+        outputs?.forEach((tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
                 return operations.find((operation) => operation.id === op)?.name || '';
             });
@@ -125,7 +125,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         const fragmentation: FragmentationEntry[] = [];
         const memory: Chunk[] =
             buffers
-                .filter((buffer: BufferData) => buffer.buffer_type === BufferType.L1)
+                ?.filter((buffer: BufferData) => buffer.buffer_type === BufferType.L1)
                 .map((buffer: BufferData) => {
                     return {
                         address: buffer.address,
