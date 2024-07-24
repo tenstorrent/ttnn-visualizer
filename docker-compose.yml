@@ -8,6 +8,7 @@ services:
         - "UID=${UID:-1000}"
         - "GID=${GID:-1000}"
         - "NODE_ENV=${NODE_ENV:-production}"
+        - "FLASK_ENV=${FLASK_ENV:-production}"
     env_file:
       - ".env"
     restart: "${DOCKER_RESTART_POLICY:-unless-stopped}"
