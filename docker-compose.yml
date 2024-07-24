@@ -1,25 +1,18 @@
-# TODO Allow access to private keys in backend container
-#   1. Could potentially mount ~/.ssh and use GID/UID
-#   2. Could copy the private key but this may be insecure (investigate)
-
-x-app: &default-app
-  build:
-    context: "."
-    dockerfile: ./docker/Dockerfile
-    target: "app"
-    args:
-      - "UID=${UID:-1000}"
-      - "GID=${GID:-1000}"
-      - "NODE_ENV=${NODE_ENV:-production}"
-  env_file:
-    - ".env"
-  restart: "${DOCKER_RESTART_POLICY:-unless-stopped}"
-  stop_grace_period: "3s"
-  tty: true
-
 services:
   web:
-    <<: *default-app
+    build:
+      context: "."
+      dockerfile: ./docker/Dockerfile
+      target: "app"
+      args:
+        - "UID=${UID:-1000}"
+        - "GID=${GID:-1000}"
+        - "NODE_ENV=${NODE_ENV:-production}"
+    env_file:
+      - ".env"
+    restart: "${DOCKER_RESTART_POLICY:-unless-stopped}"
+    stop_grace_period: "3s"
+    tty: true
     deploy:
       resources:
         limits:
@@ -37,4 +30,4 @@ services:
     environment:
       - SSH_AUTH_SOCK=/ssh-agent
     volumes:
-       - ${SSH_AUTH_SOCK}:/ssh-agent
+      - ${SSH_AUTH_SOCK}:/ssh-agent
