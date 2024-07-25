@@ -32,6 +32,11 @@ export default {
 - Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
 - Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and
   add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+  
+## Environment 
+
+Copy the provided `.env.sample` file to `.env` and change any necessary options. See the section on options 
+for more details on the available configuration options.
 
 ## Frontend
 
