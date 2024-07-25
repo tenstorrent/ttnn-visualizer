@@ -2,14 +2,24 @@ import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import { OperationDetailsData } from '../model/APIData';
 import { Operation } from '../model/Graph';
+import OperationHistory from '../definitions/operationHistory.json';
 
 const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
     const response = await axios.get<OperationDetailsData>(`/api/get-operation-details/${id}`);
+
     return response.data;
 };
 const fetchOperations = async (): Promise<Operation[]> => {
-    const { data: operationList } = await axios.get<Operation[]>('/api/get-operations');
-    return operationList;
+    const { data: operationList } = await axios.get<Omit<Operation, 'microOperations'>[]>('/api/get-operations');
+    // TODO: use proper backend call
+    // const operationHistory = await axios.get<MicroOperation[]>('/api/get-operation-history');
+    const microOperations = OperationHistory;
+
+    return operationList.map((operation) => ({
+        ...operation,
+        microOperations:
+            microOperations.filter((microOperation) => microOperation.ttnn_operation_id === operation.id) || [],
+    })) as Operation[];
 };
 
 export const useOperationsList = () => {

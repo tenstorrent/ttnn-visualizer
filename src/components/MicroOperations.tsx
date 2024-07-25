@@ -1,36 +1,4 @@
-interface Padding {
-    back: number;
-    front: number;
-}
-
-interface InputTensor {
-    dtype: number;
-    layout: number;
-    memory_config: {
-        buffer_type: number;
-        memory_layout: number;
-        shard_spec: number | null;
-    };
-    shape: {
-        dimensions: number[];
-        padding: {
-            pad_dimensions: Padding[];
-            pad_value: number;
-            rank: number;
-        };
-        rank: number;
-    };
-    storage_type: number;
-}
-
-interface MicroOperation {
-    input_tensor_records: InputTensor[];
-    operation_name: string;
-    operation_type: string;
-    program_cache_hit: boolean | null;
-    program_hash: number | null;
-    ttnn_operation_id: number;
-}
+import { MicroOperation } from '../model/Graph';
 
 interface MicroOperationsData {
     microOperations: MicroOperation[];

@@ -4,8 +4,8 @@
 import 'styles/components/OperationArguments.scss';
 import { ScrollToOptions } from '@tanstack/react-virtual';
 import ExpandableTensor from './ExpandableTensor';
-import OperationHistory from '../definitions/operationHistory.json';
 import MicroOperations from './MicroOperations';
+import { MicroOperation } from '../model/Graph';
 
 interface Arguments {
     name: string;
@@ -15,13 +15,18 @@ interface Arguments {
 interface OperationArgumentsProps {
     operationId: number;
     operationIndex: number;
-    argumentsData: Array<Arguments>;
+    argumentsData: Arguments[];
+    microOperations: MicroOperation[];
     scrollTo: (index: number, { align, behavior }: ScrollToOptions) => void;
 }
 
-function OperationArguments({ operationId, operationIndex, argumentsData, scrollTo }: OperationArgumentsProps) {
-    const microOperations = OperationHistory.filter((microOp) => microOp.ttnn_operation_id === operationId);
-
+function OperationArguments({
+    operationId,
+    operationIndex,
+    argumentsData,
+    microOperations,
+    scrollTo,
+}: OperationArgumentsProps) {
     return (
         <>
             <table className='arguments-table has-vertical-headings'>

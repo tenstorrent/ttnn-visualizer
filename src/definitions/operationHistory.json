@@ -16,18 +16,18 @@
                 "dimensions":[
                    2048,
                    2048,
-                   0,
-                   0,
-                   0,
-                   0,
-                   0,
-                   0
+                   2048,
+                   2048,
+                   2048,
+                   2048,
+                   2048,
+                   2048
                 ],
                 "padding":{
                    "pad_dimensions":[
                       {
-                         "back":0,
-                         "front":0
+                         "back":10,
+                         "front":5
                       },
                       {
                          "back":0,
@@ -38,16 +38,16 @@
                          "front":0
                       },
                       {
-                         "back":0,
-                         "front":0
+                         "back":5,
+                         "front":5
                       },
                       {
                          "back":0,
                          "front":0
                       },
                       {
-                         "back":0,
-                         "front":0
+                         "back":150,
+                         "front":200
                       },
                       {
                          "back":0,
@@ -59,9 +59,9 @@
                       }
                    ],
                    "pad_value":0,
-                   "rank":2
+                   "rank":8
                 },
-                "rank":2
+                "rank":8
              },
              "storage_type":1
           },
@@ -825,7 +825,7 @@
        "operation_type":"DeviceOperation<>",
        "program_cache_hit":null,
        "program_hash":null,
-       "ttnn_operation_id":11
+       "ttnn_operation_id":1
     },
     {
        "composite_parent_names":[

@@ -59,6 +59,7 @@ $micro-op-gap: 20px;
 
     > table {
         flex-basis: calc(50% - calc($micro-op-gap / 2));
+        flex-grow: 1;
         margin-bottom: 0;
     }
 

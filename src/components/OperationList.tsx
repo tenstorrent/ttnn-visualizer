@@ -245,6 +245,7 @@ const OperationList = () => {
                                                         operationId={operation.id}
                                                         operationIndex={virtualRow.index}
                                                         argumentsData={operation.arguments}
+                                                        microOperations={operation.microOperations}
                                                         scrollTo={virtualizer.scrollToIndex}
                                                     />
                                                 )}
