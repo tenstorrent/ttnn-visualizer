@@ -1,12 +1,15 @@
 import json
+import logging
 from pathlib import Path
 from stat import S_ISDIR
 from typing import List
 
 import paramiko
 from paramiko.client import SSHClient
-from paramiko.ssh_exception import SSHException
+from paramiko.ssh_exception import SSHException, AuthenticationException
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 TEST_CONFIG_FILE = 'config.json'
 REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath('data')
@@ -15,6 +18,7 @@ ACTIVE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath('active')
 
 class RemoteConnection(BaseModel):
     name: str
+    username: str
     host: str
     port: int
     path: str
@@ -31,32 +35,60 @@ class RemoteFolder(BaseModel):
     lastModified: int
 
 
-class NoProjectsException(BaseException):
+class RemoteFolderException(Exception):
+    def __init__(self, message, status):
+        super().__init__(message)
+        self.message = message
+        self.status = status
+
+
+class NoProjectsException(RemoteFolderException):
     pass
 
 
-def get_client(remote_connection: RemoteConnection, ssh_config="~/.ssh/config") -> SSHClient:
+def remote_exception_handler(func):
+    def remote_handler(*args, **kwargs):
+        connection = args[0]
+        try:
+            return func(*args, **kwargs)
+        except AuthenticationException as err:
+            raise RemoteFolderException(status=403, message=f"Unable to authenticate: {str(err)}")
+        except FileNotFoundError as err:
+            raise RemoteFolderException(
+                status=500, message=f"Unable to open path {connection.path}: {str(err)}"
+            )
+        except NoProjectsException as err:
+            raise RemoteFolderException(
+                status=500, message=f"Unable to open path {connection.path}: {str(err)}"
+            )
+        except IOError as err:
+            raise RemoteFolderException(
+                status=400, message=f"Path {connection.path} does not exist"
+            )
+        except SSHException as err:
+            raise RemoteFolderException(
+                status=500, message=f"Unable to connect to remote: {err}"
+            )
+
+    return remote_handler
+
+
+@remote_exception_handler
+def get_client(remote_connection: RemoteConnection) -> SSHClient:
     """
-    Read user's SSH config for identify file for given host
-    TODO All configuring key/config location through env
+    Paramiko will use the local SSH agent for keys
     :param remote_connection:
-    :param ssh_config:
     :return:
     """
-    config_path = Path(ssh_config).expanduser()
-    config = paramiko.SSHConfig.from_path(config_path).lookup(remote_connection.host)
-
-    if not config:
-        raise SSHException(f"Host {remote_connection.host} not found in SSH config")
-    keyfile_path = config['identityfile'].pop()
-
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.load_system_host_keys()
-    ssh.connect(remote_connection.host, look_for_keys=False, key_filename=keyfile_path, port=remote_connection.port)
+    ssh.connect(remote_connection.host, look_for_keys=True, port=remote_connection.port,
+                username=remote_connection.username)
     return ssh
 
 
+@remote_exception_handler
 def get_remote_folder_config_paths(ssh_client, remote_path) -> List[str]:
     """
     Given a remote path return a list of report config files
@@ -76,6 +108,7 @@ def get_remote_folder_config_paths(ssh_client, remote_path) -> List[str]:
     return project_configs
 
 
+@remote_exception_handler
 def get_remote_folders(ssh_client: SSHClient, remote_configs: List[str]) -> List[RemoteFolder]:
     """
     Given a list of remote config paths return a list of RemoteFolder objects
@@ -101,10 +134,10 @@ def get_remote_folders(ssh_client: SSHClient, remote_configs: List[str]) -> List
                 config_file.close()
             except IOError as err:
                 raise FileNotFoundError(f"Failed to read config from {config}: {err}")
-
     return remote_folder_data
 
 
+@remote_exception_handler
 def get_remote_test_folders(remote_connection: RemoteConnection) -> List[RemoteFolder]:
     """
     Return a list of remote folders given a remote connection
@@ -114,6 +147,8 @@ def get_remote_test_folders(remote_connection: RemoteConnection) -> List[RemoteF
     """
     client = get_client(remote_connection)
     remote_config_paths = get_remote_folder_config_paths(client, remote_connection.path)
+    if not remote_config_paths:
+        raise NoProjectsException(f"No projects found at {remote_connection.path}")
     return get_remote_folders(client, remote_config_paths)
 
 
@@ -140,6 +175,7 @@ def sftp_walk(sftp, remote_path):
             yield x
 
 
+@remote_exception_handler
 def sync_test_folders(remote_connection: RemoteConnection, remote_folder: RemoteFolder):
     """
     Synchronize remote test folders to local storage
@@ -160,22 +196,8 @@ def sync_test_folders(remote_connection: RemoteConnection, remote_folder: Remote
                 sftp.get(file, str(Path(destination_dir, file)))
 
 
+@remote_exception_handler
 def check_remote_path(remote_connection):
-    try:
-        ssh_client = get_client(remote_connection)
-    except SSHException as error:
-        return StatusMessage(status=500, message=str(error))
+    ssh_client = get_client(remote_connection)
     with ssh_client.open_sftp() as sftp:
-        try:
-            sftp.listdir(remote_connection.path)
-        except FileNotFoundError:
-            return StatusMessage(status=400,
-                                 message=f"Path {remote_connection.path} does not exist")
-        try:
-            remote_folders = get_remote_test_folders(remote_connection)
-            if not remote_folders:
-                return StatusMessage(status=400,
-                                     message=f"No test folders found in {remote_connection.path}")
-        except FileNotFoundError as err:
-            return StatusMessage(status=500, message=str(err))
-    return StatusMessage(status=200, message="success")
+        sftp.listdir(remote_connection.path)

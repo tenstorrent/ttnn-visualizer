@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, 
 from sqlalchemy.orm import sessionmaker
 
 from backend.remotes import RemoteConnection, check_remote_path, StatusMessage, RemoteFolder, get_remote_test_folders, \
-    sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY
+    sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY, RemoteFolderException
 
 DATABASE_URL = f"sqlite:////{ACTIVE_DATA_DIRECTORY}/db.sqlite"
 
@@ -275,19 +275,29 @@ async def read_root():
     return {"message": "Hello from FastAPI"}
 
 
-@app.post("/api/remote/folder", response_model=List[RemoteFolder])
+@app.post("/api/remote/folder", response_model=List[RemoteFolder] | StatusMessage)
 async def get_remote_folders(connection: RemoteConnection):
-    return get_remote_test_folders(connection)
+    try:
+        return get_remote_test_folders(connection)
+    except RemoteFolderException as e:
+        return StatusMessage(status=e.status, message=e.message)
 
 
 @app.post("/api/remote/test", response_model=StatusMessage)
 async def get_remote_folders(connection: RemoteConnection):
-    return check_remote_path(connection)
+    try:
+        check_remote_path(connection)
+    except RemoteFolderException as e:
+        return StatusMessage(status=e.status, message=e.message)
+    return StatusMessage(status=200, message="success")
 
 
 @app.post("/api/remote/sync", response_model=StatusMessage)
 async def sync_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
-    sync_test_folders(connection, folder)
+    try:
+        sync_test_folders(connection, folder)
+    except RemoteFolderException as e:
+        return StatusMessage(status=e.status, message=e.message)
     return StatusMessage(status=200, message="success")
 
 
@@ -334,13 +344,13 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
         db.execute(operation_query).one()
     except:
         return OperationDetails(
-        operation_id=None,
-        input_tensors=[],
-        output_tensors=[],
-        buffers=[],
-        l1_sizes=[],
-        stack_trace=''
-    )
+            operation_id=None,
+            input_tensors=[],
+            output_tensors=[],
+            buffers=[],
+            l1_sizes=[],
+            stack_trace=''
+        )
 
     # Fetch input tensors
     input_query = select(input_tensors).where(input_tensors.c.operation_id == operation_id)
@@ -448,8 +458,6 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
         l1_sizes=l1_sizes,
         stack_trace=stack_trace
     )
-
-
 
 
 @app.get("/api/get-tensor-details/{tensor_id}", response_model=TensorDetailsResponse)
