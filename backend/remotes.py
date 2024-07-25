@@ -84,17 +84,18 @@ def remote_exception_handler(func):
 
 
 @remote_exception_handler
-def get_client(remote_connection: RemoteConnection, ssh_config="~/.ssh/config") -> SSHClient:
+def get_client(remote_connection: RemoteConnection) -> SSHClient:
     """
     Paramiko will use the local SSH agent for keys
     :param remote_connection:
+    :param ssh_config: SSH configuration file path
     :return:
     """
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.load_system_host_keys()
-
-    use_agent = os.getenv('USE_SSH_AGENT', False)
+    ssh_config_path = os.getenv('SSH_CONFIG_PATH', '~/.ssh/config')
+    use_agent = os.getenv('USE_SSH_AGENT', True)
     keyfile_path = None
     if use_agent:
         agent = Agent()
@@ -103,7 +104,7 @@ def get_client(remote_connection: RemoteConnection, ssh_config="~/.ssh/config") 
         logger.info(f"Connecting to remote host {remote_connection.host}")
         logger.info(f"Found {len(agent.get_keys())} in agent")
     else:
-        config_path = Path(ssh_config).expanduser()
+        config_path = Path(ssh_config_path).expanduser()
         config = paramiko.SSHConfig.from_path(config_path).lookup(remote_connection.host)
         if not config:
             raise SSHException(f"Host not found in SSH config {remote_connection.host}")
