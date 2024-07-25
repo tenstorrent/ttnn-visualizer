@@ -11,7 +11,9 @@ from paramiko.client import SSHClient
 from paramiko.ssh_exception import SSHException, AuthenticationException, NoValidConnectionsError
 from pydantic import BaseModel
 
+# TODO Setup application wide logging configurations
 logger = logging.getLogger(__name__)
+logging.basicConfig(level = logging.INFO)
 
 TEST_CONFIG_FILE = 'config.json'
 REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath('data')
@@ -92,25 +94,29 @@ def get_client(remote_connection: RemoteConnection) -> SSHClient:
     ssh.load_system_host_keys()
     ssh_config_path = os.getenv('SSH_CONFIG_PATH', '~/.ssh/config')
     use_agent = os.getenv('USE_SSH_AGENT', True)
-    keyfile_path = None
+    connection_args = dict()
     if use_agent:
+        logger.info(f"Connecting to remote host {remote_connection.host} using SSH agent")
         agent = Agent()
         if not agent.get_keys():
             raise SSHException("No keys found")
         logger.info(f"Connecting to remote host {remote_connection.host}")
         logger.info(f"Found {len(agent.get_keys())} in agent")
+        connection_args.update({"look_for_keys": True})
     else:
+        logger.info(f"Connecting to remote host {remote_connection.host} using public keys")
         config_path = Path(ssh_config_path).expanduser()
         config = paramiko.SSHConfig.from_path(config_path).lookup(remote_connection.host)
         if not config:
             raise SSHException(f"Host not found in SSH config {remote_connection.host}")
         keyfile_path = config['identityfile'].pop()
+        connection_args.update({"key_filename": keyfile_path, "look_for_keys": False})
 
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.load_system_host_keys()
-    ssh.connect(remote_connection.host, key_filename=keyfile_path, port=remote_connection.port,
-                username=remote_connection.username)
+    ssh.connect(remote_connection.host, port=remote_connection.port,
+                username=remote_connection.username, **connection_args)
     return ssh
 
 
