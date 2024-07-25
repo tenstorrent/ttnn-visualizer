@@ -32,8 +32,8 @@ services:
       - SSH_AUTH_SOCK=/ssh-agent
     volumes:
       - ${SSH_AUTH_SOCK}:/ssh-agent
-      # Report storage
-      - "${REPORT_DATA_DIR:-./backend/data}:/app/backend/data"
+      # TODO: Report storage mount
+      # ${REPORT_DATA_DIR:-./backend/data}:/app/backend/data"
   
   # To connect to the container use `ssh-container` and port `22` 
   ssh:
