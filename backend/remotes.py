@@ -1,6 +1,7 @@
 import enum
 import json
 import logging
+import os
 from pathlib import Path
 from stat import S_ISDIR
 from typing import List
@@ -83,7 +84,7 @@ def remote_exception_handler(func):
 
 
 @remote_exception_handler
-def get_client(remote_connection: RemoteConnection) -> SSHClient:
+def get_client(remote_connection: RemoteConnection, ssh_config="~/.ssh/config") -> SSHClient:
     """
     Paramiko will use the local SSH agent for keys
     :param remote_connection:
@@ -92,12 +93,26 @@ def get_client(remote_connection: RemoteConnection) -> SSHClient:
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.load_system_host_keys()
-    agent = Agent()
-    if not agent.get_keys():
-        raise SSHException("No keys found")
-    logger.info(f"Connecting to remote host {remote_connection.host}")
-    logger.info(f"Found {len(agent.get_keys())} in agent")
-    ssh.connect(remote_connection.host, look_for_keys=True, port=remote_connection.port,
+
+    use_agent = os.getenv('USE_SSH_AGENT', False)
+    keyfile_path = None
+    if use_agent:
+        agent = Agent()
+        if not agent.get_keys():
+            raise SSHException("No keys found")
+        logger.info(f"Connecting to remote host {remote_connection.host}")
+        logger.info(f"Found {len(agent.get_keys())} in agent")
+    else:
+        config_path = Path(ssh_config).expanduser()
+        config = paramiko.SSHConfig.from_path(config_path).lookup(remote_connection.host)
+        if not config:
+            raise SSHException(f"Host not found in SSH config {remote_connection.host}")
+        keyfile_path = config['identityfile'].pop()
+
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.load_system_host_keys()
+    ssh.connect(remote_connection.host, key_filename=keyfile_path, port=remote_connection.port,
                 username=remote_connection.username)
     return ssh
 
