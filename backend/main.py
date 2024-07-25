@@ -5,16 +5,24 @@ from pathlib import Path as PathlibPath
 from typing import List, Optional
 
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, Path, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.models import Response as ResponseModel
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, select
 from sqlalchemy.orm import sessionmaker
 from fastapi.staticfiles import StaticFiles
 
-from backend.remotes import RemoteConnection, check_remote_path, StatusMessage, RemoteFolder, get_remote_test_folders, \
-    sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY
+from backend.remotes import RemoteConnection, check_remote_path, RemoteFolder, get_remote_test_folders, \
+    sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY, RemoteFolderException
+
+
+dotenv_path = PathlibPath(__file__).parent.parent.joinpath('.env')
+if dotenv_path.exists():
+    load_dotenv(str(dotenv_path))
+
 
 DATABASE_URL = f"sqlite:////{ACTIVE_DATA_DIRECTORY}/db.sqlite"
 
@@ -116,7 +124,7 @@ class StackTrace(BaseModel):
 
 
 class OperationDetails(BaseModel):
-    operation_id: int
+    operation_id: Optional[int] = None
     input_tensors: List[Tensor]
     output_tensors: List[Tensor]
     buffers: List[Buffer]
@@ -277,28 +285,38 @@ async def read_root():
     return Response(status_code=200)
 
 
-@app.post("/api/remote/folder", response_model=List[RemoteFolder])
+@app.post("/api/remote/folder", response_model=List[RemoteFolder] | ResponseModel)
 async def get_remote_folders(connection: RemoteConnection):
-    return get_remote_test_folders(connection)
+    try:
+        return get_remote_test_folders(connection)
+    except RemoteFolderException as e:
+        return Response(status_code=e.status, content=e.message)
 
 
-@app.post("/api/remote/test", response_model=StatusMessage)
+@app.post("/api/remote/test", response_model=ResponseModel)
 async def get_remote_folders(connection: RemoteConnection):
-    return check_remote_path(connection)
+    try:
+        check_remote_path(connection)
+    except RemoteFolderException as e:
+        return Response(status_code=e.status, content=e.message)
+    return Response(status_code=200)
 
 
-@app.post("/api/remote/sync", response_model=StatusMessage)
+@app.post("/api/remote/sync", response_model=ResponseModel)
 async def sync_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
-    sync_test_folders(connection, folder)
-    return StatusMessage(status=200, message="success")
+    try:
+        sync_test_folders(connection, folder)
+    except RemoteFolderException as e:
+        return Response(status_code=e.status, content=e.message)
+    return Response(status_code=200, content="")
 
 
-@app.post("/api/remote/use", response_model=StatusMessage)
+@app.post("/api/remote/use", response_model=ResponseModel)
 async def use_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
     report_folder = PathlibPath(folder.remotePath).name
     connection_directory = PathlibPath(REPORT_DATA_DIRECTORY, connection.name, report_folder)
     shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
-    return StatusMessage(status=200, message="success")
+    return Response(status_code=200)
 
 
 @app.get("/api/get-operations", response_model=List[OperationWithArguments])
@@ -330,6 +348,19 @@ async def get_operations():
 @app.get("/api/get-operation-details/{operation_id}", response_model=OperationDetails)
 async def get_operation_details(operation_id: int = Path(..., description="")):
     db = SessionLocal()
+    operation_query = select(operations).where(operations.c.operation_id == operation_id)
+
+    try:
+        db.execute(operation_query).one()
+    except:
+        return OperationDetails(
+            operation_id=None,
+            input_tensors=[],
+            output_tensors=[],
+            buffers=[],
+            l1_sizes=[],
+            stack_trace=''
+        )
 
     # Fetch input tensors
     input_query = select(input_tensors).where(input_tensors.c.operation_id == operation_id)
@@ -482,7 +513,8 @@ async def get_tensor_details(tensor_id: int = Path(..., description="The ID of t
 if os.environ.get("FLASK_ENV", "development") == "production":
     parent_dir = pathlib.Path(__file__).parent.parent.resolve()
     dist_dir = pathlib.Path(parent_dir, "/public")
-    app.mount("/", StaticFiles(directory=dist_dir, html=True))
+    if dist_dir.exists():
+        app.mount("/", StaticFiles(directory=dist_dir, html=True))
 else:
     if __name__ == "__main__":
         uvicorn.run(app, host="0.0.0.0", port=8000)
