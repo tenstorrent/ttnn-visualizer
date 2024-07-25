@@ -1,4 +1,3 @@
-import enum
 import json
 import logging
 import os
@@ -17,8 +16,6 @@ logger = logging.getLogger(__name__)
 TEST_CONFIG_FILE = 'config.json'
 REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath('data')
 ACTIVE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath('active')
-
-
 
 
 class RemoteConnection(BaseModel):
@@ -88,7 +85,6 @@ def get_client(remote_connection: RemoteConnection) -> SSHClient:
     """
     Paramiko will use the local SSH agent for keys
     :param remote_connection:
-    :param ssh_config: SSH configuration file path
     :return:
     """
     ssh = paramiko.SSHClient()
