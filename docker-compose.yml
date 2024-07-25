@@ -32,10 +32,10 @@ services:
       - SSH_AUTH_SOCK=/ssh-agent
     volumes:
       - ${SSH_AUTH_SOCK}:/ssh-agent
-      # TODO: Report storage mount
-      # ${REPORT_DATA_DIR:-./backend/data}:/app/backend/data"
+      # For Mac:
+      # - /run/host-services/ssh-auth.sock:/ssh-agent
   
-  # To connect to the container use `ssh-container` and port `22` 
+  # To connect to the container use `ssh` and port `22` 
   ssh:
     build: 
       dockerfile: Dockerfile
@@ -44,7 +44,5 @@ services:
         - "username=YOUR_USER_NAME"
         # See README for SSH container for keypath
         - "keypath=./id_ed25519.pub"
-        
-
     ports:
       - "${DOCKER_SSH_PORT_FORWARD:-2222}:22"
