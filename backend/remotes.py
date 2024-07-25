@@ -1,3 +1,4 @@
+import enum
 import json
 import logging
 from pathlib import Path
@@ -5,8 +6,9 @@ from stat import S_ISDIR
 from typing import List
 
 import paramiko
+from paramiko.agent import Agent
 from paramiko.client import SSHClient
-from paramiko.ssh_exception import SSHException, AuthenticationException
+from paramiko.ssh_exception import SSHException, AuthenticationException, NoValidConnectionsError
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -14,6 +16,8 @@ logger = logging.getLogger(__name__)
 TEST_CONFIG_FILE = 'config.json'
 REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath('data')
 ACTIVE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath('active')
+
+
 
 
 class RemoteConnection(BaseModel):
@@ -59,11 +63,16 @@ def remote_exception_handler(func):
             )
         except NoProjectsException as err:
             raise RemoteFolderException(
-                status=500, message=f"Unable to open path {connection.path}: {str(err)}"
+                status=400, message=f"Unable to open path {connection.path}: {str(err)}"
             )
+        except NoValidConnectionsError as err:
+            raise RemoteFolderException(
+                status=500, message=f"Unable to connect to host {connection.host}: {str(err)}"
+            )
+
         except IOError as err:
             raise RemoteFolderException(
-                status=400, message=f"Path {connection.path} does not exist"
+                status=400, message=f"Path {connection.path} does not exist: {str(err)}"
             )
         except SSHException as err:
             raise RemoteFolderException(
@@ -83,6 +92,11 @@ def get_client(remote_connection: RemoteConnection) -> SSHClient:
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.load_system_host_keys()
+    agent = Agent()
+    if not agent.get_keys():
+        raise SSHException("No keys found")
+    logger.info(f"Connecting to remote host {remote_connection.host}")
+    logger.info(f"Found {len(agent.get_keys())} in agent")
     ssh.connect(remote_connection.host, look_for_keys=True, port=remote_connection.port,
                 username=remote_connection.username)
     return ssh

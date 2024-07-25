@@ -4,9 +4,11 @@ from typing import List, Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, Path, Request
+from fastapi import Response
+from fastapi import FastAPI, Path, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.openapi.models import Response as ResponseModel
 from pydantic import BaseModel
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, select
 from sqlalchemy.orm import sessionmaker
@@ -275,38 +277,38 @@ async def read_root():
     return {"message": "Hello from FastAPI"}
 
 
-@app.post("/api/remote/folder", response_model=List[RemoteFolder] | StatusMessage)
+@app.post("/api/remote/folder", response_model=List[RemoteFolder] | ResponseModel)
 async def get_remote_folders(connection: RemoteConnection):
     try:
         return get_remote_test_folders(connection)
     except RemoteFolderException as e:
-        return StatusMessage(status=e.status, message=e.message)
+        return Response(status_code=e.status, content=e.message)
 
 
-@app.post("/api/remote/test", response_model=StatusMessage)
+@app.post("/api/remote/test", response_model=ResponseModel)
 async def get_remote_folders(connection: RemoteConnection):
     try:
         check_remote_path(connection)
     except RemoteFolderException as e:
-        return StatusMessage(status=e.status, message=e.message)
-    return StatusMessage(status=200, message="success")
+        return Response(status_code=e.status, content=e.message)
+    return Response(status_code=200)
 
 
-@app.post("/api/remote/sync", response_model=StatusMessage)
+@app.post("/api/remote/sync", response_model=ResponseModel)
 async def sync_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
     try:
         sync_test_folders(connection, folder)
     except RemoteFolderException as e:
-        return StatusMessage(status=e.status, message=e.message)
-    return StatusMessage(status=200, message="success")
+        return Response(status_code=e.status, content=e.message)
+    return Response(status_code=200, content="")
 
 
-@app.post("/api/remote/use", response_model=StatusMessage)
+@app.post("/api/remote/use", response_model=ResponseModel)
 async def use_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
     report_folder = PathlibPath(folder.remotePath).name
     connection_directory = PathlibPath(REPORT_DATA_DIRECTORY, connection.name, report_folder)
     shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
-    return StatusMessage(status=200, message="success")
+    return Response(status_code=200)
 
 
 @app.get("/api/get-operations", response_model=List[OperationWithArguments])
