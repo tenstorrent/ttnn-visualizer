@@ -4,17 +4,24 @@ from typing import List, Optional
 
 import httpx
 import uvicorn
-from fastapi import Response
+from dotenv import load_dotenv
 from fastapi import FastAPI, Path, Request, HTTPException
+from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.openapi.models import Response as ResponseModel
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, select
 from sqlalchemy.orm import sessionmaker
 
-from backend.remotes import RemoteConnection, check_remote_path, StatusMessage, RemoteFolder, get_remote_test_folders, \
+from backend.remotes import RemoteConnection, check_remote_path, RemoteFolder, get_remote_test_folders, \
     sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY, RemoteFolderException
+
+
+dotenv_path = PathlibPath(__file__).parent.parent.joinpath('.env')
+if dotenv_path.exists():
+    load_dotenv(str(dotenv_path))
+
 
 DATABASE_URL = f"sqlite:////{ACTIVE_DATA_DIRECTORY}/db.sqlite"
 
