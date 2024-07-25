@@ -121,13 +121,14 @@ def get_client(remote_connection: RemoteConnection) -> SSHClient:
 
 
 @remote_exception_handler
-def get_remote_folder_config_paths(ssh_client, remote_path) -> List[str]:
+def get_remote_folder_config_paths(remote_connection, ssh_client) -> List[str]:
     """
     Given a remote path return a list of report config files
     :param ssh_client:
-    :param remote_path:
+    :param remote_connection
     :return:
     """
+    remote_path = remote_connection.path
     project_configs = []
     with ssh_client.open_sftp() as sftp:
         all_files = sftp.listdir_attr(remote_path)
@@ -137,6 +138,8 @@ def get_remote_folder_config_paths(ssh_client, remote_path) -> List[str]:
             directory_files = sftp.listdir(str(dirname))
             if TEST_CONFIG_FILE in directory_files:
                 project_configs.append(Path(dirname, TEST_CONFIG_FILE))
+    if not project_configs:
+        raise NoProjectsException(status=400, message="No project configs found at path")
     return project_configs
 
 
@@ -178,7 +181,7 @@ def get_remote_test_folders(remote_connection: RemoteConnection) -> List[RemoteF
     :return:
     """
     client = get_client(remote_connection)
-    remote_config_paths = get_remote_folder_config_paths(client, remote_connection.path)
+    remote_config_paths = get_remote_folder_config_paths(remote_connection, client)
     if not remote_config_paths:
         raise NoProjectsException(f"No projects found at {remote_connection.path}")
     return get_remote_folders(client, remote_config_paths)
@@ -231,5 +234,4 @@ def sync_test_folders(remote_connection: RemoteConnection, remote_folder: Remote
 @remote_exception_handler
 def check_remote_path(remote_connection):
     ssh_client = get_client(remote_connection)
-    with ssh_client.open_sftp() as sftp:
-        sftp.listdir(remote_connection.path)
+    get_remote_folder_config_paths(remote_connection, ssh_client)
