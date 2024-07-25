@@ -32,11 +32,19 @@ services:
       - SSH_AUTH_SOCK=/ssh-agent
     volumes:
       - ${SSH_AUTH_SOCK}:/ssh-agent
+      # Report storage
+      - "${REPORT_DATA_DIR:-./backend/data}:/app/backend/data"
   
   # To connect to the container use `ssh-container` and port `22` 
-  ssh-container:
+  ssh:
     build: 
       dockerfile: Dockerfile
       context: ./docker/SSH
+      args: 
+        - "username=YOUR_USER_NAME"
+        # See README for SSH container for keypath
+        - "keypath=./id_ed25519.pub"
+        
+
     ports:
-      - "${DOCKER_SSH_PORT_FORWARD:-2222}:${PORT:-22}"
+      - "${DOCKER_SSH_PORT_FORWARD:-2222}:22"

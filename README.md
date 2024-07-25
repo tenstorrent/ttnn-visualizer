@@ -84,6 +84,8 @@ then follow steps for creating virtual environment and reinstalling dependencies
 
 ## Docker
 
+### SSH
+
 To avoid exposing private keys in the docker image an ssh-agent is required to be running on the host machine. The agent
 socket is then mounted to the guest container. For instructions on setting up your ssh-agent
 see [this article](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent?platform=windows#adding-your-ssh-key-to-the-ssh-agent)
@@ -95,9 +97,17 @@ To view your currently available keys, `ssh-add -L`.
 The docker-compose file should expand the parameter for your agent socket - you can confirm/see this value by entering `echo $SSH_AUTH_SOCK`.
 The printed value should be the location of your SSH agent socket.
 
-
-
 ### Running project
 
-`docker-compose up web --build`
+To run the application you can simply run `docker-compose up web`. To rebuild add the build flag, `docker-compose up web --build`. 
+
+To use the [provided SSH container](./docker/SSH/README.md) with the compose configuration you can substitute `web` in the above commands for `ssh`. To run the container in the background use `docker-compose up ssh -d`
+
+To connect to this container through the remote connection manager you use the name of the service as the 'host' and the default SSH port 22. 
+
+
+### Options
+
+
+
 
