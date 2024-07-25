@@ -39,15 +39,15 @@ interface MicroOperationsData {
 function MicroOperations({ microOperations }: MicroOperationsData) {
     return (
         <>
-            <table className='operation-arguments'>
+            <table className='arguments-table'>
                 <caption>Micro Operations</caption>
 
                 <tbody>
                     <tr>
-                        <td>Operation name</td>
-                        <td>Operation type</td>
-                        <td>Program cache hit</td>
-                        <td>Program hash</td>
+                        <th>Operation name</th>
+                        <th>Operation type</th>
+                        <th>Program cache hit</th>
+                        <th>Program hash</th>
                     </tr>
 
                     {microOperations.map((op) => (
@@ -71,21 +71,21 @@ function MicroOperations({ microOperations }: MicroOperationsData) {
                         <table
                             // eslint-disable-next-line react/no-array-index-key
                             key={`${op.program_hash}-${index}`}
-                            className='operation-arguments'
+                            className='arguments-table has-vertical-headings'
                         >
                             <tbody>
                                 <tr>
-                                    <td>Dtype</td>
+                                    <th>Dtype</th>
                                     <td>{inputTensor.dtype}</td>
                                 </tr>
 
                                 <tr>
-                                    <td>Layout</td>
+                                    <th>Layout</th>
                                     <td>{inputTensor.layout}</td>
                                 </tr>
 
                                 <tr>
-                                    <td>Memory config</td>
+                                    <th>Memory config</th>
                                     <td>
                                         <table className='memory-config'>
                                             <tbody>
@@ -111,19 +111,35 @@ function MicroOperations({ microOperations }: MicroOperationsData) {
                                 <tr>
                                     <td>Shape</td>
                                     <td>
-                                        Dimensions: [
-                                        {inputTensor.shape.dimensions.slice(0, inputTensor.shape.rank).toString()}
-                                        ]
-                                        <br />
-                                        Padding dimensions: [
-                                        {inputTensor.shape.padding.pad_dimensions
-                                            .slice(0, inputTensor.shape.padding.rank)
-                                            .map(
-                                                (paddingDimension) =>
-                                                    `[${paddingDimension.back},${paddingDimension.front}]`,
-                                            )
-                                            .toString()}
-                                        ]
+                                        <table className='arguments-table has-vertical-headings'>
+                                            <tbody>
+                                                <tr>
+                                                    <th>Dimensions</th>
+                                                    <td>
+                                                        [
+                                                        {inputTensor.shape.dimensions
+                                                            .slice(0, inputTensor.shape.rank)
+                                                            .toString()}
+                                                        ]
+                                                    </td>
+                                                </tr>
+
+                                                <tr>
+                                                    <th>Padding dimensions</th>
+                                                    <td>
+                                                        [
+                                                        {inputTensor.shape.padding.pad_dimensions
+                                                            .slice(0, inputTensor.shape.padding.rank)
+                                                            .map(
+                                                                (paddingDimension) =>
+                                                                    `[${paddingDimension.back},${paddingDimension.front}]`,
+                                                            )
+                                                            .toString()}
+                                                        ]
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
                                     </td>
                                 </tr>
                             </tbody>

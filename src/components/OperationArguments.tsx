@@ -24,7 +24,7 @@ function OperationArguments({ operationId, operationIndex, argumentsData, scroll
 
     return (
         <>
-            <table className='operation-arguments'>
+            <table className='arguments-table has-vertical-headings'>
                 <caption>Arguments</caption>
 
                 <tbody>

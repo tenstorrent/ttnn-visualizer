@@ -4,7 +4,7 @@
 
 @use '../definitions/colours' as *;
 
-.operation-arguments {
+.arguments-table {
     border-collapse: collapse;
     color: $tt-white-text;
     width: 100%;
@@ -24,17 +24,27 @@
             background-color: $tt-off-background;
         }
 
+        th {
+            font-weight: 700;
+        }
+
+        th,
         td {
             padding: 6px 12px;
             vertical-align: top;
 
-            &:first-child {
-                font-weight: 700;
-                vertical-align: top;
-            }
-
             &.expandable-tensor {
                 word-break: break-word; // Can get really long strings in the table cell which cause horizontal overflows
+            }
+        }
+    }
+
+    &.has-vertical-headings {
+        tr {
+            td {
+                &:first-child {
+                    font-weight: 700;
+                }
             }
         }
     }
