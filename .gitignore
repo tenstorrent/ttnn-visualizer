@@ -36,3 +36,4 @@ id_ed*
 
 # Backend
 /backend/data
+.env
