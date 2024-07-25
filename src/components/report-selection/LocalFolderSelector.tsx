@@ -36,17 +36,22 @@ const LocalFolderOptions: FC = () => {
     const handleDirectoryOpen = async () => {
         const files = await selectDirectory();
         const connectionStatus: ConnectionStatus = {
-            status: ConnectionTestStates.FAILED,
-            message: 'Some kind of error with this',
+            status: ConnectionTestStates.OK,
+            message: 'Files uploaded successfully',
         };
 
         setIsUploading(true);
 
         const response = await uploadLocalFolder(files);
 
-        if (response.status === 200) {
-            connectionStatus.status = ConnectionTestStates.OK;
-            connectionStatus.message = 'Files uploaded successful';
+        if (response.status !== 200) {
+            connectionStatus.status = ConnectionTestStates.FAILED;
+            connectionStatus.message = 'Unable to upload selected directory.';
+        }
+
+        if (response.data.status !== 200) {
+            connectionStatus.status = ConnectionTestStates.FAILED;
+            connectionStatus.message = 'Selected directory does not contain a valid report.';
         }
 
         // TODO: Handle errors more betterly

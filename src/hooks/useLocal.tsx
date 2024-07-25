@@ -26,13 +26,11 @@ const useLocalConnection = () => {
             formData.append('files', file);
         });
 
-        const response = await axios.post(`${import.meta.env.VITE_API_ROOT}/local/upload`, formData, {
+        return axios.post(`${import.meta.env.VITE_API_ROOT}/local/upload`, formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
         });
-
-        return response;
     };
 
     return {
