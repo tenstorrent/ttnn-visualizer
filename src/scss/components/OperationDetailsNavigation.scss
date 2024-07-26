@@ -14,21 +14,11 @@ $loader-width: 32px;
 
     .button-group {
         gap: 10px;
+        align-items: center;
     }
 
     .title {
         margin: 0;
         line-height: 1.4;
-    }
-}
-
-.operation-details-loader {
-    position: absolute;
-    top: -25px; // Height is not uniform so need to adjust to a different value than $loader-width
-    right: -$loader-width;
-    scale: 0.5;
-
-    .loading-spinner {
-        color: $tt-medium-light-gray;
     }
 }

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import { useCallback, useEffect, useMemo } from 'react';
 import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -5,7 +9,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
 import 'styles/components/OperationDetailsNavigation.scss';
 import ROUTES from '../definitions/routes';
-import LoadingSpinner from './LoadingSpinner';
+import LoadingSpinner, { LoadingSpinnerSizes } from './LoadingSpinner';
 
 interface OperationDetailsNavigationProps {
     operationId: number;
@@ -100,14 +104,12 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace, isLoading }
                     />
                 </Tooltip>
 
-                <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
+                {isLoading ? (
+                    <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
+                ) : (
+                    <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
+                )}
             </ButtonGroup>
-
-            {isLoading && (
-                <div className='operation-details-loader'>
-                    <LoadingSpinner />
-                </div>
-            )}
         </nav>
     );
 }
