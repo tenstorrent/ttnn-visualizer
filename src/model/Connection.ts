@@ -1,6 +1,6 @@
 import { HttpStatusCode } from 'axios';
 
-export interface Connection {
+export interface RemoteConnection {
     name: string;
     host: string;
     port: number;
@@ -19,7 +19,7 @@ export interface ConnectionStatus {
     message: string;
 }
 
-export interface ReportFolder {
+export interface RemoteFolder {
     testName: string;
     remotePath: string;
     localPath: string;
@@ -27,12 +27,12 @@ export interface ReportFolder {
     lastSynced?: string;
 }
 
-export interface SyncRemoteFolderData {
+export interface SyncRemoteFolder {
     status: HttpStatusCode;
     message: string;
 }
 
-export interface MountRemoteFolderData {
+export interface MountRemoteFolder {
     status: HttpStatusCode;
     message: string;
 }
