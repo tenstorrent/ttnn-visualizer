@@ -108,11 +108,4 @@ To run the application you can simply run `docker-compose up web`. To rebuild ad
 
 To use the [provided SSH container](./docker/SSH/README.md) with the compose configuration you can substitute `web` in the above commands for `ssh`. To run the container in the background use `docker-compose up ssh -d`
 
-To connect to this container through the remote connection manager you use the name of the service as the 'host' and the default SSH port 22. 
-
-
-### Options
-
-
-
-
+To connect to this container through the remote connection manager you use the name of the service (`ssh`) as the 'host' and the default SSH port 22. 

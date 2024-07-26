@@ -32,10 +32,11 @@ services:
       - SSH_AUTH_SOCK=/ssh-agent
     volumes:
       - ${SSH_AUTH_SOCK}:/ssh-agent
-      # For Mac replace above with:
-      # - type: bind
-      #  source: /run/host-services/ssh-auth.sock
-      #  target: /ssh-agent
+      
+      # TODO Docker desktop for MacOS is not properly forwarding the port.
+      # Need to figure out the configuration to change for forwarding SSH-agent
+      # The logic will be the same however: using the host's agent for key authentication
+      # Works on linux hosts without issue
 
   # To connect to the container in the remote connection dialog use `ssh` and port `22`
   ssh:
