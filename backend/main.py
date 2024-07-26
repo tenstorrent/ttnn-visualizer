@@ -1,3 +1,4 @@
+import json
 import shutil
 from pathlib import Path as PathlibPath
 from typing import List, Optional
@@ -5,8 +6,10 @@ from typing import List, Optional
 import httpx
 import uvicorn
 from fastapi import FastAPI, Path, Request, UploadFile, File
+from fastapi import FastAPI, Path, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
 from sqlalchemy import (
     create_engine,
@@ -175,15 +178,6 @@ class TensorDetailsResponse(BaseModel):
     consumers: List[int]
 
 
-class MicroOperation(BaseModel):
-    input_tensor_records: List[Tensor]
-    operation_name: str
-    operation_type: str
-    program_cache_hit: Optional[bool]
-    program_hash: Optional[int]
-    ttnn_operation_id: int
-
-
 operations = Table(
     "operations",
     metadata,
@@ -303,9 +297,7 @@ async def read_root():
 
 
 @app.post("/api/local/upload")
-async def create_upload_files(
-    files: List[UploadFile] = File(...)
-):
+async def create_upload_files(files: List[UploadFile] = File(...)):
     """
     Copies the folder upload into the active data directory
     :param files:
@@ -313,7 +305,7 @@ async def create_upload_files(
     """
 
     filenames = [PathlibPath(f.filename).name for f in files]
-    if 'db.sqlite' not in filenames or 'config.json' not in filenames:
+    if "db.sqlite" not in filenames or "config.json" not in filenames:
         return StatusMessage(status=500, message="Invalid project directory.")
 
     # Grab a file path to get the top level path
@@ -321,9 +313,11 @@ async def create_upload_files(
     top_level_directory = file_path.parents[0].name
     destination_dir = PathlibPath(REPORT_DATA_DIRECTORY, top_level_directory)
     for file in files:
-        destination_file = PathlibPath(REPORT_DATA_DIRECTORY, PathlibPath(file.filename))
+        destination_file = PathlibPath(
+            REPORT_DATA_DIRECTORY, PathlibPath(file.filename)
+        )
         destination_file.parent.mkdir(exist_ok=True, parents=True)
-        with open(destination_file, 'wb') as f:
+        with open(destination_file, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
     shutil.copytree(destination_dir, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
@@ -357,6 +351,17 @@ async def use_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
 
 
 @app.get("/api/get-operation-history")
+async def get_operation_history():
+    operation_history_filename = "operationHistory.json"
+    operation_history_file = PathlibPath(
+        ACTIVE_DATA_DIRECTORY, operation_history_filename
+    )
+    if not operation_history_file.exists():
+        raise HTTPException(status_code=404, detail="Operation history file not found")
+    with open(operation_history_file, "r") as file:
+        return json.load(file)
+
+
 @app.get("/api/get-operations", response_model=List[OperationWithArguments])
 async def get_operations():
     db = SessionLocal()
