@@ -38,3 +38,9 @@ watchfiles==0.22.0
 websockets==12.0
 
 paramiko~=3.4.0
+marshmallow==3.21.3
+flask_marshmallow==1.2.1
+flask_cors==4.0.1
+flask_sqlalchemy==3.1.1
+flask_static_digest==0.4.1
+marshmallow-sqlalchemy==1.0.0
