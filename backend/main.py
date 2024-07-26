@@ -8,11 +8,29 @@ from fastapi import FastAPI, Path, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, select
+from sqlalchemy import (
+    create_engine,
+    MetaData,
+    Table,
+    Column,
+    Integer,
+    String,
+    Float,
+    Text,
+    select,
+)
 from sqlalchemy.orm import sessionmaker
 
-from backend.remotes import RemoteConnection, check_remote_path, StatusMessage, RemoteFolder, get_remote_test_folders, \
-    sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY
+from backend.remotes import (
+    RemoteConnection,
+    check_remote_path,
+    StatusMessage,
+    RemoteFolder,
+    get_remote_test_folders,
+    sync_test_folders,
+    REPORT_DATA_DIRECTORY,
+    ACTIVE_DATA_DIRECTORY,
+)
 
 DATABASE_URL = f"sqlite:////{ACTIVE_DATA_DIRECTORY}/db.sqlite"
 
@@ -157,6 +175,15 @@ class TensorDetailsResponse(BaseModel):
     consumers: List[int]
 
 
+class MicroOperation(BaseModel):
+    input_tensor_records: List[Tensor]
+    operation_name: str
+    operation_type: str
+    program_cache_hit: Optional[bool]
+    program_hash: Optional[int]
+    ttnn_operation_id: int
+
+
 operations = Table(
     "operations",
     metadata,
@@ -254,7 +281,7 @@ stack_traces = Table(
     "stack_traces",
     metadata,
     Column("operation_id", Integer, primary_key=True),
-    Column("stack_trace", Text)
+    Column("stack_trace", Text),
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -322,33 +349,41 @@ async def sync_remote_folder(connection: RemoteConnection, folder: RemoteFolder)
 @app.post("/api/remote/use", response_model=StatusMessage)
 async def use_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
     report_folder = PathlibPath(folder.remotePath).name
-    connection_directory = PathlibPath(REPORT_DATA_DIRECTORY, connection.name, report_folder)
+    connection_directory = PathlibPath(
+        REPORT_DATA_DIRECTORY, connection.name, report_folder
+    )
     shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
     return StatusMessage(status=200, message="success")
 
 
+@app.get("/api/get-operation-history")
 @app.get("/api/get-operations", response_model=List[OperationWithArguments])
 async def get_operations():
     db = SessionLocal()
     operations_query = select(operations)
     operations_list = db.execute(operations_query).fetchall()
 
-    operations_dict = {operation.operation_id: {
-        "id": operation.operation_id,
-        "name": operation.name,
-        "duration": operation.duration,
-        "arguments": []
-    } for operation in operations_list}
+    operations_dict = {
+        operation.operation_id: {
+            "id": operation.operation_id,
+            "name": operation.name,
+            "duration": operation.duration,
+            "arguments": [],
+        }
+        for operation in operations_list
+    }
 
     arguments_query = select(operation_arguments)
     arguments_list = db.execute(arguments_query).fetchall()
 
     for argument in arguments_list:
-        if not any(arg["name"] == argument.name for arg in operations_dict[argument.operation_id]["arguments"]):
-            operations_dict[argument.operation_id]["arguments"].append({
-                "name": argument.name,
-                "value": argument.value
-            })
+        if not any(
+            arg["name"] == argument.name
+            for arg in operations_dict[argument.operation_id]["arguments"]
+        ):
+            operations_dict[argument.operation_id]["arguments"].append(
+                {"name": argument.name, "value": argument.value}
+            )
 
     return list(operations_dict.values())
 
@@ -356,91 +391,109 @@ async def get_operations():
 @app.get("/api/get-operation-details/{operation_id}", response_model=OperationDetails)
 async def get_operation_details(operation_id: int = Path(..., description="")):
     db = SessionLocal()
-    operation_query = select(operations).where(operations.c.operation_id == operation_id)
+    operation_query = select(operations).where(
+        operations.c.operation_id == operation_id
+    )
 
     try:
         db.execute(operation_query).one()
     except:
         return OperationDetails(
-        operation_id=None,
-        input_tensors=[],
-        output_tensors=[],
-        buffers=[],
-        l1_sizes=[],
-        stack_trace=''
-    )
+            operation_id=None,
+            input_tensors=[],
+            output_tensors=[],
+            buffers=[],
+            l1_sizes=[],
+            stack_trace="",
+        )
 
     # Fetch input tensors
-    input_query = select(input_tensors).where(input_tensors.c.operation_id == operation_id)
+    input_query = select(input_tensors).where(
+        input_tensors.c.operation_id == operation_id
+    )
     input_results = db.execute(input_query).mappings().all()
 
-    input_tensor_ids = [result['tensor_id'] for result in input_results]
-    input_tensors_query = select(tensors).where(tensors.c.tensor_id.in_(input_tensor_ids))
+    input_tensor_ids = [result["tensor_id"] for result in input_results]
+    input_tensors_query = select(tensors).where(
+        tensors.c.tensor_id.in_(input_tensor_ids)
+    )
     input_tensors_data = db.execute(input_tensors_query).mappings().all()
 
     # Add producers and consumers to input tensors
     input_tensors_list = []
     for row in input_tensors_data:
-        tensor_id = row['tensor_id']
+        tensor_id = row["tensor_id"]
 
         # Fetch producers
-        producers_query = select(output_tensors.c.operation_id).where(output_tensors.c.tensor_id == tensor_id)
+        producers_query = select(output_tensors.c.operation_id).where(
+            output_tensors.c.tensor_id == tensor_id
+        )
         producers_results = db.execute(producers_query).fetchall()
         producers_list = [result[0] for result in producers_results]
 
         # Fetch consumers
-        consumers_query = select(input_tensors.c.operation_id).where(input_tensors.c.tensor_id == tensor_id)
+        consumers_query = select(input_tensors.c.operation_id).where(
+            input_tensors.c.tensor_id == tensor_id
+        )
         consumers_results = db.execute(consumers_query).fetchall()
         consumers_list = [result[0] for result in consumers_results]
 
         tensor = Tensor(
-            tensor_id=row['tensor_id'],
-            shape=row['shape'],
-            dtype=row['dtype'],
-            layout=row['layout'],
-            memory_config=row['memory_config'],
-            device_id=row['device_id'],
-            address=row['address'],
-            buffer_type=row['buffer_type'],
+            tensor_id=row["tensor_id"],
+            shape=row["shape"],
+            dtype=row["dtype"],
+            layout=row["layout"],
+            memory_config=row["memory_config"],
+            device_id=row["device_id"],
+            address=row["address"],
+            buffer_type=row["buffer_type"],
             producers=producers_list,
-            consumers=consumers_list
+            consumers=consumers_list,
         )
         input_tensors_list.append(tensor)
 
     # Fetch output tensors
-    output_query = select(output_tensors).where(output_tensors.c.operation_id == operation_id)
+    output_query = select(output_tensors).where(
+        output_tensors.c.operation_id == operation_id
+    )
     output_results = db.execute(output_query).mappings().all()
 
-    output_tensor_ids = [result['tensor_id'] for result in output_results]
-    output_tensors_query = select(tensors).where(tensors.c.tensor_id.in_(output_tensor_ids))
+    output_tensor_ids = [result["tensor_id"] for result in output_results]
+    output_tensors_query = select(tensors).where(
+        tensors.c.tensor_id.in_(output_tensor_ids)
+    )
     output_tensors_data = db.execute(output_tensors_query).mappings().all()
 
     # Add producers and consumers to output tensors
     output_tensors_list = []
     for row in output_tensors_data:
-        tensor_id = row['tensor_id']
+        tensor_id = row["tensor_id"]
 
         # Fetch producers
-        producers_query = select(output_tensors.c.operation_id).where(output_tensors.c.tensor_id == tensor_id)
+        producers_query = select(output_tensors.c.operation_id).where(
+            output_tensors.c.tensor_id == tensor_id
+        )
         producers_results = db.execute(producers_query).fetchall()
         producers_list = [result[0] for result in producers_results]
 
         # Fetch consumers
-        consumers_query = select(input_tensors.c.operation_id).where(input_tensors.c.tensor_id == tensor_id)
+        consumers_query = select(input_tensors.c.operation_id).where(
+            input_tensors.c.tensor_id == tensor_id
+        )
         consumers_results = db.execute(consumers_query).fetchall()
         consumers_list = [result[0] for result in consumers_results]
 
         tensor = Tensor(
-            tensor_id=row['tensor_id'],
-            shape=row['shape'],
-            dtype=row['dtype'],
-            layout=row['layout'],
-            memory_config=row['memory_config'],
-            device_id=row['device_id'],
-            address=row['address'],
-            buffer_type=row['buffer_type'],
+            tensor_id=row["tensor_id"],
+            shape=row["shape"],
+            dtype=row["dtype"],
+            layout=row["layout"],
+            memory_config=row["memory_config"],
+            device_id=row["device_id"],
+            address=row["address"],
+            buffer_type=row["buffer_type"],
             producers=producers_list,
-            consumers=consumers_list
+            consumers=consumers_list,
         )
         output_tensors_list.append(tensor)
 
@@ -459,14 +512,16 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
 
     device_query = select(devices)
     device_data = db.execute(device_query).mappings().all()
-    l1_sizes = [None] * (max(device['device_id'] for device in device_data) + 1)
+    l1_sizes = [None] * (max(device["device_id"] for device in device_data) + 1)
     for device in device_data:
-        l1_sizes[device['device_id']] = device['worker_l1_size']
+        l1_sizes[device["device_id"]] = device["worker_l1_size"]
 
         # Fetch stack trace
-        stack_trace_query = select(stack_traces).where(stack_traces.c.operation_id == operation_id)
+        stack_trace_query = select(stack_traces).where(
+            stack_traces.c.operation_id == operation_id
+        )
         stack_trace_result = db.execute(stack_trace_query).mappings().first()
-        stack_trace = stack_trace_result['stack_trace'] if stack_trace_result else ""
+        stack_trace = stack_trace_result["stack_trace"] if stack_trace_result else ""
 
     return OperationDetails(
         operation_id=operation_id,
@@ -474,14 +529,14 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
         output_tensors=output_tensors_list,
         buffers=buffers_list,
         l1_sizes=l1_sizes,
-        stack_trace=stack_trace
+        stack_trace=stack_trace,
     )
 
 
-
-
 @app.get("/api/get-tensor-details/{tensor_id}", response_model=TensorDetailsResponse)
-async def get_tensor_details(tensor_id: int = Path(..., description="The ID of the tensor")):
+async def get_tensor_details(
+    tensor_id: int = Path(..., description="The ID of the tensor")
+):
     db = SessionLocal()
 
     # Fetch tensor details
@@ -499,23 +554,25 @@ async def get_tensor_details(tensor_id: int = Path(..., description="The ID of t
         memory_config=tensor_result[4],
         device_id=tensor_result[5],
         address=tensor_result[6],
-        buffer_type=tensor_result[7]
+        buffer_type=tensor_result[7],
     )
 
     # Fetch producers
-    producers_query = select(output_tensors.c.operation_id).where(output_tensors.c.tensor_id == tensor_id)
+    producers_query = select(output_tensors.c.operation_id).where(
+        output_tensors.c.tensor_id == tensor_id
+    )
     producers_results = db.execute(producers_query).fetchall()
     producers_list = [result[0] for result in producers_results]
 
     # Fetch consumers
-    consumers_query = select(input_tensors.c.operation_id).where(input_tensors.c.tensor_id == tensor_id)
+    consumers_query = select(input_tensors.c.operation_id).where(
+        input_tensors.c.tensor_id == tensor_id
+    )
     consumers_results = db.execute(consumers_query).fetchall()
     consumers_list = [result[0] for result in consumers_results]
 
     return TensorDetailsResponse(
-        tensor=tensor_details,
-        producers=producers_list,
-        consumers=consumers_list
+        tensor=tensor_details, producers=producers_list, consumers=consumers_list
     )
 
 
@@ -536,10 +593,17 @@ async def proxy_middleware(request: Request, call_next):
                 headers=request.headers,
                 params=request.query_params,
             )
-            headers = {k: v for k, v in vite_response.headers.items() if k.lower() != 'content-encoding'}
+            headers = {
+                k: v
+                for k, v in vite_response.headers.items()
+                if k.lower() != "content-encoding"
+            }
             return StreamingResponse(vite_response.aiter_bytes(), headers=headers)
         except httpx.RequestError as exc:
-            return JSONResponse(status_code=500, content={"message": f"Error connecting to Vite server: {exc}"})
+            return JSONResponse(
+                status_code=500,
+                content={"message": f"Error connecting to Vite server: {exc}"},
+            )
 
 
 if __name__ == "__main__":
