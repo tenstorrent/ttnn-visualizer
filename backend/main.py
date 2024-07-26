@@ -352,12 +352,12 @@ async def use_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
 
 @app.get("/api/get-operation-history")
 async def get_operation_history():
-    operation_history_filename = "operationHistory.json"
+    operation_history_filename = "operation_history.json"
     operation_history_file = PathlibPath(
         ACTIVE_DATA_DIRECTORY, operation_history_filename
     )
     if not operation_history_file.exists():
-        raise HTTPException(status_code=404, detail="Operation history file not found")
+        return []
     with open(operation_history_file, "r") as file:
         return json.load(file)
 

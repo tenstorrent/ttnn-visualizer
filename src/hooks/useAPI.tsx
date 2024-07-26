@@ -1,8 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import { OperationDetailsData } from '../model/APIData';
-import { Operation } from '../model/Graph';
-import OperationHistory from '../definitions/operationHistory.json';
+import { MicroOperation, Operation } from '../model/Graph';
 
 const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
     const response = await axios.get<OperationDetailsData>(`/api/get-operation-details/${id}`);
@@ -10,10 +9,10 @@ const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> 
     return response.data;
 };
 const fetchOperations = async (): Promise<Operation[]> => {
-    const { data: operationList } = await axios.get<Omit<Operation, 'microOperations'>[]>('/api/get-operations');
-    // TODO: use proper backend call
-    // const operationHistory = await axios.get<MicroOperation[]>('/api/get-operation-history');
-    const microOperations = OperationHistory;
+    const [{ data: operationList }, { data: microOperations }] = await Promise.all([
+        axios.get<Omit<Operation, 'microOperations'>[]>('/api/get-operations'),
+        axios.get<MicroOperation[]>('/api/get-operation-history'),
+    ]);
 
     return operationList.map((operation) => ({
         ...operation,
