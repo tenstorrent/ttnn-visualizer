@@ -1,6 +1,6 @@
-import { ReportFolder } from '../model/Connection';
+import { RemoteFolder } from '../model/Connection';
 
-const isLocalFolderOutdated = (folder: ReportFolder) => {
+const isRemoteFolderOutdated = (folder: RemoteFolder) => {
     if (!folder.lastSynced) {
         return true;
     }
@@ -11,4 +11,4 @@ const isLocalFolderOutdated = (folder: ReportFolder) => {
     return lastModified > lastSynced;
 };
 
-export default isLocalFolderOutdated;
+export default isRemoteFolderOutdated;
