@@ -33,6 +33,13 @@ class TestingConfig(Config):
     DEBUG = bool(strtobool(os.getenv("FLASK_DEBUG", "True")))
     TESTING = True
 
+class ProductionConfig(Config):
+    SQLALCHEMY_TRACK_MODIFICATIONS = True
+    SQLALCHEMY_ECHO = False
+    DEBUG = False
+    TESTING = False
+
 
 development = DevelopmentConfig()
 testing = TestingConfig()
+production = ProductionConfig()
