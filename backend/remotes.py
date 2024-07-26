@@ -63,7 +63,7 @@ def remote_exception_handler(func):
             )
         except NoProjectsException as err:
             raise RemoteFolderException(
-                status=400, message=f"Unable to open path {connection.path}: {str(err)}"
+                status=400, message=f"No projects found at remote location: {connection.path}: {str(err)}"
             )
         except NoValidConnectionsError as err:
             raise RemoteFolderException(
@@ -72,11 +72,11 @@ def remote_exception_handler(func):
 
         except IOError as err:
             raise RemoteFolderException(
-                status=400, message=f"Path {connection.path} does not exist: {str(err)}"
+                status=400, message=f"Error opening remote folder {connection.path}: {str(err)}"
             )
         except SSHException as err:
             raise RemoteFolderException(
-                status=500, message=f"Unable to connect to remote: {err}"
+                status=500, message=f"Error connecting to host {connection.host}: {err}"
             )
 
     return remote_handler
