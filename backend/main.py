@@ -334,7 +334,7 @@ async def get_config():
         ACTIVE_DATA_DIRECTORY, config_file_name
     )
     if not operation_history_file.exists():
-        raise HTTPException(status_code=404, detail="Operation history file not found")
+        return {}
     with open(operation_history_file, "r") as file:
         return json.load(file)
 
