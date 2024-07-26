@@ -1,10 +1,11 @@
+import json
 import shutil
 from pathlib import Path as PathlibPath
 from typing import List, Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, Path, Request, UploadFile, File
+from fastapi import FastAPI, HTTPException, Path, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -325,6 +326,17 @@ async def use_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
     connection_directory = PathlibPath(REPORT_DATA_DIRECTORY, connection.name, report_folder)
     shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
     return StatusMessage(status=200, message="success")
+
+@app.get('/api/get-config')
+async def get_config():
+    config_file_name = "config.json"
+    operation_history_file = PathlibPath(
+        ACTIVE_DATA_DIRECTORY, config_file_name
+    )
+    if not operation_history_file.exists():
+        raise HTTPException(status_code=404, detail="Operation history file not found")
+    with open(operation_history_file, "r") as file:
+        return json.load(file)
 
 
 @app.get("/api/get-operations", response_model=List[OperationWithArguments])
