@@ -4,7 +4,7 @@ from typing import List, Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, Path, Request
+from fastapi import FastAPI, Path, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -273,6 +273,34 @@ def shutdown():
 @app.get("/api")
 async def read_root():
     return {"message": "Hello from FastAPI"}
+
+
+@app.post("/api/local/upload")
+async def create_upload_files(
+    files: List[UploadFile] = File(...)
+):
+    """
+    Copies the folder upload into the active data directory
+    :param files:
+    :return:
+    """
+
+    filenames = [PathlibPath(f.filename).name for f in files]
+    if 'db.sqlite' not in filenames or 'config.json' not in filenames:
+        return StatusMessage(status=500, message="Invalid project directory.")
+
+    # Grab a file path to get the top level path
+    file_path = PathlibPath(PathlibPath(files[0].filename))
+    top_level_directory = file_path.parents[0].name
+    destination_dir = PathlibPath(REPORT_DATA_DIRECTORY, top_level_directory)
+    for file in files:
+        destination_file = PathlibPath(REPORT_DATA_DIRECTORY, PathlibPath(file.filename))
+        destination_file.parent.mkdir(exist_ok=True, parents=True)
+        with open(destination_file, 'wb') as f:
+            shutil.copyfileobj(file.file, f)
+
+    shutil.copytree(destination_dir, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
+    return StatusMessage(status=200, message="success")
 
 
 @app.post("/api/remote/folder", response_model=List[RemoteFolder])
