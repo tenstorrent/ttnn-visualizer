@@ -4,14 +4,8 @@
 
 import axios from 'axios';
 import useAppConfig from './useAppConfig';
-import {
-    ConnectionStatus,
-    ConnectionTestStates,
-    MountRemoteFolder,
-    RemoteConnection,
-    RemoteFolder,
-    SyncRemoteFolder,
-} from '../model/Connection';
+import { MountRemoteFolder, RemoteConnection, RemoteFolder, SyncRemoteFolder } from '../model/Connection';
+import { ConnectionStatus, ConnectionTestStates } from '../types/ConnectionStatus';
 
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();

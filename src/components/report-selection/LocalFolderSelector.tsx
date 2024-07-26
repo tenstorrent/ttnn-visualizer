@@ -8,11 +8,11 @@ import { type FC, useEffect, useState } from 'react';
 
 import 'styles/components/FolderPicker.scss';
 import { useNavigate } from 'react-router';
-import { ConnectionStatus, ConnectionTestStates } from '../../model/Connection';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
 import LoadingSpinner from '../LoadingSpinner';
 import { LoadingSpinnerSizes } from '../../types/LoadingSpinner';
+import { ConnectionStatus, ConnectionTestStates } from '../../types/ConnectionStatus';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,

@@ -7,7 +7,8 @@ import { FC, useState } from 'react';
 import useRemoteConnection from '../../hooks/useRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
 import 'styles/components/RemoteConnectionDialog.scss';
-import { ConnectionStatus, ConnectionTestStates, RemoteConnection } from '../../model/Connection';
+import { RemoteConnection } from '../../model/Connection';
+import { ConnectionStatus, ConnectionTestStates } from '../../types/ConnectionStatus';
 
 interface RemoteConnectionDialogProps {
     title?: string;
