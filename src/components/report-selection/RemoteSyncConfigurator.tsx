@@ -76,9 +76,8 @@ const RemoteSyncConfigurator: FC = () => {
                 selectedRemoteFolder,
             );
 
-            queryClient.clear();
-
             if (response.status === 200) {
+                queryClient.clear();
                 navigate(ROUTES.OPERATIONS);
             }
         }
