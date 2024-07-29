@@ -111,7 +111,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
 
             <div className='operation-details-component'>
-                {!isLoading && operationDetails?.operation_id ? (
+                {!isLoading && Number.isSafeInteger(operationDetails?.operation_id) ? (
                     <>
                         {details.stack_trace && (
                             <StackTrace

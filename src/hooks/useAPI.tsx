@@ -8,9 +8,9 @@ import { OperationDetailsData, ReportMetaData } from '../model/APIData';
 import { Operation } from '../model/Graph';
 
 const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
-    const response = await axios.get<OperationDetailsData>(`/api/get-operation-details/${id}`);
+    const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/get-operation-details/${id}`);
 
-    return response.data;
+    return operationDetails;
 };
 const fetchOperations = async (): Promise<Operation[]> => {
     const { data: operationList } = await axios.get<Operation[]>('/api/get-operations');
@@ -77,5 +77,5 @@ export const useNextOperation = (operationId: number) => {
 };
 
 export const useReportMeta = () => {
-    return useQuery<ReportMetaData, AxiosError>('fetch-report-meta', fetchReportMeta);
+    return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
 };
