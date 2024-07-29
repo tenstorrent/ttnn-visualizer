@@ -5,8 +5,7 @@ from typing import List, Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, Path, Request, UploadFile, File
-from fastapi import FastAPI, Path, Request
+from fastapi import FastAPI, HTTPException, Path, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.exceptions import HTTPException
@@ -348,6 +347,17 @@ async def use_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
     )
     shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
     return StatusMessage(status=200, message="success")
+
+@app.get('/api/get-config')
+async def get_config():
+    config_file_name = "config.json"
+    operation_history_file = PathlibPath(
+        ACTIVE_DATA_DIRECTORY, config_file_name
+    )
+    if not operation_history_file.exists():
+        return {}
+    with open(operation_history_file, "r") as file:
+        return json.load(file)
 
 
 @app.get("/api/get-operation-history")

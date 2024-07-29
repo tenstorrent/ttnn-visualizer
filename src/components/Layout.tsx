@@ -9,7 +9,7 @@ import ROUTES from '../definitions/routes';
 function Layout() {
     const navigate = useNavigate();
     const location = useLocation();
-    const report = useReportMeta();
+    const { data: report } = useReportMeta();
 
     const handleNavigate = (path: string) => {
         navigate(path);
@@ -32,7 +32,7 @@ function Layout() {
                 {/* TODO: Handle navigation variations differently */}
                 {location.pathname !== ROUTES.HOME && (
                     <>
-                        <span className='report-title'>{report.report_name}</span>
+                        <span className='report-title'>{report?.report_name}</span>
 
                         <nav>
                             <Button
