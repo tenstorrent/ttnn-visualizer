@@ -4,7 +4,7 @@
 
 import classNames from 'classnames';
 import 'styles/components/LoadingSpinner.scss';
-import { LoadingSpinnerSizes } from '../types/LoadingSpinner';
+import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
 
 interface LoadingSpinnerProps {
     size?: LoadingSpinnerSizes;

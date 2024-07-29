@@ -10,7 +10,7 @@ import { useNextOperation, useOperationDetails, usePreviousOperation } from '../
 import 'styles/components/OperationDetailsNavigation.scss';
 import ROUTES from '../definitions/routes';
 import LoadingSpinner from './LoadingSpinner';
-import { LoadingSpinnerSizes } from '../types/LoadingSpinner';
+import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
 
 interface OperationDetailsNavigationProps {
     operationId: number;

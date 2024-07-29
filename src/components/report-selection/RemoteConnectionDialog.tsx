@@ -8,7 +8,7 @@ import useRemoteConnection from '../../hooks/useRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
 import 'styles/components/RemoteConnectionDialog.scss';
 import { RemoteConnection } from '../../model/Connection';
-import { ConnectionStatus, ConnectionTestStates } from '../../types/ConnectionStatus';
+import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 
 interface RemoteConnectionDialogProps {
     title?: string;
