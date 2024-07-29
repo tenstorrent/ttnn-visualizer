@@ -8,6 +8,7 @@ import { AnchorButton, Button, FormGroup, Tooltip } from '@blueprintjs/core';
 
 import { useNavigate } from 'react-router';
 import { IconNames } from '@blueprintjs/icons';
+import { useQueryClient } from 'react-query';
 import useRemote from '../../hooks/useRemote';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteFolderSelector from './RemoteFolderSelector';
@@ -19,6 +20,7 @@ import { Connection, ReportFolder } from '../../model/Connection';
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const [remoteFolderList, setRemoteFolders] = useState<ReportFolder[]>(
         remote.persistentState.getSavedRemoteFolders(remote.persistentState.selectedConnection),
     );
@@ -75,6 +77,7 @@ const RemoteSyncConfigurator: FC = () => {
             );
 
             if (response.status === 200) {
+                queryClient.clear();
                 navigate(ROUTES.OPERATIONS);
             }
         }
