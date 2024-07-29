@@ -6,7 +6,7 @@ export interface Operation {
 }
 
 export interface MicroOperation {
-    input_tensor_records: InputTensor[];
+    input_tensor_records: MicroOperationInputTensor[];
     operation_name: string;
     operation_type: string;
     program_cache_hit: boolean | null;
@@ -14,7 +14,7 @@ export interface MicroOperation {
     ttnn_operation_id: number;
 }
 
-export interface InputTensor {
+export interface MicroOperationInputTensor {
     dtype: number;
     layout: number;
     memory_config: {
