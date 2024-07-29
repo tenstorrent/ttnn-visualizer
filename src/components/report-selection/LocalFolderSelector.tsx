@@ -8,6 +8,7 @@ import { type FC, useEffect, useState } from 'react';
 
 import 'styles/components/FolderPicker.scss';
 import { useNavigate } from 'react-router';
+import { useQueryClient } from 'react-query';
 import { ConnectionStatus, ConnectionTestStates } from '../../model/Connection';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
@@ -29,6 +30,8 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 
 const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
+
     const { uploadLocalFolder, selectDirectory } = useLocalConnection();
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploading, setIsUploading] = useState(false);
@@ -59,6 +62,11 @@ const LocalFolderOptions: FC = () => {
         setFolderStatus(connectionStatus);
     };
 
+    const viewOperation = () => {
+        queryClient.clear();
+        navigate(ROUTES.OPERATIONS);
+    };
+
     useEffect(() => {
         if (isUploading) {
             setFolderStatus({
@@ -84,7 +92,7 @@ const LocalFolderOptions: FC = () => {
 
                 <Button
                     disabled={folderStatus?.status !== ConnectionTestStates.OK}
-                    onClick={() => navigate(ROUTES.OPERATIONS)}
+                    onClick={viewOperation}
                     icon={IconNames.EYE_OPEN}
                 >
                     View report
