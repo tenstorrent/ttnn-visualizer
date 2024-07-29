@@ -5,10 +5,12 @@ import { Operation } from '../model/Graph';
 
 const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
     const response = await axios.get<OperationDetailsData>(`/api/get-operation-details/${id}`);
+
     return response.data;
 };
 const fetchOperations = async (): Promise<Operation[]> => {
     const { data: operationList } = await axios.get<Operation[]>('/api/get-operations');
+
     return operationList;
 };
 
