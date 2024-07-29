@@ -5,36 +5,25 @@ import 'styles/components/OperationArguments.scss';
 import { ScrollToOptions } from '@tanstack/react-virtual';
 import ExpandableTensor from './ExpandableTensor';
 import MicroOperations from './MicroOperations';
-import { MicroOperation } from '../model/Graph';
-
-interface Arguments {
-    name: string;
-    value: string;
-}
+import { Operation } from '../model/Graph';
 
 interface OperationArgumentsProps {
-    operationId: number;
     operationIndex: number;
-    argumentsData: Arguments[];
-    microOperations: MicroOperation[];
+    operation: Operation;
     scrollTo: (index: number, { align, behavior }: ScrollToOptions) => void;
 }
 
-function OperationArguments({
-    operationId,
-    operationIndex,
-    argumentsData,
-    microOperations,
-    scrollTo,
-}: OperationArgumentsProps) {
+function OperationArguments({ operationIndex, operation, scrollTo }: OperationArgumentsProps) {
+    const { id, arguments: operationArguments, microOperations } = operation;
+
     return (
         <>
             <table className='arguments-table has-vertical-headings'>
                 <caption>Arguments</caption>
 
                 <tbody>
-                    {argumentsData?.map((arg) => (
-                        <tr key={`${operationId}-${arg.name}`}>
+                    {operationArguments?.map((arg) => (
+                        <tr key={`${id}-${arg.name}`}>
                             <td>{arg.name}</td>
                             {isLengthyTensor(arg.value) ? (
                                 <ExpandableTensor
