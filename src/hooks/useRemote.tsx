@@ -4,7 +4,7 @@
 
 import axios from 'axios';
 import useAppConfig from './useAppConfig';
-import { MountRemoteFolder, RemoteConnection, RemoteFolder, SyncRemoteFolder } from '../model/Connection';
+import { MountRemoteFolder, RemoteConnection, RemoteFolder, SyncRemoteFolder } from '../model/Remote';
 import { ConnectionStatus, ConnectionTestStates } from '../definitions/ConnectionStatus';
 
 const useRemoteConnection = () => {

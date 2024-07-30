@@ -58,7 +58,6 @@ const LocalFolderOptions: FC = () => {
             connectionStatus.message = 'Selected directory does not contain a valid report.';
         }
 
-        // TODO: Handle errors more betterly
         setIsUploading(false);
         setFolderStatus(connectionStatus);
     };
