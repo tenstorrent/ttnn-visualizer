@@ -509,12 +509,9 @@ async def get_tensor_details(tensor_id: int = Path(..., description="The ID of t
     )
 
 
-# TODO Parameterize dist location for dev
-if os.environ.get("FLASK_ENV", "development") == "production":
-    parent_dir = pathlib.Path(__file__).parent.parent.resolve()
-    dist_dir = pathlib.Path(parent_dir, "/public")
-    if dist_dir.exists():
-        app.mount("/", StaticFiles(directory=dist_dir, html=True))
-else:
-    if __name__ == "__main__":
-        uvicorn.run(app, host="0.0.0.0", port=8000)
+dist_dir = '/app/backend/public'
+if PathlibPath(dist_dir).exists():
+    app.mount("/", StaticFiles(directory=dist_dir, html=True))
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
