@@ -9,7 +9,7 @@ import { type FC, useEffect, useState } from 'react';
 import 'styles/components/FolderPicker.scss';
 import { useNavigate } from 'react-router';
 import { useQueryClient } from 'react-query';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { ConnectionStatus, ConnectionTestStates } from '../../model/Connection';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
@@ -34,8 +34,7 @@ const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const meta = useAtomValue(reportMetaAtom);
-    const reportLocation = useAtomValue(reportLocationAtom);
-    const setReportLocation = useSetAtom(reportLocationAtom);
+    const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
 
     const { uploadLocalFolder, selectDirectory } = useLocalConnection();
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
