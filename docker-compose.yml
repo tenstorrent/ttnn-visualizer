@@ -29,13 +29,13 @@ services:
       - "${DOCKER_WEB_PORT_FORWARD:-8000}:${PORT:-8000}"
     profiles: ["web"]
     environment:
-      - SSH_AUTH_SOCK=/ssh-agent
+      - SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock
     volumes:
       # Linux configuration
       # - ${SSH_AUTH_SOCK}:/ssh-agent
       # MacOS configuration
-      - /run/host-services/ssh-auth.sock:/ssh-agent
-      
+      - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
+
   # To connect to the container in the remote connection dialog use `ssh` and port `22`
   ssh:
     build:
