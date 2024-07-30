@@ -102,6 +102,10 @@ To view your currently available keys, `ssh-add -L`.
 The docker-compose file should expand the parameter for your agent socket - you can confirm/see this value by entering `echo $SSH_AUTH_SOCK`.
 The printed value should be the location of your SSH agent socket.
 
+For MacOS you need to use the 'magic' socket file. The docker-compose.yml file has a volume mapping that points to this magic file, ensure that it is being used rather than `SSH_AUTH_SOCK`. 
+
+Before running the application ensure that your keys are added to the agent (`ssh-add -L`). If your keys are not present, run `ssh-add` to add them.
+
 ### Running project
 
 To run the application you can simply run `docker-compose up web`. To rebuild add the build flag, `docker-compose up web --build`. 

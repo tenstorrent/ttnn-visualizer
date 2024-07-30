@@ -66,8 +66,17 @@ ENV PYTHONUNBUFFERED="true" \
 COPY --chown=python:python ../backend /app/backend
 COPY --chown=python:python --from=assets /app/assets/dist /public
 
+# In order to support the ssh-agent on MacOS we have to run as root
+# The mounted ssh-agent socket needs to be made accessible to the app user
+# After the permission change is made we su back to that user to avoid running
+# the container as root.
+
+USER root 
+
 ENTRYPOINT ["/app/bin/docker-entrypoint-web"]
 
 EXPOSE 8000
+
+USER python 
 
 CMD ["gunicorn", "-c", "python:backend.config.gunicorn", "-k", "uvicorn.workers.UvicornWorker",  "backend.main:app"]
