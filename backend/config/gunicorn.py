@@ -3,6 +3,16 @@
 import multiprocessing
 import os
 from distutils.util import strtobool
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load dotenv from root directory
+dotenv_path = Path(__file__).parent.parent.parent.joinpath('.env')
+print(f"Looking for .env at {dotenv_path}")
+if dotenv_path.exists():
+    print('Loading .env file')
+    load_dotenv(str(dotenv_path))
 
 bind = f"0.0.0.0:{os.getenv('PORT', '8000')}"
 accesslog = "-"

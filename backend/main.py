@@ -19,9 +19,6 @@ from backend.remotes import RemoteConnection, check_remote_path, RemoteFolder, g
     sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY, RemoteFolderException
 
 
-dotenv_path = PathlibPath(__file__).parent.parent.joinpath('.env')
-if dotenv_path.exists():
-    load_dotenv(str(dotenv_path))
 
 
 DATABASE_URL = f"sqlite:////{ACTIVE_DATA_DIRECTORY}/db.sqlite"
