@@ -77,6 +77,4 @@ ENTRYPOINT ["/app/bin/docker-entrypoint-web"]
 
 EXPOSE 8000
 
-USER python 
-
-CMD ["gunicorn", "-c", "python:backend.config.gunicorn", "-k", "uvicorn.workers.UvicornWorker",  "backend.main:app"]
+CMD ["gunicorn", "-c", "backend/config/gunicorn.py", "-k", "uvicorn.workers.UvicornWorker",  "backend.main:app"]
