@@ -64,6 +64,7 @@ const LocalFolderOptions: FC = () => {
 
     const viewOperation = () => {
         queryClient.clear();
+
         navigate(ROUTES.OPERATIONS);
     };
 
@@ -108,6 +109,7 @@ const LocalFolderOptions: FC = () => {
                             size={20}
                             intent={INTENT_MAP[folderStatus.status]}
                         />
+
                         <span className='connection-status-text'>{folderStatus.message}</span>
                     </div>
                 )}
