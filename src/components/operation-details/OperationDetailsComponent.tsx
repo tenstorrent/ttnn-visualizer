@@ -9,18 +9,21 @@ import { FragmentationEntry } from '../../model/APIData';
 import L1MemoryRenderer from './L1MemoryRenderer';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
-import { formatSize, prettyPrintAddress, toHex } from '../../functions/math';
+import { formatSize, isEqual, prettyPrintAddress, toHex } from '../../functions/math';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
 import ROUTES from '../../definitions/routes';
+import { BufferType } from '../../model/BufferType';
+import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 
 interface OperationDetailsProps {
     operationId: number;
 }
 
 const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
+const MINIMAL_DRAM_MEMORY_RANGE_OFFSET = 0.9998;
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const { data: operations } = useOperationsList();
@@ -42,6 +45,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         setSelectedTensor(null);
     };
 
+    console.log(operationDetails);
+
     const navRef = useRef<HTMLDivElement>(null);
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
@@ -60,14 +65,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails);
     previousDetails.updateOperationNames(operations);
 
-    const { chartData, memory, fragmentation } = details.memoryData;
-    const { chartData: previousChartData, memory: previousMemory } = previousDetails.memoryData;
+    const { chartData, memory, fragmentation } = details.memoryData();
+    const { chartData: previousChartData, memory: previousMemory } = previousDetails.memoryData();
+
+    const { chartData: dramData, memory: dramMemory } = details.memoryData(BufferType.DRAM);
+    const { chartData: previosDramData, memory: previousDramMemory } = previousDetails.memoryData(BufferType.DRAM);
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
-    const { memorySize } = details;
+    const dramMemoryReport: FragmentationEntry[] = [...dramMemory].sort((a, b) => a.address - b.address);
+
+    const { memorySizeL1 } = details;
 
     let plotZoomRangeStart =
-        Math.min(memory[0]?.address || memorySize, previousMemory[0]?.address || memorySize) *
+        Math.min(memory[0]?.address || memorySizeL1, previousMemory[0]?.address || memorySizeL1) *
         MINIMAL_MEMORY_RANGE_OFFSET;
 
     let plotZoomRangeEnd =
@@ -81,7 +91,28 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     if (plotZoomRangeEnd < plotZoomRangeStart) {
         plotZoomRangeStart = 0;
-        plotZoomRangeEnd = memorySize;
+        plotZoomRangeEnd = memorySizeL1;
+    }
+
+    let dramPlotZoomRangeStart =
+        Math.min(dramMemory[0]?.address || DRAM_MEMORY_SIZE, previousDramMemory[0]?.address || DRAM_MEMORY_SIZE) *
+        MINIMAL_DRAM_MEMORY_RANGE_OFFSET;
+
+    let dramPlotZoomRangeEnd =
+        Math.max(
+            dramMemory.length > 0
+                ? dramMemory[dramMemory.length - 1].address + dramMemory[dramMemory.length - 1].size
+                : 0,
+            previousDramMemory.length > 0
+                ? previousDramMemory[previousDramMemory.length - 1].address +
+                      previousDramMemory[previousDramMemory.length - 1].size
+                : 0,
+        ) *
+        (1 / MINIMAL_DRAM_MEMORY_RANGE_OFFSET);
+
+    if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
+        dramPlotZoomRangeStart = 0;
+        dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
     }
 
     const onBufferClick = (event: Readonly<PlotMouseEvent>): void => {
@@ -101,6 +132,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     //     const { address } = previousMemory[event.points[0].curveNumber];
     //     setSelectedTensorAddress(address);
     // };
+
+    const dramHasntChanged = isEqual(dramMemory, previousDramMemory);
 
     return (
         <>
@@ -126,6 +159,17 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             checked={zoomedInView}
                             onChange={() => setZoomedInView(!zoomedInView)}
                         />
+                        <L1MemoryRenderer
+                            title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
+                            className={classNames('l1-memory-renderer', {
+                                'empty-plot': dramData.length === 0 || dramHasntChanged,
+                            })}
+                            plotZoomRangeStart={dramPlotZoomRangeStart}
+                            plotZoomRangeEnd={dramPlotZoomRangeEnd}
+                            chartData={previosDramData}
+                            isZoomedIn={zoomedInView}
+                            memorySize={DRAM_MEMORY_SIZE}
+                        />
 
                         <L1MemoryRenderer
                             title='Previous Summarized L1 Report'
@@ -136,7 +180,20 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             plotZoomRangeEnd={plotZoomRangeEnd}
                             chartData={previousChartData}
                             isZoomedIn={zoomedInView}
-                            memorySize={memorySize}
+                            memorySize={memorySizeL1}
+                        />
+
+                        <L1MemoryRenderer
+                            title='Current Summarized DRAM Report'
+                            className={classNames('l1-memory-renderer', { 'empty-plot': dramData.length === 0 })}
+                            plotZoomRangeStart={dramPlotZoomRangeStart}
+                            plotZoomRangeEnd={dramPlotZoomRangeEnd}
+                            chartData={dramData}
+                            isZoomedIn={zoomedInView}
+                            memorySize={DRAM_MEMORY_SIZE}
+                            onBufferClick={onBufferClick}
+                            onClickOutside={onClickOutside}
+                            additionalReferences={[navRef]}
                         />
 
                         <L1MemoryRenderer
@@ -146,7 +203,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             plotZoomRangeEnd={plotZoomRangeEnd}
                             chartData={chartData}
                             isZoomedIn={zoomedInView}
-                            memorySize={memorySize}
+                            memorySize={memorySizeL1}
                             onBufferClick={onBufferClick}
                             onClickOutside={onClickOutside}
                             additionalReferences={[navRef]}
@@ -184,7 +241,40 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         />
                                         <div className='legend-details'>
                                             <div className='format-numbers'>
-                                                {prettyPrintAddress(chunk.address, memorySize)}
+                                                {prettyPrintAddress(chunk.address, memorySizeL1)}
+                                            </div>
+                                            <div className='format-numbers keep-left'>({toHex(chunk.address)})</div>
+                                            <div className='format-numbers'>{formatSize(chunk.size)} </div>
+                                            <div>
+                                                {!chunk.empty && details.getTensorForAddress(chunk.address) && (
+                                                    <>Tensor {details.getTensorForAddress(chunk.address)?.tensor_id}</>
+                                                )}
+                                                {chunk.empty && 'Empty space'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                <hr />
+                                {dramMemoryReport.map((chunk) => (
+                                    <div
+                                        key={chunk.address}
+                                        className={classNames('legend-item', {
+                                            dimmed:
+                                                selectedTensorAddress !== null &&
+                                                selectedTensorAddress !== chunk.address,
+                                        })}
+                                    >
+                                        <div
+                                            className={classNames('memory-color-block', {
+                                                empty: chunk.empty === true,
+                                            })}
+                                            style={{
+                                                backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
+                                            }}
+                                        />
+                                        <div className='legend-details'>
+                                            <div className='format-numbers'>
+                                                {prettyPrintAddress(chunk.address, memorySizeL1)}
                                             </div>
                                             <div className='format-numbers keep-left'>({toHex(chunk.address)})</div>
                                             <div className='format-numbers'>{formatSize(chunk.size)} </div>
@@ -269,7 +359,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         key={tensor.tensor_id}
                                         selectedAddress={selectedTensorAddress}
                                         onTensorClick={onTensorClick}
-                                        memorySize={memorySize}
+                                        memorySize={memorySizeL1}
                                     />
                                 ))}
                             </div>
@@ -282,7 +372,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         key={tensor.tensor_id}
                                         selectedAddress={selectedTensorAddress}
                                         onTensorClick={onTensorClick}
-                                        memorySize={memorySize}
+                                        memorySize={memorySizeL1}
                                     />
                                 ))}
                             </div>

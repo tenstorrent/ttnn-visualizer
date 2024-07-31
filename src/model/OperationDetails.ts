@@ -3,11 +3,7 @@ import { Operation } from './Graph';
 import { getBufferColor } from '../functions/colorGenerator';
 import { formatSize, toHex } from '../functions/math';
 import { BufferData, Chunk, FragmentationEntry, OperationDetailsData, TensorData } from './APIData';
-
-export enum BufferType {
-    L1 = 1,
-    DRAM = 2,
-}
+import { BufferType } from "./BufferType";
 
 export class OperationDetails implements Partial<OperationDetailsData> {
     id: number;
@@ -49,7 +45,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             ].flat() || [];
     }
 
-    get memorySize(): number {
+    get memorySizeL1(): number {
         // TODO: memorysize will need to be read from the appropriate device even though its likely going to be the same for the multichip scenario
         return this.l1_sizes?.[0] || 0;
     }
@@ -58,6 +54,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         return this.tensorList.find((tensor) => tensor.address === address) || null;
     }
 
+    // TODO: this is unintuitive and poorly named method. consider refactor
     updateOperationNames(operations: Operation[] | undefined): void {
         if (!operations) {
             return;
@@ -116,16 +113,16 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         };
     }
 
-    /**
-     * Get memory data for the operation L1 only
-     * TODO: add DRAM buffer types and create separation
-     */
-    get memoryData(): { chartData: Partial<PlotData>[]; memory: Chunk[]; fragmentation: FragmentationEntry[] } {
+    memoryData(bufferType: BufferType = BufferType.L1): {
+        chartData: Partial<PlotData>[];
+        memory: Chunk[];
+        fragmentation: FragmentationEntry[];
+    } {
         const { buffers } = this;
         const fragmentation: FragmentationEntry[] = [];
         const memory: Chunk[] =
             buffers
-                ?.filter((buffer: BufferData) => buffer.buffer_type === BufferType.L1)
+                ?.filter((buffer: BufferData) => buffer.buffer_type === bufferType)
                 .map((buffer: BufferData) => {
                     return {
                         address: buffer.address,

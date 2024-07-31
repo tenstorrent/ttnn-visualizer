@@ -13,6 +13,11 @@ const fetchOperations = async (): Promise<Operation[]> => {
 
     return operationList;
 };
+const fetchAllBuffers = async (): Promise<any> => {
+    const { data: buffers } = await axios.get('/api/get-operation-buffers');
+
+    return buffers;
+};
 
 const fetchReportMeta = async (): Promise<ReportMetaData> => {
     const { data: meta } = await axios.get<ReportMetaData>('/api/get-config');
@@ -22,6 +27,10 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
 
 export const useOperationsList = () => {
     return useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
+};
+
+export const useAllBuffers = () => {
+    return useQuery<{ operation_id: number; buffers: [] }[], AxiosError>('get-operation-buffers', fetchAllBuffers);
 };
 
 export const useOperationDetails = (operationId: number) => {
