@@ -16,7 +16,8 @@ jobs:
       uses: SpicyPizza/create-envfile@v2.0
       with:
         envkey_DEBUG: false
-        VITE_API_ROOT: "http://localhost:8000"
+        envkey_VITE_API_ROOT: "http://localhost:8000"
+        directory: './'
         file_name: .env
         fail_on_empty: false
         sort_keys: false
