@@ -8,6 +8,7 @@ on:
 
 jobs:
 
+  create-envfile:
   build:
     runs-on: ubuntu-latest
 
@@ -23,5 +24,4 @@ jobs:
         sort_keys: false
     - name: Build the Docker image
       uses: actions/checkout@v4
-      needs: Make envfile
       run: docker compose build web
