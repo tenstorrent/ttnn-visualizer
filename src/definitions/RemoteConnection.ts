@@ -1,25 +1,17 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { HttpStatusCode } from 'axios';
 
-export interface Connection {
+export interface RemoteConnection {
     name: string;
     host: string;
     port: number;
     path: string;
 }
 
-export enum ConnectionTestStates {
-    IDLE,
-    PROGRESS,
-    FAILED,
-    OK,
-}
-
-export interface ConnectionStatus {
-    status: ConnectionTestStates;
-    message: string;
-}
-
-export interface ReportFolder {
+export interface RemoteFolder {
     testName: string;
     remotePath: string;
     localPath: string;
@@ -27,12 +19,12 @@ export interface ReportFolder {
     lastSynced?: string;
 }
 
-export interface SyncRemoteFolderData {
+export interface SyncRemoteFolder {
     status: HttpStatusCode;
     message: string;
 }
 
-export interface MountRemoteFolderData {
+export interface MountRemoteFolder {
     status: HttpStatusCode;
     message: string;
 }

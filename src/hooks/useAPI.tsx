@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import { OperationDetailsData, ReportMetaData } from '../model/APIData';

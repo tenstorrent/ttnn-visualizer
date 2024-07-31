@@ -8,11 +8,11 @@ import { Button } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 
 import RemoteConnectionDialog from './RemoteConnectionDialog';
-import { Connection } from '../../model/Connection';
+import { RemoteConnection } from '../../definitions/RemoteConnection';
 
 interface AddRemoteConnectionProps {
     disabled: boolean;
-    onAddConnection: (connection: Connection) => void;
+    onAddConnection: (remoteConnection: RemoteConnection) => void;
 }
 
 const AddRemoteConnection: FC<AddRemoteConnectionProps> = ({ disabled, onAddConnection }) => {

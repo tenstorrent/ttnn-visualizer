@@ -4,19 +4,13 @@
 
 import axios from 'axios';
 import useAppConfig from './useAppConfig';
-import {
-    Connection,
-    ConnectionStatus,
-    ConnectionTestStates,
-    MountRemoteFolderData,
-    ReportFolder,
-    SyncRemoteFolderData,
-} from '../model/Connection';
+import { MountRemoteFolder, RemoteConnection, RemoteFolder, SyncRemoteFolder } from '../definitions/RemoteConnection';
+import { ConnectionStatus, ConnectionTestStates } from '../definitions/ConnectionStatus';
 
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
 
-    const testConnection = async (connection: Partial<Connection>) => {
+    const testConnection = async (connection: Partial<RemoteConnection>) => {
         let connectionStatus: ConnectionStatus[] = [
             {
                 status: ConnectionTestStates.FAILED,
@@ -63,17 +57,17 @@ const useRemoteConnection = () => {
         return connectionStatus;
     };
 
-    const listRemoteFolders = async (connection?: Connection) => {
+    const listRemoteFolders = async (connection?: RemoteConnection) => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
 
-        const response = await axios.post<ReportFolder[]>(`${import.meta.env.VITE_API_ROOT}/remote/folder`, connection);
+        const response = await axios.post<RemoteFolder[]>(`${import.meta.env.VITE_API_ROOT}/remote/folder`, connection);
 
         return response.data;
     };
 
-    const syncRemoteFolder = async (connection?: Connection, remoteFolder?: ReportFolder) => {
+    const syncRemoteFolder = async (connection?: RemoteConnection, remoteFolder?: RemoteFolder) => {
         if (!connection || !connection.host || !connection.port || !connection.path) {
             throw new Error('No connection provided');
         }
@@ -82,14 +76,14 @@ const useRemoteConnection = () => {
             throw new Error('No remote folder provided');
         }
 
-        return axios.post<SyncRemoteFolderData>(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
+        return axios.post<SyncRemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
             connection,
             folder: remoteFolder,
         });
     };
 
-    const mountRemoteFolder = async (connection: Connection, remoteFolder: ReportFolder) => {
-        return axios.post<MountRemoteFolderData>(`${import.meta.env.VITE_API_ROOT}/remote/use`, {
+    const mountRemoteFolder = async (connection: RemoteConnection, remoteFolder: RemoteFolder) => {
+        return axios.post<MountRemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/use`, {
             connection,
             folder: remoteFolder,
         });
@@ -97,32 +91,32 @@ const useRemoteConnection = () => {
 
     const persistentState = {
         get savedConnectionList() {
-            return JSON.parse(getAppConfig('remoteConnections') ?? '[]') as Connection[];
+            return JSON.parse(getAppConfig('remoteConnections') ?? '[]') as RemoteConnection[];
         },
-        set savedConnectionList(connectionList: Connection[]) {
+        set savedConnectionList(connectionList: RemoteConnection[]) {
             setAppConfig('remoteConnections', JSON.stringify(connectionList));
         },
         get selectedConnection() {
             const savedSelectedConnection = JSON.parse(getAppConfig('selectedConnection') ?? 'null');
 
-            return (savedSelectedConnection ?? this.savedConnectionList[0]) as Connection | undefined;
+            return (savedSelectedConnection ?? this.savedConnectionList[0]) as RemoteConnection | undefined;
         },
-        set selectedConnection(connection: Connection | undefined) {
+        set selectedConnection(connection: RemoteConnection | undefined) {
             setAppConfig('selectedConnection', JSON.stringify(connection ?? null));
         },
-        getSavedRemoteFolders: (connection?: Connection) => {
-            return JSON.parse(getAppConfig(`${connection?.name} - remoteFolders`) ?? '[]') as ReportFolder[];
+        getSavedRemoteFolders: (connection?: RemoteConnection) => {
+            return JSON.parse(getAppConfig(`${connection?.name} - remoteFolders`) ?? '[]') as RemoteFolder[];
         },
-        setSavedRemoteFolders: (connection: Connection | undefined, folders: ReportFolder[]) => {
+        setSavedRemoteFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
             setAppConfig(`${connection?.name} - remoteFolders`, JSON.stringify(folders));
         },
-        updateSavedRemoteFoldersConnection(oldConnection?: Connection, newConnection?: Connection) {
+        updateSavedRemoteFoldersConnection(oldConnection?: RemoteConnection, newConnection?: RemoteConnection) {
             const folders = this.getSavedRemoteFolders(oldConnection);
 
             this.deleteSavedRemoteFolders(oldConnection);
             this.setSavedRemoteFolders(newConnection, folders);
         },
-        deleteSavedRemoteFolders: (connection?: Connection) => {
+        deleteSavedRemoteFolders: (connection?: RemoteConnection) => {
             deleteAppConfig(`${connection?.name} - remoteFolders`);
         },
     };

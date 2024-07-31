@@ -9,10 +9,11 @@ import { type FC, useEffect, useState } from 'react';
 import 'styles/components/FolderPicker.scss';
 import { useNavigate } from 'react-router';
 import { useQueryClient } from 'react-query';
-import { ConnectionStatus, ConnectionTestStates } from '../../model/Connection';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
-import LoadingSpinner, { LoadingSpinnerSizes } from '../LoadingSpinner';
+import LoadingSpinner from '../LoadingSpinner';
+import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
+import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -57,7 +58,6 @@ const LocalFolderOptions: FC = () => {
             connectionStatus.message = 'Selected directory does not contain a valid report.';
         }
 
-        // TODO: Handle errors more betterly
         setIsUploading(false);
         setFolderStatus(connectionStatus);
     };
