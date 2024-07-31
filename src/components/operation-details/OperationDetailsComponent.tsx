@@ -17,6 +17,7 @@ import { OperationDetails } from '../../model/OperationDetails';
 import ROUTES from '../../definitions/routes';
 import { BufferType } from '../../model/BufferType';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
+import { DRAMRenderConfiguration, L1RenderConfiguration } from '../../definitions/PlotConfigurations';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -161,7 +162,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         />
                         <MemoryPlotRenderer
                             title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
-                            className={classNames('l1-memory-renderer', {
+                            className={classNames('dram-memory-renderer', {
                                 'empty-plot': dramData.length === 0 || dramHasntChanged,
                             })}
                             plotZoomRangeStart={dramPlotZoomRangeStart}
@@ -169,6 +170,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             chartData={previosDramData}
                             isZoomedIn={zoomedInView}
                             memorySize={DRAM_MEMORY_SIZE}
+                            configuration={DRAMRenderConfiguration}
                         />
 
                         <MemoryPlotRenderer
@@ -181,11 +183,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             chartData={previousChartData}
                             isZoomedIn={zoomedInView}
                             memorySize={memorySizeL1}
+                            configuration={L1RenderConfiguration}
                         />
 
                         <MemoryPlotRenderer
                             title='Current Summarized DRAM Report'
-                            className={classNames('l1-memory-renderer', { 'empty-plot': dramData.length === 0 })}
+                            className={classNames('dram-memory-renderer', { 'empty-plot': dramData.length === 0 })}
                             plotZoomRangeStart={dramPlotZoomRangeStart}
                             plotZoomRangeEnd={dramPlotZoomRangeEnd}
                             chartData={dramData}
@@ -194,6 +197,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             onBufferClick={onBufferClick}
                             onClickOutside={onClickOutside}
                             additionalReferences={[navRef]}
+                            configuration={DRAMRenderConfiguration}
                         />
 
                         <MemoryPlotRenderer
@@ -207,6 +211,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             onBufferClick={onBufferClick}
                             onClickOutside={onClickOutside}
                             additionalReferences={[navRef]}
+                            configuration={L1RenderConfiguration}
                         />
 
                         <aside className={classNames('plot-instructions', { hidden: chartData.length === 0 })}>

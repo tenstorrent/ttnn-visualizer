@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
 import useOutsideClick from '../../hooks/useOutsideClick';
+import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 
 export interface L1MemoryRendererProps {
     chartData: Partial<PlotData>[];
@@ -14,6 +15,7 @@ export interface L1MemoryRendererProps {
     plotZoomRangeEnd?: number;
     className?: string;
     additionalReferences?: React.RefObject<HTMLDivElement>[];
+    configuration: PlotConfiguration;
 }
 
 const MemoryPlotRenderer: React.FC<L1MemoryRendererProps> = ({
@@ -27,12 +29,13 @@ const MemoryPlotRenderer: React.FC<L1MemoryRendererProps> = ({
     plotZoomRangeStart,
     plotZoomRangeEnd,
     additionalReferences = [],
+    configuration,
 }) => {
     const layout: Partial<Layout> = {
-        height: 110,
+        height: configuration.height,
         xaxis: {
             autorange: false,
-            title: 'L1 Address Space',
+            title: configuration.title || '',
             range: [isZoomedIn ? plotZoomRangeStart : 0, isZoomedIn ? plotZoomRangeEnd : memorySize],
             showgrid: true,
             fixedrange: true,
@@ -48,12 +51,7 @@ const MemoryPlotRenderer: React.FC<L1MemoryRendererProps> = ({
             zeroline: false,
             showticklabels: false,
         },
-        margin: {
-            l: 5,
-            r: 5,
-            b: 40,
-            t: 25,
-        },
+        margin: configuration.margin,
 
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'white',
@@ -93,7 +91,7 @@ const MemoryPlotRenderer: React.FC<L1MemoryRendererProps> = ({
         >
             <h3 className='plot-title'>{title}</h3>
             <Plot
-                className='l1-memory-plot'
+                className='memory-plot'
                 data={chartData}
                 layout={layout}
                 config={config}

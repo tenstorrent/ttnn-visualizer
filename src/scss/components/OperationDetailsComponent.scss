@@ -31,14 +31,20 @@
 
     }
 
+    .dram-memory-renderer,
     .l1-memory-renderer {
         &.empty-plot {
             opacity: 0.4;
         }
 
-        .l1-memory-plot {
+        .memory-plot {
             width: 100%;
             height: 110px;
+        }
+    }
+    .dram-memory-renderer{
+        .memory-plot {
+            height: 60px;
         }
     }
 
