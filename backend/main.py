@@ -258,6 +258,10 @@ stack_traces = Table(
     Column("stack_trace", Text)
 )
 
+class OperationBuffers(BaseModel):
+    operation_id: int
+    buffers: List[Buffer]
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -489,7 +493,39 @@ async def get_operation_details(operation_id: int = Path(..., description="")):
         stack_trace=stack_trace
     )
 
+@app.get("/api/get-operation-buffers", response_model=List[OperationBuffers])
+async def get_operation_buffers():
+    db = SessionLocal()
 
+    # Fetch all operations
+    operations_query = select(operations.c.operation_id)
+    operations_list = db.execute(operations_query).fetchall()
+
+    all_operation_buffers = []
+
+    for operation in operations_list:
+        operation_id = operation.operation_id
+
+        buffers_query = select(buffers).where(buffers.c.operation_id == operation_id)
+        buffers_data = db.execute(buffers_query).mappings().all()
+
+        unique_addresses = set()
+        buffers_list = []
+
+        for row in buffers_data:
+            buffer = Buffer(**row)
+            if buffer.address not in unique_addresses:
+                unique_addresses.add(buffer.address)
+                buffers_list.append(buffer)
+
+        operation_buffers = OperationBuffers(
+            operation_id=operation_id,
+            buffers=buffers_list
+        )
+
+        all_operation_buffers.append(operation_buffers)
+
+    return all_operation_buffers
 
 
 @app.get("/api/get-tensor-details/{tensor_id}", response_model=TensorDetailsResponse)
