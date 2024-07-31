@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { PlotData } from 'plotly.js';
 import { Operation } from './Graph';
 import { getBufferColor } from '../functions/colorGenerator';

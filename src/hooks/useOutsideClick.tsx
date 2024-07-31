@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { RefObject, useEffect } from 'react';
 
 const useOutsideClick = (refs: RefObject<HTMLElement>[], handler?: (event: MouseEvent) => void) => {

@@ -4,10 +4,7 @@
 
 import classNames from 'classnames';
 import 'styles/components/LoadingSpinner.scss';
-
-export enum LoadingSpinnerSizes {
-    SMALL = 'small',
-}
+import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
 
 interface LoadingSpinnerProps {
     size?: LoadingSpinnerSizes;

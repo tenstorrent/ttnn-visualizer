@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 export const toHex = (num: number): string => {
     if (num < 0) {
         return toHex(0xffffffff + num + 1);

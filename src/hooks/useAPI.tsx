@@ -1,17 +1,28 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import { OperationDetailsData, ReportMetaData } from '../model/APIData';
-import { Operation } from '../model/Graph';
+import { MicroOperation, Operation } from '../model/Graph';
 
 const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
-    const response = await axios.get<OperationDetailsData>(`/api/get-operation-details/${id}`);
+    const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/get-operation-details/${id}`);
 
-    return response.data;
+    return operationDetails;
 };
 const fetchOperations = async (): Promise<Operation[]> => {
-    const { data: operationList } = await axios.get<Operation[]>('/api/get-operations');
+    const [{ data: operationList }, { data: microOperations }] = await Promise.all([
+        axios.get<Omit<Operation, 'microOperations'>[]>('/api/get-operations'),
+        axios.get<MicroOperation[]>('/api/get-operation-history'),
+    ]);
 
-    return operationList;
+    return operationList.map((operation) => ({
+        ...operation,
+        microOperations:
+            microOperations.filter((microOperation) => microOperation.ttnn_operation_id === operation.id) || [],
+    })) as Operation[];
 };
 const fetchAllBuffers = async (): Promise<any> => {
     const { data: buffers } = await axios.get('/api/get-operation-buffers');
@@ -82,5 +93,5 @@ export const useNextOperation = (operationId: number) => {
 };
 
 export const useReportMeta = () => {
-    return useQuery<ReportMetaData, AxiosError>('fetch-report-meta', fetchReportMeta);
+    return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
 };
