@@ -16,7 +16,7 @@ export interface L1MemoryRendererProps {
     additionalReferences?: React.RefObject<HTMLDivElement>[];
 }
 
-const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
+const MemoryPlotRenderer: React.FC<L1MemoryRendererProps> = ({
     chartData,
     isZoomedIn,
     memorySize,
@@ -103,4 +103,4 @@ const L1MemoryRenderer: React.FC<L1MemoryRendererProps> = ({
     );
 };
 
-export default L1MemoryRenderer;
+export default MemoryPlotRenderer;

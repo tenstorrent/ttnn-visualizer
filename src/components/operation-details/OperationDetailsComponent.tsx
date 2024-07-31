@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
 import { getBufferColor } from '../../functions/colorGenerator';
 import { FragmentationEntry } from '../../model/APIData';
-import L1MemoryRenderer from './L1MemoryRenderer';
+import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
 import { formatSize, isEqual, prettyPrintAddress, toHex } from '../../functions/math';
@@ -159,7 +159,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             checked={zoomedInView}
                             onChange={() => setZoomedInView(!zoomedInView)}
                         />
-                        <L1MemoryRenderer
+                        <MemoryPlotRenderer
                             title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
                             className={classNames('l1-memory-renderer', {
                                 'empty-plot': dramData.length === 0 || dramHasntChanged,
@@ -171,7 +171,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             memorySize={DRAM_MEMORY_SIZE}
                         />
 
-                        <L1MemoryRenderer
+                        <MemoryPlotRenderer
                             title='Previous Summarized L1 Report'
                             className={classNames('l1-memory-renderer', {
                                 'empty-plot': previousChartData.length === 0,
@@ -183,7 +183,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             memorySize={memorySizeL1}
                         />
 
-                        <L1MemoryRenderer
+                        <MemoryPlotRenderer
                             title='Current Summarized DRAM Report'
                             className={classNames('l1-memory-renderer', { 'empty-plot': dramData.length === 0 })}
                             plotZoomRangeStart={dramPlotZoomRangeStart}
@@ -196,7 +196,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             additionalReferences={[navRef]}
                         />
 
-                        <L1MemoryRenderer
+                        <MemoryPlotRenderer
                             title='Current Summarized L1 Report'
                             className={classNames('l1-memory-renderer', { 'empty-plot': chartData.length === 0 })}
                             plotZoomRangeStart={plotZoomRangeStart}
