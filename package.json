@@ -28,8 +28,7 @@
     "react-plotly.js": "^2.6.0",
     "react-query": "^3.39.3",
     "react-router": "^6.23.1",
-    "react-router-dom": "^6.23.1",
-    "redux-toolkit": "^1.1.2"
+    "react-router-dom": "^6.23.1"
   },
   "devDependencies": {
     "@blueprintjs/node-build-scripts": "^9.2.1",
