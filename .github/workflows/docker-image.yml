@@ -12,13 +12,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: 'Create env file'
-      run: |
-          touch .env
-          # Trigger
-          echo PORT="8000" >> .env
-          echo VITE_API_ROOT="http://localhost:8000/api" >> .env
-          cat .env
+    - name: Make envfile
+      uses: SpicyPizza/create-envfile@v2.0
+      with:
+        envkey_DEBUG: false
+        VITE_API_ROOT: "http://localhost:8000"
+        file_name: .env
+        fail_on_empty: false
+        sort_keys: false
     - uses: actions/checkout@v4
     - name: Build the Docker image
       run: docker compose build web
