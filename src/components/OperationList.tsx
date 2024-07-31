@@ -240,6 +240,8 @@ const OperationList = () => {
                                             isOpen={expandedOperations.includes(operation.id)}
                                         >
                                             <div className='arguments-wrapper'>
+                                                <p className='monospace'>Execution time: {operation.duration}ms</p>
+
                                                 {operation.arguments && (
                                                     <OperationArguments
                                                         operationIndex={virtualRow.index}
