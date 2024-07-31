@@ -5,7 +5,7 @@
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import { OperationDetailsData, ReportMetaData } from '../model/APIData';
-import { Operation } from '../model/Graph';
+import { MicroOperation, Operation } from '../model/Graph';
 
 const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
     const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/get-operation-details/${id}`);
@@ -13,9 +13,16 @@ const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> 
     return operationDetails;
 };
 const fetchOperations = async (): Promise<Operation[]> => {
-    const { data: operationList } = await axios.get<Operation[]>('/api/get-operations');
+    const [{ data: operationList }, { data: microOperations }] = await Promise.all([
+        axios.get<Omit<Operation, 'microOperations'>[]>('/api/get-operations'),
+        axios.get<MicroOperation[]>('/api/get-operation-history'),
+    ]);
 
-    return operationList;
+    return operationList.map((operation) => ({
+        ...operation,
+        microOperations:
+            microOperations.filter((microOperation) => microOperation.ttnn_operation_id === operation.id) || [],
+    })) as Operation[];
 };
 
 const fetchReportMeta = async (): Promise<ReportMetaData> => {
