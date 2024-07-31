@@ -10,7 +10,7 @@ import 'styles/components/StackTrace.scss';
 import { Button, Collapse, Intent } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { useAtom } from 'jotai';
-import { isFullStackTraceAtom } from '../../definitions/appData';
+import { isFullStackTraceAtom } from '../../store/app';
 
 hljs.registerLanguage('python', python);
 

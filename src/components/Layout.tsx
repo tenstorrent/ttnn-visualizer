@@ -5,7 +5,7 @@ import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import TenstorrentLogo from './TenstorrentLogo';
 import ROUTES from '../definitions/routes';
-import { reportMetaAtom } from '../definitions/appData';
+import { reportMetaAtom } from '../store/app';
 
 function Layout() {
     const navigate = useNavigate();

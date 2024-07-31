@@ -7,7 +7,7 @@ import { useSetAtom } from 'jotai';
 import { useEffect } from 'react';
 import OperationList from '../components/OperationList';
 import { useReportMeta } from '../hooks/useAPI';
-import { reportMetaAtom } from '../definitions/appData';
+import { reportMetaAtom } from '../store/app';
 
 export default function Operations() {
     const report = useReportMeta();

@@ -13,7 +13,7 @@ import { useAtom, useAtomValue } from 'jotai';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
 import LoadingSpinner from '../LoadingSpinner';
-import { reportLocationAtom, reportMetaAtom } from '../../definitions/appData';
+import { reportLocationAtom, reportMetaAtom } from '../../store/app';
 import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 

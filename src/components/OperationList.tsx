@@ -18,7 +18,7 @@ import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/OperationsList.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
-import { expandedOperationsAtom } from '../definitions/appData';
+import { expandedOperationsAtom } from '../store/app';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item

@@ -15,7 +15,7 @@ import AddRemoteConnection from './AddRemoteConnection';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import ROUTES from '../../definitions/routes';
-import { reportLocationAtom, reportMetaAtom } from '../../definitions/appData';
+import { reportLocationAtom, reportMetaAtom } from '../../store/app';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 
