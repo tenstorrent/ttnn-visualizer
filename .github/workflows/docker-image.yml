@@ -21,6 +21,7 @@ jobs:
         file_name: .env
         fail_on_empty: false
         sort_keys: false
-    - uses: actions/checkout@v4
     - name: Build the Docker image
+      uses: actions/checkout@v4
+      needs: Make envfile
       run: docker compose build web
