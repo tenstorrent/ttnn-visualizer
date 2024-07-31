@@ -2,10 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect } from 'react';
 import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useLocation, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
 import 'styles/components/OperationDetailsNavigation.scss';
 import ROUTES from '../definitions/routes';
@@ -13,29 +13,22 @@ import LoadingSpinner, { LoadingSpinnerSizes } from './LoadingSpinner';
 
 interface OperationDetailsNavigationProps {
     operationId: number;
-    isFullStackTrace: boolean;
     isLoading: boolean;
 }
 
-function OperationDetailsNavigation({ operationId, isFullStackTrace, isLoading }: OperationDetailsNavigationProps) {
+function OperationDetailsNavigation({ operationId, isLoading }: OperationDetailsNavigationProps) {
     const navigate = useNavigate();
-    const location = useLocation();
     const { operation } = useOperationDetails(operationId);
     const previousOperation = usePreviousOperation(operationId);
     const nextOperation = useNextOperation(operationId);
 
-    const expandedOperations = useMemo(
-        () => location.state?.expandedOperations || [],
-        [location.state?.expandedOperations],
-    );
-
     const navigateToPreviousOperation = useCallback(() => {
-        navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`, { state: { isFullStackTrace, expandedOperations } });
-    }, [navigate, previousOperation, isFullStackTrace, expandedOperations]);
+        navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`);
+    }, [navigate, previousOperation]);
 
     const navigateToNextOperation = useCallback(() => {
-        navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`, { state: { isFullStackTrace, expandedOperations } });
-    }, [navigate, nextOperation, isFullStackTrace, expandedOperations]);
+        navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`);
+    }, [navigate, nextOperation]);
 
     useEffect(() => {
         const handleKeyPress = (e: KeyboardEvent) => {
@@ -83,7 +76,6 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace, isLoading }
                             navigate(`${ROUTES.OPERATIONS}`, {
                                 state: {
                                     previousOperationId: operationId,
-                                    expandedOperations,
                                 },
                             })
                         }
