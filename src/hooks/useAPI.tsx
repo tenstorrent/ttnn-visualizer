@@ -69,7 +69,7 @@ export const usePreviousOperationDetails = (operationId: number) => {
         return operationList[index + 1]?.id === operationId;
     });
 
-    return useOperationDetails(operation?.id || -1);
+    return useOperationDetails(operation ? operation.id : -1);
 };
 
 export const usePreviousOperation = (operationId: number) => {
