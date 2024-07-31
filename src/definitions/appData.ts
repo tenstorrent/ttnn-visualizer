@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import { atomWithStorage } from 'jotai/utils';
 import { atom } from 'jotai';
 import { ReportMetaData } from '../model/APIData';

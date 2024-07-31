@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import React, { useRef, useState } from 'react';
 import { PlotMouseEvent } from 'plotly.js';
 import { Icon, Switch } from '@blueprintjs/core';
