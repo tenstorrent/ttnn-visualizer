@@ -14,7 +14,6 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-    - name: Create envfile
     - name: Create a .env file
       run: |
             touch .env
