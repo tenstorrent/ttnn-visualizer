@@ -16,8 +16,7 @@ jobs:
       run: |
           touch .env
           echo PORT="8000" >> .env
-          # echo SOME_SECRET=${{ secrets.SOME_SECRET }} >> .env
-          echo VITE_API_ROOT="http://localhost:8000/api >> .env
+          echo VITE_API_ROOT="http://localhost:8000/api" >> .env
           cat .env
     - uses: actions/checkout@v4
     - name: Build the Docker image
