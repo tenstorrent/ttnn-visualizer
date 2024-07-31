@@ -6,7 +6,7 @@ import { Button, Icon, MenuItem, Spinner, Tooltip } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
-import { RemoteConnection, RemoteFolder } from '../../model/Remote';
+import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 
 const formatter = new Intl.DateTimeFormat('en-US', {

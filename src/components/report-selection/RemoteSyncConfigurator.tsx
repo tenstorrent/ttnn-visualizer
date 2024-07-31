@@ -14,7 +14,7 @@ import AddRemoteConnection from './AddRemoteConnection';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import ROUTES from '../../definitions/routes';
-import { RemoteConnection, RemoteFolder } from '../../model/Remote';
+import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 
 const RemoteSyncConfigurator: FC = () => {

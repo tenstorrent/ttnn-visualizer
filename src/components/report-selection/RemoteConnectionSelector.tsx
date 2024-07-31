@@ -7,7 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, useState } from 'react';
 import RemoteConnectionDialog from './RemoteConnectionDialog';
-import { RemoteConnection } from '../../model/Remote';
+import { RemoteConnection } from '../../definitions/RemoteConnection';
 
 const formatConnectionString = (connection?: RemoteConnection) => {
     if (!connection) {
