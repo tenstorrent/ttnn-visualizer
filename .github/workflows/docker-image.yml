@@ -15,6 +15,7 @@ jobs:
     - name: 'Create env file'
       run: |
           touch .env
+          # Trigger
           echo PORT="8000" >> .env
           echo VITE_API_ROOT="http://localhost:8000/api" >> .env
           cat .env
