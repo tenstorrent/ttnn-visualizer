@@ -8,6 +8,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useAtom } from 'jotai';
 import SearchField from './SearchField';
 import Collapsible from './Collapsible';
 import OperationComponent from './OperationComponent';
@@ -17,6 +18,7 @@ import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/OperationsList.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
+import { expandedOperationsAtom } from '../store/app';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -30,11 +32,12 @@ const OperationList = () => {
 
     const [filterQuery, setFilterQuery] = useState('');
     const [filteredOperationsList, setFilteredOperationsList] = useState<Operation[]>([]);
-    const [expandedOperations, setExpandedOperations] = useState<number[]>(location.state?.expandedOperations || []);
     const [shouldSortDescending, setShouldSortDescending] = useState(false);
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+
+    const [expandedOperations, setExpandedOperations] = useAtom(expandedOperationsAtom);
 
     const virtualizer = useVirtualizer({
         count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
@@ -230,11 +233,7 @@ const OperationList = () => {
                                                     small
                                                     className='buffer-view'
                                                     icon={IconNames.SEGMENTED_CONTROL}
-                                                    onClick={() =>
-                                                        navigate(`${ROUTES.OPERATIONS}/${operation.id}`, {
-                                                            state: { expandedOperations },
-                                                        })
-                                                    }
+                                                    onClick={() => navigate(`${ROUTES.OPERATIONS}/${operation.id}`)}
                                                 />
                                             }
                                             isOpen={expandedOperations.includes(operation.id)}
