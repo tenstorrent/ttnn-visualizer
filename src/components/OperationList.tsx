@@ -241,9 +241,8 @@ const OperationList = () => {
                                             <div className='arguments-wrapper'>
                                                 {operation.arguments && (
                                                     <OperationArguments
-                                                        operationId={operation.id}
                                                         operationIndex={virtualRow.index}
-                                                        data={operation.arguments}
+                                                        operation={operation}
                                                         scrollTo={virtualizer.scrollToIndex}
                                                     />
                                                 )}

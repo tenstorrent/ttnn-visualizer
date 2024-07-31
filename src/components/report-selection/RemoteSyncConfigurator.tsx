@@ -15,15 +15,15 @@ import AddRemoteConnection from './AddRemoteConnection';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import ROUTES from '../../definitions/routes';
-import isLocalFolderOutdated from '../../functions/isLocalFolderOutdated';
-import { Connection, ReportFolder } from '../../model/Connection';
 import { reportLocationAtom, reportMetaAtom } from '../../definitions/appData';
+import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
+import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const [remoteFolderList, setRemoteFolders] = useState<ReportFolder[]>(
+    const [remoteFolderList, setRemoteFolders] = useState<RemoteFolder[]>(
         remote.persistentState.getSavedRemoteFolders(remote.persistentState.selectedConnection),
     );
     const meta = useAtomValue(reportMetaAtom);
@@ -33,16 +33,16 @@ const RemoteSyncConfigurator: FC = () => {
     const [isLoadingFolderList, setIsLoadingFolderList] = useState(false);
     const [isFetchingFolderStatus, setIsFetchingFolderStatus] = useState(false);
     const [isRemoteOffline, setIsRemoteOffline] = useState(false);
-    const [selectedRemoteFolder, setSelectedRemoteFolder] = useState<ReportFolder | undefined>(remoteFolderList[0]);
+    const [selectedRemoteFolder, setSelectedRemoteFolder] = useState<RemoteFolder | undefined>(remoteFolderList[0]);
 
-    const updateSelectedConnection = (connection: Connection) => {
+    const updateSelectedConnection = (connection: RemoteConnection) => {
         remote.persistentState.selectedConnection = connection;
         setRemoteFolders(remote.persistentState.getSavedRemoteFolders(connection));
 
         setSelectedRemoteFolder(remote.persistentState.getSavedRemoteFolders(connection)[0]);
     };
 
-    const updateSavedRemoteFolders = (connection: Connection | undefined, updatedFolders: ReportFolder[]) => {
+    const updateSavedRemoteFolders = (connection: RemoteConnection | undefined, updatedFolders: RemoteFolder[]) => {
         if (!connection) {
             return [];
         }
@@ -54,7 +54,7 @@ const RemoteSyncConfigurator: FC = () => {
             return {
                 ...existingFolder,
                 ...updatedFolder,
-            } as ReportFolder;
+            } as RemoteFolder;
         });
 
         remote.persistentState.setSavedRemoteFolders(connection, mergedFolders);
@@ -63,7 +63,7 @@ const RemoteSyncConfigurator: FC = () => {
         return mergedFolders;
     };
 
-    const findConnectionIndex = (connection?: Connection) => {
+    const findConnectionIndex = (connection?: RemoteConnection) => {
         return remote.persistentState.savedConnectionList.findIndex((c) => {
             const isSameName = c.name === connection?.name;
             const isSameHost = c.host === connection?.host;
@@ -92,7 +92,7 @@ const RemoteSyncConfigurator: FC = () => {
         !isSyncingRemoteFolder ||
         !isLoadingFolderList ||
         remoteFolderList?.length > 0 ||
-        (selectedRemoteFolder && !isLocalFolderOutdated(selectedRemoteFolder)) ||
+        (selectedRemoteFolder && !isRemoteFolderOutdated(selectedRemoteFolder)) ||
         (!meta && reportLocation === 'remote');
 
     useEffect(() => {

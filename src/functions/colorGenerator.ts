@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 const colorList = [
     'rgb(63,181,143)',
     'rgb(74,217,225)',

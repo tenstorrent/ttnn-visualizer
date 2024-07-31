@@ -9,7 +9,8 @@ import { useNavigate } from 'react-router';
 import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
 import 'styles/components/OperationDetailsNavigation.scss';
 import ROUTES from '../definitions/routes';
-import LoadingSpinner, { LoadingSpinnerSizes } from './LoadingSpinner';
+import LoadingSpinner from './LoadingSpinner';
+import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
 
 interface OperationDetailsNavigationProps {
     operationId: number;
