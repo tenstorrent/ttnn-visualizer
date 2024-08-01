@@ -1,5 +1,5 @@
 # Frontend Docker Build
-FROM node:20-bookworm-slim AS assets
+FROM node:20.11-bookworm-slim AS assets
 
 WORKDIR /app/assets
 
