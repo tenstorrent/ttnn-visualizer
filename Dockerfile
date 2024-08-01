@@ -15,7 +15,7 @@ RUN apt-get update \
 
 USER node
 
-COPY --chown=node:node ../package.json *yarn* index.html ./
+COPY --chown=node:node ./package.json *yarn* index.html ./
 
 RUN yarn install && yarn cache clean
 
@@ -24,7 +24,7 @@ ENV NODE_ENV="${NODE_ENV}" \
     PATH="${PATH}:/node_modules/.bin" \
     USER="node"
 
-COPY --chown=node:node .. .
+COPY --chown=node:node . .
 
 RUN yarn vite build
 
@@ -52,9 +52,9 @@ RUN mkdir -p /public
 
 USER python
 
-COPY --chown=python:python ../backend/requirements.txt ./
-COPY --chown=python:python ../.env /app
-COPY --chown=python:python ../backend/bin ./bin
+COPY --chown=python:python ./backend/requirements.txt ./
+COPY --chown=python:python ./.env /app
+COPY --chown=python:python ./backend/bin ./bin
 
 RUN chmod 0755 bin/* && bin/pip3-install
 ARG FLASK_ENV="production"
@@ -64,7 +64,7 @@ ENV PYTHONUNBUFFERED="true" \
     PATH="${PATH}:/home/python/.local/bin" \
     USER="python"
 
-COPY --chown=python:python ../backend /app/backend
+COPY --chown=python:python ./backend /app/backend
 COPY --chown=python:python --from=assets /app/assets/dist /public
 
 # In order to support the ssh-agent on MacOS we have to run as root
@@ -72,7 +72,7 @@ COPY --chown=python:python --from=assets /app/assets/dist /public
 # After the permission change is made we su back to that user to avoid running
 # the container as root.
 
-USER root 
+USER root
 
 ENTRYPOINT ["/app/bin/docker-entrypoint-web"]
 
