@@ -24,6 +24,12 @@ const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
 
+enum SortingOptions {
+    OFF,
+    ASCENDING,
+    DESCENDING,
+}
+
 const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -32,7 +38,8 @@ const OperationList = () => {
 
     const [filterQuery, setFilterQuery] = useState('');
     const [filteredOperationsList, setFilteredOperationsList] = useState<Operation[]>([]);
-    const [shouldSortDescending, setShouldSortDescending] = useState(false);
+    const [shouldSortByID, setShouldSortByID] = useState<SortingOptions>(SortingOptions.ASCENDING);
+    const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
@@ -63,8 +70,18 @@ const OperationList = () => {
         });
     };
 
-    const handleReversingList = () => {
-        setShouldSortDescending((shouldSort) => !shouldSort);
+    const handleSortByID = () => {
+        setShouldSortDuration(SortingOptions.OFF);
+        setShouldSortByID(
+            shouldSortByID === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
+        );
+    };
+
+    const handleSortByDuration = () => {
+        setShouldSortByID(SortingOptions.OFF);
+        setShouldSortDuration(
+            shouldSortDuration === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
+        );
     };
 
     const handleExpandAllToggle = () => {
@@ -91,13 +108,23 @@ const OperationList = () => {
                 );
             }
 
-            if (shouldSortDescending) {
-                operations = operations.reverse();
+            if (isSortingModeActive(shouldSortByID)) {
+                operations = operations.sort((a, b) => a.id - b.id);
+
+                if (shouldSortByID === SortingOptions.DESCENDING) {
+                    operations = operations.reverse();
+                }
+            } else if (isSortingModeActive(shouldSortDuration)) {
+                operations = operations.sort((a, b) => a.duration - b.duration);
+
+                if (shouldSortDuration === SortingOptions.DESCENDING) {
+                    operations = operations.reverse();
+                }
             }
 
             setFilteredOperationsList(operations);
         }
-    }, [fetchedOperations, filterQuery, shouldSortDescending]);
+    }, [fetchedOperations, filterQuery, shouldSortByID, shouldSortDuration]);
 
     useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;
@@ -142,12 +169,36 @@ const OperationList = () => {
                     </Tooltip>
 
                     <Tooltip
-                        content={shouldSortDescending ? 'Sort ascending' : 'Sort descending'}
+                        content={shouldSortByID === SortingOptions.DESCENDING ? 'Sort descending' : 'Sort ascending'}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
-                            onClick={() => handleReversingList()}
-                            icon={shouldSortDescending ? IconNames.SortAlphabeticalDesc : IconNames.SortAlphabetical}
+                            onClick={() => handleSortByID()}
+                            icon={
+                                shouldSortByID === SortingOptions.DESCENDING
+                                    ? IconNames.SortAlphabeticalDesc
+                                    : IconNames.SortAlphabetical
+                            }
+                            outlined={isSortingModeActive(shouldSortByID)}
+                        />
+                    </Tooltip>
+
+                    <Tooltip
+                        content={
+                            shouldSortDuration === SortingOptions.DESCENDING
+                                ? 'Sort by duration descending'
+                                : 'Sort by duration ascending'
+                        }
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => handleSortByDuration()}
+                            icon={
+                                shouldSortDuration === SortingOptions.DESCENDING
+                                    ? IconNames.SortNumericalDesc
+                                    : IconNames.SortNumerical
+                            }
+                            outlined={isSortingModeActive(shouldSortDuration)}
                         />
                     </Tooltip>
 
@@ -239,7 +290,7 @@ const OperationList = () => {
                                             isOpen={expandedOperations.includes(operation.id)}
                                         >
                                             <div className='arguments-wrapper'>
-                                                <p className='monospace'>Execution time: {operation.duration}ms</p>
+                                                <p className='monospace'>Execution time: {operation.duration} ms</p>
 
                                                 {operation.arguments && (
                                                     <OperationArguments
@@ -268,6 +319,10 @@ const OperationList = () => {
 
 function getOperationFilterName(operation: Operation) {
     return `${operation.id.toString()} ${operation.name}`;
+}
+
+function isSortingModeActive(sorting: SortingOptions) {
+    return sorting === SortingOptions.ASCENDING || sorting === SortingOptions.DESCENDING;
 }
 
 export default OperationList;
