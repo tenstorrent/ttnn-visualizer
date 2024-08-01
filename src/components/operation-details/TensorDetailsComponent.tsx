@@ -40,7 +40,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     Tensor ID: {tensor.tensor_id}
                 </h4>
 
-                <span className='format-numbers'>{prettyPrintAddress(tensor.address, memorySize)}</span>
+                <span className='format-numbers monospace'>{prettyPrintAddress(tensor.address, memorySize)}</span>
             </div>
 
             <div className='tensor-meta'>
