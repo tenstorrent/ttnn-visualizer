@@ -5,6 +5,7 @@
 export interface Operation {
     id: number;
     name: string;
+    duration: number;
     arguments: { name: string; value: string }[];
     microOperations: MicroOperation[];
 }

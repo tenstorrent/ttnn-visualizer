@@ -58,9 +58,9 @@ function ExpandableTensor({ tensor, operationIndex, scrollTo }: ExpandableTensor
                 </>
             ) : (
                 <>
-                    <p className='collapsed-tensor'>{splitTensor[0]}</p>
-                    <p className='collapsed-tensor'>.........</p>
-                    <p className='collapsed-tensor'>{splitTensor[splitTensor.length - 1]}</p>
+                    <p className='collapsed-tensor monospace'>{splitTensor[0]}</p>
+                    <p className='collapsed-tensor monospace'>.........</p>
+                    <p className='collapsed-tensor monospace'>{splitTensor[splitTensor.length - 1]}</p>
                 </>
             )}
         </td>
