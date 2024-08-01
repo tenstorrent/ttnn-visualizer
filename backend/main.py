@@ -21,7 +21,7 @@ from backend.remotes import RemoteConnection, check_remote_path, RemoteFolder, g
 active_db_path = PathlibPath(ACTIVE_DATA_DIRECTORY, 'db.sqlite')
 empty_db_path = PathlibPath(__file__).parent.resolve().joinpath('empty.sqlite')
 if not active_db_path.exists():
-    active_db_path.parent.mkdir(exist_ok=True)
+    active_db_path.parent.mkdir(exist_ok=True, parents=True)
     shutil.copy(empty_db_path, active_db_path)
 
 DATABASE_URL = f"sqlite:////{str(active_db_path)}"
