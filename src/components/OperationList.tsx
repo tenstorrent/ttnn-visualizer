@@ -169,7 +169,11 @@ const OperationList = () => {
                     </Tooltip>
 
                     <Tooltip
-                        content={shouldSortByID === SortingOptions.DESCENDING ? 'Sort by id descending' : 'Sort by id ascending'}
+                        content={
+                            shouldSortByID === SortingOptions.DESCENDING
+                                ? 'Sort by id descending'
+                                : 'Sort by id ascending'
+                        }
                         placement={PopoverPosition.TOP}
                     >
                         <Button
@@ -290,7 +294,9 @@ const OperationList = () => {
                                             isOpen={expandedOperations.includes(operation.id)}
                                         >
                                             <div className='arguments-wrapper'>
-                                                <p className='monospace'>Python execution time: {operation.duration} s</p>
+                                                <p className='monospace'>
+                                                    Python execution time: {operation.duration} s
+                                                </p>
 
                                                 {operation.arguments && (
                                                     <OperationArguments
