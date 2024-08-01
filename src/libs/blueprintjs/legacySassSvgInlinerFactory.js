@@ -29,7 +29,7 @@ import SVGO from 'svgo';
 
 // @ts-check
 // @ts-nocheck:next-line
-import selectAll, { selectOne } from 'css-select';
+import { selectAll, selectOne } from "css-select"
 import serialize from 'dom-serializer';
 import { parseDocument } from 'htmlparser2';
 import svgToDataUri from 'mini-svg-data-uri';

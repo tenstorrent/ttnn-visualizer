@@ -33,7 +33,13 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
+      - name: Read package.json
+        uses: zvonimirsun/read-package-version-actions@v2
+        id: package-version
+  
+      - name: Show version number
+        run: echo "Version is ${{ steps.package-version.outputs.version }}"
+      
       - name: Create a .env file
         run: |
              touch .env
