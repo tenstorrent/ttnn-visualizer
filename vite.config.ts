@@ -41,4 +41,9 @@ export default defineConfig({
     optimizeDeps: {
         include: ['css-select'],
     },
+    build: {
+        commonjsOptions : {
+          include: [/css-select/, /node_modules/],
+        },
+    }
 });
