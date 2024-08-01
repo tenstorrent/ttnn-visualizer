@@ -15,9 +15,9 @@ RUN apt-get update \
 
 USER node
 
-COPY --chown=node:node ./package.json *yarn* index.html ./
+COPY --chown=node:node ./package.json package-lock.json index.html ./
 
-RUN yarn install && yarn cache clean
+RUN npm install && npm cache clean --force
 
 ARG NODE_ENV="production"
 ENV NODE_ENV="${NODE_ENV}" \
@@ -26,7 +26,7 @@ ENV NODE_ENV="${NODE_ENV}" \
 
 COPY --chown=node:node . .
 
-RUN yarn vite build
+RUN npm run build
 
 CMD ["bash"]
 
