@@ -16,7 +16,7 @@
             color: $tt-white-text;
             cursor: default;
 
-            &::before{
+            &::before {
                 display: inline-block;
                 content: "\2714"; // checkmark
                 margin-right: 5px;
@@ -33,16 +33,24 @@
 
     .dram-memory-renderer,
     .l1-memory-renderer {
+        &.identical-plot {
+            .memory-plot {
+                opacity: 0.5;
+            }
+        }
+
         &.empty-plot {
             opacity: 0.4;
         }
+
 
         .memory-plot {
             width: 100%;
             height: 110px;
         }
     }
-    .dram-memory-renderer{
+
+    .dram-memory-renderer {
         .memory-plot {
             height: 60px;
         }
@@ -53,6 +61,7 @@
         grid-template-columns: 1fr auto;
         align-items: start;
         gap: 25px;
+        min-height: 120px;
     }
 
     .producer-consumer {
@@ -79,6 +88,10 @@
         margin-bottom: 20px;
         flex-direction: column;
         row-gap: 5px;
+
+        hr {
+            margin: 10px 0;
+        }
 
         .legend-item {
             display: inline-grid;
@@ -140,7 +153,7 @@
                 opacity: 0.5;
             }
 
-            h4{
+            h4 {
                 cursor: pointer;
             }
         }

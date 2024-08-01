@@ -46,8 +46,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         setSelectedTensor(null);
     };
 
-    console.log(operationDetails);
-
     const navRef = useRef<HTMLDivElement>(null);
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
@@ -136,6 +134,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const dramHasntChanged = isEqual(dramMemory, previousDramMemory);
 
+    const dramTensorsOnly = dramMemoryReport.filter(
+        (chunk) => !chunk.empty && details.getTensorForAddress(chunk.address),
+    );
+
     return (
         <>
             <OperationDetailsNavigation
@@ -163,7 +165,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         <MemoryPlotRenderer
                             title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
                             className={classNames('dram-memory-renderer', {
-                                'empty-plot': dramData.length === 0 || dramHasntChanged,
+                                'empty-plot': previosDramData.length === 0,
+                                'identical-plot': dramHasntChanged,
                             })}
                             plotZoomRangeStart={dramPlotZoomRangeStart}
                             plotZoomRangeEnd={dramPlotZoomRangeEnd}
@@ -260,7 +263,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     </div>
                                 ))}
                                 <hr />
-                                {dramMemoryReport.map((chunk) => (
+                                {dramTensorsOnly.map((chunk) => (
                                     <div
                                         key={chunk.address}
                                         className={classNames('legend-item', {

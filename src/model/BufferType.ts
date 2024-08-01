@@ -8,3 +8,11 @@ export enum BufferType {
     L1_SMALL,
     TRACE,
 }
+
+export const BufferTypeLabel: Record<BufferType, string> = {
+    [BufferType.DRAM]: 'DRAM',
+    [BufferType.L1]: 'L1',
+    [BufferType.SYSTEM_MEMORY]: 'System Memory',
+    [BufferType.L1_SMALL]: 'L1 Small',
+    [BufferType.TRACE]: 'Trace',
+};

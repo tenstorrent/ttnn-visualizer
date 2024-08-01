@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import { BufferType } from "./BufferType";
+
 export interface TensorData {
     tensor_id: number;
     shape: string;
@@ -10,7 +12,7 @@ export interface TensorData {
     memory_config: string | null;
     device_id: number | null;
     address: number | null;
-    buffer_type: number | null;
+    buffer_type: BufferType | null;
     io: 'input' | 'output' | null;
     producerNames: string[];
     consumerNames: string[];
