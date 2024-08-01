@@ -290,7 +290,7 @@ const OperationList = () => {
                                             isOpen={expandedOperations.includes(operation.id)}
                                         >
                                             <div className='arguments-wrapper'>
-                                                <p className='monospace'>Python execution time time: {operation.duration} ms</p>
+                                                <p className='monospace'>Python execution time: {operation.duration} ms</p>
 
                                                 {operation.arguments && (
                                                     <OperationArguments
