@@ -169,7 +169,7 @@ const OperationList = () => {
                     </Tooltip>
 
                     <Tooltip
-                        content={shouldSortByID === SortingOptions.DESCENDING ? 'Sort descending' : 'Sort ascending'}
+                        content={shouldSortByID === SortingOptions.DESCENDING ? 'Sort by id descending' : 'Sort by id ascending'}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
