@@ -38,4 +38,7 @@ export default defineConfig({
             },
         },
     },
+    optimizeDeps: {
+        include: ['css-select'],
+    },
 });
