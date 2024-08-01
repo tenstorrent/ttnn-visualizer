@@ -28,8 +28,8 @@ import SVGO from 'svgo';
  */
 
 // @ts-check
-
-import selectAll from 'css-select';
+// @ts-nocheck:next-line
+import selectAll, { selectOne } from 'css-select';
 import serialize from 'dom-serializer';
 import { parseDocument } from 'htmlparser2';
 import svgToDataUri from 'mini-svg-data-uri';
@@ -38,7 +38,6 @@ import { resolve } from 'node:path';
 import * as sass from 'sass';
 import { OrderedMap } from 'immutable';
 
-const { selectOne } = 'css-select';
 const svgOptimizer = new SVGO({ plugins: [{ convertShapeToPath: { convertArcs: true } }] });
 
 /**
