@@ -6,7 +6,7 @@ interface MicroOperationsData {
 
 function MicroOperations({ microOperations }: MicroOperationsData) {
     return (
-        <>
+        <div>
             <table className='arguments-table'>
                 <caption>Micro Operations</caption>
 
@@ -115,7 +115,7 @@ function MicroOperations({ microOperations }: MicroOperationsData) {
                     )),
                 )}
             </div>
-        </>
+        </div>
     );
 }
 

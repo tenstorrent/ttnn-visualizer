@@ -191,4 +191,16 @@
         font-size: 20px;
         margin-top: 10px;
     }
+
+    .arguments-wrapper {
+        padding-top: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+
+        > * {
+            flex-basis: calc(50% - 20px);
+            min-width: 600px;
+        }
+    }
 }

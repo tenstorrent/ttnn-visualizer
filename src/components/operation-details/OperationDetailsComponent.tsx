@@ -19,6 +19,7 @@ import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
 import ROUTES from '../../definitions/routes';
+import OperationArguments from '../OperationArguments';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -46,6 +47,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     };
 
     const navRef = useRef<HTMLDivElement>(null);
+    const matchingOperation = operations?.find((operation) => operation.id === operationId);
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
         return (
@@ -282,6 +284,16 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 ))}
                             </div>
                         </div>
+
+                        {matchingOperation && (
+                            <>
+                                <hr />
+
+                                <div className='arguments-wrapper'>
+                                    <OperationArguments operation={matchingOperation} />
+                                </div>
+                            </>
+                        )}
                     </>
                 ) : (
                     <p className='not-found-message'>Operation {operationId} not found</p>

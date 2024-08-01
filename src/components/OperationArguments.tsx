@@ -8,9 +8,9 @@ import MicroOperations from './MicroOperations';
 import { Operation } from '../model/Graph';
 
 interface OperationArgumentsProps {
-    operationIndex: number;
+    operationIndex?: number;
     operation: Operation;
-    scrollTo: (index: number, { align, behavior }: ScrollToOptions) => void;
+    scrollTo?: (index: number, { align, behavior }: ScrollToOptions) => void;
 }
 
 function OperationArguments({ operationIndex, operation, scrollTo }: OperationArgumentsProps) {

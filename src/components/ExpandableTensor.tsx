@@ -8,8 +8,8 @@ import 'styles/components/ExpandableTensor.scss';
 
 interface ExpandableTensorProps {
     tensor: string;
-    operationIndex: number;
-    scrollTo: (index: number, { align, behavior }: ScrollToOptions) => void;
+    operationIndex?: number;
+    scrollTo?: (index: number, { align, behavior }: ScrollToOptions) => void;
 }
 
 function ExpandableTensor({ tensor, operationIndex, scrollTo }: ExpandableTensorProps) {
@@ -20,7 +20,13 @@ function ExpandableTensor({ tensor, operationIndex, scrollTo }: ExpandableTensor
     const handleExpandToggle = (shouldScrollTo?: boolean) => {
         setIsExpanded((previousValue) => !previousValue);
 
-        if (shouldScrollTo && cellRef.current && !isElementCompletelyInViewPort(cellRef.current)) {
+        if (
+            shouldScrollTo &&
+            cellRef.current &&
+            !isElementCompletelyInViewPort(cellRef.current) &&
+            scrollTo &&
+            operationIndex
+        ) {
             // Looks better if we scroll to the previous index
             scrollTo(operationIndex - 1, {
                 align: 'start',
