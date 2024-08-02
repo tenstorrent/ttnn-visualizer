@@ -23,10 +23,12 @@ RUN npm install && npm cache clean --force
 ARG NODE_ENV="production"
 ENV NODE_ENV="${NODE_ENV}" \
     PATH="${PATH}:/node_modules/.bin" \
+    VITE_API_ROOT="api" \
     USER="node"
 
 COPY --chown=node:node . .
-COPY --chown=node:node ./.env /app/.env.${NODE_ENV}}
+COPY --chown=node:node ./.env /app/.env.production
+COPY --chown=node:node ./.env /app/.env
 
 RUN npm run build
 
