@@ -13,6 +13,8 @@ RUN apt-get update \
     && groupmod -g "${GID}" node && usermod -u "${UID}" -g "${GID}" node \
     && mkdir -p /node_modules && chown node:node -R /node_modules /app
 
+COPY --chown=node:node ./.env /app
+
 USER node
 
 COPY --chown=node:node ./package.json package-lock.json index.html ./
