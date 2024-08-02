@@ -27,7 +27,7 @@ ENV NODE_ENV="${NODE_ENV}" \
     USER="node"
 
 COPY --chown=node:node . .
-COPY --chown=node:node ./.env /app/.env.production
+COPY --chown=node:node ./.env /app/.env."${NODE_ENV}}"
 COPY --chown=node:node ./.env /app/.env
 
 RUN npm run build
