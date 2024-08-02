@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import React, { useRef, useState } from 'react';
 import { PlotMouseEvent } from 'plotly.js';
 import { Icon, Switch } from '@blueprintjs/core';
@@ -25,7 +29,6 @@ const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const { data: operations } = useOperationsList();
     const [zoomedInView, setZoomedInView] = useState(false);
-    const [isFullStackTrace, setIsFullStackTrace] = useState(false);
 
     const {
         operationDetails: { data: operationDetails, isLoading },
@@ -48,7 +51,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         return (
             <OperationDetailsNavigation
                 operationId={operationId}
-                isFullStackTrace={isFullStackTrace}
                 isLoading={isLoading}
             />
         );
@@ -106,20 +108,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         <>
             <OperationDetailsNavigation
                 operationId={operationId}
-                isFullStackTrace={isFullStackTrace}
                 isLoading={isLoading}
             />
 
             <div className='operation-details-component'>
-                {!isLoading && operationDetails?.operation_id ? (
+                {!isLoading && Number.isSafeInteger(operationDetails?.operation_id) ? (
                     <>
-                        {details.stack_trace && (
-                            <StackTrace
-                                stackTrace={details.stack_trace}
-                                isFullStackTrace={isFullStackTrace}
-                                toggleStackTraceHandler={setIsFullStackTrace}
-                            />
-                        )}
+                        {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
 
                         <Switch
                             label={zoomedInView ? 'Full buffer report' : 'Zoom buffer report'}
@@ -183,11 +178,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             }}
                                         />
                                         <div className='legend-details'>
-                                            <div className='format-numbers'>
+                                            <div className='format-numbers monospace'>
                                                 {prettyPrintAddress(chunk.address, memorySize)}
                                             </div>
-                                            <div className='format-numbers keep-left'>({toHex(chunk.address)})</div>
-                                            <div className='format-numbers'>{formatSize(chunk.size)} </div>
+                                            <div className='format-numbers monospace keep-left'>
+                                                ({toHex(chunk.address)})
+                                            </div>
+                                            <div className='format-numbers monospace'>{formatSize(chunk.size)} </div>
                                             <div>
                                                 {!chunk.empty && details.getTensorForAddress(chunk.address) && (
                                                     <>Tensor {details.getTensorForAddress(chunk.address)?.tensor_id}</>

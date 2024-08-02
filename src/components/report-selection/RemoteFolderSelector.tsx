@@ -6,15 +6,15 @@ import { Button, Icon, MenuItem, Spinner, Tooltip } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
-import isLocalFolderOutdated from '../../functions/isLocalFolderOutdated';
-import { Connection, ReportFolder } from '../../model/Connection';
+import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
+import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
     timeStyle: 'short',
 });
 
-const formatReportFolderName = (folder?: ReportFolder, connection?: Connection) => {
+const formatRemoteFolderName = (folder?: RemoteFolder, connection?: RemoteConnection) => {
     if (!folder) {
         return 'n/a';
     }
@@ -27,13 +27,13 @@ const formatReportFolderName = (folder?: ReportFolder, connection?: Connection) 
 };
 
 const filterFolders =
-    (connection?: Connection): ItemPredicate<ReportFolder> =>
+    (connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
     (query, folder) => {
-        return formatReportFolderName(folder, connection).toLowerCase().includes(query.toLowerCase());
+        return formatRemoteFolderName(folder, connection).toLowerCase().includes(query.toLowerCase());
     };
 
 const remoteFolderRenderer =
-    (syncingFolderList: boolean, connection?: Connection): ItemRenderer<ReportFolder> =>
+    (syncingFolderList: boolean, connection?: RemoteConnection): ItemRenderer<RemoteFolder> =>
     (folder, { handleClick, modifiers }) => {
         if (!modifiers.matchesPredicate) {
             return null;
@@ -51,7 +51,7 @@ const remoteFolderRenderer =
         );
 
         if (!syncingFolderList) {
-            if (isLocalFolderOutdated(folder)) {
+            if (isRemoteFolderOutdated(folder)) {
                 statusIcon = (
                     <Tooltip
                         content={`Folder is stale, last sync: ${
@@ -85,9 +85,9 @@ const remoteFolderRenderer =
                 className='remote-folder-item'
                 active={modifiers.active}
                 disabled={modifiers.disabled}
-                key={`${formatReportFolderName(folder, connection)}${lastSynced ?? lastModified}`}
+                key={`${formatRemoteFolderName(folder, connection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
-                text={formatReportFolderName(folder)}
+                text={formatRemoteFolderName(folder)}
                 // @ts-expect-error - Hack abusing label, it actually works.
                 label={statusIcon}
                 labelClassName='remote-folder-status-icon'
@@ -96,14 +96,14 @@ const remoteFolderRenderer =
     };
 
 interface RemoteFolderSelectorProps {
-    remoteFolder?: ReportFolder;
-    remoteFolderList?: ReportFolder[];
-    remoteConnection?: Connection;
+    remoteFolder?: RemoteFolder;
+    remoteFolderList?: RemoteFolder[];
+    remoteConnection?: RemoteConnection;
     loading?: boolean;
     updatingFolderList?: boolean;
     fallbackLabel?: string;
     icon?: string;
-    onSelectFolder: (folder: ReportFolder) => void;
+    onSelectFolder: (folder: RemoteFolder) => void;
 }
 
 const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = ({
@@ -139,7 +139,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
                     icon={icon as IconName}
                     rightIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={loading || remoteFolderList?.length === 0}
-                    text={remoteFolder ? formatReportFolderName(remoteFolder, remoteConnection) : fallbackLabel}
+                    text={remoteFolder ? formatRemoteFolderName(remoteFolder, remoteConnection) : fallbackLabel}
                 />
             </Select>
 

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 export interface TensorData {
     tensor_id: number;
     shape: string;
@@ -38,4 +42,21 @@ export interface Chunk {
 
 export interface FragmentationEntry extends Chunk {
     empty?: boolean;
+}
+
+export interface ReportMetaData {
+    cache_path: string;
+    model_cache_path: string;
+    tmp_dir: string;
+    enable_model_cache: boolean;
+    enable_fast_runtime_mode: boolean;
+    throw_exception_on_fallback: boolean;
+    enable_logging: boolean;
+    enable_graph_report: boolean;
+    enable_detailed_buffer_report: boolean;
+    enable_detailed_tensor_report: boolean;
+    enable_comparison_mode: boolean;
+    comparison_mode_pcc: number;
+    root_report_path: string;
+    report_name: string;
 }

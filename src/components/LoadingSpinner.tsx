@@ -1,8 +1,22 @@
-import 'styles/components/LoadingSpinner.scss';
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-function LoadingSpinner() {
+import classNames from 'classnames';
+import 'styles/components/LoadingSpinner.scss';
+import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
+
+interface LoadingSpinnerProps {
+    size?: LoadingSpinnerSizes;
+}
+
+function LoadingSpinner({ size }: LoadingSpinnerProps) {
     return (
-        <div className='loading-spinner'>
+        <div
+            className={classNames('loading-spinner', {
+                small: size === LoadingSpinnerSizes.SMALL,
+            })}
+        >
             <div />
             <div />
             <div />
