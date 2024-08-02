@@ -134,6 +134,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const dramHasntChanged = isEqual(dramMemory, previousDramMemory);
 
+    const dramDelta = dramMemoryReport.filter((chunk) => !chunk.empty && !previousDramMemory.find((c) => c.address === chunk.address));
+    const reverseDramDelta = previousDramMemory.filter((chunk) => !dramMemoryReport.find((c) => c.address === chunk.address));
+    console.log('DRAM Delta', dramDelta, reverseDramDelta);
+
     const dramTensorsOnly = dramMemoryReport.filter(
         (chunk) => !chunk.empty && details.getTensorForAddress(chunk.address),
     );
