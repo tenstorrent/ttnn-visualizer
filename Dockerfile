@@ -65,7 +65,7 @@ RUN mkdir -p /public
 # USER python
 
 COPY --chown=python:python ./backend/requirements.txt ./
-COPY --chown=python:python ./.env /app
+COPY --chown=python:python ./.env* /app/
 COPY --chown=python:python ./backend/bin ./bin
 
 RUN chmod 0755 bin/* && bin/pip3-install
@@ -79,6 +79,7 @@ RUN chmod 0755 bin/* && bin/pip3-install
 
 COPY --chown=python:python ./backend /app/backend
 COPY --chown=python:python --from=assets /app/assets/dist /public
+RUN chmod a+rw /app/backend/data
 
 USER root
 
