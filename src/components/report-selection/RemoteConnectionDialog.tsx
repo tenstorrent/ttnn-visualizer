@@ -27,7 +27,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     buttonLabel = 'Add connection',
     remoteConnection,
 }) => {
-    const defaultConnection = remoteConnection ?? { name: '', host: '', port: 22, path: '' };
+    const defaultConnection = remoteConnection ?? { name: '', host: '', port: 22, path: '', username: '' };
     const defaultConnectionTests: ConnectionStatus[] = [
         { status: ConnectionTestStates.IDLE, message: 'Test connection' },
         { status: ConnectionTestStates.IDLE, message: 'Test remote folder path' },
@@ -99,6 +99,19 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                         key='host'
                         value={connection.host}
                         onChange={(e) => setConnection({ ...connection, host: e.target.value })}
+                    />
+                </FormGroup>
+                <FormGroup
+                    label='Username'
+                    labelFor='text-input'
+                    subLabel='Username to connect with'
+                >
+                    <InputGroup
+                        key='username'
+                        value={connection.username ?? ''}
+                        onChange={(e) => {
+                            setConnection({ ...connection, username: e.target.value });
+                        }}
                     />
                 </FormGroup>
                 <FormGroup
