@@ -89,6 +89,25 @@ then follow steps for creating virtual environment and reinstalling dependencies
 
 ## Docker
 
+### Using Docker Image 
+
+Before executing the command below please see the note on SSH agent configuration. 
+
+In order to pull the image from ghcr.io you need to create an authentication token that allows you to "read:packages".
+To create and use the token follow the instructions found [here](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic) . 
+
+_Developer Note_ 
+
+To use a different build replace the 'latest' portion in the image name with the tag you wish to target, for instance:
+'ghcr.io/tenstorrent/ttnn-visualizer:feature-ci-configuration'
+
+*MacOS Run Command* 
+
+`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v /run/host-services/ssh-auth.sock:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
+
+Linux Run Command 
+
+`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v /run/host-services/ssh-auth.sock:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
 ### SSH
 
 To avoid exposing private keys in the docker image an ssh-agent is required to be running on the host machine. The agent
@@ -114,6 +133,3 @@ To use the [provided SSH container](./docker/SSH/README.md) with the compose con
 
 To connect to this container through the remote connection manager you use the name of the service (`ssh`) as the 'host' and the default SSH port 22. 
 
-### Using Docker Image 
-
-`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v /run/host-services/ssh-auth.sock:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
