@@ -59,7 +59,8 @@ COPY --chown=python:python ./backend/requirements.txt ./
 COPY --chown=python:python ./.env /app
 COPY --chown=python:python ./backend/bin ./bin
 
-# RUN chmod 0755 bin/* && bin/pip3-install
+RUN chmod 0755 bin/* && bin/pip3-install
+
 # ARG FLASK_ENV="production"
 # ENV PYTHONUNBUFFERED="true" \
 #    FLASK_ENV="${FLASK_ENV}" \
@@ -76,14 +77,13 @@ COPY --chown=python:python --from=assets /app/assets/dist /public
 # the container as root.
 
 USER root
-RUN bin/pip3-install
 
 ARG FLASK_ENV="production"
 ENV PYTHONUNBUFFERED="true" \
     FLASK_ENV="${FLASK_ENV}" \
     PYTHONPATH="." \
-    PATH="${PATH}:/home/python/.local/bin" \
-    USER="python"
+    PATH="${PATH}:/root/.local/bin" \
+    USER="root"
 
 ENTRYPOINT ["/app/bin/docker-entrypoint-web"]
 

@@ -6,9 +6,7 @@ set -e
 # into your volume persisted public directory.
 cp -r /public /app/backend
 
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    chmod 666 "${SSH_AUTH_SOCK}"
-fi
-
+echo "Running as user: $(whoami)"
 echo "Keys present in agent: $(ssh-add -L)"
+echo "Current env $(env)"
 exec "$@"
