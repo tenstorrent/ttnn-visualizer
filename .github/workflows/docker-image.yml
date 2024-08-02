@@ -9,7 +9,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  VITE_API_ROOT: http://localhost:8000/api
+  VITE_API_ROOT: /api
 
 
 # There is a single job in this workflow. It's configured to run on the latest available version of Ubuntu.
@@ -44,8 +44,8 @@ jobs:
       - name: Create a .env file
         run: |
              touch .env
-             VITE_API_ROOT="http://localhost:8000/api" >> .env
-             cat .env
+             VITE_API_ROOT="/api" >> .env
+             cp .env .env.production
 
       # This step uses [docker/metadata-action](https://github.com/docker/metadata-action#about) to extract tags and labels that will be applied to the specified image. The `id` "meta" allows the output of this step to be referenced in a subsequent step. The `images` value provides the base name for the tags and labels.
       - name: Extract metadata (tags, labels) for Docker
