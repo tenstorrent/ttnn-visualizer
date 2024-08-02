@@ -8,10 +8,14 @@ import { type FC, useEffect, useState } from 'react';
 
 import 'styles/components/FolderPicker.scss';
 import { useNavigate } from 'react-router';
-import { ConnectionStatus, ConnectionTestStates } from '../../model/Connection';
+import { useQueryClient } from 'react-query';
+import { useAtom, useAtomValue } from 'jotai';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
-import LoadingSpinner, { LoadingSpinnerSizes } from '../LoadingSpinner';
+import LoadingSpinner from '../LoadingSpinner';
+import { reportLocationAtom, reportMetaAtom } from '../../store/app';
+import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
+import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -29,9 +33,16 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 
 const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
+    const meta = useAtomValue(reportMetaAtom);
+    const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
+
     const { uploadLocalFolder, selectDirectory } = useLocalConnection();
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploading, setIsUploading] = useState(false);
+
+    const isLocalReportMounted =
+        (meta && reportLocation === 'local') || folderStatus?.status === ConnectionTestStates.OK;
 
     const handleDirectoryOpen = async () => {
         const files = await selectDirectory();
@@ -54,9 +65,16 @@ const LocalFolderOptions: FC = () => {
             connectionStatus.message = 'Selected directory does not contain a valid report.';
         }
 
-        // TODO: Handle errors more betterly
         setIsUploading(false);
         setFolderStatus(connectionStatus);
+    };
+
+    const viewOperation = () => {
+        queryClient.clear();
+
+        setReportLocation('local');
+
+        navigate(ROUTES.OPERATIONS);
     };
 
     useEffect(() => {
@@ -83,8 +101,8 @@ const LocalFolderOptions: FC = () => {
                 </Button>
 
                 <Button
-                    disabled={folderStatus?.status !== ConnectionTestStates.OK}
-                    onClick={() => navigate(ROUTES.OPERATIONS)}
+                    disabled={!isLocalReportMounted}
+                    onClick={viewOperation}
                     icon={IconNames.EYE_OPEN}
                 >
                     View report
@@ -100,6 +118,7 @@ const LocalFolderOptions: FC = () => {
                             size={20}
                             intent={INTENT_MAP[folderStatus.status]}
                         />
+
                         <span className='connection-status-text'>{folderStatus.message}</span>
                     </div>
                 )}

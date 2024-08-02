@@ -7,15 +7,16 @@ import { FC, useState } from 'react';
 import useRemoteConnection from '../../hooks/useRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
 import 'styles/components/RemoteConnectionDialog.scss';
-import { Connection, ConnectionStatus, ConnectionTestStates } from '../../model/Connection';
+import { RemoteConnection } from '../../definitions/RemoteConnection';
+import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 
 interface RemoteConnectionDialogProps {
     title?: string;
     buttonLabel?: string;
     open: boolean;
     onClose: () => void;
-    onAddConnection: (connection: Connection) => void;
-    remoteConnection?: Connection;
+    onAddConnection: (connection: RemoteConnection) => void;
+    remoteConnection?: RemoteConnection;
 }
 
 const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
@@ -26,12 +27,12 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     buttonLabel = 'Add connection',
     remoteConnection,
 }) => {
-    const defaultConnection = remoteConnection ?? { name: '', host: '', port: 22, path: '' };
+    const defaultConnection = remoteConnection ?? { name: '', host: '', port: 22, path: '', username: '' };
     const defaultConnectionTests: ConnectionStatus[] = [
         { status: ConnectionTestStates.IDLE, message: 'Test connection' },
         { status: ConnectionTestStates.IDLE, message: 'Test remote folder path' },
     ];
-    const [connection, setConnection] = useState<Partial<Connection>>(defaultConnection);
+    const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
     const { testConnection } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
@@ -101,6 +102,19 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                     />
                 </FormGroup>
                 <FormGroup
+                    label='Username'
+                    labelFor='text-input'
+                    subLabel='Username to connect with'
+                >
+                    <InputGroup
+                        key='username'
+                        value={connection.username ?? ''}
+                        onChange={(e) => {
+                            setConnection({ ...connection, username: e.target.value });
+                        }}
+                    />
+                </FormGroup>
+                <FormGroup
                     label='SSH Port'
                     labelFor='text-input'
                     subLabel='Port to use for the SSH connection. E.g.: port 22'
@@ -161,7 +175,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                         disabled={!isValidConnection}
                         onClick={() => {
                             if (isValidConnection) {
-                                onAddConnection(connection as Connection);
+                                onAddConnection(connection as RemoteConnection);
                                 closeDialog();
                             }
                         }}
