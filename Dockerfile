@@ -50,19 +50,22 @@ RUN mkdir -p /public
 
 # Backend Build steps
 
-USER python
+# ROOTLESS BUILD - WIP
+# Currently we can not use the MacOS magic socket as non-root.
+# Once this issue is resolved we can replace root with the python user
+# USER python
 
 COPY --chown=python:python ./backend/requirements.txt ./
 COPY --chown=python:python ./.env /app
 COPY --chown=python:python ./backend/bin ./bin
 
-RUN chmod 0755 bin/* && bin/pip3-install
-ARG FLASK_ENV="production"
-ENV PYTHONUNBUFFERED="true" \
-    FLASK_ENV="${FLASK_ENV}" \
-    PYTHONPATH="." \
-    PATH="${PATH}:/home/python/.local/bin" \
-    USER="python"
+# RUN chmod 0755 bin/* && bin/pip3-install
+# ARG FLASK_ENV="production"
+# ENV PYTHONUNBUFFERED="true" \
+#    FLASK_ENV="${FLASK_ENV}" \
+#    PYTHONPATH="." \
+#    PATH="${PATH}:/home/python/.local/bin" \
+#    USER="python"
 
 COPY --chown=python:python ./backend /app/backend
 COPY --chown=python:python --from=assets /app/assets/dist /public
@@ -73,6 +76,14 @@ COPY --chown=python:python --from=assets /app/assets/dist /public
 # the container as root.
 
 USER root
+RUN bin/pip3-install
+
+ARG FLASK_ENV="production"
+ENV PYTHONUNBUFFERED="true" \
+    FLASK_ENV="${FLASK_ENV}" \
+    PYTHONPATH="." \
+    PATH="${PATH}:/home/python/.local/bin" \
+    USER="python"
 
 ENTRYPOINT ["/app/bin/docker-entrypoint-web"]
 

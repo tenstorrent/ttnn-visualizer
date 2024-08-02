@@ -48,6 +48,7 @@ async def add_cache_control_header(request, call_next):
 
 origins = [
     "http://localhost:5173",
+    "http://localhost:8000",
 ]
 
 app.add_middleware(
