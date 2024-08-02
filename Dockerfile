@@ -27,6 +27,9 @@ ENV NODE_ENV="${NODE_ENV}" \
     USER="node"
 
 COPY --chown=node:node . .
+
+# See below for environment priority
+# https://vitejs.dev/guide/env-and-mode
 COPY --chown=node:node ./.env /app/.env."${NODE_ENV}}"
 COPY --chown=node:node ./.env /app/.env
 
