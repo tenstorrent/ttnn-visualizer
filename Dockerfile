@@ -16,6 +16,8 @@ RUN apt-get update \
 
 USER node
 
+
+
 COPY --chown=node:node ./package.json package-lock.json index.html ./
 
 RUN npm install && npm cache clean --force
@@ -23,15 +25,13 @@ RUN npm install && npm cache clean --force
 ARG NODE_ENV="production"
 ENV NODE_ENV="${NODE_ENV}" \
     PATH="${PATH}:/node_modules/.bin" \
-    VITE_API_ROOT="api" \
     USER="node"
 
 COPY --chown=node:node . .
 
 # See below for environment priority
 # https://vitejs.dev/guide/env-and-mode
-COPY --chown=node:node ./.env /app/.env."${NODE_ENV}}"
-COPY --chown=node:node ./.env /app/.env
+COPY --chown=node:node ./.env* /app/
 
 RUN npm run build
 
