@@ -18,10 +18,13 @@ from fastapi.staticfiles import StaticFiles
 from backend.remotes import RemoteConnection, check_remote_path, RemoteFolder, get_remote_test_folders, \
     sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY, RemoteFolderException
 
+active_db_path = PathlibPath(ACTIVE_DATA_DIRECTORY, 'db.sqlite')
+empty_db_path = PathlibPath(__file__).parent.resolve().joinpath('empty.sqlite')
+if not active_db_path.exists():
+    active_db_path.parent.mkdir(exist_ok=True, parents=True)
+    shutil.copy(empty_db_path, active_db_path)
 
-
-
-DATABASE_URL = f"sqlite:////{ACTIVE_DATA_DIRECTORY}/db.sqlite"
+DATABASE_URL = f"sqlite:////{str(active_db_path)}"
 
 engine = create_engine(
     DATABASE_URL,
@@ -45,6 +48,7 @@ async def add_cache_control_header(request, call_next):
 
 origins = [
     "http://localhost:5173",
+    "http://localhost:8000",
 ]
 
 app.add_middleware(

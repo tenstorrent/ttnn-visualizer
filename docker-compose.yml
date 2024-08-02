@@ -2,7 +2,7 @@ services:
   web:
     build:
       context: "."
-      dockerfile: ./docker/Dockerfile
+      dockerfile: ./Dockerfile
       target: "app"
       args:
         - "UID=${UID:-1000}"
@@ -34,7 +34,7 @@ services:
       # Linux configuration
       # - ${SSH_AUTH_SOCK}:/ssh-agent
       # MacOS configuration
-      - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
+      - /run/host-services/ssh-auth.sock:/ssh-agent
 
   # To connect to the container in the remote connection dialog use `ssh` and port `22`
   ssh:
