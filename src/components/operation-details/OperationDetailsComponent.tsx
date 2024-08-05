@@ -17,7 +17,11 @@ import { OperationDetails } from '../../model/OperationDetails';
 import ROUTES from '../../definitions/routes';
 import { BufferType } from '../../model/BufferType';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
-import { DRAMRenderConfiguration, L1RenderConfiguration } from '../../definitions/PlotConfigurations';
+import {
+    CONDENSED_PLOT_CHUNK_COLOR,
+    DRAMRenderConfiguration,
+    L1RenderConfiguration,
+} from '../../definitions/PlotConfigurations';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -64,6 +68,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails);
     previousDetails.updateOperationNames(operations);
 
+    const l1Small = details.memoryData(BufferType.L1_SMALL);
+
     const { chartData, memory, fragmentation } = details.memoryData();
     const { chartData: previousChartData, memory: previousMemory } = previousDetails.memoryData();
 
@@ -72,6 +78,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const dramMemoryReport: FragmentationEntry[] = [...dramMemory].sort((a, b) => a.address - b.address);
+
+    if (l1Small.condensedChart.length > 0) {
+        l1Small.condensedChart[0].marker.color = CONDENSED_PLOT_CHUNK_COLOR;
+        l1Small.condensedChart[0].hovertemplate = `
+<span style="color:${CONDENSED_PLOT_CHUNK_COLOR};font-size:20px;">&#9632;</span>
+<br />
+<span>L1 Small Condensed view</span>
+<extra></extra>`;
+    }
 
     const { memorySizeL1 } = details;
 
@@ -134,9 +149,14 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const dramHasntChanged = isEqual(dramMemory, previousDramMemory);
 
-    const dramDelta = dramMemoryReport.filter((chunk) => !chunk.empty && !previousDramMemory.find((c) => c.address === chunk.address));
-    const reverseDramDelta = previousDramMemory.filter((chunk) => !dramMemoryReport.find((c) => c.address === chunk.address));
-    console.log('DRAM Delta', dramDelta, reverseDramDelta);
+    const dramDelta = dramMemoryReport.filter(
+        (chunk) => !chunk.empty && !previousDramMemory.find((c) => c.address === chunk.address),
+    );
+    const reverseDramDelta = previousDramMemory.filter(
+        (chunk) => !dramMemoryReport.find((c) => c.address === chunk.address),
+    );
+
+    const dramDeltaObject = details.getMemoryDelta(dramDelta, reverseDramDelta);
 
     const dramTensorsOnly = dramMemoryReport.filter(
         (chunk) => !chunk.empty && details.getTensorForAddress(chunk.address),
@@ -212,7 +232,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             className={classNames('l1-memory-renderer', { 'empty-plot': chartData.length === 0 })}
                             plotZoomRangeStart={plotZoomRangeStart}
                             plotZoomRangeEnd={plotZoomRangeEnd}
-                            chartData={chartData}
+                            chartData={chartData.concat(l1Small.condensedChart)}
                             isZoomedIn={zoomedInView}
                             memorySize={memorySizeL1}
                             onBufferClick={onBufferClick}
@@ -232,6 +252,26 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         >
                             Buffer focused, click anywhere to reset
                         </aside>
+
+                        <MemoryPlotRenderer
+                            title='DRAM Delta (difference between current and previous operation)'
+                            className={classNames('dram-memory-renderer', {
+                                'empty-plot': dramDeltaObject.chartData.length === 0,
+                            })}
+                            plotZoomRangeStart={dramDeltaObject.min}
+                            plotZoomRangeEnd={dramDeltaObject.max}
+                            chartData={dramDeltaObject.chartData}
+                            isZoomedIn
+                            memorySize={DRAM_MEMORY_SIZE}
+                            onBufferClick={onBufferClick}
+                            onClickOutside={onClickOutside}
+                            additionalReferences={[navRef]}
+                            configuration={DRAMRenderConfiguration}
+                        />
+
+                        <br />
+                        <br />
+
                         <div className='plot-tensor-details'>
                             <div className='legend'>
                                 {memoryReport.map((chunk) => (

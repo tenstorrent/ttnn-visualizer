@@ -30,3 +30,5 @@ export interface PlotConfiguration {
     };
     title?: string;
 }
+
+export const CONDENSED_PLOT_CHUNK_COLOR = '#9c9e9f';
