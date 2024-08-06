@@ -1,5 +1,5 @@
 # Frontend Docker Build
-FROM node:20.11.1 AS assets
+FROM node:20.11-bookworm-slim AS assets
 
 WORKDIR /app/assets
 
@@ -38,7 +38,7 @@ RUN npm run build
 CMD ["bash"]
 
 # # Backend Docker Build
-FROM python:3.12.3 AS app
+FROM python:3.12.3-slim-bookworm AS app
 
 WORKDIR /app
 
