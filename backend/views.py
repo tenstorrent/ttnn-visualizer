@@ -1,6 +1,8 @@
 import http
+import json
+from pathlib import Path
 
-from flask import Blueprint, Response
+from flask import Blueprint, Response, current_app
 
 from backend.models import (
     Operation,
@@ -42,7 +44,9 @@ def operation_detail(operation_id):
         return Response(status=http.HTTPStatus.NOT_FOUND)
 
     buffers = Buffer.query.filter_by(operation_id=operation.operation_id).all()
-    stack_trace = StackTrace.query.filter_by(operation_id=operation.operation_id).first()
+    stack_trace = StackTrace.query.filter_by(
+        operation_id=operation.operation_id
+    ).first()
     input_tensors = InputTensorSchema().dump(operation.input_tensors, many=True)
     output_tensors = OutputTensorSchema().dump(operation.output_tensors, many=True)
     return dict(
@@ -50,8 +54,35 @@ def operation_detail(operation_id):
         buffers=BufferSchema().dump(buffers, many=True),
         stack_traces=StackTraceSchema().dump(stack_trace),
         input_tensors=input_tensors,
-        output_tensors=output_tensors
+        output_tensors=output_tensors,
     )
+
+
+@api.route(
+    "operation-history",
+    methods=[
+        "GET",
+    ],
+)
+def get_operation_history():
+    operation_history_filename = "operation_history.json"
+    operation_history_file = Path(
+        current_app.config["ACTIVE_DATA_DIRECTORY"], operation_history_filename
+    )
+    if not operation_history_file.exists():
+        return []
+    with open(operation_history_file, "r") as file:
+        return json.load(file)
+
+
+@api.route("/config")
+def get_config():
+    config_file_name = "config.json"
+    config_file = Path(current_app.config["ACTIVE_DATA_DIRECTORY"], config_file_name)
+    if not config_file.exists():
+        return {}
+    with open(config_file, "r") as file:
+        return json.load(file)
 
 
 @api.route("/tensors", methods=["GET"])
