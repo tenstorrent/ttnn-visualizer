@@ -38,16 +38,19 @@ def operation_list():
 @api.route("/operations/<operation_id>", methods=["GET"])
 def operation_detail(operation_id):
     operation = Operation.query.get(operation_id)
-    buffers = Buffer.query.filter_by(operation_id=operation.operation_id).all()
-    stack_trace = StackTrace.query.filter_by(operation_id=operation.operation_id).all()
-
     if not operation:
         return Response(status=http.HTTPStatus.NOT_FOUND)
 
+    buffers = Buffer.query.filter_by(operation_id=operation.operation_id).all()
+    stack_trace = StackTrace.query.filter_by(operation_id=operation.operation_id).first()
+    input_tensors = InputTensorSchema().dump(operation.input_tensors, many=True)
+    output_tensors = OutputTensorSchema().dump(operation.output_tensors, many=True)
     return dict(
         operation_id=operation.operation_id,
         buffers=BufferSchema().dump(buffers, many=True),
-        stack_traces=StackTraceSchema().dump(stack_trace, many=True),
+        stack_traces=StackTraceSchema().dump(stack_trace),
+        input_tensors=input_tensors,
+        output_tensors=output_tensors
     )
 
 
