@@ -17,7 +17,7 @@ def health_check():
 @api.route("/operations", methods=["GET"])
 def operation_list():
     operations = Operation.query.all()
-    return OperationSchema(many=True, exclude=["input_tensors", "output_tensors"]).dump(operations)
+    return OperationSchema(many=True, exclude=["buffers", "input_tensors", "output_tensors"]).dump(operations)
 
 
 @api.route("/operations/<operation_id>", methods=["GET"])
@@ -41,7 +41,7 @@ def operation_detail(operation_id):
 
 @api.route("/tensors", methods=["GET"])
 def get_tensors():
-    tensors = map(attach_producer_consumers, Tensor.query.all())
+    tensors = Tensor.query.all()
     return TensorSchema().dump(tensors, many=True)
 
 
@@ -50,13 +50,16 @@ def get_tensor(tensor_id):
     tensor = Tensor.query.get(tensor_id)
     if not tensor:
         return Response(status=http.HTTPStatus.NOT_FOUND)
-    return TensorSchema().dump(attach_producer_consumers(tensor))
+    response = dict()
+    response.update(get_producer_consumers(tensor))
+    response.update({ 'tensor': TensorSchema().dump(tensor)})
+    return response
 
 
-def attach_producer_consumers(t: Tensor):
-    t.consumers = [c.operation_id for c in InputTensor.query.filter_by(tensor_id=t.tensor_id)]
-    t.producers = [c.operation_id for c in OutputTensor.query.filter_by(tensor_id=t.tensor_id)]
-    return t
+def get_producer_consumers(t: Tensor):
+    consumers = [c.operation_id for c in InputTensor.query.filter_by(tensor_id=t.tensor_id)] 
+    producers = [c.operation_id for c in OutputTensor.query.filter_by(tensor_id=t.tensor_id)]
+    return dict(consumers=consumers, producers=producers)
 
 
 def get_input_output_tensors(operation: Operation):
