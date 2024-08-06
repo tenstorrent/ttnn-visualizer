@@ -39,6 +39,9 @@ class InputOutputSchema(object):
     dtype = ma.Function(lambda obj: obj.tensor.dtype)
     tensor_id = ma.Function(lambda obj: obj.tensor.tensor_id)
     operation_id = ma.auto_field()
+    consumers = fields.List(fields.Integer)
+    producers = fields.List(fields.Integer)
+
 
 
 

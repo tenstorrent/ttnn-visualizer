@@ -89,7 +89,7 @@ def get_config():
 
 @api.route("/tensors", methods=["GET"])
 def get_tensors():
-    tensors = Tensor.query.all()
+    tensors = map(attach_producer_consumers, Tensor.query.all())
     return TensorSchema().dump(tensors, many=True)
 
 
@@ -98,20 +98,14 @@ def get_tensor(tensor_id):
     tensor = Tensor.query.get(tensor_id)
     if not tensor:
         return Response(status=http.HTTPStatus.NOT_FOUND)
-    response = dict()
-    response.update(get_producer_consumers(tensor))
-    response.update({"tensor": TensorSchema().dump(tensor)})
-    return response
+    return TensorSchema().dump(attach_producer_consumers(tensor))
 
 
-def get_producer_consumers(t: Tensor):
-    consumers = [
-        c.operation_id for c in InputTensor.query.filter_by(tensor_id=t.tensor_id)
-    ]
-    producers = [
-        c.operation_id for c in OutputTensor.query.filter_by(tensor_id=t.tensor_id)
-    ]
-    return dict(consumers=consumers, producers=producers)
+def attach_producer_consumers(t: Tensor):
+    t.consumers = [c.operation_id for c in InputTensor.query.filter_by(tensor_id=t.tensor_id)]
+    t.producers = [c.operation_id for c in OutputTensor.query.filter_by(tensor_id=t.tensor_id)]
+    return t
+
 
 
 
