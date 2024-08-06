@@ -26,8 +26,7 @@ class TensorSchema(ma.SQLAlchemyAutoSchema):
 class StackTraceSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = StackTrace
-    stack_trace = ma.auto_field()
-
+    stack_trace = ma.Function(lambda obj: obj.stack_trace or "")
 
 class InputOutputSchema(object):
     # TODO - We can probably create a model to avoid backrefs
