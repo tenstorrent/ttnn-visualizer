@@ -26,7 +26,7 @@ const fetchOperations = async (): Promise<Operation[]> => {
 };
 
 const fetchReportMeta = async (): Promise<ReportMetaData> => {
-    const { data: meta } = await axios.get<ReportMetaData>('/api/get-config');
+    const { data: meta } = await axios.get<ReportMetaData>('/api/config');
 
     return meta;
 };
