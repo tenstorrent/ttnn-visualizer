@@ -1,12 +1,14 @@
-import json
 import shutil
+import json
 from pathlib import Path as PathlibPath
 from typing import List, Optional
 
-import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException, Path, Request, UploadFile, File
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Path, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.models import Response as ResponseModel
+from fastapi.responses import Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
@@ -22,19 +24,27 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.orm import sessionmaker
+from fastapi.staticfiles import StaticFiles
 
 from backend.remotes import (
     RemoteConnection,
     check_remote_path,
-    StatusMessage,
     RemoteFolder,
     get_remote_test_folders,
     sync_test_folders,
     REPORT_DATA_DIRECTORY,
     ACTIVE_DATA_DIRECTORY,
+    RemoteFolderException,
+    StatusMessage,
 )
 
-DATABASE_URL = f"sqlite:////{ACTIVE_DATA_DIRECTORY}/db.sqlite"
+active_db_path = PathlibPath(ACTIVE_DATA_DIRECTORY, "db.sqlite")
+empty_db_path = PathlibPath(__file__).parent.resolve().joinpath("empty.sqlite")
+if not active_db_path.exists():
+    active_db_path.parent.mkdir(exist_ok=True, parents=True)
+    shutil.copy(empty_db_path, active_db_path)
+
+DATABASE_URL = f"sqlite:////{str(active_db_path)}"
 
 engine = create_engine(
     DATABASE_URL,
@@ -58,6 +68,7 @@ async def add_cache_control_header(request, call_next):
 
 origins = [
     "http://localhost:5173",
+    "http://localhost:8000",
 ]
 
 app.add_middleware(
@@ -290,9 +301,9 @@ def shutdown():
     engine.dispose()
 
 
-@app.get("/api")
+@app.get("/api/up")
 async def read_root():
-    return {"message": "Hello from FastAPI"}
+    return Response(status_code=200)
 
 
 @app.post("/api/local/upload")
@@ -323,37 +334,46 @@ async def create_upload_files(files: List[UploadFile] = File(...)):
     return StatusMessage(status=200, message="success")
 
 
-@app.post("/api/remote/folder", response_model=List[RemoteFolder])
+@app.post("/api/remote/folder", response_model=List[RemoteFolder] | ResponseModel)
 async def get_remote_folders(connection: RemoteConnection):
-    return get_remote_test_folders(connection)
+    try:
+        return get_remote_test_folders(connection)
+    except RemoteFolderException as e:
+        return Response(status_code=e.status, content=e.message)
 
 
-@app.post("/api/remote/test", response_model=StatusMessage)
+@app.post("/api/remote/test", response_model=ResponseModel)
 async def get_remote_folders(connection: RemoteConnection):
-    return check_remote_path(connection)
+    try:
+        check_remote_path(connection)
+    except RemoteFolderException as e:
+        return Response(status_code=e.status, content=e.message)
+    return Response(status_code=200)
 
 
-@app.post("/api/remote/sync", response_model=StatusMessage)
+@app.post("/api/remote/sync", response_model=ResponseModel)
 async def sync_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
-    sync_test_folders(connection, folder)
-    return StatusMessage(status=200, message="success")
+    try:
+        sync_test_folders(connection, folder)
+    except RemoteFolderException as e:
+        return Response(status_code=e.status, content=e.message)
+    return Response(status_code=200, content="")
 
 
-@app.post("/api/remote/use", response_model=StatusMessage)
+@app.post("/api/remote/use", response_model=ResponseModel)
 async def use_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
     report_folder = PathlibPath(folder.remotePath).name
     connection_directory = PathlibPath(
         REPORT_DATA_DIRECTORY, connection.name, report_folder
     )
     shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
-    return StatusMessage(status=200, message="success")
+    return Response(status_code=200)
 
-@app.get('/api/get-config')
+
+@app.get("/api/get-config")
 async def get_config():
     config_file_name = "config.json"
-    operation_history_file = PathlibPath(
-        ACTIVE_DATA_DIRECTORY, config_file_name
-    )
+    operation_history_file = PathlibPath(ACTIVE_DATA_DIRECTORY, config_file_name)
     if not operation_history_file.exists():
         return {}
     with open(operation_history_file, "r") as file:
@@ -591,35 +611,9 @@ async def get_tensor_details(
     )
 
 
-# Middleware to proxy requests to Vite development server, excluding /api/* requests
-@app.middleware("http")
-async def proxy_middleware(request: Request, call_next):
-    if request.url.path.startswith("/api"):
-        response = await call_next(request)
-        return response
-
-    vite_url = f"http://localhost:5173{request.url.path}"
-    async with httpx.AsyncClient() as client:
-        try:
-            vite_response = await client.request(
-                method=request.method,
-                url=vite_url,
-                content=await request.body(),
-                headers=request.headers,
-                params=request.query_params,
-            )
-            headers = {
-                k: v
-                for k, v in vite_response.headers.items()
-                if k.lower() != "content-encoding"
-            }
-            return StreamingResponse(vite_response.aiter_bytes(), headers=headers)
-        except httpx.RequestError as exc:
-            return JSONResponse(
-                status_code=500,
-                content={"message": f"Error connecting to Vite server: {exc}"},
-            )
-
+dist_dir = "/app/backend/public"
+if PathlibPath(dist_dir).exists():
+    app.mount("/", StaticFiles(directory=dist_dir, html=True))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
