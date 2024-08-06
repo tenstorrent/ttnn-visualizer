@@ -1,8 +1,15 @@
 import os
 from distutils.util import strtobool
+from pathlib import Path
 
 
 class Config(object):
+
+    TEST_CONFIG_FILE = 'config.json'
+    REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath('data')
+    ACTIVE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath('active')
+    ACTIVE_DB_PATH = Path(ACTIVE_DATA_DIRECTORY, "db.sqlite")
+    EMPTY_DB_PATH = Path(__file__).parent.resolve().joinpath("empty.sqlite")
     SEND_FILE_MAX_AGE_DEFAULT = 0
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False
@@ -17,7 +24,7 @@ class Config(object):
     # SQLAlchemy.
     DATABASE_OPTIONS = "check_same_thread=False"
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
-    DATABASE_FILE = os.path.join(APPLICATION_DIR, "db.sqlite")
+    DATABASE_FILE = ACTIVE_DB_PATH
 
     SQLALCHEMY_DATABASE_URI = os.getenv(
         "DATABASE_URL", "sqlite:///" + f"{DATABASE_FILE}?{DATABASE_OPTIONS}"
