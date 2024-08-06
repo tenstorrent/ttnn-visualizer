@@ -20,7 +20,7 @@ USER node
 
 COPY --chown=node:node ./package.json package-lock.json index.html ./
 
-RUN npm install && npm cache clean --force
+RUN npm install
 
 ARG NODE_ENV="production"
 ENV NODE_ENV="${NODE_ENV}" \
