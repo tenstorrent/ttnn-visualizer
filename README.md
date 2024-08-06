@@ -101,13 +101,15 @@ _Developer Note_
 To use a different build replace the 'latest' portion in the image name with the tag you wish to target, for instance:
 'ghcr.io/tenstorrent/ttnn-visualizer:feature-ci-configuration'
 
+You can see the name of any given image from the [pipeline page](https://github.com/tenstorrent/ttnn-visualizer/actions/runs/10218814967/job/28275768037#step:8:1556).
+
 *MacOS Run Command* 
 
 `docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v /run/host-services/ssh-auth.sock:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
 
 Linux Run Command 
 
-`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v /run/host-services/ssh-auth.sock:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
+`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v $SSH_AUTH_SOCK:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
 ### SSH
 
 To avoid exposing private keys in the docker image an ssh-agent is required to be running on the host machine. The agent

@@ -16,6 +16,8 @@ RUN apt-get update \
 
 USER node
 
+
+
 COPY --chown=node:node ./package.json package-lock.json index.html ./
 
 RUN npm install && npm cache clean --force
@@ -23,15 +25,13 @@ RUN npm install && npm cache clean --force
 ARG NODE_ENV="production"
 ENV NODE_ENV="${NODE_ENV}" \
     PATH="${PATH}:/node_modules/.bin" \
-    VITE_API_ROOT="api" \
     USER="node"
 
 COPY --chown=node:node . .
 
 # See below for environment priority
 # https://vitejs.dev/guide/env-and-mode
-COPY --chown=node:node ./.env /app/.env."${NODE_ENV}}"
-COPY --chown=node:node ./.env /app/.env
+COPY --chown=node:node ./.env* /app/
 
 RUN npm run build
 
@@ -65,7 +65,7 @@ RUN mkdir -p /public
 # USER python
 
 COPY --chown=python:python ./backend/requirements.txt ./
-COPY --chown=python:python ./.env /app
+COPY --chown=python:python ./.env* /app/
 COPY --chown=python:python ./backend/bin ./bin
 
 RUN chmod 0755 bin/* && bin/pip3-install
@@ -79,6 +79,7 @@ RUN chmod 0755 bin/* && bin/pip3-install
 
 COPY --chown=python:python ./backend /app/backend
 COPY --chown=python:python --from=assets /app/assets/dist /public
+RUN chmod a+rw /app/backend/data
 
 USER root
 

@@ -26,11 +26,20 @@ from sqlalchemy import (
 from sqlalchemy.orm import sessionmaker
 from fastapi.staticfiles import StaticFiles
 
-from backend.remotes import RemoteConnection, check_remote_path, RemoteFolder, get_remote_test_folders, \
-    sync_test_folders, REPORT_DATA_DIRECTORY, ACTIVE_DATA_DIRECTORY, RemoteFolderException
+from backend.remotes import (
+    RemoteConnection,
+    check_remote_path,
+    RemoteFolder,
+    get_remote_test_folders,
+    sync_test_folders,
+    REPORT_DATA_DIRECTORY,
+    ACTIVE_DATA_DIRECTORY,
+    RemoteFolderException,
+    StatusMessage,
+)
 
-active_db_path = PathlibPath(ACTIVE_DATA_DIRECTORY, 'db.sqlite')
-empty_db_path = PathlibPath(__file__).parent.resolve().joinpath('empty.sqlite')
+active_db_path = PathlibPath(ACTIVE_DATA_DIRECTORY, "db.sqlite")
+empty_db_path = PathlibPath(__file__).parent.resolve().joinpath("empty.sqlite")
 if not active_db_path.exists():
     active_db_path.parent.mkdir(exist_ok=True, parents=True)
     shutil.copy(empty_db_path, active_db_path)
@@ -360,12 +369,11 @@ async def use_remote_folder(connection: RemoteConnection, folder: RemoteFolder):
     shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
     return Response(status_code=200)
 
-@app.get('/api/get-config')
+
+@app.get("/api/get-config")
 async def get_config():
     config_file_name = "config.json"
-    operation_history_file = PathlibPath(
-        ACTIVE_DATA_DIRECTORY, config_file_name
-    )
+    operation_history_file = PathlibPath(ACTIVE_DATA_DIRECTORY, config_file_name)
     if not operation_history_file.exists():
         return {}
     with open(operation_history_file, "r") as file:
@@ -603,7 +611,7 @@ async def get_tensor_details(
     )
 
 
-dist_dir = '/app/backend/public'
+dist_dir = "/app/backend/public"
 if PathlibPath(dist_dir).exists():
     app.mount("/", StaticFiles(directory=dist_dir, html=True))
 
