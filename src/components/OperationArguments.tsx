@@ -4,43 +4,39 @@
 import 'styles/components/OperationArguments.scss';
 import { ScrollToOptions } from '@tanstack/react-virtual';
 import ExpandableTensor from './ExpandableTensor';
-import MicroOperations from './MicroOperations';
 import { Operation } from '../model/Graph';
 
 interface OperationArgumentsProps {
-    operationIndex?: number;
     operation: Operation;
+    operationIndex?: number;
     scrollTo?: (index: number, { align, behavior }: ScrollToOptions) => void;
 }
 
 function OperationArguments({ operationIndex, operation, scrollTo }: OperationArgumentsProps) {
-    const { id, arguments: operationArguments, microOperations } = operation;
+    const { id, arguments: operationArguments } = operation;
 
     return (
-        <>
-            <table className='arguments-table has-vertical-headings'>
-                <caption>Arguments</caption>
+        <table className='arguments-table has-vertical-headings'>
+            <caption>Arguments</caption>
 
-                <tbody>
-                    {operationArguments?.map((arg) => (
-                        <tr key={`${id}-${arg.name}`}>
-                            <td>{arg.name}</td>
-                            {isLengthyTensor(arg.value) ? (
-                                <ExpandableTensor
-                                    tensor={arg.value}
-                                    operationIndex={operationIndex}
-                                    scrollTo={scrollTo}
-                                />
-                            ) : (
-                                <td>{arg.value}</td>
-                            )}
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+            <tbody>
+                {operationArguments?.map((arg) => (
+                    <tr key={`${id}-${arg.name}`}>
+                        <td>{arg.name}</td>
 
-            {microOperations?.length ? <MicroOperations microOperations={microOperations} /> : null}
-        </>
+                        {isLengthyTensor(arg.value) ? (
+                            <ExpandableTensor
+                                tensor={arg.value}
+                                operationIndex={operationIndex}
+                                scrollTo={scrollTo}
+                            />
+                        ) : (
+                            <td>{arg.value}</td>
+                        )}
+                    </tr>
+                ))}
+            </tbody>
+        </table>
     );
 }
 

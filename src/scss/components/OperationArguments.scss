@@ -49,6 +49,14 @@
             }
         }
     }
+
+    &.microops-table {
+        tr {
+            :first-child {
+                width: 75%
+            }
+        }
+    }
 }
 
 $micro-op-gap: 20px;

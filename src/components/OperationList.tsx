@@ -19,6 +19,7 @@ import 'styles/components/OperationsList.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { expandedOperationsAtom } from '../store/app';
+import MicroOperations from './MicroOperations';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -299,11 +300,18 @@ const OperationList = () => {
                                                 </p>
 
                                                 {operation.arguments && (
-                                                    <OperationArguments
-                                                        operationIndex={virtualRow.index}
-                                                        operation={operation}
-                                                        scrollTo={virtualizer.scrollToIndex}
-                                                    />
+                                                    <>
+                                                        <OperationArguments
+                                                            operationIndex={virtualRow.index}
+                                                            operation={operation}
+                                                            scrollTo={virtualizer.scrollToIndex}
+                                                        />
+                                                        {operation?.microOperations ? (
+                                                            <MicroOperations
+                                                                microOperations={operation.microOperations}
+                                                            />
+                                                        ) : null}
+                                                    </>
                                                 )}
                                             </div>
                                         </Collapsible>
