@@ -13,7 +13,7 @@ from backend.models import (
     Tensor,
     StackTrace,
 )
-from backend.remotes import RemoteFolderException, StatusMessage, check_remote_path, get_remote_test_folders, sync_test_folders
+from backend.remotes import RemoteConnection, RemoteFolder, RemoteFolderException, StatusMessage, check_remote_path, get_remote_test_folders, sync_test_folders
 from backend.schemas import (
     OperationSchema,
     BufferSchema,
@@ -148,43 +148,45 @@ def create_upload_files():
 def get_remote_folders():
     connection = request.json 
     try:
-        return get_remote_test_folders(connection)
+        remote_folders = get_remote_test_folders(RemoteConnection(**connection))
+        return [r.dict() for r in remote_folders]
     except RemoteFolderException as e:
-        return Response(status_code=e.status, content=e.message)
+        return Response(status=e.status, response=e.message)
 
 
 @api.route("/remote/test", methods=["POST"])
 def test_remote_folder():
-    connection = json.loads(request.json)
+    connection = request.json
     try:
-        check_remote_path(connection)
+        check_remote_path(RemoteConnection(**connection))
     except RemoteFolderException as e:
-        return Response(status_code=e.status, content=e.message)
-    return Response(status_code=200)
+        return Response(status=e.status, response=e.message)
+    return Response(status=200)
 
 
 @api.route("/remote/sync", methods=["POST"])
 def sync_remote_folder():
-    request_body = json.loads(request.json)
+    request_body = request.json
     connection = request_body.get("connection")
     folder = request_body.get("folder")
+    print(connection)
+    print(folder)
     try:
-        sync_test_folders(connection, folder)
+        sync_test_folders(RemoteConnection(**connection), RemoteFolder(**folder))
     except RemoteFolderException as e:
-        return Response(status_code=e.status, content=e.message)
-    return Response(status_code=200, content="")
+        return Response(status=e.status, response=e.message)
+    return Response(status=200)
 
 
 @api.route("/remote/use", methods=["POST"]) 
 def use_remote_folder():
     REPORT_DATA_DIRECTORY = current_app.config["REPORT_DATA_DIRECTORY"]
     ACTIVE_DATA_DIRECTORY = current_app.config["ACTIVE_DATA_DIRECTORY"]
-    request_body = json.loads(request.json)
-    connection = request_body.get("connection")
-    folder = request_body.get("folder")
+    connection = request.json.get("connection")
+    folder = request.json.get("folder")
     report_folder = Path(folder.remotePath).name
     connection_directory = Path(
         REPORT_DATA_DIRECTORY, connection.name, report_folder
     )
     shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
-    return Response(status_code=200)
+    return Response(status=200)
