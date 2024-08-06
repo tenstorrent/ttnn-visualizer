@@ -81,6 +81,7 @@ class OperationSchema(ma.SQLAlchemySchema):
         model = Operation
 
     operation_id = ma.auto_field()
+    id = ma.Function(lambda obj: obj.operation_id)
     name = ma.auto_field()
     duration = ma.auto_field()
     buffers = ma.List(ma.Nested(BufferSchema))
