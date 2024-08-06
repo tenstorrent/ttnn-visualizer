@@ -151,7 +151,7 @@ def create_upload_files():
 
 
 @api.route("/remote/folder", methods=["POST"])
-async def get_remote_folders():
+def get_remote_folders():
     connection = request.json 
     try:
         return get_remote_test_folders(connection)
@@ -160,7 +160,7 @@ async def get_remote_folders():
 
 
 @api.route("/remote/test", methods=["POST"])
-async def test_remote_folder():
+def test_remote_folder():
     connection = json.loads(request.json)
     try:
         check_remote_path(connection)
@@ -170,7 +170,7 @@ async def test_remote_folder():
 
 
 @api.route("/remote/sync", methods=["POST"])
-async def sync_remote_folder():
+def sync_remote_folder():
     request_body = json.loads(request.json)
     connection = request_body.get("connection")
     folder = request_body.get("folder")
@@ -182,7 +182,7 @@ async def sync_remote_folder():
 
 
 @api.route("/remote/use", methods=["POST"]) 
-async def use_remote_folder():
+def use_remote_folder():
     REPORT_DATA_DIRECTORY = current_app.config["REPORT_DATA_DIRECTORY"]
     ACTIVE_DATA_DIRECTORY = current_app.config["ACTIVE_DATA_DIRECTORY"]
     request_body = json.loads(request.json)
