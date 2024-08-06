@@ -82,6 +82,7 @@ class OperationSchema(ma.SQLAlchemySchema):
 
     operation_id = ma.auto_field()
     name = ma.auto_field()
+    duration = ma.auto_field()
     buffers = ma.List(ma.Nested(BufferSchema))
     output_tensors = ma.List(ma.Nested(OutputTensorSchema))
     input_tensors = ma.List(ma.Nested(InputTensorSchema))
