@@ -38,11 +38,9 @@ class InputOutputSchema(object):
     buffer_type = ma.Function(lambda obj: obj.tensor.buffer_type)
     dtype = ma.Function(lambda obj: obj.tensor.dtype)
     tensor_id = ma.Function(lambda obj: obj.tensor.tensor_id)
+    consumers = fields.List(fields.Integer, default=[])
+    producers = fields.List(fields.Integer, default=[])
     operation_id = ma.auto_field()
-    consumers = fields.List(fields.Integer)
-    producers = fields.List(fields.Integer)
-
-
 
 
 class OutputTensorSchema(ma.SQLAlchemyAutoSchema, InputOutputSchema):
