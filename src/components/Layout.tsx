@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate } from 'react-router-dom';
-import { Button, Classes } from '@blueprintjs/core';
+import { Button, Classes, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
@@ -29,8 +29,15 @@ function Layout() {
                     <TenstorrentLogo />
                 </Link>
 
-                {/* TODO: Handle navigation variations differently */}
-                <span className='report-title'>{meta?.report_name}</span>
+                {meta?.report_name && (
+                    <Tooltip
+                        content={meta.report_name}
+                        className='report-title'
+                    >
+                        <span className='report-title'>{meta.report_name}</span>
+                    </Tooltip>
+                )}
+
                 <nav>
                     <Button
                         minimal
