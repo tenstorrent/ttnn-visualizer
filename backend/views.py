@@ -1,8 +1,9 @@
 import http
 import json
 from pathlib import Path
+import shutil
 
-from flask import Blueprint, Response, current_app
+from flask import Blueprint, Response, current_app, request
 
 from backend.models import (
     Operation,
@@ -12,6 +13,7 @@ from backend.models import (
     Tensor,
     StackTrace,
 )
+from backend.remotes import StatusMessage
 from backend.schemas import (
     OperationSchema,
     BufferSchema,
@@ -110,3 +112,38 @@ def get_producer_consumers(t: Tensor):
         c.operation_id for c in OutputTensor.query.filter_by(tensor_id=t.tensor_id)
     ]
     return dict(consumers=consumers, producers=producers)
+
+
+
+@api.route("local/upload", methods=["POST",])
+def create_upload_files():
+    """
+    Copies the folder upload into the active data directory
+    :param files:
+    :return:
+    """
+    files = request.files.getlist("files") 
+    for f in files:
+        print(f)
+    REPORT_DATA_DIRECTORY = current_app.config["REPORT_DATA_DIRECTORY"]
+    ACTIVE_DATA_DIRECTORY = current_app.config["ACTIVE_DATA_DIRECTORY"]
+    current_app.config['UPLOAD_FOLDER'] = REPORT_DATA_DIRECTORY
+
+    filenames = [Path(f.filename).name for f in files]
+    print(filenames)
+    if "db.sqlite" not in filenames or "config.json" not in filenames:
+        return StatusMessage(status=500, message="Invalid project directory.").dict()
+
+    # Grab a file path to get the top level path
+    file_path = Path(Path(files[0].filename))
+    top_level_directory = file_path.parents[0].name
+    destination_dir = Path(REPORT_DATA_DIRECTORY, top_level_directory)
+    for file in files:
+        destination_file = Path(
+            REPORT_DATA_DIRECTORY, Path(file.filename)
+        )
+        destination_file.parent.mkdir(exist_ok=True, parents=True)
+        file.save(Path(current_app.config['UPLOAD_FOLDER'], file.filename))
+
+    shutil.copytree(destination_dir, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
+    return StatusMessage(status=200, message="Success.").dict()
