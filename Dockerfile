@@ -38,7 +38,7 @@ RUN npm run build
 CMD ["bash"]
 
 # # Backend Docker Build
-FROM python:3.12.3-slim-bookworm AS app
+FROM python:3.12.3 AS app
 
 WORKDIR /app
 
