@@ -17,7 +17,7 @@ def health_check():
 @api.route("/operations", methods=["GET"])
 def operation_list():
     operations = Operation.query.all()
-    return OperationSchema(many=True).dump(operations)
+    return OperationSchema(many=True, exclude=["input_tensors", "output_tensors"]).dump(operations)
 
 
 @api.route("/operations/<operation_id>", methods=["GET"])
