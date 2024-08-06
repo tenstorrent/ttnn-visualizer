@@ -160,7 +160,7 @@ async def get_remote_folders():
 
 
 @api.route("/remote/test", methods=["POST"])
-async def get_remote_folders():
+async def test_remote_folder():
     connection = json.loads(request.json)
     try:
         check_remote_path(connection)
