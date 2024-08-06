@@ -64,6 +64,7 @@ class OperationArgumentsSchema(ma.SQLAlchemySchema):
         model = OperationArgument
 
     operation_id = ma.auto_field()
+    name = ma.auto_field()
     value = ma.auto_field()
 
 
