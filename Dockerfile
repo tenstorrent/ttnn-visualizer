@@ -79,7 +79,8 @@ RUN chmod 0755 bin/* && bin/pip3-install
 
 COPY --chown=python:python ./backend /app/backend
 COPY --chown=python:python --from=assets /app/assets/dist /public
-RUN chmod a+rw /app/backend/data
+
+RUN mkdir -p /app/backend/data && chmod a+rw /app/backend/data
 
 USER root
 
