@@ -49,7 +49,6 @@ def operation_list():
             "buffers",
             "input_tensors",
             "output_tensors",
-            "arguments",
             "operation_id",
         ],
     ).dump(operations)
