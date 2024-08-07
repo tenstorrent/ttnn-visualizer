@@ -19,6 +19,7 @@ import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
 import ROUTES from '../../definitions/routes';
+import MicroOperations from '../MicroOperations';
 import OperationArguments from '../OperationArguments';
 
 interface OperationDetailsProps {
@@ -287,12 +288,16 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             </div>
                         </div>
 
-                        {matchingOperation && (
+                        {matchingOperation?.arguments && (
                             <>
                                 <hr />
 
                                 <div className='arguments-wrapper'>
                                     <OperationArguments operation={matchingOperation} />
+
+                                    {matchingOperation?.microOperations?.length ? (
+                                        <MicroOperations microOperations={matchingOperation.microOperations} />
+                                    ) : null}
                                 </div>
                             </>
                         )}

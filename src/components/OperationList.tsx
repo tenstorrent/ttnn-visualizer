@@ -302,11 +302,12 @@ const OperationList = () => {
                                                 {operation.arguments && (
                                                     <>
                                                         <OperationArguments
-                                                            operationIndex={virtualRow.index}
                                                             operation={operation}
-                                                            scrollTo={virtualizer.scrollToIndex}
+                                                            operationIndex={virtualRow.index}
+                                                            onCollapseTensor={virtualizer.scrollToIndex}
                                                         />
-                                                        {operation?.microOperations ? (
+
+                                                        {operation?.microOperations?.length ? (
                                                             <MicroOperations
                                                                 microOperations={operation.microOperations}
                                                             />
