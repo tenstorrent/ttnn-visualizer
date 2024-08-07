@@ -13,7 +13,15 @@ from backend.models import (
     Tensor,
     StackTrace,
 )
-from backend.remotes import RemoteConnection, RemoteFolder, RemoteFolderException, StatusMessage, check_remote_path, get_remote_test_folders, sync_test_folders
+from backend.remotes import (
+    RemoteConnection,
+    RemoteFolder,
+    RemoteFolderException,
+    StatusMessage,
+    check_remote_path,
+    get_remote_test_folders,
+    sync_test_folders,
+)
 from backend.schemas import (
     OperationSchema,
     BufferSchema,
@@ -102,21 +110,28 @@ def get_tensor(tensor_id):
 
 
 def attach_producer_consumers(t: Tensor):
-    t.consumers = [c.operation_id for c in InputTensor.query.filter_by(tensor_id=t.tensor_id)]
-    t.producers = [c.operation_id for c in OutputTensor.query.filter_by(tensor_id=t.tensor_id)]
+    t.consumers = [
+        c.operation_id for c in InputTensor.query.filter_by(tensor_id=t.tensor_id)
+    ]
+    t.producers = [
+        c.operation_id for c in OutputTensor.query.filter_by(tensor_id=t.tensor_id)
+    ]
     return t
 
 
-
-
-@api.route("/local/upload", methods=["POST",])
+@api.route(
+    "/local/upload",
+    methods=[
+        "POST",
+    ],
+)
 def create_upload_files():
     """
     Copies the folder upload into the active data directory
     :param files:
     :return:
     """
-    files = request.files.getlist("files") 
+    files = request.files.getlist("files")
     for f in files:
         print(f)
     REPORT_DATA_DIRECTORY = current_app.config["REPORT_DATA_DIRECTORY"]
@@ -132,9 +147,7 @@ def create_upload_files():
     top_level_directory = file_path.parents[0].name
     destination_dir = Path(REPORT_DATA_DIRECTORY, top_level_directory)
     for file in files:
-        destination_file = Path(
-            REPORT_DATA_DIRECTORY, Path(file.filename)
-        )
+        destination_file = Path(REPORT_DATA_DIRECTORY, Path(file.filename))
         destination_file.parent.mkdir(exist_ok=True, parents=True)
         file.save(Path(destination_file, file.filename))
 
@@ -142,10 +155,9 @@ def create_upload_files():
     return StatusMessage(status=200, message="Success.").dict()
 
 
-
 @api.route("/remote/folder", methods=["POST"])
 def get_remote_folders():
-    connection = request.json 
+    connection = request.json
     try:
         remote_folders = get_remote_test_folders(RemoteConnection(**connection))
         return [r.dict() for r in remote_folders]
@@ -177,15 +189,13 @@ def sync_remote_folder():
     return Response(status=200)
 
 
-@api.route("/remote/use", methods=["POST"]) 
+@api.route("/remote/use", methods=["POST"])
 def use_remote_folder():
     REPORT_DATA_DIRECTORY = current_app.config["REPORT_DATA_DIRECTORY"]
     ACTIVE_DATA_DIRECTORY = current_app.config["ACTIVE_DATA_DIRECTORY"]
     connection = request.json.get("connection")
     folder = request.json.get("folder")
     report_folder = Path(folder.remotePath).name
-    connection_directory = Path(
-        REPORT_DATA_DIRECTORY, connection.name, report_folder
-    )
+    connection_directory = Path(REPORT_DATA_DIRECTORY, connection.name, report_folder)
     shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
     return Response(status=200)
