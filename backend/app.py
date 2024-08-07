@@ -19,8 +19,8 @@ def create_app(settings_override=None):
     :return: Flask app
     """
     app = Flask(__name__, static_folder="../public", static_url_path="/")
-    env = environ.get("FLASK_ENV", "development")
-    app.config.from_object(getattr(settings, env))
+    flask_env = environ.get("FLASK_ENV", "development")
+    app.config.from_object(getattr(settings, flask_env))
 
     if settings_override:
         app.config.update(settings_override)
@@ -29,9 +29,8 @@ def create_app(settings_override=None):
 
     app.register_blueprint(api)
 
-
-    # Ensure there is always a schema to reference 
-    # In the future we can probabably re-init the DB or 
+    # Ensure there is always a schema to reference
+    # In the future we can probabably re-init the DB or
     # wait for initialization until the user has provided a DB
     ACTIVE_DATA_DIRECTORY = app.config["ACTIVE_DATA_DIRECTORY"]
 
@@ -40,10 +39,11 @@ def create_app(settings_override=None):
     if not active_db_path.exists():
         active_db_path.parent.mkdir(exist_ok=True, parents=True)
         shutil.copy(empty_db_path, active_db_path)
-    
+
     extensions(app)
 
     if flask_env == "production":
+
         @app.route("/", defaults={"path": ""})
         @app.route("/<path:path>")
         def catch_all(path):
