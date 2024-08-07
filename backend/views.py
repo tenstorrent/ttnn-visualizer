@@ -6,6 +6,7 @@ import shutil
 from flask import Blueprint, Response, current_app, request
 
 from backend.models import (
+    Device,
     Operation,
     Buffer,
     InputTensor,
@@ -43,9 +44,15 @@ def health_check():
 def operation_list():
     operations = Operation.query.all()
     return OperationSchema(
-        many=True, exclude=["buffers", "input_tensors", "output_tensors", "arguments", "operation_id"]
+        many=True,
+        exclude=[
+            "buffers",
+            "input_tensors",
+            "output_tensors",
+            "arguments",
+            "operation_id",
+        ],
     ).dump(operations)
-
 
 
 def attach_producers_consumers(t: Tensor):
@@ -64,18 +71,27 @@ def operation_detail(operation_id):
     if not operation:
         return Response(status=HTTPStatus.NOT_FOUND)
 
+    devices = Device.query.order_by(Device.device_id.asc()).all()
+    l1_sizes = [d.worker_l1_size for d in devices]
+
     buffers = Buffer.query.filter_by(operation_id=operation.operation_id).all()
     stack_trace = StackTrace.query.filter_by(
         operation_id=operation.operation_id
     ).first()
     stack_trace_dump = StackTraceSchema().dump(stack_trace, many=False)
-    stack_trace_value = stack_trace_dump.get('stack_trace')
-    input_tensors = InputTensorSchema().dump(map(attach_producers_consumers, operation.input_tensors), many=True)
-    output_tensors = OutputTensorSchema().dump(map(attach_producers_consumers, operation.output_tensors), many=True)
+    stack_trace_value = stack_trace_dump.get("stack_trace")
+    input_tensors = InputTensorSchema().dump(
+        map(attach_producers_consumers, operation.input_tensors), many=True
+    )
+    output_tensors = OutputTensorSchema().dump(
+        map(attach_producers_consumers, operation.output_tensors), many=True
+    )
+
     return dict(
         operation_id=operation.operation_id,
         buffers=BufferSchema().dump(buffers, many=True),
         stack_trace=stack_trace_value,
+        l1_sizes=l1_sizes,
         input_tensors=input_tensors,
         output_tensors=output_tensors,
     )
@@ -122,8 +138,6 @@ def get_tensor(tensor_id):
     return TensorSchema().dump(attach_producers_consumers(tensor))
 
 
-
-
 @api.route(
     "/local/upload",
     methods=[
@@ -145,7 +159,10 @@ def create_upload_files():
     filenames = [Path(f.filename).name for f in files]
     print(filenames)
     if "db.sqlite" not in filenames or "config.json" not in filenames:
-        return StatusMessage(status=HTTPStatus.INTERNAL_SERVER_ERROR, message="Invalid project directory.").dict()
+        return StatusMessage(
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            message="Invalid project directory.",
+        ).dict()
 
     # Grab a file path to get the top level path
     file_path = Path(Path(files[0].filename))
@@ -198,12 +215,15 @@ def use_remote_folder():
     folder = request.json.get("folder", None)
     if not connection or folder:
         return Response(status=HTTPStatus.BAD_REQUEST)
-    
+
     REPORT_DATA_DIRECTORY = current_app.config["REPORT_DATA_DIRECTORY"]
     ACTIVE_DATA_DIRECTORY = current_app.config["ACTIVE_DATA_DIRECTORY"]
     report_folder = Path(folder.remotePath).name
     connection_directory = Path(REPORT_DATA_DIRECTORY, connection.name, report_folder)
     if not connection_directory.exists():
-        return Response(status=HTTPStatus.INTERNAL_SERVER_ERROR, response=f"{connection_directory} does not exist.")
+        return Response(
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            response=f"{connection_directory} does not exist.",
+        )
     shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
     return Response(status=HTTPStatus.OK)
