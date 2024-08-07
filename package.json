@@ -9,7 +9,9 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
-    "flask:start": "python -m backend.main",
+    "flask:start": "flask --app backend.app run -h localhost -p 8000",
+    "flask:start-threaded": "flask --app backend.app run --with-threads -h localhost -p 8000",
+    "flask:start-debug": "flask --app backend.app --debug run -h localhost -p 8000",
     "compose:up" : "docker-compose up web --build",
     "docker:build:ssh": "docker build docker/SSH --build-arg username=$(logname) -t local-ssh-image",
     "docker:run:ssh": "docker run -dit --rm -p 2222:22 --name local-ssh-server local-ssh-image:latest"

@@ -63,14 +63,23 @@ source myenv/bin/activate
 install requirements
 
 ```shell
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 ```
 
-run server
+Starting the server
 
 ```shell
-npm run start-flask
+npm run flask:start
 ```
+
+Starting with hot reload:
+
+``` shell
+npm run flask:start-debug
+```
+
+
+
 
 access on localhost:8000/
 
@@ -78,14 +87,22 @@ access on localhost:8000/
 
 Copy report contents to `backend/data/active` - IE - `backend/data/active/db.sqlite`
 
-### !fix for python random errors not finding modules:
+### Fix for python random errors not finding modules:
 
 ```shell
 deactivate
 rm -rf myenv
 ```
 
-then follow steps for creating virtual environment and reinstalling dependencies
+Then follow steps for creating virtual environment and reinstalling dependencies
+
+### Fix for missing distutils package
+
+With the virtualenv activated run:
+
+```shell
+pip install --upgrade setuptools
+```
 
 ## Docker
 
