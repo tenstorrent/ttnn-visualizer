@@ -54,6 +54,7 @@
         .memory-plot {
             height: 80px;
         }
+
         margin-bottom: 10px;
     }
 
@@ -92,6 +93,10 @@
 
         hr {
             margin: 10px 0;
+        }
+
+        .full-dram-legend {
+            display: grid;
         }
 
         .legend-item {

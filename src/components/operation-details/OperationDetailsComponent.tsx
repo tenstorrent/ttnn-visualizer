@@ -4,12 +4,11 @@ import { Icon, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
-import { getBufferColor } from '../../functions/colorGenerator';
 import { FragmentationEntry } from '../../model/APIData';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
-import { formatSize, isEqual, prettyPrintAddress, toHex } from '../../functions/math';
+import { isEqual } from '../../functions/math';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
@@ -22,6 +21,8 @@ import {
     DRAMRenderConfiguration,
     L1RenderConfiguration,
 } from '../../definitions/PlotConfigurations';
+import { MemoryLegendElement } from './MemoryLegendElement';
+import Collapsible from '../Collapsible';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -249,7 +250,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             Buffer focused, click anywhere to reset
                         </aside>
 
-                        <h3>DRAM Memory</h3>
+                        {/* <Collapsible */}
+                        {/*    label={<h3>DRAM Memory</h3>} */}
+                        {/*    contentClassName='full-dram-legend' */}
+                        {/*    isOpen={false} */}
+                        {/* > */}
 
                         <MemoryPlotRenderer
                             title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
@@ -295,74 +300,43 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                         <br />
                         <br />
-
+                        {/* </Collapsible> */}
                         <div className='plot-tensor-details'>
                             <div className='legend'>
                                 {memoryReport.map((chunk) => (
-                                    <div
+                                    <MemoryLegendElement
+                                        chunk={chunk}
                                         key={chunk.address}
-                                        className={classNames('legend-item', {
-                                            dimmed:
-                                                selectedTensorAddress !== null &&
-                                                selectedTensorAddress !== chunk.address,
-                                        })}
-                                    >
-                                        <div
-                                            className={classNames('memory-color-block', {
-                                                empty: chunk.empty === true,
-                                            })}
-                                            style={{
-                                                backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
-                                            }}
-                                        />
-                                        <div className='legend-details'>
-                                            <div className='format-numbers'>
-                                                {prettyPrintAddress(chunk.address, memorySizeL1)}
-                                            </div>
-                                            <div className='format-numbers keep-left'>({toHex(chunk.address)})</div>
-                                            <div className='format-numbers'>{formatSize(chunk.size)} </div>
-                                            <div>
-                                                {!chunk.empty && details.getTensorForAddress(chunk.address) && (
-                                                    <>Tensor {details.getTensorForAddress(chunk.address)?.tensor_id}</>
-                                                )}
-                                                {chunk.empty && 'Empty space'}
-                                            </div>
-                                        </div>
-                                    </div>
+                                        memSize={memorySizeL1}
+                                        selectedTensorAddress={selectedTensorAddress}
+                                        operationDetails={details}
+                                    />
                                 ))}
                                 <hr />
                                 {dramTensorsOnly.map((chunk) => (
-                                    <div
+                                    <MemoryLegendElement
+                                        chunk={chunk}
                                         key={chunk.address}
-                                        className={classNames('legend-item', {
-                                            dimmed:
-                                                selectedTensorAddress !== null &&
-                                                selectedTensorAddress !== chunk.address,
-                                        })}
-                                    >
-                                        <div
-                                            className={classNames('memory-color-block', {
-                                                empty: chunk.empty === true,
-                                            })}
-                                            style={{
-                                                backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
-                                            }}
-                                        />
-                                        <div className='legend-details'>
-                                            <div className='format-numbers'>
-                                                {prettyPrintAddress(chunk.address, memorySizeL1)}
-                                            </div>
-                                            <div className='format-numbers keep-left'>({toHex(chunk.address)})</div>
-                                            <div className='format-numbers'>{formatSize(chunk.size)} </div>
-                                            <div>
-                                                {!chunk.empty && details.getTensorForAddress(chunk.address) && (
-                                                    <>Tensor {details.getTensorForAddress(chunk.address)?.tensor_id}</>
-                                                )}
-                                                {chunk.empty && 'Empty space'}
-                                            </div>
-                                        </div>
-                                    </div>
+                                        memSize={DRAM_MEMORY_SIZE}
+                                        selectedTensorAddress={selectedTensorAddress}
+                                        operationDetails={details}
+                                    />
                                 ))}
+                                <Collapsible
+                                    label='Full DRAM Legend'
+                                    contentClassName='full-dram-legend'
+                                    isOpen={false}
+                                >
+                                    {dramMemoryReport.map((chunk) => (
+                                        <MemoryLegendElement
+                                            chunk={chunk}
+                                            key={chunk.address}
+                                            memSize={DRAM_MEMORY_SIZE}
+                                            selectedTensorAddress={selectedTensorAddress}
+                                            operationDetails={details}
+                                        />
+                                    ))}
+                                </Collapsible>
                             </div>
                             <div
                                 ref={navRef}
