@@ -36,7 +36,7 @@ api = Blueprint("api", __name__, url_prefix="/api")
 
 @api.route("/up", methods=["GET", "POST"])
 def health_check():
-    return Response(status=200)
+    return Response(status=HTTPStatus.OK)
 
 
 @api.route("/operations", methods=["GET"])
@@ -105,7 +105,7 @@ def get_tensors():
 def get_tensor(tensor_id):
     tensor = Tensor.query.get(tensor_id)
     if not tensor:
-        return Response(status=http.HTTPStatus.NOT_FOUND)
+        return Response(status=HTTPStatus.NOT_FOUND)
     return TensorSchema().dump(attach_producer_consumers(tensor))
 
 
