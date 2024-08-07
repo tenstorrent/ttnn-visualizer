@@ -96,20 +96,49 @@ Before executing the command below please see the note on SSH agent configuratio
 In order to pull the image from ghcr.io you need to create an authentication token that allows you to "read:packages".
 To create and use the token follow the instructions found [here](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic) . 
 
-_Developer Note_ 
+_Developer Note_
 
-To use a different build replace the 'latest' portion in the image name with the tag you wish to target, for instance:
-'ghcr.io/tenstorrent/ttnn-visualizer:feature-ci-configuration'
+Available image versions can be found [here](https://github.com/tenstorrent/ttnn-visualizer/pkgs/container/ttnn-visualizer).
 
-You can see the name of any given image from the [pipeline page](https://github.com/tenstorrent/ttnn-visualizer/actions/runs/10218814967/job/28275768037#step:8:1556).
+#### Docker Volumes
+
+In order to avoid having to re-download reports when re-creating the image it is recommended to create a volume to store the report data. A volume can be created using the docker volume command, `docker volume create report-data`. This volume should be mounted in the container at `/app/backend/data`. 
+
+#### Running Image
 
 *MacOS Run Command* 
 
-`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v /run/host-services/ssh-auth.sock:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
+`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v report-data:/app/backend/data -v /run/host-services/ssh-auth.sock:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
 
-Linux Run Command 
+*Linux Run Command*
 
-`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v $SSH_AUTH_SOCK:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
+`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v report-data/app/backend/data -v $SSH_AUTH_SOCK:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
+
+Or using docker compose:
+
+``` YAML
+services:
+  web:
+    image: ghcr.io/tenstorrent/ttnn-visualizer:latest
+    ports:
+      - 8000:8000
+    # If using a VPN to connect to remote machines remove ports
+    # and use the host network
+    # network: host
+    environment:
+      - SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock
+    volumes:
+      # Volume for report data
+      - report-data:/app/backend/data
+      # Linux configuration
+      - ${SSH_AUTH_SOCK}:/ssh-agent
+      # MacOS configuration
+      # - /run/host-services/ssh-auth.sock:/ssh-agent
+
+volumes:
+  report-data:
+```
+
 ### SSH
 
 To avoid exposing private keys in the docker image an ssh-agent is required to be running on the host machine. The agent
