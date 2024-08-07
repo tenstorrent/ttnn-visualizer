@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
     "flask:start": "flask --app backend.app run -h localhost -p 8000",
+    "flask:start-threaded": "flask --app backend.app run --with-threads -h localhost -p 8000",
     "flask:start-debug": "flask --app backend.app --debug run -h localhost -p 8000",
     "compose:up" : "docker-compose up web --build",
     "docker:build:ssh": "docker build docker/SSH --build-arg username=$(logname) -t local-ssh-image",
