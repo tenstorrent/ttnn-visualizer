@@ -21,7 +21,7 @@ const useLocalConnection = () => {
 
     const uploadLocalFolder = async (files: File[]) => {
         const formData = new FormData();
-        Array.from(files).forEach(f => {
+        Array.from(files).forEach((f) => {
             formData.append('files', f);
         });
 
