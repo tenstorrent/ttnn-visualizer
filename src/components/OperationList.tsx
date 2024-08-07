@@ -307,7 +307,7 @@ const OperationList = () => {
                                                             onCollapseTensor={virtualizer.scrollToIndex}
                                                         />
 
-                                                        {operation?.microOperations?.length ? (
+                                                        {operation.microOperations?.length ? (
                                                             <MicroOperations
                                                                 microOperations={operation.microOperations}
                                                             />
