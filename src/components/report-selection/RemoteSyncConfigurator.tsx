@@ -9,11 +9,13 @@ import { AnchorButton, Button, FormGroup, Tooltip } from '@blueprintjs/core';
 import { useNavigate } from 'react-router';
 import { IconNames } from '@blueprintjs/icons';
 import { useQueryClient } from 'react-query';
+import { useAtom, useAtomValue } from 'jotai';
 import useRemote from '../../hooks/useRemote';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import ROUTES from '../../definitions/routes';
+import { reportLocationAtom, reportMetaAtom } from '../../store/app';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 
@@ -24,6 +26,8 @@ const RemoteSyncConfigurator: FC = () => {
     const [remoteFolderList, setRemoteFolders] = useState<RemoteFolder[]>(
         remote.persistentState.getSavedRemoteFolders(remote.persistentState.selectedConnection),
     );
+    const meta = useAtomValue(reportMetaAtom);
+    const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
 
     const [isSyncingRemoteFolder, setIsSyncingRemoteFolder] = useState(false);
     const [isLoadingFolderList, setIsLoadingFolderList] = useState(false);
@@ -78,16 +82,18 @@ const RemoteSyncConfigurator: FC = () => {
 
             if (response.status === 200) {
                 queryClient.clear();
+                setReportLocation('remote');
                 navigate(ROUTES.OPERATIONS);
             }
         }
     };
 
-    const isViewReportDisabled =
-        isSyncingRemoteFolder ||
-        isLoadingFolderList ||
-        remoteFolderList?.length === 0 ||
-        (selectedRemoteFolder && isRemoteFolderOutdated(selectedRemoteFolder));
+    const isRemoteReportMounted =
+        !isSyncingRemoteFolder ||
+        !isLoadingFolderList ||
+        remoteFolderList?.length > 0 ||
+        (selectedRemoteFolder && !isRemoteFolderOutdated(selectedRemoteFolder)) ||
+        (!meta && reportLocation === 'remote');
 
     useEffect(() => {
         (async () => {
@@ -253,7 +259,7 @@ const RemoteSyncConfigurator: FC = () => {
                     </Tooltip>
 
                     <Button
-                        disabled={isViewReportDisabled}
+                        disabled={!isRemoteReportMounted}
                         onClick={viewReport}
                         icon={IconNames.EYE_OPEN}
                     >

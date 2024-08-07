@@ -6,6 +6,7 @@ import { HttpStatusCode } from 'axios';
 
 export interface RemoteConnection {
     name: string;
+    username: string;
     host: string;
     port: number;
     path: string;

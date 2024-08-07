@@ -8,14 +8,14 @@ import { OperationDetailsData, ReportMetaData } from '../model/APIData';
 import { MicroOperation, Operation } from '../model/Graph';
 
 const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
-    const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/get-operation-details/${id}`);
+    const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/operations/${id}`);
 
     return operationDetails;
 };
 const fetchOperations = async (): Promise<Operation[]> => {
     const [{ data: operationList }, { data: microOperations }] = await Promise.all([
-        axios.get<Omit<Operation, 'microOperations'>[]>('/api/get-operations'),
-        axios.get<MicroOperation[]>('/api/get-operation-history'),
+        axios.get<Omit<Operation, 'microOperations'>[]>('/api/operations'),
+        axios.get<MicroOperation[]>('/api/operation-history'),
     ]);
 
     return operationList.map((operation) => ({
@@ -31,7 +31,7 @@ const fetchAllBuffers = async (): Promise<any> => {
 };
 
 const fetchReportMeta = async (): Promise<ReportMetaData> => {
-    const { data: meta } = await axios.get<ReportMetaData>('/api/get-config');
+    const { data: meta } = await axios.get<ReportMetaData>('/api/config');
 
     return meta;
 };
