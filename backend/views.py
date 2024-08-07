@@ -47,6 +47,17 @@ def operation_list():
     ).dump(operations)
 
 
+
+def attach_producers_consumers(t: Tensor):
+    t.consumers = [
+        c.operation_id for c in InputTensor.query.filter_by(tensor_id=t.tensor_id)
+    ]
+    t.producers = [
+        c.operation_id for c in OutputTensor.query.filter_by(tensor_id=t.tensor_id)
+    ]
+    return t
+
+
 @api.route("/operations/<operation_id>", methods=["GET"])
 def operation_detail(operation_id):
     operation = Operation.query.get(operation_id)
@@ -59,8 +70,8 @@ def operation_detail(operation_id):
     ).first()
     stack_trace_dump = StackTraceSchema().dump(stack_trace, many=False)
     stack_trace_value = stack_trace_dump.get('stack_trace')
-    input_tensors = InputTensorSchema().dump(operation.input_tensors, many=True)
-    output_tensors = OutputTensorSchema().dump(operation.output_tensors, many=True)
+    input_tensors = InputTensorSchema().dump(map(attach_producers_consumers, operation.input_tensors), many=True)
+    output_tensors = OutputTensorSchema().dump(map(attach_producers_consumers, operation.output_tensors), many=True)
     return dict(
         operation_id=operation.operation_id,
         buffers=BufferSchema().dump(buffers, many=True),
@@ -99,7 +110,7 @@ def get_config():
 
 @api.route("/tensors", methods=["GET"])
 def get_tensors():
-    tensors = map(attach_producer_consumers, Tensor.query.all())
+    tensors = map(attach_producers_consumers, Tensor.query.all())
     return TensorSchema().dump(tensors, many=True)
 
 
@@ -108,17 +119,9 @@ def get_tensor(tensor_id):
     tensor = Tensor.query.get(tensor_id)
     if not tensor:
         return Response(status=HTTPStatus.NOT_FOUND)
-    return TensorSchema().dump(attach_producer_consumers(tensor))
+    return TensorSchema().dump(attach_producers_consumers(tensor))
 
 
-def attach_producer_consumers(t: Tensor):
-    t.consumers = [
-        c.operation_id for c in InputTensor.query.filter_by(tensor_id=t.tensor_id)
-    ]
-    t.producers = [
-        c.operation_id for c in OutputTensor.query.filter_by(tensor_id=t.tensor_id)
-    ]
-    return t
 
 
 @api.route(
