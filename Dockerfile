@@ -20,7 +20,7 @@ USER node
 
 COPY --chown=node:node ./package.json package-lock.json index.html ./
 
-RUN npm install && npm cache clean --force
+RUN npm install
 
 ARG NODE_ENV="production"
 ENV NODE_ENV="${NODE_ENV}" \
@@ -79,7 +79,8 @@ RUN chmod 0755 bin/* && bin/pip3-install
 
 COPY --chown=python:python ./backend /app/backend
 COPY --chown=python:python --from=assets /app/assets/dist /public
-RUN chmod a+rw /app/backend/data
+
+RUN mkdir -p /app/backend/data && chmod a+rw /app/backend/data
 
 USER root
 

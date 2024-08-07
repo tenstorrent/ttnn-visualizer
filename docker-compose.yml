@@ -27,12 +27,20 @@ services:
       retries: 3
     ports:
       - "${DOCKER_WEB_PORT_FORWARD:-8000}:${PORT:-8000}"
+      
+    # If using a VPN to connect to remote machines remove ports
+    # and use the host network
+    # network: host
     profiles: ["web"]
     environment:
       - SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock
     volumes:
+      # Volume for report data
+      - report-data:/app/backend/data
+
       # Linux configuration
       # - ${SSH_AUTH_SOCK}:/ssh-agent
+
       # MacOS configuration
       - /run/host-services/ssh-auth.sock:/ssh-agent
 
@@ -47,3 +55,6 @@ services:
         - "keypath=./id_ed25519.pub"
     ports:
       - "${DOCKER_SSH_PORT_FORWARD:-2222}:22"
+
+volumes:
+  report-data:
