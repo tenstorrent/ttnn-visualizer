@@ -121,7 +121,6 @@ def create_upload_files():
         print(f)
     REPORT_DATA_DIRECTORY = current_app.config["REPORT_DATA_DIRECTORY"]
     ACTIVE_DATA_DIRECTORY = current_app.config["ACTIVE_DATA_DIRECTORY"]
-    current_app.config["UPLOAD_FOLDER"] = REPORT_DATA_DIRECTORY
 
     filenames = [Path(f.filename).name for f in files]
     print(filenames)
@@ -137,7 +136,7 @@ def create_upload_files():
             REPORT_DATA_DIRECTORY, Path(file.filename)
         )
         destination_file.parent.mkdir(exist_ok=True, parents=True)
-        file.save(Path(current_app.config["UPLOAD_FOLDER"], file.filename))
+        file.save(Path(destination_file, file.filename))
 
     shutil.copytree(destination_dir, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
     return StatusMessage(status=200, message="Success.").dict()
