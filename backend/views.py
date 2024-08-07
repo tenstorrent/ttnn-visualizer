@@ -43,7 +43,7 @@ def health_check():
 def operation_list():
     operations = Operation.query.all()
     return OperationSchema(
-        many=True, exclude=["buffers", "input_tensors", "output_tensors"]
+        many=True, exclude=["buffers", "input_tensors", "output_tensors", "arguments", "operation_id"]
     ).dump(operations)
 
 
