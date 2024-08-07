@@ -9,7 +9,7 @@ from flask_cors import CORS
 from backend import settings
 
 
-def create_app(settings_override=None, flask_env="development"):
+def create_app(settings_override=None):
     from backend.views import api
 
     """
@@ -19,7 +19,7 @@ def create_app(settings_override=None, flask_env="development"):
     :return: Flask app
     """
     app = Flask(__name__, static_folder="../public", static_url_path="/")
-    env = environ.get("FLASK_ENV", flask_env)
+    env = environ.get("FLASK_ENV", "development")
     app.config.from_object(getattr(settings, env))
 
     if settings_override:
