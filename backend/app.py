@@ -7,6 +7,7 @@ from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_cors import CORS
 from backend import settings
+from dotenv import load_dotenv
 
 
 def create_app(settings_override=None):
@@ -28,6 +29,11 @@ def create_app(settings_override=None):
     middleware(app)
 
     app.register_blueprint(api)
+
+    # Load dotenv from root directory
+    dotenv_path = Path(__file__).parent.parent.joinpath('.env')
+    if dotenv_path.exists():
+        load_dotenv(str(dotenv_path))
 
     # Ensure there is always a schema to reference
     # In the future we can probabably re-init the DB or
