@@ -171,7 +171,7 @@ def create_upload_files():
     for file in files:
         destination_file = Path(REPORT_DATA_DIRECTORY, Path(file.filename))
         destination_file.parent.mkdir(exist_ok=True, parents=True)
-        file.save(Path(destination_dir, file.filename))
+        file.save(destination_file)
 
     shutil.copytree(destination_dir, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
     return StatusMessage(status=HTTPStatus.OK, message="Success.").dict()
