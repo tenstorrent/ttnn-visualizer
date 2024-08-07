@@ -10,7 +10,7 @@ export const L1RenderConfiguration = {
 } as PlotConfiguration;
 
 export const DRAMRenderConfiguration = {
-    height: 80,
+    height: 90,
     margin: {
         l: 5,
         r: 5,

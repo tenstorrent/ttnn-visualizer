@@ -106,6 +106,15 @@ ${tensor ? `<br><br>Tensor ${tensor.tensor_id}` : ''}
     }
 
     // TODO: this is unintuitive and poorly named method. consider refactor
+
+    /** @description
+     *
+     * Mutates current object
+     *
+     * Updates the producer and consumer names for each tensor in the tensorList
+     *
+     * Unifies inputs and outputs into a single tensorList
+     * */
     updateOperationNames(operations: Operation[] | undefined): void {
         if (!operations) {
             return;
@@ -213,9 +222,11 @@ ${tensor ? `<br><br>Tensor ${tensor.tensor_id}` : ''}
 
         return {
             chartData: this.getChartData(delta),
+            // eslint-disable-next-line no-unsafe-optional-chaining
             min: delta[0]?.address - 10240 || 0,
             // eslint-disable-next-line no-unsafe-optional-chaining
             max: delta[delta.length - 1]?.address + delta[delta.length - 1]?.size + 10240 || DRAM_MEMORY_SIZE,
+            memory: delta,
         };
     }
 }

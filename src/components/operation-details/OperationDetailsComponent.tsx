@@ -79,8 +79,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const dramMemoryReport: FragmentationEntry[] = [...dramMemory].sort((a, b) => a.address - b.address);
 
-    if (l1Small.condensedChart.length > 0) {
-        l1Small.condensedChart[0].marker.color = CONDENSED_PLOT_CHUNK_COLOR;
+    if (l1Small.condensedChart[0] !== undefined) {
+        l1Small.condensedChart[0].marker!.color = CONDENSED_PLOT_CHUNK_COLOR;
         l1Small.condensedChart[0].hovertemplate = `
 <span style="color:${CONDENSED_PLOT_CHUNK_COLOR};font-size:20px;">&#9632;</span>
 <br />
@@ -129,10 +129,32 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
     }
 
-    const onBufferClick = (event: Readonly<PlotMouseEvent>): void => {
-        const { address } = memory[event.points[0].curveNumber];
+    const selectTensorByAddress = (address: number): void => {
         setSelectedTensorAddress(address);
         setSelectedTensor(details.getTensorForAddress(address)?.tensor_id || null);
+    };
+
+    const onDramDeltaClick = (event: Readonly<PlotMouseEvent>): void => {
+        const index = event.points[0].curveNumber;
+        const { address } = dramDeltaObject.memory[index];
+        selectTensorByAddress(address);
+    };
+
+    const onDramBufferClick = (event: Readonly<PlotMouseEvent>): void => {
+        const index = event.points[0].curveNumber;
+        const { address } = dramMemory[index];
+        selectTensorByAddress(address);
+    };
+
+    const onBufferClick = (event: Readonly<PlotMouseEvent>): void => {
+        const index = event.points[0].curveNumber;
+        // this is a hacky way to determine this
+        if (index >= memory.length) {
+            console.log('Are we clicking on L1 small?');
+        } else {
+            const { address } = memory[index];
+            selectTensorByAddress(address);
+        }
     };
 
     const onTensorClick = (id: number): void => {
@@ -182,24 +204,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         )}
 
                         <Switch
-                            label={zoomedInView ? 'Full buffer report' : 'Zoom buffer report'}
+                            label={zoomedInView ? 'Full buffer reports' : 'Zoom buffer reports'}
                             checked={zoomedInView}
                             onChange={() => setZoomedInView(!zoomedInView)}
                         />
-                        <MemoryPlotRenderer
-                            title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
-                            className={classNames('dram-memory-renderer', {
-                                'empty-plot': previosDramData.length === 0,
-                                'identical-plot': dramHasntChanged,
-                            })}
-                            plotZoomRangeStart={dramPlotZoomRangeStart}
-                            plotZoomRangeEnd={dramPlotZoomRangeEnd}
-                            chartData={previosDramData}
-                            isZoomedIn={zoomedInView}
-                            memorySize={DRAM_MEMORY_SIZE}
-                            configuration={DRAMRenderConfiguration}
-                        />
 
+                        <h3>L1 Memory</h3>
                         <MemoryPlotRenderer
                             title='Previous Summarized L1 Report'
                             className={classNames('l1-memory-renderer', {
@@ -211,20 +221,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             isZoomedIn={zoomedInView}
                             memorySize={memorySizeL1}
                             configuration={L1RenderConfiguration}
-                        />
-
-                        <MemoryPlotRenderer
-                            title='Current Summarized DRAM Report'
-                            className={classNames('dram-memory-renderer', { 'empty-plot': dramData.length === 0 })}
-                            plotZoomRangeStart={dramPlotZoomRangeStart}
-                            plotZoomRangeEnd={dramPlotZoomRangeEnd}
-                            chartData={dramData}
-                            isZoomedIn={zoomedInView}
-                            memorySize={DRAM_MEMORY_SIZE}
-                            onBufferClick={onBufferClick}
-                            onClickOutside={onClickOutside}
-                            additionalReferences={[navRef]}
-                            configuration={DRAMRenderConfiguration}
                         />
 
                         <MemoryPlotRenderer
@@ -253,6 +249,34 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             Buffer focused, click anywhere to reset
                         </aside>
 
+                        <h3>DRAM Memory</h3>
+
+                        <MemoryPlotRenderer
+                            title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
+                            className={classNames('dram-memory-renderer', {
+                                'empty-plot': previosDramData.length === 0,
+                                'identical-plot': dramHasntChanged,
+                            })}
+                            plotZoomRangeStart={dramPlotZoomRangeStart}
+                            plotZoomRangeEnd={dramPlotZoomRangeEnd}
+                            chartData={previosDramData}
+                            isZoomedIn={zoomedInView}
+                            memorySize={DRAM_MEMORY_SIZE}
+                            configuration={DRAMRenderConfiguration}
+                        />
+                        <MemoryPlotRenderer
+                            title='Current Summarized DRAM Report'
+                            className={classNames('dram-memory-renderer', { 'empty-plot': dramData.length === 0 })}
+                            plotZoomRangeStart={dramPlotZoomRangeStart}
+                            plotZoomRangeEnd={dramPlotZoomRangeEnd}
+                            chartData={dramData}
+                            isZoomedIn={zoomedInView}
+                            memorySize={DRAM_MEMORY_SIZE}
+                            onBufferClick={onDramBufferClick}
+                            onClickOutside={onClickOutside}
+                            additionalReferences={[navRef]}
+                            configuration={DRAMRenderConfiguration}
+                        />
                         <MemoryPlotRenderer
                             title='DRAM Delta (difference between current and previous operation)'
                             className={classNames('dram-memory-renderer', {
@@ -263,7 +287,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             chartData={dramDeltaObject.chartData}
                             isZoomedIn
                             memorySize={DRAM_MEMORY_SIZE}
-                            onBufferClick={onBufferClick}
+                            onBufferClick={onDramDeltaClick}
                             onClickOutside={onClickOutside}
                             additionalReferences={[navRef]}
                             configuration={DRAMRenderConfiguration}
