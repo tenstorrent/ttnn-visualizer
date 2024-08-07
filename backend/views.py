@@ -168,9 +168,11 @@ def create_upload_files():
     file_path = Path(Path(files[0].filename))
     top_level_directory = file_path.parents[0].name
     destination_dir = Path(REPORT_DATA_DIRECTORY, top_level_directory)
+    destination_dir.mkdir(exist_ok=True, parents=True)
     for file in files:
         destination_file = Path(REPORT_DATA_DIRECTORY, Path(file.filename))
-        destination_file.parent.mkdir(exist_ok=True, parents=True)
+        if not destination_file.parent.exists():
+            destination_file.parent.mkdir(exist_ok=True, parents=True)
         file.save(destination_file)
 
     shutil.copytree(destination_dir, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
@@ -213,9 +215,10 @@ def sync_remote_folder():
 def use_remote_folder():
     connection = request.json.get("connection", None)
     folder = request.json.get("folder", None)
-    if not connection or folder:
+    if not connection or not folder:
         return Response(status=HTTPStatus.BAD_REQUEST)
-
+    connection = RemoteConnection(**connection)
+    folder = RemoteFolder(**folder)
     REPORT_DATA_DIRECTORY = current_app.config["REPORT_DATA_DIRECTORY"]
     ACTIVE_DATA_DIRECTORY = current_app.config["ACTIVE_DATA_DIRECTORY"]
     report_folder = Path(folder.remotePath).name
