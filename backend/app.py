@@ -62,7 +62,8 @@ def extensions(app: flask.Flask):
     :return: None
     """
 
-
+    db.init_app(app)
+    ma.init_app(app)
     flask_static_digest.init_app(app)
 
     # For automatically reflecting table data
