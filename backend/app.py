@@ -1,4 +1,6 @@
 from os import environ
+from pathlib import Path
+import shutil
 from flask import Flask
 import flask
 from werkzeug.debug import DebuggedApplication
@@ -27,6 +29,18 @@ def create_app(settings_override=None, flask_env="development"):
 
     app.register_blueprint(api)
 
+
+    # Ensure there is always a schema to reference 
+    # In the future we can probabably re-init the DB or 
+    # wait for initialization until the user has provided a DB
+    ACTIVE_DATA_DIRECTORY = app.config["ACTIVE_DATA_DIRECTORY"]
+
+    active_db_path = Path(ACTIVE_DATA_DIRECTORY, "db.sqlite")
+    empty_db_path = Path(__file__).parent.resolve().joinpath("empty.sqlite")
+    if not active_db_path.exists():
+        active_db_path.parent.mkdir(exist_ok=True, parents=True)
+        shutil.copy(empty_db_path, active_db_path)
+    
     extensions(app)
 
     if flask_env == "production":
@@ -48,8 +62,6 @@ def extensions(app: flask.Flask):
     :return: None
     """
 
-    db.init_app(app)
-    ma.init_app(app)
 
     flask_static_digest.init_app(app)
 
