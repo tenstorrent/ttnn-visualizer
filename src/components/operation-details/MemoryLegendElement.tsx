@@ -33,9 +33,9 @@ export const MemoryLegendElement: React.FC<{
                 }}
             />
             <div className='legend-details'>
-                <div className='format-numbers'>{prettyPrintAddress(chunk.address, memSize)}</div>
-                <div className='format-numbers keep-left'>({toHex(chunk.address)})</div>
-                <div className='format-numbers'>{formatSize(chunk.size)} </div>
+                <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize)}</div>
+                <div className='format-numbers monospace keep-left'>({toHex(chunk.address)})</div>
+                <div className='format-numbers monospace'>{formatSize(chunk.size)} </div>
                 <div>
                     {!chunk.empty && operationDetails.getTensorForAddress(chunk.address) && (
                         <>Tensor {operationDetails.getTensorForAddress(chunk.address)?.tensor_id}</>
