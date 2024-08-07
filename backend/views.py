@@ -1,4 +1,4 @@
-import http
+from http import HTTPStatus
 import json
 from pathlib import Path
 import shutil
@@ -51,7 +51,7 @@ def operation_list():
 def operation_detail(operation_id):
     operation = Operation.query.get(operation_id)
     if not operation:
-        return Response(status=http.HTTPStatus.NOT_FOUND)
+        return Response(status=HTTPStatus.NOT_FOUND)
 
     buffers = Buffer.query.filter_by(operation_id=operation.operation_id).all()
     stack_trace = StackTrace.query.filter_by(
@@ -140,7 +140,7 @@ def create_upload_files():
     filenames = [Path(f.filename).name for f in files]
     print(filenames)
     if "db.sqlite" not in filenames or "config.json" not in filenames:
-        return StatusMessage(status=500, message="Invalid project directory.").dict()
+        return StatusMessage(status=HTTPStatus.INTERNAL_SERVER_ERROR, message="Invalid project directory.").dict()
 
     # Grab a file path to get the top level path
     file_path = Path(Path(files[0].filename))
@@ -152,7 +152,7 @@ def create_upload_files():
         file.save(Path(destination_file, file.filename))
 
     shutil.copytree(destination_dir, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
-    return StatusMessage(status=200, message="Success.").dict()
+    return StatusMessage(status=HTTPStatus.OK, message="Success.").dict()
 
 
 @api.route("/remote/folder", methods=["POST"])
@@ -172,7 +172,7 @@ def test_remote_folder():
         check_remote_path(RemoteConnection(**connection))
     except RemoteFolderException as e:
         return Response(status=e.status, response=e.message)
-    return Response(status=200)
+    return Response(status=HTTPStatus.OK)
 
 
 @api.route("/remote/sync", methods=["POST"])
@@ -180,22 +180,25 @@ def sync_remote_folder():
     request_body = request.json
     connection = request_body.get("connection")
     folder = request_body.get("folder")
-    print(connection)
-    print(folder)
     try:
         sync_test_folders(RemoteConnection(**connection), RemoteFolder(**folder))
     except RemoteFolderException as e:
         return Response(status=e.status, response=e.message)
-    return Response(status=200)
+    return Response(status=HTTPStatus.OK)
 
 
 @api.route("/remote/use", methods=["POST"])
 def use_remote_folder():
+    connection = request.json.get("connection", None)
+    folder = request.json.get("folder", None)
+    if not connection or folder:
+        return Response(status=HTTPStatus.BAD_REQUEST)
+    
     REPORT_DATA_DIRECTORY = current_app.config["REPORT_DATA_DIRECTORY"]
     ACTIVE_DATA_DIRECTORY = current_app.config["ACTIVE_DATA_DIRECTORY"]
-    connection = request.json.get("connection")
-    folder = request.json.get("folder")
     report_folder = Path(folder.remotePath).name
     connection_directory = Path(REPORT_DATA_DIRECTORY, connection.name, report_folder)
+    if not connection_directory.exists():
+        return Response(status=HTTPStatus.INTERNAL_SERVER_ERROR, response=f"{connection_directory} does not exist.")
     shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
-    return Response(status=200)
+    return Response(status=HTTPStatus.OK)
