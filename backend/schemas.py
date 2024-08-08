@@ -1,5 +1,3 @@
-from typing import Optional
-
 from marshmallow import fields, validates
 
 from backend.extensions import ma
@@ -19,14 +17,19 @@ from backend.models import (
 class TensorSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Tensor
+
     shape = ma.auto_field()
     address = ma.auto_field()
+    consumers = fields.List(fields.Integer, default=[])
+    producers = fields.List(fields.Integer, default=[])
 
 
 class StackTraceSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = StackTrace
+
     stack_trace = ma.Function(lambda obj: obj.stack_trace or "")
+
 
 class InputOutputSchema(object):
     # TODO - We can probably create a model to avoid backrefs
@@ -38,8 +41,8 @@ class InputOutputSchema(object):
     buffer_type = ma.Function(lambda obj: obj.tensor.buffer_type)
     dtype = ma.Function(lambda obj: obj.tensor.dtype)
     tensor_id = ma.Function(lambda obj: obj.tensor.tensor_id)
-    consumers = fields.List(fields.Integer, default=[])
-    producers = fields.List(fields.Integer, default=[])
+    producers = ma.Function(lambda obj: obj.tensor.producers())
+    consumers = ma.Function(lambda obj: obj.tensor.consumers())
     operation_id = ma.auto_field()
 
 

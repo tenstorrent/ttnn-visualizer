@@ -190,4 +190,11 @@
         font-size: 20px;
         margin-top: 10px;
     }
+
+    .arguments-wrapper {
+        padding-top: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+    }
 }

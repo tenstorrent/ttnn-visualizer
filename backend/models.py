@@ -60,7 +60,6 @@ output_tensors = Table(
     PrimaryKeyConstraint("operation_id", "output_index", "tensor_id"),
 )
 
-
 stack_traces = Table(
     "stack_traces",
     db.metadata,
@@ -68,7 +67,6 @@ stack_traces = Table(
     Column("stack_trace", Text),
     PrimaryKeyConstraint("operation_id", "stack_trace")
 )
-
 
 buffers = Table(
     "buffers",
@@ -104,13 +102,19 @@ devices = Table(
     Column("cb_limit", Integer),
 )
 
+
 class Device(db.Model):
     __table__ = devices
 
 
-
 class Tensor(db.Model):
     __table__ = tensors
+
+    def producers(self):
+        return [c.operation_id for c in OutputTensor.query.filter_by(tensor_id=self.tensor_id)]
+
+    def consumers(self):
+        return [c.operation_id for c in InputTensor.query.filter_by(tensor_id=self.tensor_id)]
 
 
 class Buffer(db.Model):
@@ -126,9 +130,11 @@ class InputTensor(db.Model):
 class StackTrace(db.Model):
     __table__ = stack_traces
 
+
 class OutputTensor(db.Model):
     __table__ = output_tensors
     tensor = db.relationship("Tensor", backref="output")
+
 
 
 class Operation(db.Model):
