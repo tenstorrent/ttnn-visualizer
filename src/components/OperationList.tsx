@@ -19,6 +19,7 @@ import 'styles/components/OperationsList.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { expandedOperationsAtom } from '../store/app';
+import MicroOperations from './MicroOperations';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -169,7 +170,11 @@ const OperationList = () => {
                     </Tooltip>
 
                     <Tooltip
-                        content={shouldSortByID === SortingOptions.DESCENDING ? 'Sort by id descending' : 'Sort by id ascending'}
+                        content={
+                            shouldSortByID === SortingOptions.DESCENDING
+                                ? 'Sort by id descending'
+                                : 'Sort by id ascending'
+                        }
                         placement={PopoverPosition.TOP}
                     >
                         <Button
@@ -290,14 +295,24 @@ const OperationList = () => {
                                             isOpen={expandedOperations.includes(operation.id)}
                                         >
                                             <div className='arguments-wrapper'>
-                                                <p className='monospace'>Python execution time: {operation.duration} s</p>
+                                                <p className='monospace'>
+                                                    Python execution time: {operation.duration} s
+                                                </p>
 
                                                 {operation.arguments && (
-                                                    <OperationArguments
-                                                        operationIndex={virtualRow.index}
-                                                        operation={operation}
-                                                        scrollTo={virtualizer.scrollToIndex}
-                                                    />
+                                                    <>
+                                                        <OperationArguments
+                                                            operation={operation}
+                                                            operationIndex={virtualRow.index}
+                                                            onCollapseTensor={virtualizer.scrollToIndex}
+                                                        />
+
+                                                        {operation.microOperations?.length ? (
+                                                            <MicroOperations
+                                                                microOperations={operation.microOperations}
+                                                            />
+                                                        ) : null}
+                                                    </>
                                                 )}
                                             </div>
                                         </Collapsible>

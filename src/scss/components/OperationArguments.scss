@@ -32,6 +32,7 @@
         td {
             padding: 6px 12px;
             vertical-align: top;
+            text-align: left;
 
             &.expandable-tensor {
                 word-break: break-word; // Can get really long strings in the table cell which cause horizontal overflows
@@ -45,6 +46,14 @@
                 &:first-child {
                     font-weight: 700;
                 }
+            }
+        }
+    }
+
+    &.microops-table {
+        tr {
+            :first-child {
+                width: 75%
             }
         }
     }

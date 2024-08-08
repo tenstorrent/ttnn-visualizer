@@ -6,7 +6,7 @@ interface MicroOperationsData {
 
 function MicroOperations({ microOperations }: MicroOperationsData) {
     return (
-        <>
+        <div>
             <table className='arguments-table'>
                 <caption>Micro Operations</caption>
 
@@ -55,20 +55,20 @@ function MicroOperations({ microOperations }: MicroOperationsData) {
                                 <tr>
                                     <th>Memory config</th>
                                     <td>
-                                        <table className='memory-config'>
+                                        <table className='arguments-table has-vertical-headings microops-table'>
                                             <tbody>
                                                 <tr>
-                                                    <td>Buffer type</td>
+                                                    <th>Buffer type</th>
                                                     <td>{inputTensor.memory_config.buffer_type}</td>
                                                 </tr>
 
                                                 <tr>
-                                                    <td>Memory layout</td>
+                                                    <th>Memory layout</th>
                                                     <td>{inputTensor.memory_config.memory_layout}</td>
                                                 </tr>
 
                                                 <tr>
-                                                    <td>Shard spec</td>
+                                                    <th>Shard spec</th>
                                                     <td>{inputTensor.memory_config.shard_spec ?? 'null'}</td>
                                                 </tr>
                                             </tbody>
@@ -79,7 +79,7 @@ function MicroOperations({ microOperations }: MicroOperationsData) {
                                 <tr>
                                     <td>Shape</td>
                                     <td>
-                                        <table className='arguments-table has-vertical-headings'>
+                                        <table className='arguments-table has-vertical-headings microops-table'>
                                             <tbody>
                                                 <tr>
                                                     <th>Dimensions</th>
@@ -115,7 +115,7 @@ function MicroOperations({ microOperations }: MicroOperationsData) {
                     )),
                 )}
             </div>
-        </>
+        </div>
     );
 }
 
