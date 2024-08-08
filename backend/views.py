@@ -1,7 +1,7 @@
-from http import HTTPStatus
 import json
-from pathlib import Path
 import shutil
+from http import HTTPStatus
+from pathlib import Path
 
 from flask import Blueprint, Response, current_app, request
 
@@ -9,8 +9,6 @@ from backend.models import (
     Device,
     Operation,
     Buffer,
-    InputTensor,
-    OutputTensor,
     Tensor,
     StackTrace,
 )
@@ -47,21 +45,9 @@ def operation_list():
         many=True,
         exclude=[
             "buffers",
-            "input_tensors",
-            "output_tensors",
             "operation_id",
         ],
     ).dump(operations)
-
-
-def attach_producers_consumers(t: Tensor):
-    t.consumers = [
-        c.operation_id for c in InputTensor.query.filter_by(tensor_id=t.tensor_id)
-    ]
-    t.producers = [
-        c.operation_id for c in OutputTensor.query.filter_by(tensor_id=t.tensor_id)
-    ]
-    return t
 
 
 @api.route("/operations/<operation_id>", methods=["GET"])
@@ -80,10 +66,10 @@ def operation_detail(operation_id):
     stack_trace_dump = StackTraceSchema().dump(stack_trace, many=False)
     stack_trace_value = stack_trace_dump.get("stack_trace")
     input_tensors = InputTensorSchema().dump(
-        map(attach_producers_consumers, operation.input_tensors), many=True
+        operation.input_tensors, many=True
     )
     output_tensors = OutputTensorSchema().dump(
-        map(attach_producers_consumers, operation.output_tensors), many=True
+        operation.output_tensors, many=True
     )
 
     return dict(
@@ -125,7 +111,7 @@ def get_config():
 
 @api.route("/tensors", methods=["GET"])
 def get_tensors():
-    tensors = map(attach_producers_consumers, Tensor.query.all())
+    tensors = Tensor.query.all()
     return TensorSchema().dump(tensors, many=True)
 
 
@@ -134,7 +120,7 @@ def get_tensor(tensor_id):
     tensor = Tensor.query.get(tensor_id)
     if not tensor:
         return Response(status=HTTPStatus.NOT_FOUND)
-    return TensorSchema().dump(attach_producers_consumers(tensor))
+    return TensorSchema().dump(tensor)
 
 
 @api.route(
@@ -146,7 +132,6 @@ def get_tensor(tensor_id):
 def create_upload_files():
     """
     Copies the folder upload into the active data directory
-    :param files:
     :return:
     """
     files = request.files.getlist("files")
