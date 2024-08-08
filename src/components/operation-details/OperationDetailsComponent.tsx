@@ -48,7 +48,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     };
 
     const navRef = useRef<HTMLDivElement>(null);
-    const matchingOperation = operations?.find((operation) => operation.id === operationId);
+    const operation = operations?.find((op) => op.id === operationId);
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
         return (
@@ -288,15 +288,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             </div>
                         </div>
 
-                        {matchingOperation?.arguments && (
+                        {operation?.arguments && (
                             <>
                                 <hr />
 
                                 <div className='arguments-wrapper'>
-                                    <OperationArguments operation={matchingOperation} />
+                                    <OperationArguments operation={operation} />
 
-                                    {matchingOperation?.microOperations?.length ? (
-                                        <MicroOperations microOperations={matchingOperation.microOperations} />
+                                    {operation.microOperations.length ? (
+                                        <MicroOperations microOperations={operation.microOperations} />
                                     ) : null}
                                 </div>
                             </>
