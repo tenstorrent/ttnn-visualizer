@@ -12,3 +12,4 @@ flask_static_digest==0.4.1
 marshmallow-sqlalchemy==1.0.0
 setuptools==65.5.0
 python-dotenv==1.0.1
+gevent==24.2.1
