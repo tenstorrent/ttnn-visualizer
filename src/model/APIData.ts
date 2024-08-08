@@ -2,13 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { BufferType } from "./BufferType";
+import { BufferType } from './BufferType';
+import { Operation, Tensor } from './Graph';
 
-import { Operation, Tensor } from "./Graph";
-
-
-export interface TensorData extends Tensor{
-
+export interface TensorData extends Tensor {
     shape: string;
     dtype: string;
     layout: string;
@@ -17,10 +14,8 @@ export interface TensorData extends Tensor{
     address: number | null;
     buffer_type: BufferType | null;
     io: 'input' | 'output' | null;
-    producerNames: string[];
+    producerNames: string[]; // TODO: this is a very brittle way to connect producer ids to operation names
     consumerNames: string[];
-    producers: number[];
-    consumers: number[];
 }
 
 export interface BufferData {
@@ -31,7 +26,7 @@ export interface BufferData {
     buffer_type: number;
 }
 
-export interface OperationDetailsData extends Operation{
+export interface OperationDetailsData extends Operation {
     id: number;
     inputs: TensorData[];
     outputs: TensorData[];

@@ -2,8 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-
-
 export interface Operation {
     id: number;
     name: string;
@@ -29,7 +27,7 @@ export interface MicroOperation {
     operation_type: string;
     program_cache_hit: boolean | null;
     program_hash: number | null;
-    ttnn_operation_id: number;
+    ttnn_operation_id: number; // TODO: we should lose ttnn prefix unless it has meaning. even then it should be a property
 }
 
 export interface MicroOperationInputTensor {
