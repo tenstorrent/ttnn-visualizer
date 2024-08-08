@@ -9,8 +9,6 @@ import { MicroOperation, OperationDescription } from '../model/Graph';
 
 const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
     const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/operations/${id}`);
-    operationDetails.inputs = operationDetails.input_tensors || [];
-    operationDetails.outputs = operationDetails.output_tensors || [];
     return operationDetails;
 };
 const fetchOperations = async (): Promise<OperationDescription[]> => {
@@ -21,8 +19,6 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
 
     return operationList.map((operation) => ({
         ...operation,
-        inputs: operation.input_tensors || [],
-        outputs: operation.output_tensors || [],
         microOperations:
             microOperations.filter((microOperation) => microOperation.ttnn_operation_id === operation.id) || [],
     })) as OperationDescription[];
