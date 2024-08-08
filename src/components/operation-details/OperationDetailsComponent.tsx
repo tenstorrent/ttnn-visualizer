@@ -285,10 +285,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             className={classNames('dram-memory-renderer', {
                                 'empty-plot': dramDeltaObject.chartData.length === 0,
                             })}
-                            plotZoomRangeStart={dramDeltaObject.min}
-                            plotZoomRangeEnd={dramDeltaObject.max}
+                            plotZoomRangeStart={dramPlotZoomRangeStart}
+                            plotZoomRangeEnd={dramPlotZoomRangeEnd}
                             chartData={dramDeltaObject.chartData}
-                            isZoomedIn
+                            isZoomedIn={zoomedInView}
                             memorySize={DRAM_MEMORY_SIZE}
                             onBufferClick={onDramDeltaClick}
                             onClickOutside={onClickOutside}
