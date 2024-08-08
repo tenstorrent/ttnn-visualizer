@@ -57,8 +57,8 @@ const LocalFolderOptions: FC = () => {
 
         setIsUploading(true);
 
-        const response = await uploadLocalFolder(files);
         setLocalUploadLabel(`${files.length} files selected.`);
+        const response = await uploadLocalFolder(files);
 
         if (response.status !== 200) {
             connectionStatus.status = ConnectionTestStates.FAILED;
@@ -70,6 +70,7 @@ const LocalFolderOptions: FC = () => {
             connectionStatus.message = 'Selected directory does not contain a valid report.';
         }
 
+        setLocalUploadLabel(`${files.length} files uploaded`);
         setIsUploading(false);
         setFolderStatus(connectionStatus);
     };
