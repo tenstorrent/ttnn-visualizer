@@ -55,14 +55,11 @@ def operation_detail(operation_id):
     operation = Operation.query.get(operation_id)
     if not operation:
         return Response(status=HTTPStatus.NOT_FOUND)
-
-    operation_data = OperationSchema().dump(operation)
-
     devices = Device.query.order_by(Device.device_id.asc()).all()
     l1_sizes = [d.worker_l1_size for d in devices]
 
     return dict(
-        **operation_data,
+        **OperationSchema().dump(operation),
         l1_sizes=l1_sizes,
     )
 
