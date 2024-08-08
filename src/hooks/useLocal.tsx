@@ -3,11 +3,6 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import axios from 'axios';
-import { FileWithDirectoryAndFileHandle } from 'browser-fs-access';
-
-export interface LocalFile extends FileWithDirectoryAndFileHandle {
-    webkitRelativePath: string;
-}
 
 const useLocalConnection = () => {
     const uploadLocalFolder = async (files: FileList) => {
