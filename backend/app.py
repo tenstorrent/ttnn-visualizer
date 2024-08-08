@@ -1,3 +1,4 @@
+import logging
 from os import environ
 from pathlib import Path
 import shutil
@@ -10,6 +11,7 @@ from backend import settings
 from dotenv import load_dotenv
 
 
+
 def create_app(settings_override=None):
     from backend.views import api
 
@@ -19,10 +21,13 @@ def create_app(settings_override=None):
     :param settings_override: Override settings
     :return: Flask app
     """
+
     app = Flask(__name__, static_folder="../public", static_url_path="/")
     flask_env = environ.get("FLASK_ENV", "development")
     app.config.from_object(getattr(settings, flask_env))
 
+    logging.basicConfig(level=app.config.get('LOG_LEVEL', 'INFO'))
+    
     if settings_override:
         app.config.update(settings_override)
 

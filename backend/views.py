@@ -1,9 +1,12 @@
 import json
+import logging
 import shutil
 from http import HTTPStatus
 from pathlib import Path
 
 from flask import Blueprint, Response, current_app, request
+
+logger = logging.getLogger(__name__)
 
 from backend.models import (
     Device,
@@ -135,31 +138,34 @@ def create_upload_files():
     :return:
     """
     files = request.files.getlist("files")
-    for f in files:
-        print(f)
+
     REPORT_DATA_DIRECTORY = current_app.config["REPORT_DATA_DIRECTORY"]
     ACTIVE_DATA_DIRECTORY = current_app.config["ACTIVE_DATA_DIRECTORY"]
 
     filenames = [Path(f.filename).name for f in files]
-    print(filenames)
+
+    logger.info(f"Received files: {filenames}")
+
     if "db.sqlite" not in filenames or "config.json" not in filenames:
         return StatusMessage(
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
             message="Invalid project directory.",
         ).dict()
 
-    # Grab a file path to get the top level path
-    file_path = Path(Path(files[0].filename))
-    top_level_directory = file_path.parents[0].name
-    destination_dir = Path(REPORT_DATA_DIRECTORY, top_level_directory)
-    destination_dir.mkdir(exist_ok=True, parents=True)
+    report_name = files[0].filename.split('/')[0]
+    report_directory = Path(REPORT_DATA_DIRECTORY, report_name)
+    logger.info(f"Writing report files to {report_directory}")
     for file in files:
+        logger.info(f"Processing file: {file.filename}")
         destination_file = Path(REPORT_DATA_DIRECTORY, Path(file.filename))
+        logger.info(f"Writing file to ${destination_file}")
         if not destination_file.parent.exists():
+            logger.info(f"{destination_file.parent.name} does not exist. Creating directory")
             destination_file.parent.mkdir(exist_ok=True, parents=True)
         file.save(destination_file)
 
-    shutil.copytree(destination_dir, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
+    logger.info(f"Copying file tree from f{report_directory} to {ACTIVE_DATA_DIRECTORY}")
+    shutil.copytree(report_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
     return StatusMessage(status=HTTPStatus.OK, message="Success.").dict()
 
 
