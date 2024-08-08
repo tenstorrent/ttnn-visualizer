@@ -111,7 +111,7 @@ def get_config():
 
 @api.route("/tensors", methods=["GET"])
 def get_tensors():
-    tensors = map(attach_producers_consumers, Tensor.query.all())
+    tensors = Tensor.query.all()
     return TensorSchema().dump(tensors, many=True)
 
 
@@ -120,7 +120,7 @@ def get_tensor(tensor_id):
     tensor = Tensor.query.get(tensor_id)
     if not tensor:
         return Response(status=HTTPStatus.NOT_FOUND)
-    return TensorSchema().dump(attach_producers_consumers(tensor))
+    return TensorSchema().dump(tensor)
 
 
 @api.route(
@@ -132,7 +132,6 @@ def get_tensor(tensor_id):
 def create_upload_files():
     """
     Copies the folder upload into the active data directory
-    :param files:
     :return:
     """
     files = request.files.getlist("files")
