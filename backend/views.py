@@ -66,14 +66,14 @@ def operation_detail(operation_id):
     stack_trace_dump = StackTraceSchema().dump(stack_trace, many=False)
     stack_trace_value = stack_trace_dump.get("stack_trace")
     input_tensors = InputTensorSchema().dump(
-        operation.input_tensors, many=True
+        operation.inputs, many=True
     )
     output_tensors = OutputTensorSchema().dump(
-        operation.output_tensors, many=True
+        operation.outputs, many=True
     )
 
     return dict(
-        operation_id=operation.operation_id,
+        id=operation.operation_id,
         buffers=BufferSchema().dump(buffers, many=True),
         stack_trace=stack_trace_value,
         l1_sizes=l1_sizes,

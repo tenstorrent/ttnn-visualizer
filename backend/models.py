@@ -140,9 +140,10 @@ class OutputTensor(db.Model):
 class Operation(db.Model):
     __table__ = operations
     arguments = db.relationship("OperationArgument", backref="operation")
-    input_tensors = db.relationship("InputTensor", backref="operation")
-    output_tensors = db.relationship("OutputTensor", backref="operation")
+    inputs = db.relationship("InputTensor", backref="operation")
+    outputs = db.relationship("OutputTensor", backref="operation")
     buffers = db.relationship("Buffer", backref="operation")
+
 
 
 class OperationArgument(db.Model):
