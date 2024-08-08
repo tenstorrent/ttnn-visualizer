@@ -129,7 +129,7 @@ def create_upload_files():
     for file in files:
         logger.info(f"Processing file: {file.filename}")
         destination_file = Path(report_data_directory, Path(file.filename))
-        logger.info(f"Writing file to ${destination_file}")
+        logger.info(f"Writing file to {destination_file}")
         if not destination_file.parent.exists():
             logger.info(f"{destination_file.parent.name} does not exist. Creating directory")
             destination_file.parent.mkdir(exist_ok=True, parents=True)
