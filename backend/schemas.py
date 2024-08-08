@@ -20,8 +20,9 @@ class TensorSchema(ma.SQLAlchemyAutoSchema):
 
     shape = ma.auto_field()
     address = ma.auto_field()
-    consumers = fields.List(fields.Integer, default=[])
-    producers = fields.List(fields.Integer, default=[])
+    id = ma.Function(lambda obj: obj.tensor_id, dump_only=True)
+    producers = ma.Function(lambda obj: obj.producers(), dump_only=True)
+    consumers = ma.Function(lambda obj: obj.consumers(), dump_only=True)
 
 
 class StackTraceSchema(ma.SQLAlchemyAutoSchema):
@@ -40,9 +41,9 @@ class InputOutputSchema(object):
     device_id = ma.Function(lambda obj: obj.tensor.device_id)
     buffer_type = ma.Function(lambda obj: obj.tensor.buffer_type)
     dtype = ma.Function(lambda obj: obj.tensor.dtype)
-    tensor_id = ma.Function(lambda obj: obj.tensor.tensor_id)
     producers = ma.Function(lambda obj: obj.tensor.producers())
     consumers = ma.Function(lambda obj: obj.tensor.consumers())
+    id = ma.Function(lambda obj: obj.tensor.tensor_id, dump_only=True)
     operation_id = ma.auto_field()
 
 
