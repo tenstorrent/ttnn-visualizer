@@ -2,12 +2,25 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+
+
 export interface Operation {
     id: number;
     name: string;
+    inputs: Tensor[];
+    outputs: Tensor[];
+}
+
+export interface OperationDescription extends Operation {
     duration: number;
     arguments: { name: string; value: string }[];
     microOperations: MicroOperation[];
+}
+
+export interface Tensor {
+    tensor_id: number;
+    producers: number[];
+    consumers: number[];
 }
 
 export interface MicroOperation {

@@ -2,8 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-export interface TensorData {
-    tensor_id: number;
+import { Operation, Tensor } from "./Graph";
+
+
+export interface TensorData extends Tensor{
+
     shape: string;
     dtype: string;
     layout: string;
@@ -26,10 +29,10 @@ export interface BufferData {
     buffer_type: number;
 }
 
-export interface OperationDetailsData {
+export interface OperationDetailsData extends Operation{
     operation_id: number;
-    input_tensors: TensorData[];
-    output_tensors: TensorData[];
+    inputs: TensorData[];
+    outputs: TensorData[];
     buffers: BufferData[];
     l1_sizes: number[];
     stack_trace: string;

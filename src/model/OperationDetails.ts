@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { PlotData } from 'plotly.js';
-import { Operation } from './Graph';
+import { OperationDescription } from './Graph';
 import { getBufferColor } from '../functions/colorGenerator';
 import { formatSize, toHex } from '../functions/math';
 import { BufferData, Chunk, FragmentationEntry, OperationDetailsData, TensorData } from './APIData';
@@ -30,8 +30,8 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     constructor(data: OperationDetailsData) {
         this.id = data.operation_id;
-        this.inputs = data.input_tensors;
-        this.outputs = data.output_tensors;
+        this.inputs = data.inputs;
+        this.outputs = data.outputs;
         this.buffers = data.buffers;
         this.l1_sizes = data.l1_sizes;
         this.stack_trace = data.stack_trace;
@@ -62,7 +62,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         return this.tensorList.find((tensor) => tensor.address === address) || null;
     }
 
-    updateOperationNames(operations: Operation[] | undefined): void {
+    updateOperationNames(operations: OperationDescription[] | undefined): void {
         if (!operations) {
             return;
         }
