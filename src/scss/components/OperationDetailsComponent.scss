@@ -134,6 +134,10 @@
         height: 15px;
         display: inline-block;
 
+        &.empty {
+            background-color: $tt-white-text;
+        }
+
         &.empty-tensor {
             background: repeating-linear-gradient(
                     45deg,

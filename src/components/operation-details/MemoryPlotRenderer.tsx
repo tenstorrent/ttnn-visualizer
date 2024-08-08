@@ -4,7 +4,7 @@ import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
 import useOutsideClick from '../../hooks/useOutsideClick';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 
-export interface L1MemoryRendererProps {
+export interface MemoryPlotRendererProps {
     chartData: Partial<PlotData>[];
     isZoomedIn: boolean;
     memorySize: number;
@@ -18,7 +18,7 @@ export interface L1MemoryRendererProps {
     configuration: PlotConfiguration;
 }
 
-const MemoryPlotRenderer: React.FC<L1MemoryRendererProps> = ({
+const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     chartData,
     isZoomedIn,
     memorySize,
