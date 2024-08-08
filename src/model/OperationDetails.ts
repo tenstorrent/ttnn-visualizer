@@ -26,7 +26,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
     tensorList: TensorData[];
 
     constructor(data: OperationDetailsData) {
-        this.id = data.operation_id;
+        this.id = data.id;
         this.inputs = data.inputs;
         this.outputs = data.outputs;
         this.buffers = data.buffers;
@@ -73,7 +73,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 hovertemplate: `
 <span style="color:${color};font-size:20px;">&#9632;</span>
 ${address} (${toHex(address)}) <br>Size: ${formatSize(size)}
-${tensor ? `<br><br>Tensor ${tensor.tensor_id}` : ''}
+${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
 <extra></extra>`,
 
                 hoverlabel: {
@@ -160,7 +160,7 @@ ${tensor ? `<br><br>Tensor ${tensor.tensor_id}` : ''}
             return { producers: [], consumers: [] };
         }
 
-        const tensor = this.tensorList.filter((t) => t.tensor_id === id)[0];
+        const tensor = this.tensorList.filter((t) => t.id === id)[0];
 
         return {
             producers: tensor.producers.map((op, index) => ({

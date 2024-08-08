@@ -38,7 +38,7 @@ export const MemoryLegendElement: React.FC<{
                 <div className='format-numbers monospace'>{formatSize(chunk.size)} </div>
                 <div>
                     {!chunk.empty && operationDetails.getTensorForAddress(chunk.address) && (
-                        <>Tensor {operationDetails.getTensorForAddress(chunk.address)?.tensor_id}</>
+                        <>Tensor {operationDetails.getTensorForAddress(chunk.address)?.id}</>
                     )}
                     {chunk.empty && 'Empty space'}
                 </div>

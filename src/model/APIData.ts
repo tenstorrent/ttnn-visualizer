@@ -32,7 +32,7 @@ export interface BufferData {
 }
 
 export interface OperationDetailsData extends Operation{
-    operation_id: number;
+    id: number;
     inputs: TensorData[];
     outputs: TensorData[];
     buffers: BufferData[];

@@ -18,7 +18,7 @@ export interface OperationDescription extends Operation {
 }
 
 export interface Tensor {
-    tensor_id: number;
+    id: number;
     producers: number[];
     consumers: number[];
 }
