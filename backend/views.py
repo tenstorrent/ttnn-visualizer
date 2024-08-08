@@ -73,7 +73,7 @@ def operation_detail(operation_id):
     )
 
     return dict(
-        operation_id=operation.operation_id,
+        id=operation.operation_id,
         buffers=BufferSchema().dump(buffers, many=True),
         stack_trace=stack_trace_value,
         l1_sizes=l1_sizes,
