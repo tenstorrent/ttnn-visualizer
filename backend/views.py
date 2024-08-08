@@ -1,6 +1,5 @@
 import json
 import logging
-from pathlib import Path
 import shutil
 from http import HTTPStatus
 from pathlib import Path
@@ -139,7 +138,7 @@ def create_upload_files():
     :return:
     """
     files = request.files.getlist("files")
-    
+
     REPORT_DATA_DIRECTORY = current_app.config["REPORT_DATA_DIRECTORY"]
     ACTIVE_DATA_DIRECTORY = current_app.config["ACTIVE_DATA_DIRECTORY"]
 
