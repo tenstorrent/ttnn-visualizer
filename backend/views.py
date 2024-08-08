@@ -77,8 +77,8 @@ def operation_detail(operation_id):
         buffers=BufferSchema().dump(buffers, many=True),
         stack_trace=stack_trace_value,
         l1_sizes=l1_sizes,
-        input_tensors=input_tensors,
-        output_tensors=output_tensors,
+        inputs=input_tensors,
+        outputs=output_tensors,
     )
 
 
