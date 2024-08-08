@@ -27,6 +27,8 @@ import {
 } from '../../definitions/PlotConfigurations';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import Collapsible from '../Collapsible';
+import MicroOperations from '../MicroOperations';
+import OperationArguments from '../OperationArguments';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -55,6 +57,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     };
 
     const navRef = useRef<HTMLDivElement>(null);
+    const operation = operations?.find((op) => op.id === operationId);
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
         return (
@@ -422,6 +425,20 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 ))}
                             </div>
                         </div>
+
+                        {operation?.arguments && (
+                            <>
+                                <hr />
+
+                                <div className='arguments-wrapper'>
+                                    <OperationArguments operation={operation} />
+
+                                    {operation.microOperations.length ? (
+                                        <MicroOperations microOperations={operation.microOperations} />
+                                    ) : null}
+                                </div>
+                            </>
+                        )}
                     </>
                 ) : (
                     <p className='not-found-message'>Operation {operationId} not found</p>
