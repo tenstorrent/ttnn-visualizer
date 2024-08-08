@@ -136,15 +136,18 @@ class OutputTensor(db.Model):
     tensor = db.relationship("Tensor", backref="output")
 
 
-
 class Operation(db.Model):
     __table__ = operations
     arguments = db.relationship("OperationArgument", backref="operation")
     inputs = db.relationship("InputTensor", backref="operation")
     outputs = db.relationship("OutputTensor", backref="operation")
     buffers = db.relationship("Buffer", backref="operation")
-
+    stack_trace = db.relationship("StackTrace", backref="operation")
 
 
 class OperationArgument(db.Model):
     __table__ = operation_arguments
+
+
+
+

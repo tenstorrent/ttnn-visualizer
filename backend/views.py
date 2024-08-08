@@ -56,29 +56,14 @@ def operation_detail(operation_id):
     if not operation:
         return Response(status=HTTPStatus.NOT_FOUND)
 
+    operation_data = OperationSchema().dump(operation)
+
     devices = Device.query.order_by(Device.device_id.asc()).all()
     l1_sizes = [d.worker_l1_size for d in devices]
 
-    buffers = Buffer.query.filter_by(operation_id=operation.operation_id).all()
-    stack_trace = StackTrace.query.filter_by(
-        operation_id=operation.operation_id
-    ).first()
-    stack_trace_dump = StackTraceSchema().dump(stack_trace, many=False)
-    stack_trace_value = stack_trace_dump.get("stack_trace")
-    input_tensors = InputTensorSchema().dump(
-        operation.inputs, many=True
-    )
-    output_tensors = OutputTensorSchema().dump(
-        operation.outputs, many=True
-    )
-
     return dict(
-        id=operation.operation_id,
-        buffers=BufferSchema().dump(buffers, many=True),
-        stack_trace=stack_trace_value,
+        **operation_data,
         l1_sizes=l1_sizes,
-        inputs=input_tensors,
-        outputs=output_tensors,
     )
 
 
