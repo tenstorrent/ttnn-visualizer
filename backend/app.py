@@ -91,7 +91,7 @@ def middleware(app: flask.Flask):
         app.wsgi_app = DebuggedApplication(app.wsgi_app, evalex=True)
 
     # Set the real IP address into request.remote_addr when behind a proxy.
-    app.wsgi_app = ProxyFix(app.wsgi_app)
+    # app.wsgi_app = ProxyFix(app.wsgi_app)
 
     # CORS configuration
     origins = ["http://localhost:5173"]
@@ -104,3 +104,4 @@ def middleware(app: flask.Flask):
     )
 
     return None
+

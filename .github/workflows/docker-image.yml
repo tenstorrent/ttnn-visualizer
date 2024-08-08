@@ -1,6 +1,8 @@
 name: Create and publish a Docker image
 
 on:
+  pull:
+    branches: [ "dev" ]
   push:
     branches: [ "main", "dev" ]
     tags:
