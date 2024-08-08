@@ -19,11 +19,10 @@ const useLocalConnection = () => {
         return (await directoryOpen(OPEN_FOLDER_OPTIONS)) as LocalFile[];
     };
 
-    const uploadLocalFolder = async (files: LocalFile[]) => {
+    const uploadLocalFolder = async (files: File[]) => {
         const formData = new FormData();
-
-        files.forEach((file: LocalFile) => {
-            formData.append('files', file);
+        Array.from(files).forEach((f) => {
+            formData.append('files', f);
         });
 
         return axios.post(`${import.meta.env.VITE_API_ROOT}/local/upload`, formData, {

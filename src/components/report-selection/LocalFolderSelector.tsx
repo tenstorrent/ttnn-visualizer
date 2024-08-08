@@ -4,7 +4,7 @@
 
 import { Button, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { type FC, useEffect, useState } from 'react';
+import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
 import 'styles/components/FolderPicker.scss';
 import { useNavigate } from 'react-router';
@@ -44,8 +44,12 @@ const LocalFolderOptions: FC = () => {
     const isLocalReportMounted =
         (meta && reportLocation === 'local') || folderStatus?.status === ConnectionTestStates.OK;
 
-    const handleDirectoryOpen = async () => {
-        const files = await selectDirectory();
+
+    const handleDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files) {
+            return;
+        }
+        const { files } = e.target;
         const connectionStatus: ConnectionStatus = {
             status: ConnectionTestStates.OK,
             message: 'Files uploaded successfully',
@@ -93,12 +97,14 @@ const LocalFolderOptions: FC = () => {
             subLabel='Select a local directory containing a report'
         >
             <div className='buttons-container'>
-                <Button
-                    onClick={handleDirectoryOpen}
-                    icon={IconNames.FOLDER_OPEN}
-                >
-                    Open Directory
-                </Button>
+                <input
+                    type='file'
+                    multiple
+                    /* @ts-expect-error */
+                    directory=''
+                    webkitdirectory=''
+                    onChange={handleDirectoryOpen}
+                />
 
                 <Button
                     disabled={!isLocalReportMounted}
