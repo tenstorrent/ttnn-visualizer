@@ -37,13 +37,13 @@ const LocalFolderOptions: FC = () => {
     const meta = useAtomValue(reportMetaAtom);
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
 
-    const { uploadLocalFolder, selectDirectory } = useLocalConnection();
+    const { uploadLocalFolder } = useLocalConnection();
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploading, setIsUploading] = useState(false);
+    const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
 
     const isLocalReportMounted =
         (meta && reportLocation === 'local') || folderStatus?.status === ConnectionTestStates.OK;
-
 
     const handleDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) {
@@ -58,6 +58,7 @@ const LocalFolderOptions: FC = () => {
         setIsUploading(true);
 
         const response = await uploadLocalFolder(files);
+        setLocalUploadLabel(`${files.length} files selected.`);
 
         if (response.status !== 200) {
             connectionStatus.status = ConnectionTestStates.FAILED;
@@ -97,14 +98,22 @@ const LocalFolderOptions: FC = () => {
             subLabel='Select a local directory containing a report'
         >
             <div className='buttons-container'>
-                <input
-                    type='file'
-                    multiple
-                    /* @ts-expect-error */
-                    directory=''
-                    webkitdirectory=''
-                    onChange={handleDirectoryOpen}
-                />
+                <label
+                    className='bp5-file-input'
+                    htmlFor='local-upload'
+                >
+                    <input
+                        id='local-upload'
+                        type='file'
+                        multiple
+                        /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
+                        // eslint-disable-next-line react/no-unknown-property
+                        directory=''
+                        webkitdirectory=''
+                        onChange={handleDirectoryOpen}
+                    />
+                    <span className='bp5-file-upload-input'>{localUploadLabel}</span>
+                </label>
 
                 <Button
                     disabled={!isLocalReportMounted}
