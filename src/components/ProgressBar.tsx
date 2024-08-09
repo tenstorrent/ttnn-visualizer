@@ -9,7 +9,7 @@ function ProgressBar({ progress, estimated }: ProgressBarProps) {
             <span>
                 {progress > 0 ? `${Math.round(progress * 100)}%` : `100%`}
                 {` - `}
-                {estimated > 0 ? `${Math.round(estimated)}s left` : ''}
+                {estimated > 0 ? `${Math.round(estimated)}s left` : '0s left'}
             </span>
 
             <progress
