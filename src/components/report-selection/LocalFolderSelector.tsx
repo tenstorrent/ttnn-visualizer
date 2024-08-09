@@ -131,11 +131,6 @@ const LocalFolderOptions: FC = () => {
                     />
                 )}
 
-                <ProgressBar
-                    progress={0.55}
-                    estimated={10}
-                />
-
                 {folderStatus && !isUploading && (
                     <div className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}>
                         <Icon
