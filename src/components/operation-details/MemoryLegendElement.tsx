@@ -11,7 +11,7 @@ export const MemoryLegendElement: React.FC<{
     selectedTensorAddress: number | null;
     operationDetails: OperationDetails;
 }> = ({
-    //
+    // no wrap eslint
     chunk,
     memSize,
     selectedTensorAddress,
@@ -26,10 +26,10 @@ export const MemoryLegendElement: React.FC<{
         >
             <div
                 className={classNames('memory-color-block', {
-                    empty: chunk.empty === true,
+                    empty: chunk.empty,
                 })}
                 style={{
-                    backgroundColor: chunk.empty ? '#fff' : getBufferColor(chunk.address),
+                    ...(chunk.empty ? {} : { backgroundColor: getBufferColor(chunk.address) }),
                 }}
             />
             <div className='legend-details'>
