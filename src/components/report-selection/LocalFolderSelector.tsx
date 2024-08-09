@@ -4,7 +4,7 @@
 
 import { Button, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { type FC, useEffect, useState } from 'react';
+import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
 import 'styles/components/FolderPicker.scss';
 import { useNavigate } from 'react-router';
@@ -37,15 +37,19 @@ const LocalFolderOptions: FC = () => {
     const meta = useAtomValue(reportMetaAtom);
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
 
-    const { uploadLocalFolder, selectDirectory } = useLocalConnection();
+    const { uploadLocalFolder } = useLocalConnection();
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploading, setIsUploading] = useState(false);
+    const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
 
     const isLocalReportMounted =
         (meta && reportLocation === 'local') || folderStatus?.status === ConnectionTestStates.OK;
 
-    const handleDirectoryOpen = async () => {
-        const files = await selectDirectory();
+    const handleDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files) {
+            return;
+        }
+        const { files } = e.target;
         const connectionStatus: ConnectionStatus = {
             status: ConnectionTestStates.OK,
             message: 'Files uploaded successfully',
@@ -53,6 +57,7 @@ const LocalFolderOptions: FC = () => {
 
         setIsUploading(true);
 
+        setLocalUploadLabel(`${files.length} files selected.`);
         const response = await uploadLocalFolder(files);
 
         if (response.status !== 200) {
@@ -65,6 +70,7 @@ const LocalFolderOptions: FC = () => {
             connectionStatus.message = 'Selected directory does not contain a valid report.';
         }
 
+        setLocalUploadLabel(`${files.length} files uploaded`);
         setIsUploading(false);
         setFolderStatus(connectionStatus);
     };
@@ -93,12 +99,22 @@ const LocalFolderOptions: FC = () => {
             subLabel='Select a local directory containing a report'
         >
             <div className='buttons-container'>
-                <Button
-                    onClick={handleDirectoryOpen}
-                    icon={IconNames.FOLDER_OPEN}
+                <label
+                    className='bp5-file-input'
+                    htmlFor='local-upload'
                 >
-                    Open Directory
-                </Button>
+                    <input
+                        id='local-upload'
+                        type='file'
+                        multiple
+                        /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
+                        // eslint-disable-next-line react/no-unknown-property
+                        directory=''
+                        webkitdirectory=''
+                        onChange={handleDirectoryOpen}
+                    />
+                    <span className='bp5-file-upload-input'>{localUploadLabel}</span>
+                </label>
 
                 <Button
                     disabled={!isLocalReportMounted}
