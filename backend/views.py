@@ -22,6 +22,7 @@ from backend.remotes import (
     StatusMessage,
     check_remote_path,
     get_remote_test_folders,
+    read_remote_file,
     sync_test_folders,
 )
 from backend.schemas import (
@@ -188,6 +189,14 @@ def test_remote_folder():
         return Response(status=e.status, response=e.message)
     return Response(status=HTTPStatus.OK)
 
+@api.route("/remote/read", methods=["POST"])
+def test_remote_folder():
+    connection = request.json
+    try:
+        content = read_remote_file(RemoteConnection(**connection))
+    except RemoteFolderException as e:
+        return Response(status=e.status, response=e.message)
+    return Response(status=200, response=content)
 
 @api.route("/remote/sync", methods=["POST"])
 def sync_remote_folder():
