@@ -190,7 +190,7 @@ def test_remote_folder():
     return Response(status=HTTPStatus.OK)
 
 @api.route("/remote/read", methods=["POST"])
-def test_remote_folder():
+def read_remote_folder():
     connection = request.json
     try:
         content = read_remote_file(RemoteConnection(**connection))
