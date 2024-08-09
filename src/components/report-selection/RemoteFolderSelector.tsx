@@ -14,13 +14,17 @@ const formatter = new Intl.DateTimeFormat('en-US', {
     timeStyle: 'short',
 });
 
+const MAX_REPORT_NAME_LENGTH = 50;
+
 const formatRemoteFolderName = (folder?: RemoteFolder, connection?: RemoteConnection) => {
     if (!folder) {
         return 'n/a';
     }
 
     if (!connection) {
-        return folder.testName;
+        return folder.testName.length > MAX_REPORT_NAME_LENGTH
+            ? `${folder.testName.slice(0, MAX_REPORT_NAME_LENGTH)}...`
+            : folder.testName;
     }
 
     return `${connection.name} — ${folder.testName}`;
