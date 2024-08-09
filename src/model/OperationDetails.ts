@@ -3,10 +3,16 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { PlotData } from 'plotly.js';
-import { Operation } from './Graph';
 import { getBufferColor } from '../functions/colorGenerator';
 import { formatSize, toHex } from '../functions/math';
-import { BufferData, Chunk, FragmentationEntry, OperationDetailsData, TensorData } from './APIData';
+import {
+    BufferData,
+    Chunk,
+    FragmentationEntry,
+    OperationDescription,
+    OperationDetailsData,
+    TensorData
+} from './APIData';
 import { BufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 
@@ -26,9 +32,9 @@ export class OperationDetails implements Partial<OperationDetailsData> {
     tensorList: TensorData[];
 
     constructor(data: OperationDetailsData) {
-        this.id = data.operation_id;
-        this.inputs = data.input_tensors;
-        this.outputs = data.output_tensors;
+        this.id = data.id;
+        this.inputs = data.inputs;
+        this.outputs = data.outputs;
         this.buffers = data.buffers;
         this.l1_sizes = data.l1_sizes;
         this.stack_trace = data.stack_trace;
@@ -73,7 +79,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 hovertemplate: `
 <span style="color:${color};font-size:20px;">&#9632;</span>
 ${address} (${toHex(address)}) <br>Size: ${formatSize(size)}
-${tensor ? `<br><br>Tensor ${tensor.tensor_id}` : ''}
+${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
 <extra></extra>`,
 
                 hoverlabel: {
@@ -115,7 +121,8 @@ ${tensor ? `<br><br>Tensor ${tensor.tensor_id}` : ''}
      *
      * Unifies inputs and outputs into a single tensorList
      * */
-    updateOperationNames(operations: Operation[] | undefined): void {
+
+    updateOperationNames(operations: OperationDescription[] | undefined): void {
         if (!operations) {
             return;
         }
@@ -159,7 +166,7 @@ ${tensor ? `<br><br>Tensor ${tensor.tensor_id}` : ''}
             return { producers: [], consumers: [] };
         }
 
-        const tensor = this.tensorList.filter((t) => t.tensor_id === id)[0];
+        const tensor = this.tensorList.filter((t) => t.id === id)[0];
 
         return {
             producers: tensor.producers.map((op, index) => ({

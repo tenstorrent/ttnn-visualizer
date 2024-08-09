@@ -6,14 +6,10 @@ from pathlib import Path
 
 from flask import Blueprint, Response, current_app, request
 
-logger = logging.getLogger(__name__)
-
 from backend.models import (
     Device,
     Operation,
-    Buffer,
     Tensor,
-    StackTrace,
 )
 from backend.remotes import (
     RemoteConnection,
@@ -26,12 +22,10 @@ from backend.remotes import (
 )
 from backend.schemas import (
     OperationSchema,
-    BufferSchema,
-    InputTensorSchema,
-    OutputTensorSchema,
     TensorSchema,
-    StackTraceSchema,
 )
+
+logger = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -57,32 +51,13 @@ def operation_list():
 def operation_detail(operation_id):
     operation = Operation.query.get(operation_id)
     if not operation:
-        return dict()
-    #     return Response(status=HTTPStatus.NOT_FOUND)
-
+        return Response(status=HTTPStatus.NOT_FOUND)
     devices = Device.query.order_by(Device.device_id.asc()).all()
     l1_sizes = [d.worker_l1_size for d in devices]
 
-    buffers = Buffer.query.filter_by(operation_id=operation.operation_id).all()
-    stack_trace = StackTrace.query.filter_by(
-        operation_id=operation.operation_id
-    ).first()
-    stack_trace_dump = StackTraceSchema().dump(stack_trace, many=False)
-    stack_trace_value = stack_trace_dump.get("stack_trace")
-    input_tensors = InputTensorSchema().dump(
-        operation.input_tensors, many=True
-    )
-    output_tensors = OutputTensorSchema().dump(
-        operation.output_tensors, many=True
-    )
-
     return dict(
-        operation_id=operation.operation_id,
-        buffers=BufferSchema().dump(buffers, many=True),
-        stack_trace=stack_trace_value,
+        **OperationSchema().dump(operation),
         l1_sizes=l1_sizes,
-        input_tensors=input_tensors,
-        output_tensors=output_tensors,
     )
 
 
@@ -134,14 +109,9 @@ def get_tensor(tensor_id):
     ],
 )
 def create_upload_files():
-    """
-    Copies the folder upload into the active data directory
-    :return:
-    """
     files = request.files.getlist("files")
-
-    REPORT_DATA_DIRECTORY = current_app.config["REPORT_DATA_DIRECTORY"]
-    ACTIVE_DATA_DIRECTORY = current_app.config["ACTIVE_DATA_DIRECTORY"]
+    report_data_directory = current_app.config["REPORT_DATA_DIRECTORY"]
+    active_data_directory = current_app.config["ACTIVE_DATA_DIRECTORY"]
 
     filenames = [Path(f.filename).name for f in files]
 
@@ -151,23 +121,23 @@ def create_upload_files():
         return StatusMessage(
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
             message="Invalid project directory.",
-        ).dict()
+        ).model_dump()
 
     report_name = files[0].filename.split('/')[0]
-    report_directory = Path(REPORT_DATA_DIRECTORY, report_name)
+    report_directory = Path(report_data_directory, report_name)
     logger.info(f"Writing report files to {report_directory}")
     for file in files:
         logger.info(f"Processing file: {file.filename}")
-        destination_file = Path(REPORT_DATA_DIRECTORY, Path(file.filename))
-        logger.info(f"Writing file to ${destination_file}")
+        destination_file = Path(report_data_directory, Path(file.filename))
+        logger.info(f"Writing file to {destination_file}")
         if not destination_file.parent.exists():
             logger.info(f"{destination_file.parent.name} does not exist. Creating directory")
             destination_file.parent.mkdir(exist_ok=True, parents=True)
         file.save(destination_file)
 
-    logger.info(f"Copying file tree from f{report_directory} to {ACTIVE_DATA_DIRECTORY}")
-    shutil.copytree(report_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
-    return StatusMessage(status=HTTPStatus.OK, message="Success.").dict()
+    logger.info(f"Copying file tree from f{report_directory} to {active_data_directory}")
+    shutil.copytree(report_directory, active_data_directory, dirs_exist_ok=True)
+    return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
 
 
 @api.route("/remote/folder", methods=["POST"])
@@ -175,7 +145,7 @@ def get_remote_folders():
     connection = request.json
     try:
         remote_folders = get_remote_test_folders(RemoteConnection(**connection))
-        return [r.dict() for r in remote_folders]
+        return [r.model_dump() for r in remote_folders]
     except RemoteFolderException as e:
         return Response(status=e.status, response=e.message)
 
@@ -210,14 +180,14 @@ def use_remote_folder():
         return Response(status=HTTPStatus.BAD_REQUEST)
     connection = RemoteConnection(**connection)
     folder = RemoteFolder(**folder)
-    REPORT_DATA_DIRECTORY = current_app.config["REPORT_DATA_DIRECTORY"]
-    ACTIVE_DATA_DIRECTORY = current_app.config["ACTIVE_DATA_DIRECTORY"]
+    report_data_directory = current_app.config["REPORT_DATA_DIRECTORY"]
+    active_data_directory = current_app.config["ACTIVE_DATA_DIRECTORY"]
     report_folder = Path(folder.remotePath).name
-    connection_directory = Path(REPORT_DATA_DIRECTORY, connection.name, report_folder)
+    connection_directory = Path(report_data_directory, connection.name, report_folder)
     if not connection_directory.exists():
         return Response(
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
             response=f"{connection_directory} does not exist.",
         )
-    shutil.copytree(connection_directory, ACTIVE_DATA_DIRECTORY, dirs_exist_ok=True)
+    shutil.copytree(connection_directory, active_data_directory, dirs_exist_ok=True)
     return Response(status=HTTPStatus.OK)

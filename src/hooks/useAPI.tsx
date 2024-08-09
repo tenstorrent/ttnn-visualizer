@@ -4,17 +4,15 @@
 
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
-import { OperationDetailsData, ReportMetaData } from '../model/APIData';
-import { MicroOperation, Operation } from '../model/Graph';
+import { MicroOperation, OperationDescription, OperationDetailsData, ReportMetaData } from '../model/APIData';
 
 const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
     const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/operations/${id}`);
-
     return operationDetails;
 };
-const fetchOperations = async (): Promise<Operation[]> => {
+const fetchOperations = async (): Promise<OperationDescription[]> => {
     const [{ data: operationList }, { data: microOperations }] = await Promise.all([
-        axios.get<Omit<Operation, 'microOperations'>[]>('/api/operations'),
+        axios.get<Omit<OperationDescription, 'microOperations'>[]>('/api/operations'),
         axios.get<MicroOperation[]>('/api/operation-history'),
     ]);
 
@@ -22,7 +20,7 @@ const fetchOperations = async (): Promise<Operation[]> => {
         ...operation,
         microOperations:
             microOperations.filter((microOperation) => microOperation.ttnn_operation_id === operation.id) || [],
-    })) as Operation[];
+    })) as OperationDescription[];
 };
 
 /** @description
@@ -41,7 +39,7 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
 };
 
 export const useOperationsList = () => {
-    return useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
+    return useQuery<OperationDescription[], AxiosError>('get-operations', fetchOperations);
 };
 
 export const useAllBuffers = () => {
@@ -56,6 +54,7 @@ export const useOperationDetails = (operationId: number) => {
     const operationDetails = useQuery<OperationDetailsData>(['get-operation-detail', operationId], () =>
         fetchOperationDetails(operationId),
     );
+
 
     // TODO: consider useQueries or include operation data on BE
 

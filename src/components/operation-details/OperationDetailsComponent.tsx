@@ -137,7 +137,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const selectTensorByAddress = (address: number): void => {
         setSelectedTensorAddress(address);
-        setSelectedTensor(details.getTensorForAddress(address)?.tensor_id || null);
+        setSelectedTensor(details.getTensorForAddress(address)?.id || null);
     };
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEvent>): void => {
@@ -164,7 +164,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     };
 
     const onTensorClick = (id: number): void => {
-        const address = details.tensorList.find((t) => t.tensor_id === id)?.address || null;
+        const address = details.tensorList.find((t) => t.id === id)?.address || null;
         setSelectedTensorAddress(address);
         setSelectedTensor(id);
     };
@@ -198,7 +198,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
 
             <div className='operation-details-component'>
-                {!isLoading && Number.isSafeInteger(operationDetails?.operation_id) ? (
+                {!isLoading && Number.isSafeInteger(operationDetails?.id) ? (
                     <>
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
 
@@ -285,10 +285,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             className={classNames('dram-memory-renderer', {
                                 'empty-plot': dramDeltaObject.chartData.length === 0,
                             })}
-                            plotZoomRangeStart={dramDeltaObject.min}
-                            plotZoomRangeEnd={dramDeltaObject.max}
+                            plotZoomRangeStart={dramPlotZoomRangeStart}
+                            plotZoomRangeEnd={dramPlotZoomRangeEnd}
                             chartData={dramDeltaObject.chartData}
-                            isZoomedIn
+                            isZoomedIn={zoomedInView}
                             memorySize={DRAM_MEMORY_SIZE}
                             onBufferClick={onDramDeltaClick}
                             onClickOutside={onClickOutside}
@@ -404,7 +404,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 {details.inputs?.map((tensor) => (
                                     <TensorDetailsComponent
                                         tensor={tensor}
-                                        key={tensor.tensor_id}
+                                        key={tensor.id}
                                         selectedAddress={selectedTensorAddress}
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
@@ -417,7 +417,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 {details.outputs?.map((tensor) => (
                                     <TensorDetailsComponent
                                         tensor={tensor}
-                                        key={tensor.tensor_id}
+                                        key={tensor.id}
                                         selectedAddress={selectedTensorAddress}
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}

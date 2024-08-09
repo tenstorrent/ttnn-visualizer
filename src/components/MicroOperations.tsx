@@ -1,4 +1,4 @@
-import { MicroOperation } from '../model/Graph';
+import { MicroOperation } from "../model/APIData";
 
 interface MicroOperationsData {
     microOperations: MicroOperation[];

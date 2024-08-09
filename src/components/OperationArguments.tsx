@@ -6,10 +6,11 @@ import 'styles/components/OperationArguments.scss';
 import { ScrollToOptions } from '@tanstack/react-virtual';
 import { useRef } from 'react';
 import ExpandableTensor from './ExpandableTensor';
-import { Operation } from '../model/Graph';
+
+import { OperationDescription } from "../model/APIData";
 
 interface OperationArgumentsProps {
-    operation: Operation;
+    operation: OperationDescription;
     operationIndex?: number;
     onCollapseTensor?: (index: number, { align, behavior }: ScrollToOptions) => void;
 }

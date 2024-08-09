@@ -35,10 +35,10 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 />
                 <h4
                     onClick={() => {
-                        onTensorClick(tensor.tensor_id);
+                        onTensorClick(tensor.id);
                     }}
                 >
-                    Tensor ID: {tensor.tensor_id}
+                    Tensor ID: {tensor.id}
                 </h4>
 
                 <span className='format-numbers monospace'>{prettyPrintAddress(tensor.address, memorySize)}</span>
