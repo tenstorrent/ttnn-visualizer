@@ -48,7 +48,6 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                     }) || []),
                 ],
             ].flat() || [];
-        console.log(this.tensorList);
     }
 
     private getChartData(memory: Chunk[]): Partial<PlotData>[] {

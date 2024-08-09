@@ -23,6 +23,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
             microOperations.filter((microOperation) => microOperation.ttnn_operation_id === operation.id) || [],
     })) as OperationDescription[];
 };
+
 const fetchAllBuffers = async (): Promise<any> => {
     const { data: buffers } = await axios.get('/api/get-operation-buffers');
 
