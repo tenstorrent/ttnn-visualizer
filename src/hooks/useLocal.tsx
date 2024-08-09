@@ -15,17 +15,21 @@ const useLocalConnection = () => {
             formData.append('files', f);
         });
 
-        return axios.post(`${import.meta.env.VITE_API_ROOT}/local/upload`, formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-            onUploadProgress(uploadProgress) {
-                setUploadProgress({
-                    progress: uploadProgress.progress,
-                    estimated: uploadProgress.estimated,
-                });
-            },
-        });
+        return axios
+            .post(`${import.meta.env.VITE_API_ROOT}/local/upload`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+                onUploadProgress(uploadProgress) {
+                    setUploadProgress({
+                        progress: uploadProgress.progress,
+                        estimated: uploadProgress.estimated,
+                    });
+                },
+            })
+            .finally(() => {
+                setUploadProgress(null);
+            });
     };
 
     return {
