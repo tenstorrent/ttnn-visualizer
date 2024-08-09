@@ -9,7 +9,13 @@ import { ReportMetaData } from '../model/APIData';
 const reportMetaKey = 'reportMeta';
 const reportLocationKey = 'reportLocation';
 
+interface UploadProgress {
+    progress?: number;
+    estimated?: number;
+}
+
 export const reportMetaAtom = atomWithStorage<ReportMetaData | null>(reportMetaKey, null);
 export const reportLocationAtom = atomWithStorage<'local' | 'remote' | null>(reportLocationKey, null);
 export const isFullStackTraceAtom = atom(false);
 export const expandedOperationsAtom = atom<number[]>([]);
+export const localUploadProgressAtom = atom<UploadProgress | null>(null);

@@ -12,10 +12,9 @@ import { useQueryClient } from 'react-query';
 import { useAtom, useAtomValue } from 'jotai';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
-import LoadingSpinner from '../LoadingSpinner';
-import { reportLocationAtom, reportMetaAtom } from '../../store/app';
-import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
+import { localUploadProgressAtom, reportLocationAtom, reportMetaAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
+import ProgressBar from '../ProgressBar';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -41,9 +40,10 @@ const LocalFolderOptions: FC = () => {
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploading, setIsUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
+    const localUploadProgress = useAtomValue(localUploadProgressAtom);
 
     const isLocalReportMounted =
-        (meta && reportLocation === 'local') || folderStatus?.status === ConnectionTestStates.OK;
+        (!isUploading && meta && reportLocation === 'local') || folderStatus?.status === ConnectionTestStates.OK;
 
     const handleDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) {
@@ -124,7 +124,12 @@ const LocalFolderOptions: FC = () => {
                     View report
                 </Button>
 
-                {isUploading && <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />}
+                {isUploading && localUploadProgress?.progress && localUploadProgress?.estimated && (
+                    <ProgressBar
+                        progress={localUploadProgress.progress}
+                        estimated={localUploadProgress.estimated}
+                    />
+                )}
 
                 {folderStatus && !isUploading && (
                     <div className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}>
