@@ -140,6 +140,7 @@ def get_client(remote_connection: RemoteConnection) -> SSHClient:
 
 @remote_exception_handler
 def read_remote_file(remote_connection):
+    logger.info(f"Opening remote file {remote_connection.path}")
     ssh_client = get_client(remote_connection)
     with ssh_client.open_sftp() as sftp:
         path = Path(remote_connection.path)
@@ -274,13 +275,3 @@ def check_remote_path(remote_connection):
     get_remote_folder_config_paths(remote_connection, ssh_client)
 
 
-if __name__ == "__main__":
-    remote_connection = RemoteConnection(
-        name="Test",
-        username="w0269804",
-        host="localhost",
-        port=2222,
-        path="/home/w0269804/test.txt",
-    )
-    file = read_remote_file(remote_connection)
-    print(file)
