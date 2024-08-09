@@ -5,11 +5,15 @@
 @use '../definitions/colours' as *;
 
 .operation-details-component {
-    a, a:active, a:visited {
+    a,
+    a:active,
+    a:visited {
         color: $link-color;
         margin: 0;
         padding: 2px 0;
-        transition: color 150ms linear, background-color 150ms linear;
+        transition:
+            color 150ms linear,
+            background-color 150ms linear;
         transition-delay: 10ms;
 
         &.current {
@@ -18,7 +22,7 @@
 
             &::before {
                 display: inline-block;
-                content: "\2714"; // checkmark
+                content: '\2714'; // checkmark
                 margin-right: 5px;
             }
         }
@@ -27,12 +31,18 @@
     a:hover:not(.current) {
         color: $tt-black;
         background-color: $link-color;
-        transition: color 0ms linear, background-color 0ms linear;
-
+        transition:
+            color 0ms linear,
+            background-color 0ms linear;
     }
 
     .dram-memory-renderer,
     .l1-memory-renderer {
+        .memory-plot {
+            width: 100%;
+            height: 110px;
+        }
+
         &.identical-plot {
             .memory-plot {
                 opacity: 0.5;
@@ -41,12 +51,6 @@
 
         &.empty-plot {
             opacity: 0.4;
-        }
-
-
-        .memory-plot {
-            width: 100%;
-            height: 110px;
         }
     }
 
@@ -110,7 +114,7 @@
 
             .legend-details {
                 display: inline-grid;
-                grid-template-columns: 1fr 1fr .75fr 1fr;
+                grid-template-columns: 1fr 1fr 0.75fr 1fr;
                 gap: 15px;
 
                 .format-numbers {
@@ -121,7 +125,6 @@
                     }
                 }
             }
-
 
             .legend-text {
                 font-size: 0.875rem;
@@ -135,13 +138,7 @@
         display: inline-block;
 
         &.empty-tensor {
-            background: repeating-linear-gradient(
-                    45deg,
-                    transparent,
-                    transparent 5px,
-                    $tt-red 5px,
-                    $tt-red 7px
-            );
+            background: repeating-linear-gradient(45deg, transparent, transparent 5px, $tt-red 5px, $tt-red 7px);
         }
     }
 
@@ -149,7 +146,6 @@
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 5px;
-
 
         .tensor-item {
             margin-top: 20px;

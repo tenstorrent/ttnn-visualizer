@@ -20,5 +20,6 @@ module.exports = {
         'selector-pseudo-element-colon-notation': 'double',
         'comment-no-empty': null,
         'scss/comment-no-empty': null,
+        'no-descending-specificity': null,
     },
 };
