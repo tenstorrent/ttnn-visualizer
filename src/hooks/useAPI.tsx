@@ -4,8 +4,7 @@
 
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
-import { OperationDetailsData, ReportMetaData } from '../model/APIData';
-import { MicroOperation, OperationDescription } from '../model/Graph';
+import { MicroOperation, OperationDescription, OperationDetailsData, ReportMetaData } from '../model/APIData';
 
 const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
     const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/operations/${id}`);

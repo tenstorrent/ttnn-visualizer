@@ -12,7 +12,6 @@ import { useAtom } from 'jotai';
 import SearchField from './SearchField';
 import Collapsible from './Collapsible';
 import OperationComponent from './OperationComponent';
-import { OperationDescription } from '../model/Graph';
 import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/OperationsList.scss';
@@ -20,6 +19,7 @@ import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { expandedOperationsAtom } from '../store/app';
 import MicroOperations from './MicroOperations';
+import { OperationDescription } from "../model/APIData";
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item

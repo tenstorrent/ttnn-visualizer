@@ -3,10 +3,16 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { PlotData } from 'plotly.js';
-import { OperationDescription } from './Graph';
 import { getBufferColor } from '../functions/colorGenerator';
 import { formatSize, toHex } from '../functions/math';
-import { BufferData, Chunk, FragmentationEntry, OperationDetailsData, TensorData } from './APIData';
+import {
+    BufferData,
+    Chunk,
+    FragmentationEntry,
+    OperationDescription,
+    OperationDetailsData,
+    TensorData
+} from './APIData';
 import { BufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 
