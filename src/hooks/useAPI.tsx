@@ -8,8 +8,25 @@ import { OperationDetailsData, ReportMetaData } from '../model/APIData';
 import { MicroOperation, Operation } from '../model/Graph';
 
 const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
-    const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/operations/${id}`);
+    let operationDetails: OperationDetailsData = {
+        operation_id: 0,
+        input_tensors: [],
+        output_tensors: [],
+        buffers: [],
+        l1_sizes: [],
+        stack_trace: '',
+    };
 
+    try {
+        const apiResponse = await axios.get<OperationDetailsData>(`/api/operations/${id}`);
+        operationDetails = apiResponse.data;
+    } catch (err) {
+        if (axios.isAxiosError(err)) {
+            if (err.status === 404) {
+                console.info(`Do stuff on 404 error`);
+            }
+        }
+    }
     return operationDetails;
 };
 const fetchOperations = async (): Promise<Operation[]> => {
