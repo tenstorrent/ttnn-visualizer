@@ -24,6 +24,10 @@ const fetchOperations = async (): Promise<Operation[]> => {
             microOperations.filter((microOperation) => microOperation.ttnn_operation_id === operation.id) || [],
     })) as Operation[];
 };
+
+/** @description
+ * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
+ */
 const fetchAllBuffers = async (): Promise<any> => {
     const { data: buffers } = await axios.get('/api/get-operation-buffers');
 
