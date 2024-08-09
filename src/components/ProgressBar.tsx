@@ -1,3 +1,5 @@
+import 'styles/components/ProgressBar.scss';
+
 interface ProgressBarProps {
     progress: number;
     estimated: number;
@@ -5,7 +7,7 @@ interface ProgressBarProps {
 
 function ProgressBar({ progress, estimated }: ProgressBarProps) {
     return (
-        <div>
+        <div className='progress-bar'>
             <span>
                 {progress > 0 ? `${Math.round(progress * 100)}%` : `100%`}
                 {` - `}
@@ -15,7 +17,6 @@ function ProgressBar({ progress, estimated }: ProgressBarProps) {
             <progress
                 value={progress}
                 max='1'
-                style={{ width: '100%' }}
             />
         </div>
     );
