@@ -16,7 +16,7 @@
             color: $tt-white-text;
             cursor: default;
 
-            &::before{
+            &::before {
                 display: inline-block;
                 content: "\2714"; // checkmark
                 margin-right: 5px;
@@ -31,15 +31,31 @@
 
     }
 
+    .dram-memory-renderer,
     .l1-memory-renderer {
+        &.identical-plot {
+            .memory-plot {
+                opacity: 0.5;
+            }
+        }
+
         &.empty-plot {
             opacity: 0.4;
         }
 
-        .l1-memory-plot {
+
+        .memory-plot {
             width: 100%;
             height: 110px;
         }
+    }
+
+    .dram-memory-renderer {
+        .memory-plot {
+            height: 80px;
+        }
+
+        margin-bottom: 10px;
     }
 
     .plot-tensor-details {
@@ -47,6 +63,7 @@
         grid-template-columns: 1fr auto;
         align-items: start;
         gap: 25px;
+        min-height: 120px;
     }
 
     .producer-consumer {
@@ -73,6 +90,14 @@
         margin-bottom: 20px;
         flex-direction: column;
         row-gap: 5px;
+
+        hr {
+            margin: 10px 0;
+        }
+
+        .full-dram-legend {
+            display: grid;
+        }
 
         .legend-item {
             display: inline-grid;
@@ -109,6 +134,10 @@
         height: 15px;
         display: inline-block;
 
+        &.empty {
+            background-color: $tt-white-text;
+        }
+
         &.empty-tensor {
             background: repeating-linear-gradient(
                     45deg,
@@ -133,7 +162,7 @@
                 opacity: 0.5;
             }
 
-            h4{
+            h4 {
                 cursor: pointer;
             }
         }

@@ -25,6 +25,15 @@ const fetchOperations = async (): Promise<Operation[]> => {
     })) as Operation[];
 };
 
+/** @description
+ * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
+ */
+const fetchAllBuffers = async (): Promise<any> => {
+    const { data: buffers } = await axios.get('/api/get-operation-buffers');
+
+    return buffers;
+};
+
 const fetchReportMeta = async (): Promise<ReportMetaData> => {
     const { data: meta } = await axios.get<ReportMetaData>('/api/config');
 
@@ -33,6 +42,10 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
 
 export const useOperationsList = () => {
     return useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
+};
+
+export const useAllBuffers = () => {
+    return useQuery<{ operation_id: number; buffers: [] }[], AxiosError>('get-operation-buffers', fetchAllBuffers);
 };
 
 export const useOperationDetails = (operationId: number) => {
@@ -60,7 +73,7 @@ export const usePreviousOperationDetails = (operationId: number) => {
         return operationList[index + 1]?.id === operationId;
     });
 
-    return useOperationDetails(operation?.id || -1);
+    return useOperationDetails(operation ? operation.id : -1);
 };
 
 export const usePreviousOperation = (operationId: number) => {

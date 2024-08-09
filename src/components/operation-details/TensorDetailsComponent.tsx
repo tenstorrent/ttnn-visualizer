@@ -3,6 +3,7 @@ import classNames from 'classnames';
 import { getBufferColor } from '../../functions/colorGenerator';
 import { TensorData } from '../../model/APIData';
 import { prettyPrintAddress } from '../../functions/math';
+import { BufferTypeLabel } from '../../model/BufferType';
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
@@ -44,6 +45,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
             </div>
 
             <div className='tensor-meta'>
+                {tensor.buffer_type !== null && <p>Buffer type: {BufferTypeLabel[tensor.buffer_type]}</p>}
                 <p>Shape: {tensor.shape}</p>
                 <p>Dtype: {tensor.dtype}</p>
                 <p>Layout: {tensor.layout}</p>

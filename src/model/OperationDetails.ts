@@ -7,11 +7,8 @@ import { Operation } from './Graph';
 import { getBufferColor } from '../functions/colorGenerator';
 import { formatSize, toHex } from '../functions/math';
 import { BufferData, Chunk, FragmentationEntry, OperationDetailsData, TensorData } from './APIData';
-
-export enum BufferType {
-    L1 = 1,
-    DRAM = 2,
-}
+import { BufferType } from './BufferType';
+import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 
 export class OperationDetails implements Partial<OperationDetailsData> {
     id: number;
@@ -53,7 +50,53 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             ].flat() || [];
     }
 
-    get memorySize(): number {
+    private getChartData(memory: Chunk[]): Partial<PlotData>[] {
+        return memory.map((chunk) => {
+            const { address, size } = chunk;
+            const color = getBufferColor(address);
+            const tensor = this.getTensorForAddress(address);
+            return {
+                x: [address + size / 2],
+                y: [1],
+                type: 'bar',
+                width: [size],
+                marker: {
+                    color,
+                    line: {
+                        width: 0,
+                        opacity: 0,
+                        simplify: false,
+                    },
+                },
+
+                hoverinfo: 'none',
+                hovertemplate: `
+<span style="color:${color};font-size:20px;">&#9632;</span>
+${address} (${toHex(address)}) <br>Size: ${formatSize(size)}
+${tensor ? `<br><br>Tensor ${tensor.tensor_id}` : ''}
+<extra></extra>`,
+
+                hoverlabel: {
+                    align: 'right',
+                    bgcolor: 'white',
+                    padding: {
+                        t: 10,
+                        b: 10,
+                        l: 10,
+                        r: 10,
+                    },
+
+                    font: {
+                        color: 'black',
+                        weight: 'bold',
+                        size: 14,
+                    },
+                },
+            };
+        });
+    }
+
+    get memorySizeL1(): number {
         // TODO: memorysize will need to be read from the appropriate device even though its likely going to be the same for the multichip scenario
         return this.l1_sizes?.[0] || 0;
     }
@@ -62,6 +105,16 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         return this.tensorList.find((tensor) => tensor.address === address) || null;
     }
 
+    // TODO: this is unintuitive and poorly named method. consider refactor
+
+    /** @description
+     *
+     * Mutates current object
+     *
+     * Updates the producer and consumer names for each tensor in the tensorList
+     *
+     * Unifies inputs and outputs into a single tensorList
+     * */
     updateOperationNames(operations: Operation[] | undefined): void {
         if (!operations) {
             return;
@@ -120,16 +173,18 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         };
     }
 
-    /**
-     * Get memory data for the operation L1 only
-     * TODO: add DRAM buffer types and create separation
-     */
-    get memoryData(): { chartData: Partial<PlotData>[]; memory: Chunk[]; fragmentation: FragmentationEntry[] } {
+    memoryData(bufferType: BufferType = BufferType.L1): {
+        chartData: Partial<PlotData>[];
+        memory: Chunk[];
+        fragmentation: FragmentationEntry[];
+        condensed: Chunk;
+        condensedChart: Partial<PlotData>[];
+    } {
         const { buffers } = this;
         const fragmentation: FragmentationEntry[] = [];
         const memory: Chunk[] =
             buffers
-                ?.filter((buffer: BufferData) => buffer.buffer_type === BufferType.L1)
+                ?.filter((buffer: BufferData) => buffer.buffer_type === bufferType)
                 .map((buffer: BufferData) => {
                     return {
                         address: buffer.address,
@@ -150,50 +205,28 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 }
             }
         });
-        const chartData: Partial<PlotData>[] = memory.map((chunk) => {
-            const { address, size } = chunk;
-            const color = getBufferColor(address);
-            const tensor = this.getTensorForAddress(address);
-            return {
-                x: [address + size / 2],
-                y: [1],
-                type: 'bar',
-                width: [size],
-                marker: {
-                    color,
-                    line: {
-                        width: 0,
-                        opacity: 0,
-                        simplify: false,
-                    },
-                },
 
-                hoverinfo: 'none',
-                hovertemplate: `
-<span style="color:${color};font-size:20px;">&#9632;</span>
-${address} (${toHex(address)}) <br>Size: ${formatSize(size)}
-${tensor ? `<br><br>Tensor ${tensor.tensor_id}` : ''}
-<extra></extra>`,
+        const condensed: Chunk = {
+            address: memory[0]?.address || 0,
+            // eslint-disable-next-line no-unsafe-optional-chaining
+            size: memory[memory.length - 1]?.address + memory[memory.length - 1]?.size || 0,
+        };
 
-                hoverlabel: {
-                    align: 'right',
-                    bgcolor: 'white',
-                    padding: {
-                        t: 10,
-                        b: 10,
-                        l: 10,
-                        r: 10,
-                    },
+        const chartData = this.getChartData(memory);
 
-                    font: {
-                        color: 'black',
-                        weight: 'bold',
-                        size: 14,
-                    },
-                },
-            };
-        });
+        return { chartData, memory, fragmentation, condensed, condensedChart: this.getChartData([condensed]) };
+    }
 
-        return { chartData, memory, fragmentation };
+    public getMemoryDelta(delta1: Chunk[], delta2: Chunk[]) {
+        const delta = delta1.length > 0 ? delta1 : delta2;
+
+        return {
+            chartData: this.getChartData(delta),
+            // eslint-disable-next-line no-unsafe-optional-chaining
+            min: delta[0]?.address - 10240 || 0,
+            // eslint-disable-next-line no-unsafe-optional-chaining
+            max: delta[delta.length - 1]?.address + delta[delta.length - 1]?.size + 10240 || DRAM_MEMORY_SIZE,
+            memory: delta,
+        };
     }
 }
