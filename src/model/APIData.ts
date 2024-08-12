@@ -35,6 +35,17 @@ export interface OperationDetailsData extends Operation {
     stack_trace: string;
 }
 
+// TODO: we may want to revisit the 'default' portion fo the variable name
+export const defaultOperationDetailsData: OperationDetailsData = {
+    id: 0,
+    name: '',
+    inputs: [],
+    outputs: [],
+    buffers: [],
+    l1_sizes: [],
+    stack_trace: '',
+};
+
 export interface Chunk {
     address: number;
     size: number;
