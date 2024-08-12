@@ -12,7 +12,7 @@ import { useQueryClient } from 'react-query';
 import { useAtom, useAtomValue } from 'jotai';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
-import { localUploadProgressAtom, reportLocationAtom, reportMetaAtom } from '../../store/app';
+import { reportLocationAtom, reportMetaAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import ProgressBar from '../ProgressBar';
 
@@ -36,11 +36,10 @@ const LocalFolderOptions: FC = () => {
     const meta = useAtomValue(reportMetaAtom);
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
 
-    const { uploadLocalFolder } = useLocalConnection();
+    const { uploadLocalFolder, uploadProgress } = useLocalConnection();
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploading, setIsUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
-    const localUploadProgress = useAtomValue(localUploadProgressAtom);
 
     const isLocalReportMounted =
         (!isUploading && meta && reportLocation === 'local') || folderStatus?.status === ConnectionTestStates.OK;
@@ -124,10 +123,10 @@ const LocalFolderOptions: FC = () => {
                     View report
                 </Button>
 
-                {isUploading && localUploadProgress?.progress && localUploadProgress?.estimated && (
+                {isUploading && uploadProgress?.progress && uploadProgress?.estimated && (
                     <ProgressBar
-                        progress={localUploadProgress.progress}
-                        estimated={localUploadProgress.estimated}
+                        progress={uploadProgress.progress}
+                        estimated={uploadProgress.estimated}
                     />
                 )}
 

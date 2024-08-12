@@ -3,11 +3,15 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import axios from 'axios';
-import { useSetAtom } from 'jotai';
-import { localUploadProgressAtom } from '../store/app';
+import { useState } from 'react';
+
+interface UploadProgress {
+    progress?: number;
+    estimated?: number;
+}
 
 const useLocalConnection = () => {
-    const setUploadProgress = useSetAtom(localUploadProgressAtom);
+    const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
 
     const uploadLocalFolder = async (files: FileList) => {
         const formData = new FormData();
@@ -20,10 +24,10 @@ const useLocalConnection = () => {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
-                onUploadProgress(uploadProgress) {
+                onUploadProgress(uploadStatus) {
                     setUploadProgress({
-                        progress: uploadProgress.progress,
-                        estimated: uploadProgress.estimated,
+                        progress: uploadStatus.progress,
+                        estimated: uploadStatus.estimated,
                     });
                 },
             })
@@ -34,6 +38,7 @@ const useLocalConnection = () => {
 
     return {
         uploadLocalFolder,
+        uploadProgress,
     };
 };
 
