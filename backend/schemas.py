@@ -94,7 +94,6 @@ class OperationSchema(ma.SQLAlchemySchema):
     outputs = ma.List(ma.Nested(OutputTensorSchema))
     inputs = ma.List(ma.Nested(InputTensorSchema))
     arguments = ma.List(ma.Nested(OperationArgumentsSchema))
-    stack_trace = ma.auto_field()
 
     def get_stack_trace(self, operation):
         if hasattr(operation, "stack_trace"):
