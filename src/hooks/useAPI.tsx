@@ -4,34 +4,15 @@
 
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
-import { OperationDetailsData, ReportMetaData } from '../model/APIData';
-import { MicroOperation, Operation } from '../model/Graph';
+import { MicroOperation, OperationDescription, OperationDetailsData, ReportMetaData } from '../model/APIData';
 
 const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
-    let operationDetails: OperationDetailsData = {
-        operation_id: 0,
-        input_tensors: [],
-        output_tensors: [],
-        buffers: [],
-        l1_sizes: [],
-        stack_trace: '',
-    };
-
-    try {
-        const apiResponse = await axios.get<OperationDetailsData>(`/api/operations/${id}`);
-        operationDetails = apiResponse.data;
-    } catch (err) {
-        if (axios.isAxiosError(err)) {
-            if (err.status === 404) {
-                console.info(`Do stuff on 404 error`);
-            }
-        }
-    }
+    const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/operations/${id}`);
     return operationDetails;
 };
-const fetchOperations = async (): Promise<Operation[]> => {
+const fetchOperations = async (): Promise<OperationDescription[]> => {
     const [{ data: operationList }, { data: microOperations }] = await Promise.all([
-        axios.get<Omit<Operation, 'microOperations'>[]>('/api/operations'),
+        axios.get<Omit<OperationDescription, 'microOperations'>[]>('/api/operations'),
         axios.get<MicroOperation[]>('/api/operation-history'),
     ]);
 
@@ -39,7 +20,16 @@ const fetchOperations = async (): Promise<Operation[]> => {
         ...operation,
         microOperations:
             microOperations.filter((microOperation) => microOperation.ttnn_operation_id === operation.id) || [],
-    })) as Operation[];
+    })) as OperationDescription[];
+};
+
+/** @description
+ * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
+ */
+const fetchAllBuffers = async (): Promise<any> => {
+    const { data: buffers } = await axios.get('/api/get-operation-buffers');
+
+    return buffers;
 };
 
 const fetchReportMeta = async (): Promise<ReportMetaData> => {
@@ -49,7 +39,11 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
 };
 
 export const useOperationsList = () => {
-    return useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
+    return useQuery<OperationDescription[], AxiosError>('get-operations', fetchOperations);
+};
+
+export const useAllBuffers = () => {
+    return useQuery<{ operation_id: number; buffers: [] }[], AxiosError>('get-operation-buffers', fetchAllBuffers);
 };
 
 export const useOperationDetails = (operationId: number) => {
@@ -77,7 +71,7 @@ export const usePreviousOperationDetails = (operationId: number) => {
         return operationList[index + 1]?.id === operationId;
     });
 
-    return useOperationDetails(operation?.id || -1);
+    return useOperationDetails(operation ? operation.id : -1);
 };
 
 export const usePreviousOperation = (operationId: number) => {

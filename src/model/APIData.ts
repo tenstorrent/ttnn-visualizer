@@ -2,20 +2,20 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-export interface TensorData {
-    tensor_id: number;
+import { BufferType } from './BufferType';
+import { Operation, Tensor } from './Graph';
+
+export interface TensorData extends Tensor {
     shape: string;
     dtype: string;
     layout: string;
     memory_config: string | null;
     device_id: number | null;
     address: number | null;
-    buffer_type: number | null;
+    buffer_type: BufferType | null;
     io: 'input' | 'output' | null;
-    producerNames: string[];
+    producerNames: string[]; // TODO: this is a very brittle way to connect producer ids to operation names
     consumerNames: string[];
-    producers: number[];
-    consumers: number[];
 }
 
 export interface BufferData {
@@ -26,10 +26,10 @@ export interface BufferData {
     buffer_type: number;
 }
 
-export interface OperationDetailsData {
-    operation_id: number;
-    input_tensors: TensorData[];
-    output_tensors: TensorData[];
+export interface OperationDetailsData extends Operation {
+    id: number;
+    inputs: TensorData[];
+    outputs: TensorData[];
     buffers: BufferData[];
     l1_sizes: number[];
     stack_trace: string;
@@ -59,4 +59,42 @@ export interface ReportMetaData {
     comparison_mode_pcc: number;
     root_report_path: string;
     report_name: string;
+}
+
+export interface MicroOperationInputTensor {
+    dtype: number;
+    layout: number;
+    memory_config: {
+        buffer_type: number;
+        memory_layout: number;
+        shard_spec: number | null;
+    };
+    shape: {
+        dimensions: number[];
+        padding: {
+            pad_dimensions: {
+                back: number;
+                front: number;
+            }[];
+            pad_value: number;
+            rank: number;
+        };
+        rank: number;
+    };
+    storage_type: number;
+}
+
+export interface MicroOperation {
+    input_tensor_records: MicroOperationInputTensor[];
+    operation_name: string;
+    operation_type: string;
+    program_cache_hit: boolean | null;
+    program_hash: number | null;
+    ttnn_operation_id: number; // TODO: we should lose ttnn prefix unless it has meaning. even then it should be a property
+}
+
+export interface OperationDescription extends Operation {
+    duration: number;
+    arguments: { name: string; value: string }[];
+    microOperations: MicroOperation[];
 }
