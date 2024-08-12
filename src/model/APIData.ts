@@ -35,6 +35,16 @@ export interface OperationDetailsData extends Operation {
     stack_trace: string;
 }
 
+export const defaultOperationDetailsData: OperationDetailsData = {
+    id: 0,
+    name: '',
+    inputs: [],
+    outputs: [],
+    buffers: [],
+    l1_sizes: [],
+    stack_trace: '',
+};
+
 export interface Chunk {
     address: number;
     size: number;
