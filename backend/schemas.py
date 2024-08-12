@@ -85,6 +85,7 @@ class OperationSchema(ma.SQLAlchemySchema):
     class Meta:
         model = Operation
 
+    stack_trace = fields.Method("get_stack_trace")
     operation_id = ma.auto_field()
     id = ma.Function(lambda obj: obj.operation_id)
     name = ma.auto_field()
@@ -94,6 +95,12 @@ class OperationSchema(ma.SQLAlchemySchema):
     inputs = ma.List(ma.Nested(InputTensorSchema))
     arguments = ma.List(ma.Nested(OperationArgumentsSchema))
     stack_trace = ma.auto_field()
+
+    def get_stack_trace(self, operation):
+        if hasattr(operation, "stack_trace"):
+            first_trace = next((x for x in operation.stack_trace), "")
+            return first_trace.stack_trace
+        return ""
 
 
 # Filesystem Schemas
