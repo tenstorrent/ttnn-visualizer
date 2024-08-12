@@ -11,8 +11,6 @@ import { Button, Collapse, Intent } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { useAtom } from 'jotai';
 import { isFullStackTraceAtom } from '../../store/app';
-import useRemoteConnection from '../../hooks/useRemote';
-import axios from 'axios';
 
 hljs.registerLanguage('python', python);
 
@@ -22,8 +20,16 @@ interface StackTraceProps {
 
 function StackTrace({ stackTrace }: StackTraceProps) {
     const [isFullStackTrace, setIsFullStackTrace] = useAtom(isFullStackTraceAtom);
-    const stackTraceWithHighlights = useMemo(() => hljs.highlight(stackTrace, { language: 'python' }), [stackTrace]);
-    const { readRemoteFile } = useRemoteConnection();
+    const stackTraceWithHighlights = useMemo(() => {
+        const regex = /(?<=File <span class="hljs-string">&quot;)(.*)(?=&quot;<\/span>,)/m;
+        const highlightedString = hljs.highlight(stackTrace, { language: 'python' }).value;
+        const matches = regex.exec(highlightedString);
+
+        return matches
+            ? highlightedString.replace(regex, `<a href="/" class="file-explorer" target="_blank">${matches[0]}</a>`)
+            : highlightedString;
+    }, [stackTrace]);
+    // const { readRemoteFile } = useRemoteConnection();
 
     if (!stackTrace) {
         return null;
@@ -33,22 +39,22 @@ function StackTrace({ stackTrace }: StackTraceProps) {
     const file = parts[1];
     console.info(`Attempting to read file: ${file}`);
 
-    readRemoteFile({
-        path: file,
-        host: 'THE_REMOTE_HOST',
-        port: 2222,
-        name: '',
-        username: 'YOUR_USER_NAME',
-    })
-        .then((value) => {
-            console.info(value);
-            return value;
-        })
-        .catch((err) => {
-            if (axios.isAxiosError(err)) {
-                console.error(err.message);
-            }
-        });
+    // readRemoteFile({
+    //     path: file,
+    //     host: 'THE_REMOTE_HOST',
+    //     port: 2222,
+    //     name: '',
+    //     username: 'YOUR_USER_NAME',
+    // })
+    //     .then((value) => {
+    //         console.info(value);
+    //         return value;
+    //     })
+    //     .catch((err) => {
+    //         if (axios.isAxiosError(err)) {
+    //             console.error(err.message);
+    //         }
+    //     });
 
     return (
         <pre className='stack-trace'>
@@ -61,7 +67,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                     <code
                         className='language-python code-output'
                         // eslint-disable-next-line react/no-danger
-                        dangerouslySetInnerHTML={{ __html: stackTraceWithHighlights.value }}
+                        dangerouslySetInnerHTML={{ __html: stackTraceWithHighlights }}
                     />
                 </Collapse>
             ) : (
@@ -70,7 +76,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                         className='language-python code-output'
                         // eslint-disable-next-line react/no-danger
                         dangerouslySetInnerHTML={{
-                            __html: `  File ${stackTraceWithHighlights.value.split('File')[1].trim()}`,
+                            __html: `  File ${stackTraceWithHighlights.split('File')[1].trim()}`,
                         }}
                     />
                 </div>

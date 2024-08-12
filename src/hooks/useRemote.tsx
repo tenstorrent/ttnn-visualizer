@@ -121,12 +121,15 @@ const useRemoteConnection = () => {
         },
     };
 
+    const readRemoteFile = (connection?: RemoteConnection) => {};
+
     return {
         testConnection,
         syncRemoteFolder,
         listRemoteFolders,
         mountRemoteFolder,
         persistentState,
+        readRemoteFile,
     };
 };
 
