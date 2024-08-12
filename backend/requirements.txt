@@ -12,3 +12,5 @@ flask_static_digest==0.4.1
 marshmallow-sqlalchemy==1.0.0
 setuptools==65.5.0
 python-dotenv==1.0.1
+pytest==8.3.2
+pytest-mock==3.14.0
