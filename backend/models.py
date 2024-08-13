@@ -110,12 +110,6 @@ class Device(db.Model):
 class Tensor(db.Model):
     __table__ = tensors
 
-    def producers(self):
-        return [c.operation_id for c in OutputTensor.query.filter_by(tensor_id=self.tensor_id)]
-
-    def consumers(self):
-        return [c.operation_id for c in InputTensor.query.filter_by(tensor_id=self.tensor_id)]
-
 
 class Buffer(db.Model):
     __table__ = buffers
@@ -124,7 +118,7 @@ class Buffer(db.Model):
 
 class InputTensor(db.Model):
     __table__ = input_tensors
-    tensor = db.relationship("Tensor", backref="input")
+    tensor = db.relationship("Tensor")
 
 
 class StackTrace(db.Model):
@@ -133,21 +127,17 @@ class StackTrace(db.Model):
 
 class OutputTensor(db.Model):
     __table__ = output_tensors
-    tensor = db.relationship("Tensor", backref="output")
+    tensor = db.relationship("Tensor")
 
 
 class Operation(db.Model):
     __table__ = operations
-    arguments = db.relationship("OperationArgument", backref="operation")
-    inputs = db.relationship("InputTensor", backref="operation")
-    outputs = db.relationship("OutputTensor", backref="operation")
-    buffers = db.relationship("Buffer", backref="operation")
-    stack_trace = db.relationship("StackTrace", backref="operation")
+    arguments = db.relationship("OperationArgument", lazy="joined")
+    inputs = db.relationship("InputTensor", lazy="joined")
+    outputs = db.relationship("OutputTensor", lazy="joined")
+    buffers = db.relationship("Buffer", lazy="dynamic")
+    stack_trace = db.relationship("StackTrace")
 
 
 class OperationArgument(db.Model):
     __table__ = operation_arguments
-
-
-
-

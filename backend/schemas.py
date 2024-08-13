@@ -20,7 +20,7 @@ class TensorSchema(ma.SQLAlchemyAutoSchema):
 
     shape = ma.auto_field()
     address = ma.auto_field()
-    id = ma.Function(lambda obj: obj.tensor_id, dump_only=True)
+    # id = ma.Function(lambda obj: obj.tensor_id, dump_only=True)
     producers = ma.Function(lambda obj: obj.producers(), dump_only=True)
     consumers = ma.Function(lambda obj: obj.consumers(), dump_only=True)
 
@@ -41,9 +41,9 @@ class InputOutputSchema(object):
     device_id = ma.Function(lambda obj: obj.tensor.device_id)
     buffer_type = ma.Function(lambda obj: obj.tensor.buffer_type)
     dtype = ma.Function(lambda obj: obj.tensor.dtype)
-    producers = ma.Function(lambda obj: obj.tensor.producers())
-    consumers = ma.Function(lambda obj: obj.tensor.consumers())
-    id = ma.Function(lambda obj: obj.tensor.tensor_id, dump_only=True)
+    # producers = ma.Function(lambda obj: obj.tensor.producers())
+    # consumers = ma.Function(lambda obj: obj.tensor.consumers())
+    id = ma.Function(lambda obj: obj.tensor.tensor_id)
     operation_id = ma.auto_field()
 
 
@@ -77,8 +77,8 @@ class BufferSchema(ma.SQLAlchemyAutoSchema):
     address = ma.auto_field()
     max_size_per_bank = ma.auto_field()
     buffer_type = ma.auto_field()
-    device_id = ma.Function(lambda obj: obj.device.device_id)
-    operation_id = ma.Function(lambda obj: obj.operation.operation_id)
+    # device_id = ma.Function(lambda obj: obj.device.device_id)
+    # operation_id = ma.Function(lambda obj: obj.operation.operation_id)
 
 
 class OperationSchema(ma.SQLAlchemySchema):
