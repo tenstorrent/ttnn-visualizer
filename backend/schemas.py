@@ -41,8 +41,8 @@ class InputOutputSchema(object):
     device_id = ma.Function(lambda obj: obj.tensor.device_id)
     buffer_type = ma.Function(lambda obj: obj.tensor.buffer_type)
     dtype = ma.Function(lambda obj: obj.tensor.dtype)
-    # producers = ma.Function(lambda obj: obj.tensor.producers())
-    # consumers = ma.Function(lambda obj: obj.tensor.consumers())
+    producers = ma.Function(lambda obj: obj.tensor.producers)
+    consumers = ma.Function(lambda obj: obj.tensor.consumers)
     id = ma.Function(lambda obj: obj.tensor.tensor_id)
     operation_id = ma.auto_field()
 

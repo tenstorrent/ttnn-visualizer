@@ -110,6 +110,13 @@ class Device(db.Model):
 class Tensor(db.Model):
     __table__ = tensors
 
+    @property
+    def producers(self):
+        return []
+
+    @property
+    def consumers(self):
+        return []
 
 class Buffer(db.Model):
     __table__ = buffers
@@ -119,6 +126,7 @@ class Buffer(db.Model):
 class InputTensor(db.Model):
     __table__ = input_tensors
     tensor = db.relationship("Tensor")
+
 
 
 class StackTrace(db.Model):
