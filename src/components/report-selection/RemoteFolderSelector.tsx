@@ -17,17 +17,21 @@ const formatter = new Intl.DateTimeFormat('en-US', {
 const MAX_REPORT_NAME_LENGTH = 50;
 
 const formatRemoteFolderName = (folder?: RemoteFolder, connection?: RemoteConnection) => {
-    if (!folder) {
+    const storedSelectedConnection = localStorage.getItem('selectedConnection');
+
+    if (!folder || !storedSelectedConnection) {
         return 'n/a';
     }
 
-    if (!connection) {
-        return folder.testName.length > MAX_REPORT_NAME_LENGTH
-            ? `${folder.testName.slice(0, MAX_REPORT_NAME_LENGTH)}...`
-            : folder.testName;
-    }
+    const selectedConnection: RemoteConnection = JSON.parse(storedSelectedConnection);
 
-    return `${connection.name} — ${folder.testName}`;
+    return connection?.name ?? folder.remotePath.replace(selectedConnection.path, '');
+};
+
+const getTestName = (folder: RemoteFolder) => {
+    return folder.testName.length > MAX_REPORT_NAME_LENGTH
+        ? `${folder.testName.slice(0, MAX_REPORT_NAME_LENGTH)}...`
+        : folder.testName;
 };
 
 const filterFolders =
@@ -84,6 +88,13 @@ const remoteFolderRenderer =
             }
         }
 
+        const getLabelElement = () => (
+            <>
+                <span className='test-name'>{getTestName(folder)}</span>
+                {statusIcon}
+            </>
+        );
+
         return (
             <MenuItem
                 className='remote-folder-item'
@@ -92,8 +103,9 @@ const remoteFolderRenderer =
                 key={`${formatRemoteFolderName(folder, connection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
                 text={formatRemoteFolderName(folder)}
-                // @ts-expect-error - Hack abusing label, it actually works.
-                label={statusIcon}
+                textClassName='folder-path'
+                icon={IconNames.FOLDER_CLOSE}
+                labelElement={getLabelElement()}
                 labelClassName='remote-folder-status-icon'
             />
         );
