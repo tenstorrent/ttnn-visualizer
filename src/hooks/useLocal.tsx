@@ -5,7 +5,7 @@
 import axios from 'axios';
 import { useState } from 'react';
 
-interface UploadProgress {
+export interface UploadProgress {
     progress?: number;
     estimated?: number;
 }
