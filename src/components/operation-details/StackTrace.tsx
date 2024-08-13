@@ -4,13 +4,14 @@
 
 import hljs from 'highlight.js/lib/core';
 import python from 'highlight.js/lib/languages/python';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/StackTrace.scss';
 import { Button, Collapse, Intent } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { useAtom } from 'jotai';
 import { isFullStackTraceAtom } from '../../store/app';
+import useRemoteConnection from '../../hooks/useRemote';
 
 hljs.registerLanguage('python', python);
 
@@ -18,43 +19,39 @@ interface StackTraceProps {
     stackTrace: string;
 }
 
+const FILE_PATH_REGEX = /(?<=File ")(.*)(?=")/m;
+
 function StackTrace({ stackTrace }: StackTraceProps) {
     const [isFullStackTrace, setIsFullStackTrace] = useAtom(isFullStackTraceAtom);
+    const [canReadRemoteFile, _setCanReadRemoteFile] = useState(true);
+    const [filePath, setFilePath] = useState('');
+    const { readRemoteFile } = useRemoteConnection();
+
     const stackTraceWithHighlights = useMemo(() => {
-        const regex = /(?<=File <span class="hljs-string">&quot;)(.*)(?=&quot;<\/span>,)/m;
+        const matches = FILE_PATH_REGEX.exec(stackTrace);
         const highlightedString = hljs.highlight(stackTrace, { language: 'python' }).value;
-        const matches = regex.exec(highlightedString);
 
-        return matches
-            ? highlightedString.replace(regex, `<a href="/" class="file-explorer" target="_blank">${matches[0]}</a>`)
-            : highlightedString;
+        if (matches) {
+            setFilePath(matches[0]);
+        }
+
+        return highlightedString;
     }, [stackTrace]);
-    // const { readRemoteFile } = useRemoteConnection();
 
-    if (!stackTrace) {
-        return null;
-    }
+    const handleReadRemoteFile = async () => {
+        const selectedConnection = localStorage.getItem('selectedConnection');
 
-    const parts = stackTrace.trimStart().split(' ');
-    const file = parts[1];
-    console.info(`Attempting to read file: ${file}`);
+        if (selectedConnection) {
+            const connectionWithFilePath = {
+                ...JSON.parse(selectedConnection),
+                path: filePath,
+            };
 
-    // readRemoteFile({
-    //     path: file,
-    //     host: 'THE_REMOTE_HOST',
-    //     port: 2222,
-    //     name: '',
-    //     username: 'YOUR_USER_NAME',
-    // })
-    //     .then((value) => {
-    //         console.info(value);
-    //         return value;
-    //     })
-    //     .catch((err) => {
-    //         if (axios.isAxiosError(err)) {
-    //             console.error(err.message);
-    //         }
-    //     });
+            await readRemoteFile(connectionWithFilePath);
+        }
+    };
+
+    // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
 
     return (
         <pre className='stack-trace'>
@@ -82,17 +79,31 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                 </div>
             )}
 
-            <Button
-                className={classNames({
+            <div
+                className={classNames('stack-trace-buttons', {
                     'is-sticky': isFullStackTrace,
                 })}
-                type='button'
-                minimal
-                intent={Intent.PRIMARY}
-                onClick={() => setIsFullStackTrace(!isFullStackTrace)}
             >
-                {isFullStackTrace ? 'Hide full stack trace' : 'Show full stack trace'}
-            </Button>
+                <Button
+                    type='button'
+                    minimal
+                    intent={Intent.PRIMARY}
+                    onClick={() => setIsFullStackTrace(!isFullStackTrace)}
+                >
+                    {isFullStackTrace ? 'Hide full stack trace' : 'Show full stack trace'}
+                </Button>
+
+                {canReadRemoteFile && (
+                    <Button
+                        type='button'
+                        minimal
+                        intent={Intent.SUCCESS}
+                        onClick={handleReadRemoteFile}
+                    >
+                        Read remote file
+                    </Button>
+                )}
+            </div>
         </pre>
     );
 }

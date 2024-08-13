@@ -18,29 +18,16 @@
 
     .code-output {
         text-wrap: balance;
-
-        .hljs-string {
-            .file-explorer {
-                text-decoration: underline;
-                text-underline-offset: 3px;
-
-                &:visited {
-                    color: inherit;
-                }
-
-                &:hover,
-                &:focus {
-                    color: inherit;
-                    background-color: transparent;
-                    text-decoration: none;
-                }
-            }
-        }
     }
 
-    .is-sticky {
-        position: sticky;
-        top: 0;
-        right: 0;
+    .stack-trace-buttons {
+        display: flex;
+        flex-direction: column;
+
+        &.is-sticky {
+            position: sticky;
+            top: 0;
+            right: 0;
+        }
     }
 }
