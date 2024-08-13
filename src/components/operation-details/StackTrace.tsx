@@ -4,14 +4,16 @@
 
 import hljs from 'highlight.js/lib/core';
 import python from 'highlight.js/lib/languages/python';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/StackTrace.scss';
 import { Button, Collapse, Intent } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useAtom } from 'jotai';
 import { isFullStackTraceAtom } from '../../store/app';
 import useRemoteConnection from '../../hooks/useRemote';
+import Overlay from '../Overlay';
 
 hljs.registerLanguage('python', python);
 
@@ -25,6 +27,10 @@ function StackTrace({ stackTrace }: StackTraceProps) {
     const [isFullStackTrace, setIsFullStackTrace] = useAtom(isFullStackTraceAtom);
     const [canReadRemoteFile, _setCanReadRemoteFile] = useState(true);
     const [filePath, setFilePath] = useState('');
+    const [isFetchingFile, setIsFetchingFile] = useState(false);
+    const [fileContents, setFileContents] = useState('');
+    const [isViewingFile, setIsViewingFile] = useState(false);
+    const toggleViewingFile = useCallback(() => setIsViewingFile((open) => !open), [setIsViewingFile]);
     const { readRemoteFile } = useRemoteConnection();
 
     const stackTraceWithHighlights = useMemo(() => {
@@ -38,16 +44,34 @@ function StackTrace({ stackTrace }: StackTraceProps) {
         return highlightedString;
     }, [stackTrace]);
 
+    const fileWithHighlights = useMemo(() => {
+        return fileContents ? hljs.highlight(fileContents, { language: 'python' }).value : '';
+    }, [fileContents]);
+
     const handleReadRemoteFile = async () => {
         const selectedConnection = localStorage.getItem('selectedConnection');
 
-        if (selectedConnection) {
+        if (fileContents) {
+            setIsViewingFile(true);
+            return;
+        }
+
+        if (selectedConnection && !fileContents) {
             const connectionWithFilePath = {
                 ...JSON.parse(selectedConnection),
                 path: filePath,
             };
 
-            await readRemoteFile(connectionWithFilePath);
+            setIsFetchingFile(true);
+
+            const response = await readRemoteFile(connectionWithFilePath);
+
+            setIsFetchingFile(false);
+
+            if (response.status === 200) {
+                setFileContents(response.data);
+                setIsViewingFile(true);
+            }
         }
     };
 
@@ -99,11 +123,30 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                         minimal
                         intent={Intent.SUCCESS}
                         onClick={handleReadRemoteFile}
+                        rightIcon={IconNames.DOCUMENT_OPEN}
+                        disabled={isFetchingFile}
                     >
                         Read remote file
                     </Button>
                 )}
             </div>
+
+            <Overlay
+                isOpen={isViewingFile}
+                onClose={toggleViewingFile}
+            >
+                {fileWithHighlights && (
+                    <pre className='stack-trace'>
+                        <code
+                            className='language-python code-output'
+                            // eslint-disable-next-line react/no-danger
+                            dangerouslySetInnerHTML={{
+                                __html: fileWithHighlights,
+                            }}
+                        />
+                    </pre>
+                )}
+            </Overlay>
         </pre>
     );
 }

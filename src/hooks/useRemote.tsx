@@ -122,19 +122,10 @@ const useRemoteConnection = () => {
     };
 
     const readRemoteFile = async (connection?: RemoteConnection) => {
-        const response = await axios.post(`${import.meta.env.VITE_API_ROOT}/remote/read`, connection);
+        // Debug path
+        connection.path = '/home/ctr-dblundell/proj_sw/user_dev/ctr-dblundell/reports/app.py';
 
-        // .then((value) => {
-        //     console.info(value);
-        //     return value;
-        // })
-        // .catch((err) => {
-        //     if (axios.isAxiosError(err)) {
-        //         console.error(err.message);
-        //     }
-        // });
-
-        return response;
+        return axios.post(`${import.meta.env.VITE_API_ROOT}/remote/read`, connection);
     };
 
     return {
