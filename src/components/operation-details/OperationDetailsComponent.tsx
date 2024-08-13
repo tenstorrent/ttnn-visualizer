@@ -42,7 +42,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [zoomedInView, setZoomedInView] = useState(false);
 
     const {
-        operationDetails: { data: operationDetails, isLoading },
+        operationDetails: { data: operationDetails, isLoading, status },
     } = useOperationDetails(operationId);
 
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
@@ -61,10 +61,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
         return (
-            <OperationDetailsNavigation
-                operationId={operationId}
-                isLoading={isLoading}
-            />
+            <>
+                <OperationDetailsNavigation
+                    operationId={operationId}
+                    isLoading={isLoading}
+                />
+                {status === 'error' && <h3 className='not-found-message'>Operation {operationId} not found</h3>}
+            </>
         );
     }
 

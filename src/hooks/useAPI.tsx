@@ -4,11 +4,35 @@
 
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
-import { MicroOperation, OperationDescription, OperationDetailsData, ReportMetaData } from '../model/APIData';
+import {
+    MicroOperation,
+    OperationDescription,
+    OperationDetailsData,
+    ReportMetaData,
+    defaultOperationDetailsData,
+} from '../model/APIData';
 
-const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
-    const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/operations/${id}`);
-    return operationDetails;
+const fetchOperationDetails = async (id: number | null): Promise<OperationDetailsData> => {
+    if (id === null) {
+        return defaultOperationDetailsData;
+    }
+    try {
+        const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/operations/${id}`, {
+            maxRedirects: 1,
+        });
+        return operationDetails;
+    } catch (error: unknown) {
+        if (axios.isAxiosError(error)) {
+            if (error.response && error.response.status >= 400 && error.response.status < 500) {
+                // we may want to handle this differently
+                throw error;
+            }
+            if (error.response && error.response.status >= 500) {
+                throw error;
+            }
+        }
+    }
+    return defaultOperationDetailsData;
 };
 const fetchOperations = async (): Promise<OperationDescription[]> => {
     const [{ data: operationList }, { data: microOperations }] = await Promise.all([
@@ -46,16 +70,19 @@ export const useAllBuffers = () => {
     return useQuery<{ operation_id: number; buffers: [] }[], AxiosError>('get-operation-buffers', fetchAllBuffers);
 };
 
-export const useOperationDetails = (operationId: number) => {
+export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
     const operation = operations?.filter((_operation) => {
         return _operation.id === operationId;
     })[0];
-    const operationDetails = useQuery<OperationDetailsData>(['get-operation-detail', operationId], () =>
-        fetchOperationDetails(operationId),
+    const operationDetails = useQuery<OperationDetailsData>(
+        ['get-operation-detail', operationId],
+        () => fetchOperationDetails(operationId),
+        {
+            retry: 2,
+            retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
+        },
     );
-
-    // TODO: consider useQueries or include operation data on BE
 
     return {
         operation,
@@ -71,7 +98,7 @@ export const usePreviousOperationDetails = (operationId: number) => {
         return operationList[index + 1]?.id === operationId;
     });
 
-    return useOperationDetails(operation ? operation.id : -1);
+    return useOperationDetails(operation ? operation.id : null);
 };
 
 export const usePreviousOperation = (operationId: number) => {
