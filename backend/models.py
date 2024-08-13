@@ -8,6 +8,8 @@ from sqlalchemy import (
     Float,
 )
 
+from sqlalchemy_serializer import SerializerMixin
+
 from backend.extensions import db
 
 operations = Table(
@@ -103,23 +105,26 @@ devices = Table(
 )
 
 
-class Device(db.Model):
+class Device(db.Model, SerializerMixin):
     __table__ = devices
 
 
-class Tensor(db.Model):
+class Tensor(db.Model, SerializerMixin):
     __table__ = tensors
+    serialize_rules = ('-input', '-output', 'producers', 'consumers')
 
+    @property
     def producers(self):
         return [c.operation_id for c in OutputTensor.query.filter_by(tensor_id=self.tensor_id)]
 
+    @property
     def consumers(self):
         return [c.operation_id for c in InputTensor.query.filter_by(tensor_id=self.tensor_id)]
 
 
-class Buffer(db.Model):
+class Buffer(db.Model, SerializerMixin):
     __table__ = buffers
-    device = db.relationship("Device")
+    serialize_rules = ('-operation',)
 
 
 class InputTensor(db.Model):
@@ -136,7 +141,7 @@ class OutputTensor(db.Model):
     tensor = db.relationship("Tensor", backref="output")
 
 
-class Operation(db.Model):
+class Operation(db.Model, SerializerMixin):
     __table__ = operations
     arguments = db.relationship("OperationArgument", backref="operation")
     inputs = db.relationship("InputTensor", backref="operation")
