@@ -25,6 +25,7 @@ const FILE_PATH_REGEX = /(?<=File ")(.*)(?=")/m;
 
 function StackTrace({ stackTrace }: StackTraceProps) {
     const [isFullStackTrace, setIsFullStackTrace] = useAtom(isFullStackTraceAtom);
+    // TODO: Include check for whether the remote file exists or not
     const [canReadRemoteFile, _setCanReadRemoteFile] = useState(true);
     const [filePath, setFilePath] = useState('');
     const [isFetchingFile, setIsFetchingFile] = useState(false);
@@ -64,14 +65,22 @@ function StackTrace({ stackTrace }: StackTraceProps) {
 
             setIsFetchingFile(true);
 
-            const response = await readRemoteFile(connectionWithFilePath);
+            try {
+                const response = await readRemoteFile(connectionWithFilePath);
+
+                if (response?.status === 200) {
+                    setFileContents(response.data);
+                } else {
+                    setFileContents(
+                        'Error reading file. Either the file is not available or the connection is not valid.',
+                    );
+                }
+            } catch (error) {
+                setFileContents('Error reading file. Either the file is not available or the connection is not valid.');
+            }
 
             setIsFetchingFile(false);
-
-            if (response.status === 200) {
-                setFileContents(response.data);
-                setIsViewingFile(true);
-            }
+            setIsViewingFile(true);
         }
     };
 
