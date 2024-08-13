@@ -3,10 +3,8 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 export const toHex = (num: number): string => {
-    if (num < 0) {
-        return toHex(0xffffffff + num + 1);
-    }
-    return `0x${num.toString(16).toUpperCase()}`;
+    // eslint-disable-next-line no-bitwise
+    return `0x${(num >>> 0).toString(16).toUpperCase()}`;
 };
 
 export const formatSize = (number: number): string => {
