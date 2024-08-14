@@ -1,0 +1,9 @@
+.progress-bar {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+
+    .status {
+        margin-bottom: 5px;
+    }
+}
