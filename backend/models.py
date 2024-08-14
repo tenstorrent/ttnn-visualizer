@@ -7,6 +7,7 @@ from sqlalchemy import (
     Text,
     Float,
 )
+from sqlalchemy.orm import relationship
 
 from backend.extensions import db
 
@@ -109,24 +110,18 @@ class Device(db.Model):
 
 class Tensor(db.Model):
     __table__ = tensors
+    input_tensors = relationship("InputTensor", back_populates="tensor", lazy="joined")
+    output_tensors = relationship("OutputTensor", back_populates="tensor", lazy="joined")
 
-    @property
-    def producers(self):
-        return []
 
-    @property
-    def consumers(self):
-        return []
 
 class Buffer(db.Model):
     __table__ = buffers
-    device = db.relationship("Device")
 
 
 class InputTensor(db.Model):
     __table__ = input_tensors
-    tensor = db.relationship("Tensor")
-
+    tensor = db.relationship("Tensor", lazy="joined", back_populates="input_tensors")
 
 
 class StackTrace(db.Model):
@@ -135,7 +130,7 @@ class StackTrace(db.Model):
 
 class OutputTensor(db.Model):
     __table__ = output_tensors
-    tensor = db.relationship("Tensor")
+    tensor = db.relationship("Tensor", lazy="joined", back_populates="output_tensors")
 
 
 class Operation(db.Model):
@@ -143,7 +138,6 @@ class Operation(db.Model):
     arguments = db.relationship("OperationArgument", lazy="joined")
     inputs = db.relationship("InputTensor", lazy="joined")
     outputs = db.relationship("OutputTensor", lazy="joined")
-    buffers = db.relationship("Buffer", lazy="dynamic")
     stack_trace = db.relationship("StackTrace")
 
 
