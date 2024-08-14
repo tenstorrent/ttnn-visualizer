@@ -11,13 +11,14 @@
     color: $tt-white-text;
     font-size: 20px;
 
-    [type="button"] .bp5-icon {
+    [type='button'] .bp5-icon {
         color: $tt-white-text;
     }
 
     .operation-icon.bp5-icon svg {
-        fill: $tt-yellow;
+        fill: $tt-tint-yellow;
     }
+
     .highlighted-text {
         color: $tt-white-text;
         font-size: 20px;
