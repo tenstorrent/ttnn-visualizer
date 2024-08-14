@@ -33,7 +33,7 @@ class Config(object):
 
 
 class DevelopmentConfig(Config):
-    SQLALCHEMY_ECHO = True
+    pass
 
 
 class TestingConfig(Config):
