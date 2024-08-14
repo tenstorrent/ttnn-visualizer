@@ -43,6 +43,14 @@ class InputOutputSchema(object):
     consumers = ma.Function(lambda obj: obj.tensor.consumers)
     id = ma.Function(lambda obj: obj.tensor.tensor_id)
     operation_id = ma.auto_field()
+    consumers = fields.Method("get_consumers")
+    producers = fields.Method("get_producers")
+
+    def get_producers(self, obj):
+        return [ot.operation_id for ot in obj.tensor.output_tensors]
+
+    def get_consumers(self, obj):
+        return [it.operation_id for it in obj.tensor.input_tensors]
 
 
 class OutputTensorSchema(ma.SQLAlchemyAutoSchema, InputOutputSchema):
@@ -75,8 +83,8 @@ class BufferSchema(ma.SQLAlchemyAutoSchema):
     address = ma.auto_field()
     max_size_per_bank = ma.auto_field()
     buffer_type = ma.auto_field()
-    # device_id = ma.Function(lambda obj: obj.device.device_id)
-    # operation_id = ma.Function(lambda obj: obj.operation.operation_id)
+    device_id = ma.Function(lambda obj: obj.device.device_id)
+    operation_id = ma.Function(lambda obj: obj.operation.operation_id)
 
 
 class OperationSchema(ma.SQLAlchemySchema):
@@ -87,10 +95,10 @@ class OperationSchema(ma.SQLAlchemySchema):
     id = ma.Function(lambda obj: obj.operation_id)
     name = ma.auto_field()
     duration = ma.auto_field()
-    buffers = ma.List(ma.Nested(BufferSchema))
-    outputs = ma.List(ma.Nested(OutputTensorSchema))
-    inputs = ma.List(ma.Nested(InputTensorSchema))
-    arguments = ma.List(ma.Nested(OperationArgumentsSchema))
+    buffers = ma.List(ma.Nested(BufferSchema()))
+    outputs = ma.List(ma.Nested(OutputTensorSchema()))
+    inputs = ma.List(ma.Nested(InputTensorSchema()))
+    arguments = ma.List(ma.Nested(OperationArgumentsSchema()))
 
 
 # Filesystem Schemas
