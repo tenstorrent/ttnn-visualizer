@@ -10,8 +10,8 @@ import 'styles/components/StackTrace.scss';
 import { Button, ButtonGroup, Collapse, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
-import { useAtom } from 'jotai';
-import { isFullStackTraceAtom } from '../../store/app';
+import { useAtom, useAtomValue } from 'jotai';
+import { isFullStackTraceAtom, reportLocationAtom } from '../../store/app';
 import useRemoteConnection from '../../hooks/useRemote';
 import Overlay from '../Overlay';
 
@@ -33,6 +33,10 @@ function StackTrace({ stackTrace }: StackTraceProps) {
     const [isViewingFile, setIsViewingFile] = useState(false);
     const toggleViewingFile = useCallback(() => setIsViewingFile((open) => !open), [setIsViewingFile]);
     const { readRemoteFile, persistentState } = useRemoteConnection();
+    const connectionType = useAtomValue(reportLocationAtom);
+
+    // TODO: Look at how we store this as an atom vs useAppConfig localStorage
+    const isRemote = connectionType === 'remote';
 
     const stackTraceWithHighlights = useMemo(() => {
         const matches = FILE_PATH_REGEX.exec(stackTrace);
@@ -124,7 +128,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                     </Tooltip>
 
                     <Tooltip
-                        content='View external source file'
+                        content={isRemote ? 'View external source file' : 'Cannot view local source file'}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
@@ -133,7 +137,8 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                             intent={Intent.SUCCESS}
                             onClick={handleReadRemoteFile}
                             icon={IconNames.DOCUMENT_OPEN}
-                            disabled={isFetchingFile}
+                            disabled={isFetchingFile || !isRemote}
+                            loading={isFetchingFile}
                         />
                     </Tooltip>
                 </ButtonGroup>
