@@ -24,6 +24,7 @@ from backend.schemas import (
     OperationSchema,
     TensorSchema,
 )
+from backend.utils import timer
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ def health_check():
 
 
 @api.route("/operations", methods=["GET"])
+@timer
 def operation_list():
     operations = Operation.query.all()
     return OperationSchema(
