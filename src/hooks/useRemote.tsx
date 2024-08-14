@@ -125,7 +125,14 @@ const useRemoteConnection = () => {
         // Debug path
         connection.path = '/home/ctr-dblundell/proj_sw/user_dev/ctr-dblundell/reports/app.py';
 
-        return axios.post(`${import.meta.env.VITE_API_ROOT}/remote/read`, connection);
+        try {
+            const response = await axios.post(`${import.meta.env.VITE_API_ROOT}/remote/read`, connection);
+
+            return response.data;
+        } catch (error) {
+            // Typescript makes me do this
+            return axios.isAxiosError(error) ? error.message : error;
+        }
     };
 
     return {

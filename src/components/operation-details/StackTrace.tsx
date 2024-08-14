@@ -7,7 +7,7 @@ import python from 'highlight.js/lib/languages/python';
 import { useCallback, useMemo, useState } from 'react';
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/StackTrace.scss';
-import { Button, Collapse, Intent } from '@blueprintjs/core';
+import { Button, ButtonGroup, Collapse, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useAtom } from 'jotai';
@@ -25,14 +25,14 @@ const FILE_PATH_REGEX = /(?<=File ")(.*)(?=")/m;
 
 function StackTrace({ stackTrace }: StackTraceProps) {
     const [isFullStackTrace, setIsFullStackTrace] = useAtom(isFullStackTraceAtom);
-    // TODO: Include check for whether the remote file exists or not
-    const [canReadRemoteFile, _setCanReadRemoteFile] = useState(true);
+    // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
+    // const [canReadRemoteFile, setCanReadRemoteFile] = useState(true);
     const [filePath, setFilePath] = useState('');
     const [isFetchingFile, setIsFetchingFile] = useState(false);
     const [fileContents, setFileContents] = useState('');
     const [isViewingFile, setIsViewingFile] = useState(false);
     const toggleViewingFile = useCallback(() => setIsViewingFile((open) => !open), [setIsViewingFile]);
-    const { readRemoteFile } = useRemoteConnection();
+    const { readRemoteFile, persistentState } = useRemoteConnection();
 
     const stackTraceWithHighlights = useMemo(() => {
         const matches = FILE_PATH_REGEX.exec(stackTrace);
@@ -50,7 +50,12 @@ function StackTrace({ stackTrace }: StackTraceProps) {
     }, [fileContents]);
 
     const handleReadRemoteFile = async () => {
-        const selectedConnection = localStorage.getItem('selectedConnection');
+        const { selectedConnection } = persistentState;
+
+        if (!selectedConnection) {
+            setFileContents('No connection selected');
+            setIsViewingFile(true);
+        }
 
         if (fileContents) {
             setIsViewingFile(true);
@@ -59,32 +64,19 @@ function StackTrace({ stackTrace }: StackTraceProps) {
 
         if (selectedConnection && !fileContents) {
             const connectionWithFilePath = {
-                ...JSON.parse(selectedConnection),
+                ...selectedConnection,
                 path: filePath,
             };
 
             setIsFetchingFile(true);
 
-            try {
-                const response = await readRemoteFile(connectionWithFilePath);
-
-                if (response?.status === 200) {
-                    setFileContents(response.data);
-                } else {
-                    setFileContents(
-                        'Error reading file. Either the file is not available or the connection is not valid.',
-                    );
-                }
-            } catch (error) {
-                setFileContents('Error reading file. Either the file is not available or the connection is not valid.');
-            }
+            const response = await readRemoteFile(connectionWithFilePath);
+            setFileContents(response);
 
             setIsFetchingFile(false);
             setIsViewingFile(true);
         }
     };
-
-    // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
 
     return (
         <pre className='stack-trace'>
@@ -117,27 +109,34 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                     'is-sticky': isFullStackTrace,
                 })}
             >
-                <Button
-                    type='button'
-                    minimal
-                    intent={Intent.PRIMARY}
-                    onClick={() => setIsFullStackTrace(!isFullStackTrace)}
-                >
-                    {isFullStackTrace ? 'Hide full stack trace' : 'Show full stack trace'}
-                </Button>
-
-                {canReadRemoteFile && (
-                    <Button
-                        type='button'
-                        minimal
-                        intent={Intent.SUCCESS}
-                        onClick={handleReadRemoteFile}
-                        rightIcon={IconNames.DOCUMENT_OPEN}
-                        disabled={isFetchingFile}
+                <ButtonGroup>
+                    <Tooltip
+                        content={isFullStackTrace ? 'Collapse stack trace' : 'Expand stack trace'}
+                        placement={PopoverPosition.TOP}
                     >
-                        Read remote file
-                    </Button>
-                )}
+                        <Button
+                            type='button'
+                            minimal
+                            intent={Intent.PRIMARY}
+                            onClick={() => setIsFullStackTrace(!isFullStackTrace)}
+                            icon={isFullStackTrace ? IconNames.CARET_UP : IconNames.CARET_DOWN}
+                        />
+                    </Tooltip>
+
+                    <Tooltip
+                        content='View external source file'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            type='button'
+                            minimal
+                            intent={Intent.SUCCESS}
+                            onClick={handleReadRemoteFile}
+                            icon={IconNames.DOCUMENT_OPEN}
+                            disabled={isFetchingFile}
+                        />
+                    </Tooltip>
+                </ButtonGroup>
             </div>
 
             <Overlay
