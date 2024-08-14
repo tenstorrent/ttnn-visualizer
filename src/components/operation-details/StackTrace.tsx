@@ -4,7 +4,7 @@
 
 import hljs from 'highlight.js/lib/core';
 import python from 'highlight.js/lib/languages/python';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/StackTrace.scss';
 import { Button, ButtonGroup, Collapse, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
@@ -34,6 +34,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
     const toggleViewingFile = useCallback(() => setIsViewingFile((open) => !open), [setIsViewingFile]);
     const { readRemoteFile, persistentState } = useRemoteConnection();
     const connectionType = useAtomValue(reportLocationAtom);
+    const scrollElementRef = useRef<null | HTMLPreElement>(null);
 
     // TODO: Look at how we store this as an atom vs useAppConfig localStorage
     const isRemote = connectionType === 'remote';
@@ -77,8 +78,19 @@ function StackTrace({ stackTrace }: StackTraceProps) {
         }
     };
 
+    const handleToggleStackTrace = () => {
+        setIsFullStackTrace(!isFullStackTrace);
+
+        if (isFullStackTrace) {
+            scrollElementRef?.current?.scrollIntoView();
+        }
+    };
+
     return (
-        <pre className='stack-trace'>
+        <pre
+            className='stack-trace'
+            ref={scrollElementRef}
+        >
             {isFullStackTrace ? (
                 <Collapse
                     isOpen={isFullStackTrace}
@@ -117,7 +129,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                             type='button'
                             minimal
                             intent={Intent.PRIMARY}
-                            onClick={() => setIsFullStackTrace(!isFullStackTrace)}
+                            onClick={handleToggleStackTrace}
                             icon={isFullStackTrace ? IconNames.CARET_UP : IconNames.CARET_DOWN}
                         />
                     </Tooltip>
