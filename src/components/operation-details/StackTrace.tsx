@@ -56,17 +56,12 @@ function StackTrace({ stackTrace }: StackTraceProps) {
     const handleReadRemoteFile = async () => {
         const { selectedConnection } = persistentState;
 
-        if (!selectedConnection) {
-            setFileContents('No connection selected');
-            setIsViewingFile(true);
-        }
-
         if (fileContents) {
             setIsViewingFile(true);
             return;
         }
 
-        if (selectedConnection && !fileContents) {
+        if (selectedConnection && !fileContents && isRemote) {
             const connectionWithFilePath = {
                 ...selectedConnection,
                 path: filePath,
@@ -137,7 +132,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                             intent={Intent.SUCCESS}
                             onClick={handleReadRemoteFile}
                             icon={IconNames.DOCUMENT_OPEN}
-                            disabled={isFetchingFile || !isRemote}
+                            disabled={isFetchingFile || !persistentState.selectedConnection || !isRemote}
                             loading={isFetchingFile}
                         />
                     </Tooltip>
