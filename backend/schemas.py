@@ -20,9 +20,7 @@ class TensorSchema(ma.SQLAlchemyAutoSchema):
 
     shape = ma.auto_field()
     address = ma.auto_field()
-    # id = ma.Function(lambda obj: obj.tensor_id, dump_only=True)
-    producers = ma.Function(lambda obj: obj.producers(), dump_only=True)
-    consumers = ma.Function(lambda obj: obj.consumers(), dump_only=True)
+    id = ma.Function(lambda obj: obj.tensor_id, dump_only=True)
 
 
 class StackTraceSchema(ma.SQLAlchemyAutoSchema):
