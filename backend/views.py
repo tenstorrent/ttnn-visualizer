@@ -11,6 +11,7 @@ from backend.models import (
     Operation,
     Tensor,
 )
+from backend.queries import get_operations
 from backend.remotes import (
     RemoteConnection,
     RemoteFolder,
@@ -29,6 +30,8 @@ from backend.utils import timer
 logger = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__, url_prefix="/api")
+REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath('data')
+ACTIVE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath('active')
 
 
 @api.route("/up", methods=["GET", "POST"])
@@ -39,14 +42,8 @@ def health_check():
 @api.route("/operations", methods=["GET"])
 @timer
 def operation_list():
-    operations = Operation.query.all()
-    return OperationSchema(
-        many=True,
-        exclude=[
-            "buffers",
-            "operation_id",
-        ],
-    ).dump(operations)
+    return get_operations(ACTIVE_DATA_DIRECTORY)
+
 
 
 @api.route("/operations/<operation_id>", methods=["GET"])
