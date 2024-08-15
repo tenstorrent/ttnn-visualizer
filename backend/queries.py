@@ -323,8 +323,6 @@ def query_consumer_operation_ids(report_path, tensor_id):
 
 
 def get_operation_details(report_path, operation_id, exclusions=None):
-    if exclusions is None:
-        exclusions = []
     buffers = [] # use list(query_buffers(report_path, operation_id))
     input_tensors = list(query_input_tensors(report_path, operation_id))
     output_tensors = list(query_output_tensors(report_path, operation_id))
@@ -335,7 +333,9 @@ def get_operation_details(report_path, operation_id, exclusions=None):
 
 def get_operations(report_path):
     operation_list = list(query_operations(report_path))
-    return [get_operation_details(report_path, o.operation_id) for o in operation_list]
+    return [
+        dict(**o.__dict__, **get_operation_details(report_path, o.operation_id)) for o in operation_list
+    ]
 
 
 
