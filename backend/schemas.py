@@ -81,7 +81,6 @@ class BufferSchema(ma.SQLAlchemyAutoSchema):
     max_size_per_bank = ma.auto_field()
     buffer_type = ma.auto_field()
     device_id = ma.Function(lambda obj: obj.device.device_id)
-    operation_id = ma.Function(lambda obj: obj.operation.operation_id)
 
 
 class OperationSchema(ma.SQLAlchemySchema):
