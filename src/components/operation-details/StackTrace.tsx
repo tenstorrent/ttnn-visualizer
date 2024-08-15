@@ -23,6 +23,12 @@ interface StackTraceProps {
 
 const FILE_PATH_REGEX = /(?<=File ")(.*)(?=")/m;
 
+function isTopOfElementInViewport(element: HTMLElement): boolean {
+    const elementPosition = element.getBoundingClientRect();
+
+    return elementPosition.top > window.scrollY;
+}
+
 function StackTrace({ stackTrace }: StackTraceProps) {
     const [isFullStackTrace, setIsFullStackTrace] = useAtom(isFullStackTraceAtom);
     // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
@@ -81,7 +87,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
     const handleToggleStackTrace = () => {
         setIsFullStackTrace(!isFullStackTrace);
 
-        if (isFullStackTrace) {
+        if (isFullStackTrace && scrollElementRef?.current && !isTopOfElementInViewport(scrollElementRef.current)) {
             scrollElementRef?.current?.scrollIntoView();
         }
     };
@@ -130,7 +136,8 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                             minimal
                             intent={Intent.PRIMARY}
                             onClick={handleToggleStackTrace}
-                            icon={isFullStackTrace ? IconNames.CARET_UP : IconNames.CARET_DOWN}
+                            icon={isFullStackTrace ? IconNames.DOUBLE_CHEVRON_UP : IconNames.DOUBLE_CHEVRON_RIGHT}
+                            // text={isFullStackTrace ? 'Collapse' : 'Expand'}
                         />
                     </Tooltip>
 
@@ -146,6 +153,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                             icon={IconNames.DOCUMENT_OPEN}
                             disabled={isFetchingFile || !persistentState.selectedConnection || !isRemote}
                             loading={isFetchingFile}
+                            // text='Source'
                         />
                     </Tooltip>
                 </ButtonGroup>
