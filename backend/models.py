@@ -7,6 +7,7 @@ from sqlalchemy import (
     Text,
     Float,
 )
+from sqlalchemy.orm import relationship
 
 from backend.extensions import db
 
@@ -109,22 +110,18 @@ class Device(db.Model):
 
 class Tensor(db.Model):
     __table__ = tensors
+    input_tensors = relationship("InputTensor", back_populates="tensor", lazy="joined")
+    output_tensors = relationship("OutputTensor", back_populates="tensor", lazy="joined")
 
-    def producers(self):
-        return [c.operation_id for c in OutputTensor.query.filter_by(tensor_id=self.tensor_id)]
-
-    def consumers(self):
-        return [c.operation_id for c in InputTensor.query.filter_by(tensor_id=self.tensor_id)]
 
 
 class Buffer(db.Model):
     __table__ = buffers
-    device = db.relationship("Device")
 
 
 class InputTensor(db.Model):
     __table__ = input_tensors
-    tensor = db.relationship("Tensor", backref="input")
+    tensor = db.relationship("Tensor", lazy="joined", back_populates="input_tensors")
 
 
 class StackTrace(db.Model):
@@ -133,21 +130,16 @@ class StackTrace(db.Model):
 
 class OutputTensor(db.Model):
     __table__ = output_tensors
-    tensor = db.relationship("Tensor", backref="output")
+    tensor = db.relationship("Tensor", lazy="joined", back_populates="output_tensors")
 
 
 class Operation(db.Model):
     __table__ = operations
-    arguments = db.relationship("OperationArgument", backref="operation")
-    inputs = db.relationship("InputTensor", backref="operation")
-    outputs = db.relationship("OutputTensor", backref="operation")
-    buffers = db.relationship("Buffer", backref="operation")
-    stack_trace = db.relationship("StackTrace", backref="operation")
+    arguments = db.relationship("OperationArgument", lazy="joined")
+    inputs = db.relationship("InputTensor", lazy="joined")
+    outputs = db.relationship("OutputTensor", lazy="joined")
+    stack_trace = db.relationship("StackTrace")
 
 
 class OperationArgument(db.Model):
     __table__ = operation_arguments
-
-
-
-

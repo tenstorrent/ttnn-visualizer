@@ -21,8 +21,6 @@ class TensorSchema(ma.SQLAlchemyAutoSchema):
     shape = ma.auto_field()
     address = ma.auto_field()
     id = ma.Function(lambda obj: obj.tensor_id, dump_only=True)
-    producers = ma.Function(lambda obj: obj.producers(), dump_only=True)
-    consumers = ma.Function(lambda obj: obj.consumers(), dump_only=True)
 
 
 class StackTraceSchema(ma.SQLAlchemyAutoSchema):
@@ -33,7 +31,8 @@ class StackTraceSchema(ma.SQLAlchemyAutoSchema):
 
 
 class InputOutputSchema(object):
-    # TODO - We can probably create a model to avoid backrefs
+    id = ma.Function(lambda obj: obj.tensor.tensor_id)
+    operation_id = ma.auto_field()
     shape = ma.Function(lambda obj: obj.tensor.shape)
     address = ma.Function(lambda obj: obj.tensor.address)
     layout = ma.Function(lambda obj: obj.tensor.layout)
@@ -41,10 +40,14 @@ class InputOutputSchema(object):
     device_id = ma.Function(lambda obj: obj.tensor.device_id)
     buffer_type = ma.Function(lambda obj: obj.tensor.buffer_type)
     dtype = ma.Function(lambda obj: obj.tensor.dtype)
-    producers = ma.Function(lambda obj: obj.tensor.producers())
-    consumers = ma.Function(lambda obj: obj.tensor.consumers())
-    id = ma.Function(lambda obj: obj.tensor.tensor_id, dump_only=True)
-    operation_id = ma.auto_field()
+    consumers = fields.Method("get_consumers")
+    producers = fields.Method("get_producers")
+
+    def get_producers(self, obj):
+        return [ot.operation_id for ot in obj.tensor.output_tensors]
+
+    def get_consumers(self, obj):
+        return [it.operation_id for it in obj.tensor.input_tensors]
 
 
 class OutputTensorSchema(ma.SQLAlchemyAutoSchema, InputOutputSchema):
@@ -89,10 +92,10 @@ class OperationSchema(ma.SQLAlchemySchema):
     id = ma.Function(lambda obj: obj.operation_id)
     name = ma.auto_field()
     duration = ma.auto_field()
-    buffers = ma.List(ma.Nested(BufferSchema))
-    outputs = ma.List(ma.Nested(OutputTensorSchema))
-    inputs = ma.List(ma.Nested(InputTensorSchema))
-    arguments = ma.List(ma.Nested(OperationArgumentsSchema))
+    buffers = ma.List(ma.Nested(BufferSchema()))
+    outputs = ma.List(ma.Nested(OutputTensorSchema()))
+    inputs = ma.List(ma.Nested(InputTensorSchema()))
+    arguments = ma.List(ma.Nested(OperationArgumentsSchema()))
 
 
 # Filesystem Schemas
