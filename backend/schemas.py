@@ -31,7 +31,7 @@ class StackTraceSchema(ma.SQLAlchemyAutoSchema):
 
 
 class InputOutputSchema(object):
-    id = ma.Function(lambda obj: obj.tensor.tensor_id)
+    id = ma.Function(lambda obj: obj.tensor_id)
     operation_id = ma.auto_field()
     shape = ma.Function(lambda obj: obj.tensor.shape)
     address = ma.Function(lambda obj: obj.tensor.address)
@@ -44,10 +44,10 @@ class InputOutputSchema(object):
     producers = fields.Method("get_producers")
 
     def get_producers(self, obj):
-        return [ot.operation_id for ot in obj.tensor.output_tensors]
+        return []
 
     def get_consumers(self, obj):
-        return [it.operation_id for it in obj.tensor.input_tensors]
+        return []
 
 
 class OutputTensorSchema(ma.SQLAlchemyAutoSchema, InputOutputSchema):
@@ -101,6 +101,7 @@ class OperationSchema(ma.SQLAlchemySchema):
         if obj.stack_trace and len(obj.stack_trace):
             return next(x for x in obj.stack_trace).stack_trace
         return ""
+
 
 # Filesystem Schemas
 class RemoteConnectionSchema(ma.Schema):
