@@ -139,7 +139,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                             className={classNames({
                                 'rotate-180': isFullStackTrace,
                             })}
-                            icon={IconNames.BRING_DATA}
+                            icon={isFullStackTrace ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
                         />
                     </Tooltip>
 
