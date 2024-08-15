@@ -138,7 +138,7 @@ class Operation(db.Model):
     arguments = db.relationship("OperationArgument", lazy="joined")
     inputs = db.relationship("InputTensor", lazy="joined")
     outputs = db.relationship("OutputTensor", lazy="joined")
-    stack_trace = db.relationship("StackTrace")
+    stack_trace = db.relationship("StackTrace", lazy="joined")
     buffers = db.relationship("Buffer")
 
 
