@@ -136,8 +136,10 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                             minimal
                             intent={Intent.PRIMARY}
                             onClick={handleToggleStackTrace}
-                            icon={isFullStackTrace ? IconNames.DOUBLE_CHEVRON_UP : IconNames.DOUBLE_CHEVRON_RIGHT}
-                            // text={isFullStackTrace ? 'Collapse' : 'Expand'}
+                            className={classNames({
+                                'rotate-180': isFullStackTrace,
+                            })}
+                            icon={IconNames.BRING_DATA}
                         />
                     </Tooltip>
 
@@ -153,7 +155,6 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                             icon={IconNames.DOCUMENT_OPEN}
                             disabled={isFetchingFile || !persistentState.selectedConnection || !isRemote}
                             loading={isFetchingFile}
-                            // text='Source'
                         />
                     </Tooltip>
                 </ButtonGroup>
