@@ -31,7 +31,8 @@ class StackTraceSchema(ma.SQLAlchemyAutoSchema):
 
 
 class InputOutputSchema(object):
-    # TODO - We can probably create a model to avoid backrefs
+    id = ma.Function(lambda obj: obj.tensor.tensor_id)
+    operation_id = ma.auto_field()
     shape = ma.Function(lambda obj: obj.tensor.shape)
     address = ma.Function(lambda obj: obj.tensor.address)
     layout = ma.Function(lambda obj: obj.tensor.layout)
@@ -39,10 +40,6 @@ class InputOutputSchema(object):
     device_id = ma.Function(lambda obj: obj.tensor.device_id)
     buffer_type = ma.Function(lambda obj: obj.tensor.buffer_type)
     dtype = ma.Function(lambda obj: obj.tensor.dtype)
-    producers = ma.Function(lambda obj: obj.tensor.producers)
-    consumers = ma.Function(lambda obj: obj.tensor.consumers)
-    id = ma.Function(lambda obj: obj.tensor.tensor_id)
-    operation_id = ma.auto_field()
     consumers = fields.Method("get_consumers")
     producers = fields.Method("get_producers")
 
