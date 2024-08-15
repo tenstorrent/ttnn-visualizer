@@ -81,7 +81,6 @@ class BufferSchema(ma.SQLAlchemyAutoSchema):
     max_size_per_bank = ma.auto_field()
     buffer_type = ma.auto_field()
     device_id = ma.Function(lambda obj: obj.device.device_id)
-    operation_id = ma.Function(lambda obj: obj.operation.operation_id)
 
 
 class OperationSchema(ma.SQLAlchemySchema):
@@ -96,7 +95,12 @@ class OperationSchema(ma.SQLAlchemySchema):
     outputs = ma.List(ma.Nested(OutputTensorSchema()))
     inputs = ma.List(ma.Nested(InputTensorSchema()))
     arguments = ma.List(ma.Nested(OperationArgumentsSchema()))
+    stack_trace = ma.Method("get_stack_trace")
 
+    def get_stack_trace(self, obj):
+        if obj.stack_trace and len(obj.stack_trace):
+            return next(x for x in obj.stack_trace).stack_trace
+        return ""
 
 # Filesystem Schemas
 class RemoteConnectionSchema(ma.Schema):

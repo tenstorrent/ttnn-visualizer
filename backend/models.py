@@ -117,7 +117,7 @@ class Tensor(db.Model):
 
 class Buffer(db.Model):
     __table__ = buffers
-
+    device= relationship("Device")
 
 class InputTensor(db.Model):
     __table__ = input_tensors
@@ -139,6 +139,7 @@ class Operation(db.Model):
     inputs = db.relationship("InputTensor", lazy="joined")
     outputs = db.relationship("OutputTensor", lazy="joined")
     stack_trace = db.relationship("StackTrace")
+    buffers = db.relationship("Buffer")
 
 
 class OperationArgument(db.Model):
