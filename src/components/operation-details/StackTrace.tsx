@@ -6,14 +6,14 @@ import hljs from 'highlight.js/lib/core';
 import python from 'highlight.js/lib/languages/python';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import 'highlight.js/styles/a11y-dark.css';
-import 'styles/components/StackTrace.scss';
-import { Button, ButtonGroup, Collapse, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useAtom, useAtomValue } from 'jotai';
 import { isFullStackTraceAtom, reportLocationAtom } from '../../store/app';
 import useRemoteConnection from '../../hooks/useRemote';
 import Overlay from '../Overlay';
+import 'styles/components/StackTrace.scss';
 
 hljs.registerLanguage('python', python);
 
@@ -22,6 +22,7 @@ interface StackTraceProps {
 }
 
 const FILE_PATH_REGEX = /(?<=File ")(.*)(?=")/m;
+const LINE_NUMBER_REGEX = /(?<=line )([[:digit:]]*)(?=,)/m;
 
 function isTopOfElementInViewport(element: HTMLElement): boolean {
     const elementPosition = element.getBoundingClientRect();
@@ -46,19 +47,44 @@ function StackTrace({ stackTrace }: StackTraceProps) {
     const isRemote = connectionType === 'remote';
 
     const stackTraceWithHighlights = useMemo(() => {
-        const matches = FILE_PATH_REGEX.exec(stackTrace);
-        const highlightedString = hljs.highlight(stackTrace, { language: 'python' }).value;
+        const filePathMatches = FILE_PATH_REGEX.exec(stackTrace);
+        let highlightedString = hljs.highlight(stackTrace, { language: 'python' }).value;
 
-        if (matches) {
-            setFilePath(matches[0]);
+        if (filePathMatches) {
+            setFilePath(filePathMatches[0]);
         }
+
+        let line = 1;
+        highlightedString = highlightedString.replace(
+            /^/gm,
+            () => `<div class="ttnn-line"><span class="line-number">${line++}</span>`,
+        );
+        highlightedString = highlightedString.replace(/<div class="ttnn-line">/gm, (match) => `</div>${match}`);
 
         return highlightedString;
     }, [stackTrace]);
 
     const fileWithHighlights = useMemo(() => {
-        return fileContents ? hljs.highlight(fileContents, { language: 'python' }).value : '';
-    }, [fileContents]);
+        const lineNumberMatches = LINE_NUMBER_REGEX.exec(stackTrace);
+
+        if (fileContents && lineNumberMatches?.[0]) {
+            let highlightedString = hljs.highlight(fileContents, { language: 'python' }).value;
+
+            let line = 1;
+            highlightedString = highlightedString.replace(/^/gm, () => {
+                const classes = line === lineNumberMatches?.[0] ? 'ttnn-line highlighted-line' : 'ttnn-line';
+                return `<div class="${classes}"><span class="line-number">${line++}</span>`;
+            });
+            highlightedString = highlightedString.replace(
+                /<div class="ttnn-line">|<div class="ttnn-line highlighted-line">/gm,
+                (match) => `</div>${match}`,
+            );
+
+            return highlightedString;
+        }
+
+        return '';
+    }, [fileContents, stackTrace]);
 
     const handleReadRemoteFile = async () => {
         const { selectedConnection } = persistentState;
@@ -98,24 +124,26 @@ function StackTrace({ stackTrace }: StackTraceProps) {
             ref={scrollElementRef}
         >
             {isFullStackTrace ? (
-                <Collapse
-                    isOpen={isFullStackTrace}
-                    keepChildrenMounted={false}
-                    className='code-wrapper'
-                >
+                // <Collapse
+                //     isOpen={isFullStackTrace}
+                //     keepChildrenMounted={false}
+                //     className='code-wrapper'
+                // >
+                <div className='code-wrapper'>
                     <code
                         className='language-python code-output'
                         // eslint-disable-next-line react/no-danger
                         dangerouslySetInnerHTML={{ __html: stackTraceWithHighlights }}
                     />
-                </Collapse>
+                </div>
             ) : (
+                // </Collapse>
                 <div className='code-wrapper'>
                     <code
                         className='language-python code-output'
                         // eslint-disable-next-line react/no-danger
                         dangerouslySetInnerHTML={{
-                            __html: `  File ${stackTraceWithHighlights.split('File')[1].trim()}`,
+                            __html: getStackTracePreview(stackTraceWithHighlights),
                         }}
                     />
                 </div>
@@ -178,6 +206,12 @@ function StackTrace({ stackTrace }: StackTraceProps) {
             </Overlay>
         </pre>
     );
+}
+
+function getStackTracePreview(stackTrace: string) {
+    const splitTrace: Array<string> = stackTrace.split('<span class="line-number">').splice(0, 3);
+
+    return splitTrace.join('<span class="line-number">');
 }
 
 export default StackTrace;

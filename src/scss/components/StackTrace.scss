@@ -5,15 +5,18 @@
     display: flex;
     flex-wrap: nowrap;
     padding: 10px;
+    padding-left: 0;
     background: $tt-very-dark-gray;
     align-items: flex-start;
     gap: 10px;
     margin-top: 0;
+    padding-bottom: 30px;
 
     .code-wrapper {
         flex-basis: 100%;
         flex-shrink: 1;
-        padding: 6px 0
+        padding: 6px 0;
+        position: relative;
     }
 
     .code-output {
@@ -34,5 +37,22 @@
     .rotate-180 {
         transform: rotate(180deg);
     }
-}
 
+    .ttnn-line {
+        margin-left: 55px;
+        border-left: 1px solid aliceblue;
+        padding-left: 15px;
+
+        &.highlighted-line {
+            background-color: brown;
+        }
+    }
+
+    .line-number {
+        position: absolute;
+        text-align: right;
+        left: 5px;
+        min-width: 30px;
+        font-size: 1em;
+    }
+}
