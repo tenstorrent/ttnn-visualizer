@@ -16,7 +16,6 @@
         flex-basis: 100%;
         flex-shrink: 1;
         padding: 6px 0;
-        position: relative;
     }
 
     .code-output {
@@ -39,20 +38,36 @@
     }
 
     .ttnn-line {
-        margin-left: 55px;
-        border-left: 1px solid aliceblue;
-        padding-left: 15px;
+        padding-left: 70px;
+        position: relative;
+
+        .line-number {
+            position: absolute;
+            text-align: right;
+            left: 5px;
+            min-width: 30px;
+            font-size: 1em;
+            color: $tt-medium-gray;
+        }
+
+        &::before {
+            content: '';
+            display: block;
+            border-left: 1px solid $tt-medium-light-gray;
+            width: 1px;
+            height: 100%;
+            position: absolute;
+            left: 55px;
+        }
 
         &.highlighted-line {
-            background-color: brown;
+            background-color: $tt-medium-blue;
+
+            .line-number {
+                color: $tt-medium-light-gray;
+            }
         }
     }
 
-    .line-number {
-        position: absolute;
-        text-align: right;
-        left: 5px;
-        min-width: 30px;
-        font-size: 1em;
-    }
+
 }

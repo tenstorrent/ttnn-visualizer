@@ -22,7 +22,7 @@ interface StackTraceProps {
 }
 
 const FILE_PATH_REGEX = /(?<=File ")(.*)(?=")/m;
-const LINE_NUMBER_REGEX = /(?<=line )([[:digit:]]*)(?=,)/m;
+const LINE_NUMBER_REGEX = /(?<=line )(\d*)(?=,)/m;
 
 function isTopOfElementInViewport(element: HTMLElement): boolean {
     const elementPosition = element.getBoundingClientRect();
