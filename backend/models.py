@@ -113,6 +113,13 @@ class Tensor(db.Model):
     input_tensors = relationship("InputTensor", back_populates="tensor", lazy="joined")
     output_tensors = relationship("OutputTensor", back_populates="tensor", lazy="joined")
 
+    @property
+    def producers(self):
+        return [i.operation_id for i in self.output_tensors]
+
+    @property
+    def consumers(self):
+        return [i.operation_id for i in self.input_tensors]
 
 
 class Buffer(db.Model):
@@ -121,7 +128,7 @@ class Buffer(db.Model):
 
 class InputTensor(db.Model):
     __table__ = input_tensors
-    tensor = db.relationship("Tensor", lazy="joined", back_populates="input_tensors")
+    tensor = db.relationship("Tensor", back_populates="input_tensors", innerjoin=True, lazy="joined")
 
 
 class StackTrace(db.Model):
@@ -130,7 +137,7 @@ class StackTrace(db.Model):
 
 class OutputTensor(db.Model):
     __table__ = output_tensors
-    tensor = db.relationship("Tensor", lazy="joined", back_populates="output_tensors")
+    tensor = db.relationship("Tensor", back_populates="output_tensors", innerjoin=True, lazy="joined")
 
 
 class Operation(db.Model):
