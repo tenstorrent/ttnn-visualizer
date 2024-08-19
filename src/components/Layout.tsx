@@ -3,6 +3,8 @@ import { Button, Classes, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
+import { Bounce, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.min.css';
 import TenstorrentLogo from './TenstorrentLogo';
 import ROUTES from '../definitions/routes';
 import { reportMetaAtom } from '../store/app';
@@ -54,6 +56,21 @@ function Layout() {
 
             <main>
                 <Outlet />
+
+                <ToastContainer
+                    position='top-right'
+                    autoClose={5000}
+                    hideProgressBar={false}
+                    newestOnTop={false}
+                    closeOnClick
+                    rtl={false}
+                    pauseOnFocusLoss
+                    draggable
+                    pauseOnHover
+                    closeButton={false}
+                    theme='light'
+                    transition={Bounce}
+                />
             </main>
         </div>
     );
