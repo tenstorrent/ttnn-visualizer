@@ -2,12 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { PlotMouseEvent } from 'plotly.js';
 import { Icon, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
+import { useAtom } from 'jotai';
+import { Bounce, toast } from 'react-toastify';
 import { FragmentationEntry } from '../../model/APIData';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
@@ -29,6 +31,7 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import Collapsible from '../Collapsible';
 import MicroOperations from '../MicroOperations';
 import OperationArguments from '../OperationArguments';
+import { selectedTensorAddressAtom } from '../../store/app';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -48,13 +51,34 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
 
-    const [selectedTensorAddress, setSelectedTensorAddress] = useState<number | null>(null);
+    const [selectedTensorAddress, setSelectedTensorAddress] = useAtom(selectedTensorAddressAtom);
     const [selectedTensor, setSelectedTensor] = useState<number | null>(null);
+    const [toastId, setToastId] = useState<number | null>(null);
 
     const onClickOutside = () => {
         setSelectedTensorAddress(null);
         setSelectedTensor(null);
+
+        if (toastId) {
+            toast.dismiss(toastId);
+            setToastId(null);
+        }
     };
+
+    useEffect(() => {
+        if (selectedTensorAddress) {
+            const toastInstance = toast(<ToastTensorMessage address={selectedTensorAddress} />, {
+                position: 'bottom-right',
+                hideProgressBar: true,
+                closeOnClick: true,
+                onClick: () => setToastId(null),
+                theme: 'light',
+                transition: Bounce,
+            }) as number;
+
+            setToastId(toastInstance);
+        }
+    }, [selectedTensorAddress]);
 
     const navRef = useRef<HTMLDivElement>(null);
     const operation = operations?.find((op) => op.id === operationId);
@@ -241,14 +265,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                         <aside className={classNames('plot-instructions', { hidden: chartData.length === 0 })}>
                             Click on a buffer to focus
-                        </aside>
-
-                        <aside
-                            className={classNames('plot-instructions-floating', {
-                                hidden: selectedTensorAddress === null,
-                            })}
-                        >
-                            Buffer focused, click anywhere to reset
                         </aside>
 
                         {/* <Collapsible */}
@@ -450,4 +466,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         </>
     );
 };
+
+interface ToastTensorMessageProps {
+    address: number;
+}
+
+const ToastTensorMessage = ({ address }: ToastTensorMessageProps) => (
+    <div>
+        Buffer <strong>{address}</strong> selected
+    </div>
+);
+
 export default OperationDetailsComponent;

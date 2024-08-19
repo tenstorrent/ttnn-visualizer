@@ -1,8 +1,11 @@
 import React, { useRef } from 'react';
+import tinycolor from 'tinycolor2';
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
+import { useAtomValue } from 'jotai';
 import useOutsideClick from '../../hooks/useOutsideClick';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { selectedTensorAddressAtom } from '../../store/app';
 
 export interface MemoryPlotRendererProps {
     chartData: Partial<PlotData>[];
@@ -31,6 +34,8 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     additionalReferences = [],
     configuration,
 }) => {
+    const selectedAddress = useAtomValue(selectedTensorAddressAtom);
+
     const layout: Partial<Layout> = {
         height: configuration.height,
         xaxis: {
@@ -92,7 +97,19 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             <h3 className='plot-title'>{title}</h3>
             <Plot
                 className='memory-plot'
-                data={chartData}
+                data={chartData.map((data) => {
+                    if (
+                        selectedAddress &&
+                        !data.hovertemplate?.includes(selectedAddress.toString()) &&
+                        data.marker?.color
+                    ) {
+                        const colorString = data.marker.color as string;
+
+                        data.marker.color = tinycolor(colorString).desaturate(30).toString();
+                    }
+
+                    return data;
+                })}
                 layout={layout}
                 config={config}
                 onClick={onBufferClick}
