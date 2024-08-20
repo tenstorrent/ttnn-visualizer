@@ -159,23 +159,20 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const selectTensorByAddress = (address: number): void => {
         setSelectedTensorAddress(address);
         setSelectedTensor(details.getTensorForAddress(address)?.id || null);
-        // createToast(address);
+        createToast(address);
     };
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEvent>): void => {
         const index = event.points[0].curveNumber;
         const { address } = dramDeltaObject.memory[index];
         selectTensorByAddress(address);
-
-        createToast(address);
+        setSelectedTensorAddress(address);
     };
 
     const onDramBufferClick = (event: Readonly<PlotMouseEvent>): void => {
         const index = event.points[0].curveNumber;
         const { address } = dramMemory[index];
         selectTensorByAddress(address);
-
-        createToast(address);
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEvent>): void => {
@@ -193,6 +190,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         const address = details.tensorList.find((t) => t.id === id)?.address || null;
         setSelectedTensorAddress(address);
         setSelectedTensor(id);
+
+        if (address) {
+            createToast(address);
+        }
     };
 
     const createToast = (address: number) => {
