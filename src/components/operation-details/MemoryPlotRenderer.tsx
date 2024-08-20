@@ -1,9 +1,8 @@
-import React, { useRef } from 'react';
+import { ForwardRefRenderFunction } from 'react';
 import tinycolor from 'tinycolor2';
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
 import { useAtomValue } from 'jotai';
-import useOutsideClick from '../../hooks/useOutsideClick';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import { selectedTensorAddressAtom } from '../../store/app';
 
@@ -13,27 +12,26 @@ export interface MemoryPlotRendererProps {
     memorySize: number;
     title: string;
     onBufferClick?: (event: PlotMouseEvent) => void;
-    onClickOutside?: (event: MouseEvent) => void;
     plotZoomRangeStart?: number;
     plotZoomRangeEnd?: number;
     className?: string;
-    additionalReferences?: React.RefObject<HTMLDivElement>[];
     configuration: PlotConfiguration;
 }
 
-const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
-    chartData,
-    isZoomedIn,
-    memorySize,
-    className = '',
-    title,
-    onBufferClick,
-    onClickOutside,
-    plotZoomRangeStart,
-    plotZoomRangeEnd,
-    additionalReferences = [],
-    configuration,
-}) => {
+const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRendererProps> = (
+    {
+        chartData,
+        isZoomedIn,
+        memorySize,
+        className = '',
+        title,
+        onBufferClick,
+        plotZoomRangeStart,
+        plotZoomRangeEnd,
+        configuration,
+    },
+    ref,
+) => {
     const selectedAddress = useAtomValue(selectedTensorAddressAtom);
 
     const layout: Partial<Layout> = {
@@ -85,16 +83,13 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
         staticPlot: onBufferClick === undefined,
     };
 
-    const plotRef = useRef<HTMLDivElement>(null);
-
-    useOutsideClick([plotRef, ...additionalReferences], onClickOutside);
-
     return (
         <div
             className={className}
-            ref={plotRef}
+            ref={ref}
         >
             <h3 className='plot-title'>{title}</h3>
+
             <Plot
                 className='memory-plot'
                 data={chartData.map((data) => {
@@ -105,7 +100,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
                     ) {
                         const colorString = data.marker.color as string;
 
-                        data.marker.color = tinycolor(colorString).desaturate(30).toString();
+                        data.marker.color = tinycolor(colorString).desaturate(40).toString();
                     }
 
                     return data;

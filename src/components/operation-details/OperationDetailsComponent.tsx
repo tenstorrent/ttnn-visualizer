@@ -2,14 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useRef, useState } from 'react';
 import { PlotMouseEvent } from 'plotly.js';
 import { Icon, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
+import { toast } from 'react-toastify';
 import { useAtom } from 'jotai';
-import { Bounce, toast } from 'react-toastify';
 import { FragmentationEntry } from '../../model/APIData';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
@@ -32,6 +32,7 @@ import Collapsible from '../Collapsible';
 import MicroOperations from '../MicroOperations';
 import OperationArguments from '../OperationArguments';
 import { selectedTensorAddressAtom } from '../../store/app';
+import useOutsideClick from '../../hooks/useOutsideClick';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -65,22 +66,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         }
     };
 
-    useEffect(() => {
-        if (selectedTensorAddress) {
-            const toastInstance = toast(<ToastTensorMessage address={selectedTensorAddress} />, {
-                position: 'bottom-right',
-                hideProgressBar: true,
-                closeOnClick: true,
-                onClick: () => setToastId(null),
-                theme: 'light',
-                transition: Bounce,
-            }) as number;
-
-            setToastId(toastInstance);
-        }
-    }, [selectedTensorAddress]);
-
+    const plot1Ref = useRef<HTMLDivElement>(null);
+    const plot2Ref = useRef<HTMLDivElement>(null);
+    const plot3Ref = useRef<HTMLDivElement>(null);
+    const plot4Ref = useRef<HTMLDivElement>(null);
+    const plot5Ref = useRef<HTMLDivElement>(null);
     const navRef = useRef<HTMLDivElement>(null);
+
+    useOutsideClick([plot1Ref, plot2Ref, plot3Ref, plot4Ref, plot5Ref, navRef], onClickOutside);
+
     const operation = operations?.find((op) => op.id === operationId);
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
@@ -165,18 +159,23 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const selectTensorByAddress = (address: number): void => {
         setSelectedTensorAddress(address);
         setSelectedTensor(details.getTensorForAddress(address)?.id || null);
+        // createToast(address);
     };
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEvent>): void => {
         const index = event.points[0].curveNumber;
         const { address } = dramDeltaObject.memory[index];
         selectTensorByAddress(address);
+
+        createToast(address);
     };
 
     const onDramBufferClick = (event: Readonly<PlotMouseEvent>): void => {
         const index = event.points[0].curveNumber;
         const { address } = dramMemory[index];
         selectTensorByAddress(address);
+
+        createToast(address);
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEvent>): void => {
@@ -194,6 +193,22 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         const address = details.tensorList.find((t) => t.id === id)?.address || null;
         setSelectedTensorAddress(address);
         setSelectedTensor(id);
+    };
+
+    const createToast = (address: number) => {
+        if (toastId) {
+            toast.dismiss(toastId);
+        }
+
+        const toastInstance = toast(<ToastTensorMessage address={address} />, {
+            position: 'bottom-right',
+            hideProgressBar: true,
+            closeOnClick: true,
+            onClick: () => setToastId(null),
+            theme: 'light',
+        }) as number;
+
+        setToastId(toastInstance);
     };
 
     // TODO: keeping this as a reminder. this wont work properly while we pick tensor by address only, an only for a specific operation
@@ -217,6 +232,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         (chunk) => !chunk.empty && details.getTensorForAddress(chunk.address),
     );
 
+    const ForwardedMemoryPlotRenderer = forwardRef(MemoryPlotRenderer);
+
     return (
         <>
             <OperationDetailsNavigation
@@ -236,7 +253,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         />
 
                         <h3>L1 Memory</h3>
-                        <MemoryPlotRenderer
+                        <ForwardedMemoryPlotRenderer
                             title='Previous Summarized L1 Report'
                             className={classNames('l1-memory-renderer', {
                                 'empty-plot': previousChartData.length === 0,
@@ -247,9 +264,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             isZoomedIn={zoomedInView}
                             memorySize={memorySizeL1}
                             configuration={L1RenderConfiguration}
+                            ref={plot1Ref}
                         />
 
-                        <MemoryPlotRenderer
+                        <ForwardedMemoryPlotRenderer
                             title='Current Summarized L1 Report'
                             className={classNames('l1-memory-renderer', { 'empty-plot': chartData.length === 0 })}
                             plotZoomRangeStart={plotZoomRangeStart}
@@ -258,9 +276,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             isZoomedIn={zoomedInView}
                             memorySize={memorySizeL1}
                             onBufferClick={onBufferClick}
-                            onClickOutside={onClickOutside}
-                            additionalReferences={[navRef]}
                             configuration={L1RenderConfiguration}
+                            ref={plot2Ref}
                         />
 
                         <aside className={classNames('plot-instructions', { hidden: chartData.length === 0 })}>
@@ -273,7 +290,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {/*    isOpen={false} */}
                         {/* > */}
 
-                        <MemoryPlotRenderer
+                        <ForwardedMemoryPlotRenderer
                             title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
                             className={classNames('dram-memory-renderer', {
                                 'empty-plot': previosDramData.length === 0,
@@ -285,8 +302,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             isZoomedIn={zoomedInView}
                             memorySize={DRAM_MEMORY_SIZE}
                             configuration={DRAMRenderConfiguration}
+                            ref={plot3Ref}
                         />
-                        <MemoryPlotRenderer
+                        <ForwardedMemoryPlotRenderer
                             title='Current Summarized DRAM Report'
                             className={classNames('dram-memory-renderer', { 'empty-plot': dramData.length === 0 })}
                             plotZoomRangeStart={dramPlotZoomRangeStart}
@@ -295,11 +313,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             isZoomedIn={zoomedInView}
                             memorySize={DRAM_MEMORY_SIZE}
                             onBufferClick={onDramBufferClick}
-                            onClickOutside={onClickOutside}
-                            additionalReferences={[navRef]}
                             configuration={DRAMRenderConfiguration}
+                            ref={plot4Ref}
                         />
-                        <MemoryPlotRenderer
+                        <ForwardedMemoryPlotRenderer
                             title='DRAM Delta (difference between current and previous operation)'
                             className={classNames('dram-memory-renderer', {
                                 'empty-plot': dramDeltaObject.chartData.length === 0,
@@ -310,9 +327,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             isZoomedIn={zoomedInView}
                             memorySize={DRAM_MEMORY_SIZE}
                             onBufferClick={onDramDeltaClick}
-                            onClickOutside={onClickOutside}
-                            additionalReferences={[navRef]}
                             configuration={DRAMRenderConfiguration}
+                            ref={plot5Ref}
                         />
 
                         <br />
@@ -355,6 +371,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     ))}
                                 </Collapsible>
                             </div>
+
                             <div
                                 ref={navRef}
                                 className={classNames('producer-consumer', { hidden: selectedTensor === null })}
