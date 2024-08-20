@@ -3,6 +3,10 @@
 @use '../definitions/colours' as *;
 
 .home {
+    display: flex;
+    place-content: center center;
+    margin-top: 100px;
+
     h3 {
         margin: 0;
     }
