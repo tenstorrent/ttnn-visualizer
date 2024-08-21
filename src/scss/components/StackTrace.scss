@@ -5,24 +5,70 @@
     display: flex;
     flex-wrap: nowrap;
     padding: 10px;
+    padding-left: 0;
     background: $tt-very-dark-gray;
     align-items: flex-start;
     gap: 10px;
     margin-top: 0;
 
     .code-wrapper {
-        flex-basis: 85%;
+        flex-basis: 100%;
         flex-shrink: 1;
-        padding: 6px 0
+        padding: 6px 0;
     }
 
     .code-output {
+        width: 100%;
         text-wrap: balance;
     }
 
-    .is-sticky {
-        position: sticky;
-        top: 0;
-        right: 0;
+    .stack-trace-buttons {
+        display: flex;
+        flex-direction: column;
+
+        &.is-sticky {
+            position: sticky;
+            top: 0;
+            right: 0;
+        }
     }
+
+    .rotate-180 {
+        transform: rotate(180deg);
+    }
+
+    .ttnn-line {
+        padding-left: 70px;
+        position: relative;
+        min-height: 18px; // Magic Number!
+
+        .line-number {
+            position: absolute;
+            text-align: right;
+            left: 5px;
+            min-width: 30px;
+            font-size: 1em;
+            color: $tt-medium-gray;
+        }
+
+        &::before {
+            content: '';
+            display: block;
+            border-left: 1px solid $tt-medium-light-gray;
+            width: 1px;
+            height: 100%;
+            position: absolute;
+            left: 55px;
+        }
+
+        &.highlighted-line {
+            background-color: $tt-medium-blue;
+
+            .line-number {
+                color: $tt-medium-light-gray;
+            }
+        }
+    }
+
+
 }

@@ -121,12 +121,23 @@ const useRemoteConnection = () => {
         },
     };
 
+    const readRemoteFile = async (connection?: RemoteConnection) => {
+        try {
+            const response = await axios.post(`${import.meta.env.VITE_API_ROOT}/remote/read`, connection);
+
+            return response.data;
+        } catch (error) {
+            return axios.isAxiosError(error);
+        }
+    };
+
     return {
         testConnection,
         syncRemoteFolder,
         listRemoteFolders,
         mountRemoteFolder,
         persistentState,
+        readRemoteFile,
     };
 };
 
