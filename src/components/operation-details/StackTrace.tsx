@@ -72,7 +72,8 @@ function StackTrace({ stackTrace }: StackTraceProps) {
 
             let line = 1;
             highlightedString = highlightedString.replace(/^/gm, () => {
-                const classes = line === lineNumberMatches?.[0] ? 'ttnn-line highlighted-line' : 'ttnn-line';
+                const classes =
+                    line === parseInt(lineNumberMatches?.[0], 10) ? 'ttnn-line highlighted-line' : 'ttnn-line';
                 return `<div class="${classes}"><span class="line-number">${line++}</span>`;
             });
             highlightedString = highlightedString.replace(
