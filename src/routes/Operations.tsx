@@ -23,7 +23,7 @@ export default function Operations() {
     return (
         <>
             <Helmet title='Operations' />
-            <OperationList />;
+            <OperationList />
         </>
     );
 }

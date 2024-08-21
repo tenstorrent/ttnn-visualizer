@@ -4,6 +4,8 @@
 
 @use "../definitions/colours" as *;
 
+$tt-pending: #ffd500;
+
 .bp5-dialog.remote-connection-dialog {
     background-color: $tt-slight-off-background;
 
@@ -32,14 +34,14 @@
         animation: 0.7s steps(2) infinite alternate both;
     }
 
-    &.status-idle .connection-status-icon { color: $tt-idle; }
+    &.status-idle .connection-status-icon { color: $tt-medium-gray; }
 
     &.status-progress .connection-status-icon {
         animation-name: connection-test-progress;
         color: $tt-pending;
     }
+
     &.status-failed .connection-status-icon { color: $tt-error; }
-    &.status-ok .connection-status-icon { color: $tt-success; }
 }
 
 @keyframes connection-test-progress {
