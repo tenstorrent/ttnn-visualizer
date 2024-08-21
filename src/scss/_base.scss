@@ -4,12 +4,7 @@
 @use 'definitions/colours' as *;
 
 :root {
-    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-    line-height: 1.5;
-    font-weight: 400;
     color-scheme: light dark;
-    background-color: $tt-background;
-    color: $tt-white-text;
     font-synthesis: none;
     text-rendering: optimizelegibility;
     -webkit-font-smoothing: antialiased;
@@ -32,27 +27,12 @@ body {
     font-family: 'Arial Nova', Arial, sans-serif;
     height: 100vh;
     padding: 15px;
-    color: $tt-white-text;
-    background: $tt-background;
+    color: $tt-white;
+    background-color: $tt-background;
 }
 
 button {
     opacity: 0.9;
-}
-
-a {
-    height: fit-content;
-    width: fit-content;
-    margin: 10px;
-    font-weight: 500;
-    color: $tt-light-blue;
-    text-decoration: inherit;
-
-    &:hover {
-        opacity: 1;
-        text-decoration: none;
-        color: $tt-purple;
-    }
 }
 
 hr {

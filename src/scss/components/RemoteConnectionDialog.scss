@@ -32,17 +32,17 @@
         animation: 0.7s steps(2) infinite alternate both;
     }
 
-    &.status-idle .connection-status-icon { color: $tt-medium-gray; }
+    &.status-idle .connection-status-icon { color: $tt-idle; }
 
     &.status-progress .connection-status-icon {
         animation-name: connection-test-progress;
-        color: $node-select;
+        color: $tt-pending;
     }
-    &.status-failed .connection-status-icon { color: $core-highlight-inout; }
-    &.status-ok .connection-status-icon { color: $bright-highlight; }
+    &.status-failed .connection-status-icon { color: $tt-error; }
+    &.status-ok .connection-status-icon { color: $tt-success; }
 }
 
 @keyframes connection-test-progress {
     from { color: $tt-medium-gray; }
-    to { color: $node-select; }
+    to { color: $tt-pending; }
 }

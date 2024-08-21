@@ -3,57 +3,79 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 /* Tenstorrent powerpoint theme */
-$tt-yellow: #ffd10a;
-$tt-red: #f04f5e;
 $tt-purple: #786bb0;
 $tt-background: #33333d;
 $tt-off-background: #44444d;
 $tt-slight-off-background: #383840;
 $tt-very-dark-gray: #1c2127;
-$tt-black: #000;
-$tt-white-text: #fefef6;
-$tt-extra-light-gray: #f5f5f5;
 $tt-light-gray: #eeeee6;
 $tt-medium-light-gray: #cbcbcb;
 $tt-medium-gray: #909096;
 $tt-dark-gray: #606066;
-$hr: #676767;
-$tt-light-blue: #72deff;
-$tt-medium-blue: #008cab;
-$tt-dark-blue: #004c9b;
-$bright-highlight: #9f0;
-$node-select: #ffd500;
-$node-select-focus: #99c4ff;
-$core-highlight-inout: #ff3c00;
-$core-highlight-output: #07f;
-$pipe-select: #fff58a;
-$c-dram: #7abdcc;
-$hc-core: #f996ff;
-$c-core: #a5cc7a;
-$c-router: #d0c079;
-$c-eth: #a794ee;
-$c-pcix: #ee9794;
-$progress-bar-track: #262626;
-$progress-bar-fill: #7abdcc;
-$link-saturation-track: #2d72d2;
-$link-saturation-fill: rgb(95 107 124 / 20%);
-$detailed-view-component: #a6bce5;
-$detailed-view-light-text: #99c4ff;
-$sort-header: #d8e4f6;
-$focus-ring: rgb(142 243 47 / 90%);
-$alert-color: #ff6c0a;
-$queue-color: #5f6b7c;
-$highlight-green: #abe338;
-$link-color: $detailed-view-light-text;
 
-// branding colors:
-$tt-primary-yellow: #f6bc42;
-$tt-tint-yellow: #f9d68e;
-$tt-tint-blue: #9ca8f2;
-$tt-accent-red: #fa512e;
+// New colours
+$tt-white: #FFF;
+$tt-black: #202020;
+$tt-dark-grey: #363636;
 
+// tt-purple
+$tt-purple: #BCB3F7;
+$tt-purple-tint-1: #D0C8FF;
+$tt-purple-tint-2: #E2DEFC;
+$tt-purple-accent: #7C68FA;
+$tt-purple-shade: #4B456E;
 
-// $tt-purple: #7C68FA;
-// $tt-slate: #EDEFF9;
-// $tt-black: #202020;
-// $tt-white: #FFFFFF;
+// tt-red
+$tt-red: #FF9E8A;
+$tt-red-tint-1: #EAB1A5;
+$tt-red-tint-2: #F4D8D2;
+$tt-red-accent: #FA512E;
+$tt-red-shade: #8D2914;
+
+// tt-blue
+$tt-blue: #7584E6;
+$tt-blue-tint-1: #9CA8F2;
+$tt-blue-tint-2: #CCD2F9;
+$tt-blue-accent: #5164E0;
+$tt-blue-shade: #252C5B;
+
+// tt-yellow
+$tt-yellow: #F6BC42;
+$tt-yellow-tint-1: #F9D68E;
+$tt-yellow-tint-2: #F5E2BA;
+$tt-yellow-accent: #C2A261;
+$tt-yellow-shade: #8B7039;
+
+// tt-teal
+$tt-teal: #74C5DF;
+$tt-teal-tint-1: #9BDBF0;
+$tt-teal-tint-2: #C7F1FF;
+$tt-teal-accent: #3EB7DE;
+$tt-teal-shade: #0D4D62;
+
+// tt-green
+$tt-green: #6FABA0;
+$tt-green-tint-1: #92C9BF;
+$tt-green-tint-2: #C7EFE8;
+$tt-green-accent: #608C84;
+$tt-green-shade: #103525;
+
+// tt-sand
+$tt-sand: #CDC2A6;
+$tt-sand-tint-1: #E5D7B5;
+$tt-sand-tint-2: #EEEAE0;
+$tt-sand-accent: #A2987A;
+$tt-sand-shade: #3A3433;
+
+// tt-slate
+$tt-slate: #737999;
+$tt-slate-tint-1: #979DBD;
+$tt-slate-tint-2: #EDEFF9;
+$tt-slate-accent: #606891;
+$tt-slate-shade: #101636;
+
+// States
+$tt-idle: #909096;
+$tt-success: #9f0;
+$tt-pending: #ffd500;
+$tt-error: #ff3c00;

@@ -4,6 +4,8 @@
 
 @use '../definitions/colours' as *;
 
+$link-color: #99c4ff;
+
 .operation-details-component {
     a,
     a:active,
@@ -17,7 +19,7 @@
         transition-delay: 10ms;
 
         &.current {
-            color: $tt-white-text;
+            color: $tt-white;
             cursor: default;
 
             &::before {
@@ -138,11 +140,11 @@
         display: inline-block;
 
         &.empty {
-            background-color: $tt-white-text;
+            background-color: $tt-white;
         }
 
         &.empty-tensor {
-            background: repeating-linear-gradient(45deg, transparent, transparent 5px, $tt-red 5px, $tt-red 7px);
+            background: repeating-linear-gradient(45deg, transparent, transparent 5px, $tt-red-accent 5px, $tt-red-accent 7px);
         }
     }
 
@@ -166,7 +168,7 @@
         .tensor-name {
             display: inline-flex;
             align-items: center;
-            color: $tt-white-text;
+            color: $tt-white;
             gap: 8px;
             margin-bottom: 10px;
 
@@ -202,7 +204,7 @@
         position: fixed;
         bottom: 20px;
         right: 20px;
-        background-color: $tt-white-text;
+        background-color: $tt-white;
         color: $tt-black;
         padding: 10px;
 
