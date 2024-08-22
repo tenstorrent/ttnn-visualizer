@@ -127,7 +127,7 @@ const useRemoteConnection = () => {
 
             return response.data;
         } catch (error) {
-            return axios.isAxiosError(error);
+            return axios.isAxiosError(error) ? error.message : error;
         }
     };
 
