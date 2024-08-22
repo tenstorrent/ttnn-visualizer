@@ -104,6 +104,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
             setIsFetchingFile(true);
 
             const response = await readRemoteFile(connectionWithFilePath);
+            console.log(response);
             setFileContents(response);
 
             setIsFetchingFile(false);
