@@ -1,4 +1,4 @@
-import { ForwardRefRenderFunction } from 'react';
+import { ForwardRefRenderFunction, useMemo, useState } from 'react';
 import tinycolor from 'tinycolor2';
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
@@ -33,6 +33,8 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
     ref,
 ) => {
     const selectedAddress = useAtomValue(selectedTensorAddressAtom);
+    const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
+    const [augmentedChart, setAugmentedChart] = useState<Partial<PlotData>[]>(structuredClone(chartData));
 
     const layout: Partial<Layout> = {
         height: configuration.height,
@@ -83,6 +85,33 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
         staticPlot: onBufferClick === undefined,
     };
 
+    useMemo(() => {
+        setAugmentedChart((currentState) =>
+            currentState.map((data, index) => {
+                if (!data?.marker?.color || !data?.x || !chartData?.[index]?.marker) {
+                    return data;
+                }
+
+                const originalColour = chartData[index].marker.color as string;
+                const desaturatedColour = tinycolor(originalColour).desaturate(80).toString();
+
+                if (selectedAddress) {
+                    data.marker.color =
+                        hoveredPoint === data.x[0] || data.hovertemplate?.includes(selectedAddress.toString())
+                            ? originalColour
+                            : desaturatedColour;
+
+                    return data;
+                }
+
+                // No selected address (but could be hovered)
+                data.marker.color = hoveredPoint === data.x[0] ? desaturatedColour : originalColour;
+
+                return data;
+            }),
+        );
+    }, [hoveredPoint, chartData, selectedAddress]);
+
     return (
         <div
             className={className}
@@ -92,22 +121,12 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
 
             <Plot
                 className='memory-plot'
-                data={chartData.map((data) => {
-                    if (
-                        selectedAddress &&
-                        !data.hovertemplate?.includes(selectedAddress.toString()) &&
-                        data.marker?.color
-                    ) {
-                        const colorString = data.marker.color as string;
-
-                        data.marker.color = tinycolor(colorString).desaturate(40).toString();
-                    }
-
-                    return data;
-                })}
+                data={augmentedChart}
                 layout={layout}
                 config={config}
                 onClick={onBufferClick}
+                onHover={(data) => setHoveredPoint(data.points[0].x as number)}
+                onUnhover={() => setHoveredPoint(null)}
             />
         </div>
     );

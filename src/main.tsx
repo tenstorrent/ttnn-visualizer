@@ -40,7 +40,13 @@ const router = createBrowserRouter([
 
 FocusStyleManager.onlyShowFocusOnTabs();
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            refetchOnWindowFocus: false, // Messes with Plotly event handling
+        },
+    },
+});
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
         <HelmetProvider>
