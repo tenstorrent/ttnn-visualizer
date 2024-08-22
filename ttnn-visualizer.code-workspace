@@ -15,6 +15,17 @@
             "source.fixAll.eslint": "always",
             "source.fixAll.stylelint": "always",
         },
-        "cSpell.words": ["blueprintjs", "TTNN"],
+        "cSpell.words": [
+            "blueprintjs",
+            "esbenp",
+            "plotly",
+            "tinycolor",
+            "TTNN",
+            "Unhover",
+            "xaxis",
+            "xref",
+            "yaxis",
+            "yref",
+        ],
     },
 }
