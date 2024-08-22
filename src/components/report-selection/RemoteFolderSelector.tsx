@@ -8,6 +8,7 @@ import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
+import useRemoteConnection from '../../hooks/useRemote';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
@@ -16,14 +17,14 @@ const formatter = new Intl.DateTimeFormat('en-US', {
 
 const MAX_REPORT_NAME_LENGTH = 50;
 
-const formatRemoteFolderName = (folder?: RemoteFolder, connection?: RemoteConnection) => {
-    const storedSelectedConnection = localStorage.getItem('selectedConnection');
-
-    if (!folder || !storedSelectedConnection) {
+const formatRemoteFolderName = (
+    folder?: RemoteFolder,
+    connection?: RemoteConnection,
+    selectedConnection?: RemoteConnection,
+) => {
+    if (!folder || !selectedConnection) {
         return 'n/a';
     }
-
-    const selectedConnection: RemoteConnection = JSON.parse(storedSelectedConnection);
 
     return connection?.name ?? folder.remotePath.replace(selectedConnection.path, '');
 };
@@ -35,14 +36,18 @@ const getTestName = (folder: RemoteFolder) => {
 };
 
 const filterFolders =
-    (connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
+    (connection?: RemoteConnection, selectedConnection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
     (query, folder) => {
-        return formatRemoteFolderName(folder, connection).toLowerCase().includes(query.toLowerCase());
+        return formatRemoteFolderName(folder, connection, selectedConnection)
+            .toLowerCase()
+            .includes(query.toLowerCase());
     };
 
 const remoteFolderRenderer =
     (syncingFolderList: boolean, connection?: RemoteConnection): ItemRenderer<RemoteFolder> =>
     (folder, { handleClick, modifiers }) => {
+        const { persistentState } = useRemoteConnection();
+
         if (!modifiers.matchesPredicate) {
             return null;
         }
@@ -100,9 +105,9 @@ const remoteFolderRenderer =
                 className='remote-folder-item'
                 active={modifiers.active}
                 disabled={modifiers.disabled}
-                key={`${formatRemoteFolderName(folder, connection)}${lastSynced ?? lastModified}`}
+                key={`${formatRemoteFolderName(folder, connection, persistentState.selectedConnection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
-                text={formatRemoteFolderName(folder)}
+                text={formatRemoteFolderName(folder, undefined, persistentState.selectedConnection)}
                 textClassName='folder-path'
                 icon={IconNames.FOLDER_CLOSE}
                 labelElement={getLabelElement()}
@@ -133,6 +138,8 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     fallbackLabel = '(No selection)',
     icon = IconNames.FOLDER_OPEN,
 }) => {
+    const { persistentState } = useRemoteConnection();
+
     return (
         <div className='buttons-container'>
             <Select
@@ -140,7 +147,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
                 items={remoteFolderList ?? []}
                 itemRenderer={remoteFolderRenderer(updatingFolderList, remoteConnection)}
                 filterable
-                itemPredicate={filterFolders(remoteConnection)}
+                itemPredicate={filterFolders(remoteConnection, persistentState.selectedConnection)}
                 noResults={
                     <MenuItem
                         disabled
@@ -155,7 +162,11 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
                     icon={icon as IconName}
                     rightIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={loading || remoteFolderList?.length === 0}
-                    text={remoteFolder ? formatRemoteFolderName(remoteFolder, remoteConnection) : fallbackLabel}
+                    text={
+                        remoteFolder
+                            ? formatRemoteFolderName(remoteFolder, remoteConnection, persistentState.selectedConnection)
+                            : fallbackLabel
+                    }
                 />
             </Select>
 

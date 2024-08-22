@@ -6,7 +6,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from 'react-query';
-import { FocusStyleManager } from '@blueprintjs/core';
+import { FocusStyleManager, OverlaysProvider } from '@blueprintjs/core';
 import './index.scss';
 import { HelmetProvider } from 'react-helmet-async';
 import ErrorPage from './error-page';
@@ -50,7 +50,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
         <HelmetProvider>
             <React.StrictMode>
-                <RouterProvider router={router} />
+                <OverlaysProvider>
+                    <RouterProvider router={router} />
+                </OverlaysProvider>
             </React.StrictMode>
         </HelmetProvider>
     </QueryClientProvider>,
