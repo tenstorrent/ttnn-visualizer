@@ -305,6 +305,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             configuration={DRAMRenderConfiguration}
                             ref={plot3Ref}
                         />
+
                         <ForwardedMemoryPlotRenderer
                             title='Current Summarized DRAM Report'
                             className={classNames('dram-memory-renderer', { 'empty-plot': dramData.length === 0 })}
@@ -317,6 +318,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             configuration={DRAMRenderConfiguration}
                             ref={plot4Ref}
                         />
+
                         <ForwardedMemoryPlotRenderer
                             title='DRAM Delta (difference between current and previous operation)'
                             className={classNames('dram-memory-renderer', {
