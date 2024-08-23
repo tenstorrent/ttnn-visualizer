@@ -1,21 +1,37 @@
+/* eslint-disable react/jsx-props-no-spreading */
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Button, ButtonGroup, FormGroup, Intent, PopoverPosition, Switch, Tooltip } from '@blueprintjs/core';
+import {
+    Button,
+    ButtonGroup,
+    FormGroup,
+    InputGroup,
+    Intent,
+    PopoverPosition,
+    Switch,
+    Tooltip,
+} from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
 import ConnectionTestMessage from '../components/report-selection/ConnectionTestMessage';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import ProgressBar from '../components/ProgressBar';
 import SearchField from '../components/SearchField';
+import 'styles/routes/Styleguide.scss';
+
+const FORM_GROUP = {
+    label: 'Form label',
+    subLabel: 'Sub label here',
+};
 
 export default function Operations() {
     return (
         <>
             <Helmet title='Styleguide' />
 
-            <h2>Typography</h2>
+            {/* <h2>Typography</h2>
 
             <p>
                 <strong>Font family</strong>
@@ -45,65 +61,11 @@ export default function Operations() {
                 Lorem ipsum dolor sit, amet consectetur adipisicing elit. Magni nemo velit molestias quae temporibus
                 sint in at consectetur voluptatem obcaecati, saepe, ratione, reprehenderit perferendis quas explicabo
                 error repellendus deserunt? Optio!
-            </p>
+            </p> */}
 
             <h2>Buttons</h2>
 
-            <ButtonGroup>
-                <Button
-                    icon={IconNames.ArrowLeft}
-                    outlined
-                />
-
-                <Button
-                    icon={IconNames.LIST}
-                    outlined
-                />
-
-                <Button
-                    rightIcon={IconNames.ArrowRight}
-                    outlined
-                />
-            </ButtonGroup>
-
-            <ButtonGroup minimal>
-                <Tooltip
-                    content='Expand all'
-                    placement={PopoverPosition.TOP}
-                >
-                    <Button rightIcon={IconNames.ExpandAll} />
-                </Tooltip>
-
-                <Tooltip
-                    content='Sort by id ascending'
-                    placement={PopoverPosition.TOP}
-                >
-                    <Button icon={IconNames.SortAlphabetical} />
-                </Tooltip>
-
-                <Tooltip
-                    content='Sort by duration ascending'
-                    placement={PopoverPosition.TOP}
-                >
-                    <Button icon={IconNames.SortNumerical} />
-                </Tooltip>
-
-                <Tooltip
-                    content='Scroll to top'
-                    placement={PopoverPosition.TOP}
-                >
-                    <Button icon={IconNames.DOUBLE_CHEVRON_UP} />
-                </Tooltip>
-
-                <Tooltip
-                    content='Scroll to bottom'
-                    placement={PopoverPosition.TOP}
-                >
-                    <Button icon={IconNames.DOUBLE_CHEVRON_DOWN} />
-                </Tooltip>
-            </ButtonGroup>
-
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div className='container flex'>
                 <div>
                     <p>Default</p>
 
@@ -429,15 +391,120 @@ export default function Operations() {
                 </div>
             </div>
 
+            <div className='container'>
+                <p>Icons</p>
+                <ButtonGroup>
+                    <Button
+                        icon={IconNames.ArrowLeft}
+                        outlined
+                    />
+
+                    <Button
+                        icon={IconNames.LIST}
+                        outlined
+                    />
+
+                    <Button
+                        rightIcon={IconNames.ArrowRight}
+                        outlined
+                    />
+                </ButtonGroup>
+
+                <ButtonGroup minimal>
+                    <Tooltip
+                        content='Expand all'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button rightIcon={IconNames.ExpandAll} />
+                    </Tooltip>
+
+                    <Tooltip
+                        content='Sort by id ascending'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button icon={IconNames.SortAlphabetical} />
+                    </Tooltip>
+
+                    <Tooltip
+                        content='Sort by duration ascending'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button icon={IconNames.SortNumerical} />
+                    </Tooltip>
+
+                    <Tooltip
+                        content='Scroll to top'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button icon={IconNames.DOUBLE_CHEVRON_UP} />
+                    </Tooltip>
+
+                    <Tooltip
+                        content='Scroll to bottom'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button icon={IconNames.DOUBLE_CHEVRON_DOWN} />
+                    </Tooltip>
+                </ButtonGroup>
+            </div>
+
             <h3>Form elements</h3>
 
-            <FormGroup>
-                <SearchField
-                    placeholder='Filter operations'
-                    searchQuery=''
-                    onQueryChanged={() => {}}
+            <FormGroup
+                {...FORM_GROUP}
+                className='short-width'
+            >
+                <InputGroup
+                    className='bp5-light'
+                    key='name'
+                    onChange={() => {}}
+                    leftIcon={IconNames.FOLDER_NEW}
                 />
             </FormGroup>
+
+            <div className='container flex'>
+                <InputGroup
+                    className='bp5-light'
+                    key='name'
+                    onChange={() => {}}
+                    intent={Intent.PRIMARY}
+                    leftIcon={IconNames.FOLDER_NEW}
+                />
+
+                <InputGroup
+                    className='bp5-light'
+                    key='name'
+                    onChange={() => {}}
+                    intent={Intent.WARNING}
+                    leftIcon={IconNames.FOLDER_NEW}
+                />
+
+                <InputGroup
+                    className='bp5-light'
+                    key='name'
+                    onChange={() => {}}
+                    intent={Intent.SUCCESS}
+                    leftIcon={IconNames.FOLDER_NEW}
+                />
+
+                <InputGroup
+                    className='bp5-light'
+                    key='name'
+                    onChange={() => {}}
+                    intent={Intent.DANGER}
+                    leftIcon={IconNames.FOLDER_NEW}
+                />
+            </div>
+
+            <div className='short-width'>
+                <FormGroup>
+                    <SearchField
+                        placeholder='Filter operations'
+                        searchQuery=''
+                        onQueryChanged={() => {}}
+                    />
+                </FormGroup>
+            </div>
 
             <FormGroup>
                 <label
@@ -451,18 +518,38 @@ export default function Operations() {
                     />
                     <span className='bp5-file-upload-input'>Select files...</span>
                 </label>
+            </FormGroup>
 
+            <FormGroup>
                 <Switch label='Toggle switch' />
+                <Switch
+                    label='Toggle switch'
+                    checked
+                />
             </FormGroup>
 
             <h3>Status</h3>
 
             <p>Progress bar</p>
 
-            <div style={{ width: '200px', marginBottom: '20px' }}>
+            <div className='container short-width'>
                 <ProgressBar
-                    progress={0.37}
+                    progress={0.05}
                     estimated={36}
+                />
+            </div>
+
+            <div className='container short-width'>
+                <ProgressBar
+                    progress={0.5}
+                    estimated={17}
+                />
+            </div>
+
+            <div className='container short-width'>
+                <ProgressBar
+                    progress={0.95}
+                    estimated={1}
                 />
             </div>
 
