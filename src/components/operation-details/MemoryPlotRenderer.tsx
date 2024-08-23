@@ -93,7 +93,8 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
                 }
 
                 const originalColour = chartData[index].marker.color as string;
-                const desaturatedColour = tinycolor(originalColour).desaturate(80).toString();
+                const lightlyDesaturatedColour = tinycolor(originalColour).desaturate(55).toString();
+                const desaturatedColour = tinycolor(originalColour).desaturate(75).toString();
 
                 if (selectedAddress) {
                     data.marker.color =
@@ -105,7 +106,13 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
                 }
 
                 // No selected address (but could be hovered)
-                data.marker.color = hoveredPoint === data.x[0] ? desaturatedColour : originalColour;
+                if (hoveredPoint) {
+                    data.marker.color = hoveredPoint === data.x[0] ? originalColour : lightlyDesaturatedColour;
+
+                    return data;
+                }
+
+                data.marker.color = originalColour;
 
                 return data;
             }),
