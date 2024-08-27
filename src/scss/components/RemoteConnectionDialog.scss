@@ -7,7 +7,7 @@
 $tt-pending: #ffd500;
 
 .bp5-dialog.remote-connection-dialog {
-    background-color: $tt-slight-off-background;
+    background-color: $tt-off-background;
 
     .bp5-dialog-header {
         background-color: $tt-off-background;
@@ -41,7 +41,7 @@ $tt-pending: #ffd500;
         color: $tt-pending;
     }
 
-    &.status-failed .connection-status-icon { color: $tt-error; }
+    // &.status-failed .connection-status-icon { color: $tt-error; }
 }
 
 @keyframes connection-test-progress {

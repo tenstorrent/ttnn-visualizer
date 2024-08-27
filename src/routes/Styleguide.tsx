@@ -20,6 +20,7 @@ import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import ProgressBar from '../components/ProgressBar';
 import SearchField from '../components/SearchField';
 import 'styles/routes/Styleguide.scss';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -62,6 +63,23 @@ export default function Operations() {
                 sint in at consectetur voluptatem obcaecati, saepe, ratione, reprehenderit perferendis quas explicabo
                 error repellendus deserunt? Optio!
             </p> */}
+
+            <h2>Colours</h2>
+
+            <p>Background</p>
+            <div className='container flex no-gap no-wrap'>
+                <div className='colour grey-1' />
+                <div className='colour grey-2' />
+            </div>
+
+            <p>Greys</p>
+            <div className='container flex no-gap no-wrap'>
+                <div className='colour grey-4' />
+                <div className='colour grey-5' />
+                <div className='colour grey-6' />
+                <div className='colour grey-7' />
+                <div className='colour grey-8' />
+            </div>
 
             <h2>Buttons</h2>
 
@@ -456,7 +474,6 @@ export default function Operations() {
             >
                 <InputGroup
                     className='bp5-light'
-                    key='name'
                     onChange={() => {}}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
@@ -465,7 +482,6 @@ export default function Operations() {
             <div className='container flex'>
                 <InputGroup
                     className='bp5-light'
-                    key='name'
                     onChange={() => {}}
                     intent={Intent.PRIMARY}
                     leftIcon={IconNames.FOLDER_NEW}
@@ -473,7 +489,6 @@ export default function Operations() {
 
                 <InputGroup
                     className='bp5-light'
-                    key='name'
                     onChange={() => {}}
                     intent={Intent.WARNING}
                     leftIcon={IconNames.FOLDER_NEW}
@@ -481,7 +496,6 @@ export default function Operations() {
 
                 <InputGroup
                     className='bp5-light'
-                    key='name'
                     onChange={() => {}}
                     intent={Intent.SUCCESS}
                     leftIcon={IconNames.FOLDER_NEW}
@@ -489,7 +503,6 @@ export default function Operations() {
 
                 <InputGroup
                     className='bp5-light'
-                    key='name'
                     onChange={() => {}}
                     intent={Intent.DANGER}
                     leftIcon={IconNames.FOLDER_NEW}
@@ -524,6 +537,7 @@ export default function Operations() {
                 <Switch label='Toggle switch' />
                 <Switch
                     label='Toggle switch'
+                    onChange={() => {}}
                     checked
                 />
             </FormGroup>
@@ -553,24 +567,32 @@ export default function Operations() {
                 />
             </div>
 
-            <p>Connection message</p>
+            <div className='container'>
+                <p>Connection message</p>
 
-            <ConnectionTestMessage
-                status={ConnectionTestStates.IDLE}
-                message='Operation is idle'
-            />
-            <ConnectionTestMessage
-                status={ConnectionTestStates.PROGRESS}
-                message='Operation in progress'
-            />
-            <ConnectionTestMessage
-                status={ConnectionTestStates.OK}
-                message='Operation is successful'
-            />
-            <ConnectionTestMessage
-                status={ConnectionTestStates.FAILED}
-                message='Operation failed :('
-            />
+                <ConnectionTestMessage
+                    status={ConnectionTestStates.IDLE}
+                    message='Operation is idle'
+                />
+                <ConnectionTestMessage
+                    status={ConnectionTestStates.PROGRESS}
+                    message='Operation in progress'
+                />
+                <ConnectionTestMessage
+                    status={ConnectionTestStates.OK}
+                    message='Operation is successful'
+                />
+                <ConnectionTestMessage
+                    status={ConnectionTestStates.FAILED}
+                    message='Operation failed :('
+                />
+            </div>
+
+            <div className='container'>
+                <p>Loading spinner</p>
+
+                <LoadingSpinner />
+            </div>
         </>
     );
 }
