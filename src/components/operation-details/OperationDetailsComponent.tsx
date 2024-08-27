@@ -248,7 +248,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
 
                         <Switch
-                            label={zoomedInView ? 'Full buffer reports' : 'Zoom buffer reports'}
+                            className='zoom-toggle'
+                            label='Buffer zoom'
                             checked={zoomedInView}
                             onChange={() => setZoomedInView(!zoomedInView)}
                         />
@@ -280,10 +281,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             configuration={L1RenderConfiguration}
                             ref={plot2Ref}
                         />
-
-                        <aside className={classNames('plot-instructions', { hidden: chartData.length === 0 })}>
-                            Click on a buffer to focus
-                        </aside>
 
                         {/* <Collapsible */}
                         {/*    label={<h3>DRAM Memory</h3>} */}
