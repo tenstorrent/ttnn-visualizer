@@ -5,6 +5,8 @@
 @use 'sass:color';
 @use '../definitions/colours' as *;
 
+$row-background: $tt-grey-2;
+
 .arguments-table {
     border-collapse: collapse;
     width: 100%;
@@ -18,10 +20,11 @@
     }
 
     tr {
-        background-color: color.adjust($tt-off-background, $lightness: -5%);
+        background-color: color.adjust($row-background, $lightness: 2%);
 
         &:nth-of-type(odd) {
-            background-color: $tt-off-background;
+            background-color: color.adjust($row-background, $lightness: 8%);
+
         }
 
         th {

@@ -4,38 +4,15 @@
 
 @use '../definitions/colours' as *;
 
-$link-color: #99c4ff;
-
 .operation-details-component {
-    a,
-    a:active,
-    a:visited {
-        color: $link-color;
-        margin: 0;
-        padding: 2px 0;
-        transition:
-            color 150ms linear,
-            background-color 150ms linear;
-        transition-delay: 10ms;
+    .selected-tensor {
+        color: $tt-white;
 
-        &.current {
-            color: $tt-white;
-            cursor: default;
-
-            &::before {
-                display: inline-block;
-                content: '\2714'; // checkmark
-                margin-right: 5px;
-            }
+        &::before {
+            display: inline-block;
+            content: '\2714'; // checkmark
+            margin-right: 5px;
         }
-    }
-
-    a:hover:not(.current) {
-        color: $tt-black;
-        background-color: $link-color;
-        transition:
-            color 0ms linear,
-            background-color 0ms linear;
     }
 
     .dram-memory-renderer,

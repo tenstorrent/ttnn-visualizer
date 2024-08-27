@@ -9,9 +9,10 @@
     // $dark-button-background-color-hover: color.adjust($tt-slate, $lightness: -5%),
     // $dark-minimal-button-background-color-hover: rgba($tt-purple-accent, 20%),
     // $pt-dark-text-color
-    $control-checked-background-color: $tt-purple-accent,
-    $control-checked-background-color-hover: color.adjust($tt-purple-accent, $lightness: -3%),
-    $control-checked-background-color-active: color.adjust($tt-purple-accent, $lightness: -6%),
+    $pt-dark-link-color: $tt-teal-accent,
+    $control-checked-background-color: $tt-teal-accent,
+    $control-checked-background-color-hover: color.adjust($tt-teal-accent, $lightness: -3%),
+    $control-checked-background-color-active: color.adjust($tt-teal-accent, $lightness: -6%),
     $dark-progress-track-color: $tt-teal-shade,
     $dark-progress-head-color: $tt-teal-accent,
     // $dark-control-checked-background-color: #abc123,
@@ -45,10 +46,10 @@
 
 // Default
 .btn-default {
-    background-color: $tt-slate !important;
+    background-color: $tt-sand-shade !important;
 
     &:hover {
-        background-color: color.adjust($tt-slate, $lightness: -5%) !important;
+        background-color: color.adjust($tt-sand-shade, $lightness: -5%) !important;
     }
 
     .bp5-icon {
@@ -67,32 +68,27 @@
 
 // Primary
 .btn {
-    background-color: #2d72d2;
-    background-color: $tt-purple-shade !important;
+    background-color: $tt-teal-shade !important;
 
     &:hover {
-        // background-color: #2d72d2;
-        background-color: color.adjust($tt-purple-shade, $lightness: -5%) !important;
+        background-color: color.adjust($tt-teal-shade, $lightness: -5%) !important;
     }
 
     &.bp5-minimal {
         background-color: transparent !important;
-        color: $tt-purple !important;
+        color: $tt-teal !important;
 
         &:hover {
-            // background-color: rgb(45 114 210 / 20%);
-            background-color: rgba($tt-purple-accent, 20%) !important;
+            background-color: rgba($tt-teal-accent, 20%) !important;
         }
     }
 }
 
 // Success
 .btn-success {
-    background-color: #cd4246;
     background-color: $tt-green-accent !important;
 
     &:hover {
-        background-color: #ac2f33;
         background-color: color.adjust($tt-green-accent, $lightness: -5%) !important;
     }
 
@@ -101,7 +97,6 @@
         color: $tt-green-tint-1 !important;
 
         &:hover {
-            // background-color: rgb(45 114 210 / 20%);
             background-color: rgba($tt-green-accent, 20%) !important;
         }
     }
@@ -109,11 +104,9 @@
 
 // Warning
 .btn-warning {
-    background-color: #cd4246;
     background-color: $tt-yellow !important;
 
     &:hover {
-        background-color: #ac2f33;
         background-color: color.adjust($tt-yellow, $lightness: -5%) !important;
     }
 
@@ -122,7 +115,6 @@
         color: $tt-yellow-tint-1 !important;
 
         &:hover {
-            // background-color: rgb(45 114 210 / 20%);
             background-color: rgba($tt-yellow, 20%) !important;
         }
     }
@@ -130,11 +122,9 @@
 
 // Danger
 .btn-error {
-    background-color: #cd4246;
     background-color: $tt-red-accent !important;
 
     &:hover {
-        background-color: #ac2f33;
         background-color: color.adjust($tt-red-accent, $lightness: -5%) !important;
     }
 
@@ -143,7 +133,6 @@
         color: $tt-red !important;
 
         &:hover {
-            // background-color: rgb(45 114 210 / 20%);
             background-color: rgba($tt-red-accent, 20%) !important;
         }
     }

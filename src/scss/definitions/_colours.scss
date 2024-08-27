@@ -2,19 +2,15 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-/* Tenstorrent powerpoint theme */
-$tt-purple: #786bb0;
-$tt-background: #33333d;
-$tt-off-background: #44444d;
-$tt-very-dark-gray: #1c2127;
-$tt-light-gray: #eeeee6;
-$tt-medium-light-gray: #cbcbcb;
-$tt-medium-gray: #909096;
-$tt-dark-gray: #606066;
-
-// New colours
-$tt-white: #fff;
+// New Greys
 $tt-black: #202020;
+$tt-grey-2: #343434;
+$tt-grey-3: #464646;
+$tt-grey-4: #575757;
+$tt-grey-5: #A7AFB6;
+$tt-grey-6: #CED4DA;
+$tt-grey-7: #DEE2E6;
+$tt-white: #fff;
 
 // tt-purple
 $tt-purple: #bcb3f7;
@@ -72,5 +68,5 @@ $tt-slate-tint-2: #edeff9;
 $tt-slate-accent: #606891;
 $tt-slate-shade: #101636;
 
-// States
-$tt-error: #ff3c00;
+// Shared variables
+$tt-background: $tt-grey-2;

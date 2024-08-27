@@ -37,6 +37,19 @@ button {
 
 hr {
     border: none;
-    border-bottom: 1px solid $tt-medium-gray;
+    border-bottom: 1px solid $tt-grey-5;
     margin: 0;
+}
+
+a {
+    text-decoration: underline;
+
+    &:focus {
+        text-decoration: none;
+        outline: none;
+    }
+
+    &:hover {
+        text-decoration: none;
+    }
 }

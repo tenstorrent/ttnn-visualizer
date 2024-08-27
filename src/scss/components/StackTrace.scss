@@ -6,7 +6,7 @@
     flex-wrap: nowrap;
     padding: 10px;
     padding-left: 0;
-    background: $tt-very-dark-gray;
+    background-color: $tt-black;
     align-items: flex-start;
     gap: 10px;
     margin-top: 0;
@@ -48,13 +48,13 @@
             left: 5px;
             min-width: 30px;
             font-size: 1em;
-            color: $tt-medium-gray;
+            color: $tt-grey-5;
         }
 
         &::before {
             content: '';
             display: block;
-            border-left: 1px solid $tt-medium-light-gray;
+            border-left: 1px solid $tt-grey-4;
             width: 1px;
             height: 100%;
             position: absolute;
@@ -65,7 +65,7 @@
             background-color: $tt-slate;
 
             .line-number {
-                color: $tt-medium-light-gray;
+                color: $tt-grey-7;
             }
         }
     }

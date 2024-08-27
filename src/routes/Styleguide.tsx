@@ -32,7 +32,8 @@ export default function Operations() {
         <>
             <Helmet title='Styleguide' />
 
-            {/* <h2>Typography</h2>
+            <h2>Typography</h2>
+            {/*
 
             <p>
                 <strong>Font family</strong>
@@ -44,15 +45,16 @@ export default function Operations() {
             <h2>Heading H2</h2>
             <h3>Heading H3</h3>
             <h4>Heading H4</h4>
-            <h5>Heading H5</h5>
+            <h5>Heading H5</h5> */}
 
             <p>
                 <strong>Paragraph</strong>
             </p>
             <p>
                 Lorem ipsum dolor sit amet <em>consectetur adipisicing</em> elit. Error laborum atque suscipit. Officiis
-                fugit necessitatibus libero <strong>perspiciatis sequi </strong>accusantium earum repudiandae deserunt
-                nemo, <u>voluptatem tempora</u> laborum eaque minima molestiae eveniet.
+                fugit necessitatibus libero <strong>perspiciatis sequi </strong>accusantium earum{' '}
+                <a href='#123'>repudiandae deserunt</a> nemo, <u>voluptatem tempora</u> laborum eaque minima molestiae
+                eveniet.
             </p>
 
             <p>
@@ -62,23 +64,22 @@ export default function Operations() {
                 Lorem ipsum dolor sit, amet consectetur adipisicing elit. Magni nemo velit molestias quae temporibus
                 sint in at consectetur voluptatem obcaecati, saepe, ratione, reprehenderit perferendis quas explicabo
                 error repellendus deserunt? Optio!
-            </p> */}
+            </p>
 
             <h2>Colours</h2>
 
-            <p>Background</p>
-            <div className='container flex no-gap no-wrap'>
-                <div className='colour grey-1' />
-                <div className='colour grey-2' />
-            </div>
-
             <p>Greys</p>
-            <div className='container flex no-gap no-wrap'>
-                <div className='colour grey-4' />
-                <div className='colour grey-5' />
-                <div className='colour grey-6' />
-                <div className='colour grey-7' />
-                <div className='colour grey-8' />
+            <div className='container flex'>
+                <div className='container colour-container flex no-gap flex-column'>
+                    <div className='colour b-1' />
+                    <div className='colour g-2' />
+                    <div className='colour g-3' />
+                    <div className='colour g-4' />
+                    <div className='colour g-5' />
+                    <div className='colour g-6' />
+                    <div className='colour g-7' />
+                    <div className='colour w-1' />
+                </div>
             </div>
 
             <h2>Buttons</h2>
