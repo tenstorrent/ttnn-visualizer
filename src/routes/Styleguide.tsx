@@ -47,38 +47,119 @@ export default function Operations() {
             <h4>Heading H4</h4>
             <h5>Heading H5</h5> */}
 
-            <p>
-                <strong>Paragraph</strong>
-            </p>
-            <p>
-                Lorem ipsum dolor sit amet <em>consectetur adipisicing</em> elit. Error laborum atque suscipit. Officiis
-                fugit necessitatibus libero <strong>perspiciatis sequi </strong>accusantium earum{' '}
-                <a href='#123'>repudiandae deserunt</a> nemo, <u>voluptatem tempora</u> laborum eaque minima molestiae
-                eveniet.
-            </p>
+            <div className='container'>
+                <p>
+                    <strong>Paragraph</strong>
+                </p>
+                <p>
+                    Lorem ipsum dolor sit amet <em>consectetur adipisicing</em> elit. Error laborum atque suscipit.
+                    Officiis fugit necessitatibus libero <strong>perspiciatis sequi </strong>accusantium earum{' '}
+                    <a href='#123'>repudiandae deserunt</a> nemo, <u>voluptatem tempora</u> laborum eaque minima
+                    molestiae eveniet.
+                </p>
 
-            <p>
-                <strong>Monospace</strong>
-            </p>
-            <p className='monospace'>
-                Lorem ipsum dolor sit, amet consectetur adipisicing elit. Magni nemo velit molestias quae temporibus
-                sint in at consectetur voluptatem obcaecati, saepe, ratione, reprehenderit perferendis quas explicabo
-                error repellendus deserunt? Optio!
-            </p>
+                <p>
+                    <strong>Monospace</strong>
+                </p>
+                <p className='monospace'>
+                    Lorem ipsum dolor sit, amet consectetur adipisicing elit. Magni nemo velit molestias quae temporibus
+                    sint in at consectetur voluptatem obcaecati, saepe, ratione, reprehenderit perferendis quas
+                    explicabo error repellendus deserunt? Optio!
+                </p>
+
+                <p>
+                    <strong>Horizontal ruler</strong>
+                </p>
+                <hr />
+            </div>
 
             <h2>Colours</h2>
 
             <p>Greys</p>
             <div className='container flex'>
                 <div className='container colour-container flex no-gap flex-column'>
-                    <div className='colour b-1' />
-                    <div className='colour g-2' />
-                    <div className='colour g-3' />
-                    <div className='colour g-4' />
-                    <div className='colour g-5' />
-                    <div className='colour g-6' />
-                    <div className='colour g-7' />
                     <div className='colour w-1' />
+                    <div className='colour g-6' />
+                    <div className='colour g-5' />
+                    <div className='colour g-4' />
+                    <div className='colour g-3' />
+                    <div className='colour g-2' />
+                    <div className='colour g-1' />
+                    <div className='colour b-1' />
+                </div>
+            </div>
+
+            <div className='container flex wrap'>
+                <div className='container colour-container flex no-gap flex-column'>
+                    <p>Purple</p>
+                    <div className='colour purple-base' />
+                    <div className='colour purple-tint-1' />
+                    <div className='colour purple-tint-2' />
+                    <div className='colour purple-accent' />
+                    <div className='colour purple-shade' />
+                </div>
+
+                <div className='container colour-container flex no-gap flex-column'>
+                    <p>Red</p>
+                    <div className='colour red-base' />
+                    <div className='colour red-tint-1' />
+                    <div className='colour red-tint-2' />
+                    <div className='colour red-accent' />
+                    <div className='colour red-shade' />
+                </div>
+
+                <div className='container colour-container flex no-gap flex-column'>
+                    <p>Blue</p>
+                    <div className='colour blue-base' />
+                    <div className='colour blue-tint-1' />
+                    <div className='colour blue-tint-2' />
+                    <div className='colour blue-accent' />
+                    <div className='colour blue-shade' />
+                </div>
+
+                <div className='container colour-container flex no-gap flex-column'>
+                    <p>Yellow</p>
+                    <div className='colour yellow-base' />
+                    <div className='colour yellow-tint-1' />
+                    <div className='colour yellow-tint-2' />
+                    <div className='colour yellow-accent' />
+                    <div className='colour yellow-shade' />
+                </div>
+
+                <div className='container colour-container flex no-gap flex-column'>
+                    <p>Teal</p>
+                    <div className='colour teal-base' />
+                    <div className='colour teal-tint-1' />
+                    <div className='colour teal-tint-2' />
+                    <div className='colour teal-accent' />
+                    <div className='colour teal-shade' />
+                </div>
+
+                <div className='container colour-container flex no-gap flex-column'>
+                    <p>Green</p>
+                    <div className='colour green-base' />
+                    <div className='colour green-tint-1' />
+                    <div className='colour green-tint-2' />
+                    <div className='colour green-accent' />
+                    <div className='colour green-shade' />
+                </div>
+
+                <div className='container colour-container flex no-gap flex-column'>
+                    <p>Sand</p>
+                    <div className='colour sand-base' />
+                    <div className='colour sand-tint-1' />
+                    <div className='colour sand-tint-2' />
+                    <div className='colour sand-accent' />
+                    <div className='colour sand-shade' />
+                </div>
+
+                <div className='container colour-container flex no-gap flex-column'>
+                    <p>Slate</p>
+                    <div className='colour slate-base' />
+                    <div className='colour slate-tint-1' />
+                    <div className='colour slate-tint-2' />
+                    <div className='colour slate-accent' />
+                    <div className='colour slate-shade' />
                 </div>
             </div>
 
@@ -543,7 +624,7 @@ export default function Operations() {
                 />
             </FormGroup>
 
-            <h3>Status</h3>
+            <h3>Components</h3>
 
             <p>Progress bar</p>
 

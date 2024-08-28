@@ -16,6 +16,10 @@
         gap: 0
     }
 
+    &.wrap {
+        flex-wrap: wrap;
+    }
+
     &.no-wrap {
         flex-wrap: nowrap;
     }
@@ -30,31 +34,32 @@
 }
 
 .colour-container {
+    flex-basis: 24%;
+
     .colour {
         height: 30px;
-        width: 160px;
 
-        &.g-2 {
+        &.g-1 {
             background-color: $tt-grey-2;
         }
 
-        &.g-3 {
+        &.g-2 {
             background-color: $tt-grey-3;
         }
 
-        &.g-4 {
+        &.g-3 {
             background-color: $tt-grey-4;
         }
 
-        &.g-5 {
+        &.g-4 {
             background-color: $tt-grey-5;
         }
 
-        &.g-6 {
+        &.g-5 {
             background-color: $tt-grey-6;
         }
 
-        &.g-7 {
+        &.g-6 {
             background-color: $tt-grey-7;
         }
 
@@ -65,5 +70,19 @@
         &.w-1 {
             background-color: $tt-white;
         }
+
+        @each $colour-name, $shades in $tt-colours {
+            @each $shade-name, $shade-value in $shades {
+              &.#{$colour-name}-#{$shade-name} {
+                background-color: $shade-value;
+              }
+            }
+        }
     }
 }
+
+@function clr($base, $shade: base) {
+    $color: map.get(map.get($colors, $base), $shade);
+
+    @return $color;
+  }

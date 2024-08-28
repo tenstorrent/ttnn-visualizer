@@ -70,3 +70,61 @@ $tt-slate-shade: #101636;
 
 // Shared variables
 $tt-background: $tt-grey-2;
+$tt-colours: (
+  "purple": (
+    "base": $tt-purple,
+    "tint-1": $tt-purple-tint-1,
+    "tint-2": $tt-purple-tint-2,
+    "accent": $tt-purple-accent,
+    "shade": $tt-purple-shade,
+  ),
+  "red": (
+    "base": $tt-red,
+    "tint-1": $tt-red-tint-1,
+    "tint-2": $tt-red-tint-2,
+    "accent": $tt-red-accent,
+    "shade": $tt-red-shade,
+  ),
+  "blue": (
+    "base": $tt-blue,
+    "tint-1": $tt-blue-tint-1,
+    "tint-2": $tt-blue-tint-2,
+    "accent": $tt-blue-accent,
+    "shade": $tt-blue-shade,
+  ),
+  "yellow": (
+    "base": $tt-yellow,
+    "tint-1": $tt-yellow-tint-1,
+    "tint-2": $tt-yellow-tint-2,
+    "accent": $tt-yellow-accent,
+    "shade": $tt-yellow-shade,
+  ),
+  "teal": (
+    "base": $tt-teal,
+    "tint-1": $tt-teal-tint-1,
+    "tint-2": $tt-teal-tint-2,
+    "accent": $tt-teal-accent,
+    "shade": $tt-teal-shade,
+  ),
+  "green": (
+    "base": $tt-green,
+    "tint-1": $tt-green-tint-1,
+    "tint-2": $tt-green-tint-2,
+    "accent": $tt-green-accent,
+    "shade": $tt-green-shade,
+  ),
+  "sand": (
+    "base": $tt-sand,
+    "tint-1": $tt-sand-tint-1,
+    "tint-2": $tt-sand-tint-2,
+    "accent": $tt-sand-accent,
+    "shade": $tt-sand-shade,
+  ),
+  "slate": (
+    "base": $tt-slate,
+    "tint-1": $tt-slate-tint-1,
+    "tint-2": $tt-slate-tint-2,
+    "accent": $tt-slate-accent,
+    "shade": $tt-slate-shade,
+  )
+);

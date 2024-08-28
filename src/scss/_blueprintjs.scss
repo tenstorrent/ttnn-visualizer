@@ -5,9 +5,10 @@
 @use 'sass:color';
 @use './definitions/colours' as *;
 @use "@blueprintjs/core/src/blueprint.scss" with (
-    // $dark-button-background-color: $tt-slate,
-    // $dark-button-background-color-hover: color.adjust($tt-slate, $lightness: -5%),
-    // $dark-minimal-button-background-color-hover: rgba($tt-purple-accent, 20%),
+    // $dark-button-background-color: $tt-sand-shade,
+    // $dark-button-background-color-hover: color.adjust($tt-sand-shade, $lightness: -5%),
+    // $dark-minimal-button-background-color: $tt-sand-shade,
+    // $dark-minimal-button-background-color-hover: color.adjust($tt-sand-shade, $lightness: 5%),
     // $pt-dark-text-color
     $pt-dark-link-color: $tt-teal-accent,
     $control-checked-background-color: $tt-teal-accent,

@@ -17,5 +17,9 @@
     .highlighted-text {
         color: $tt-white;
         font-size: 20px;
+
+        mark {
+            background-color: $tt-yellow;
+        }
     }
 }
