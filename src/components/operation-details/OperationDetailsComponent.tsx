@@ -33,6 +33,8 @@ import MicroOperations from '../MicroOperations';
 import OperationArguments from '../OperationArguments';
 import { selectedTensorAddressAtom } from '../../store/app';
 import useOutsideClick from '../../hooks/useOutsideClick';
+import { getBufferColor } from '../../functions/colorGenerator';
+import ToastTensorMessage from './ToastTensorMessage';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -210,13 +212,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         const id = tensor?.id || (buffer?.address && toHex(buffer.address)) || null;
 
         if (id) {
-            const toastInstance = toast(<ToastTensorMessage id={id} />, {
-                position: 'bottom-right',
-                hideProgressBar: true,
-                closeOnClick: true,
-                onClick: () => setToastId(null),
-                theme: 'light',
-            }) as number;
+            const toastInstance = toast(
+                <ToastTensorMessage
+                    id={id}
+                    colour={getBufferColor(address)}
+                />,
+                {
+                    position: 'bottom-right',
+                    hideProgressBar: true,
+                    closeOnClick: true,
+                    onClick: () => setToastId(null),
+                    theme: 'light',
+                },
+            ) as number;
 
             setToastId(toastInstance);
         }
@@ -496,15 +504,5 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         </>
     );
 };
-
-interface ToastTensorMessageProps {
-    id: number | string;
-}
-
-const ToastTensorMessage = ({ id }: ToastTensorMessageProps) => (
-    <div>
-        {typeof id === 'string' ? 'Buffer' : 'Tensor'} <strong>{id}</strong> selected
-    </div>
-);
 
 export default OperationDetailsComponent;
