@@ -122,3 +122,10 @@ button,
 .monospace {
     font-family: monospace;
 }
+
+.no-toast-animation {
+    display: none !important;
+    transition: none !important;
+    opacity: 0;
+}
+

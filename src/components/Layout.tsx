@@ -3,11 +3,19 @@ import { Button, Classes, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
-import { Bounce, ToastContainer } from 'react-toastify';
+import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
 import TenstorrentLogo from './TenstorrentLogo';
 import ROUTES from '../definitions/routes';
 import { reportMetaAtom } from '../store/app';
+
+const BounceInOut = cssTransition({
+    enter: `Toastify--animate Toastify__bounce-enter`,
+    exit: ` no-toast-animation Toastify__bounce-exit`,
+    appendPosition: true,
+    collapseDuration: 0,
+    collapse: true,
+});
 
 function Layout() {
     const navigate = useNavigate();
@@ -69,7 +77,7 @@ function Layout() {
                     pauseOnHover
                     closeButton={false}
                     theme='light'
-                    transition={Bounce}
+                    transition={BounceInOut}
                 />
             </main>
         </div>
