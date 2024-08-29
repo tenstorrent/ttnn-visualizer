@@ -108,6 +108,21 @@
             gap: 5px;
             grid-template-columns: 20px 1fr;
 
+            &.button {
+                background-color: transparent;
+                padding: 0;
+                font-size: inherit;
+
+                &:focus,
+                &:hover {
+                    .legend-details {
+                        .format-numbers:first-child {
+                            text-decoration: underline;
+                        }
+                    }
+                }
+            }
+
             &.dimmed {
                 opacity: 0.4;
             }
@@ -169,14 +184,24 @@
             color: $tt-white-text;
             gap: 8px;
             margin-bottom: 10px;
+            font-size: inherit;
+            background-color: transparent;
+            padding: 0;
 
             h4 {
                 margin: 0;
             }
+
+            &:focus,
+            &:hover {
+                h4 {
+                    text-decoration: underline;
+                }
+            }
         }
 
         .tensor-meta {
-            padding-left: 40px;
+            padding-left: 25px;
         }
     }
 

@@ -14,7 +14,7 @@ import { FragmentationEntry } from '../../model/APIData';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
-import { isEqual } from '../../functions/math';
+import { isEqual, toHex } from '../../functions/math';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
@@ -196,20 +196,30 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         }
     };
 
+    const onLegendClick = (address: number) => {
+        selectTensorByAddress(address);
+    };
+
     const createToast = (address: number) => {
         if (toastId) {
             toast.dismiss(toastId);
         }
 
-        const toastInstance = toast(<ToastTensorMessage address={address} />, {
-            position: 'bottom-right',
-            hideProgressBar: true,
-            closeOnClick: true,
-            onClick: () => setToastId(null),
-            theme: 'light',
-        }) as number;
+        const tensor = details.getTensorForAddress(address);
+        const buffer = details.buffers.find((b) => b.address === address);
+        const id = tensor?.id || (buffer?.address && toHex(buffer.address)) || null;
 
-        setToastId(toastInstance);
+        if (id) {
+            const toastInstance = toast(<ToastTensorMessage id={id} />, {
+                position: 'bottom-right',
+                hideProgressBar: true,
+                closeOnClick: true,
+                onClick: () => setToastId(null),
+                theme: 'light',
+            }) as number;
+
+            setToastId(toastInstance);
+        }
     };
 
     // TODO: keeping this as a reminder. this wont work properly while we pick tensor by address only, an only for a specific operation
@@ -343,6 +353,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         memSize={memorySizeL1}
                                         selectedTensorAddress={selectedTensorAddress}
                                         operationDetails={details}
+                                        onLegendClick={onLegendClick}
                                     />
                                 ))}
                                 <hr />
@@ -353,6 +364,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         memSize={DRAM_MEMORY_SIZE}
                                         selectedTensorAddress={selectedTensorAddress}
                                         operationDetails={details}
+                                        onLegendClick={onLegendClick}
                                     />
                                 ))}
                                 <Collapsible
@@ -367,6 +379,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             memSize={DRAM_MEMORY_SIZE}
                                             selectedTensorAddress={selectedTensorAddress}
                                             operationDetails={details}
+                                            onLegendClick={onLegendClick}
                                         />
                                     ))}
                                 </Collapsible>
@@ -485,12 +498,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 };
 
 interface ToastTensorMessageProps {
-    address: number;
+    id: number | string;
 }
 
-const ToastTensorMessage = ({ address }: ToastTensorMessageProps) => (
+const ToastTensorMessage = ({ id }: ToastTensorMessageProps) => (
     <div>
-        Buffer <strong>{address}</strong> selected
+        {typeof id === 'string' ? 'Buffer' : 'Tensor'} <strong>{id}</strong> selected
     </div>
 );
 

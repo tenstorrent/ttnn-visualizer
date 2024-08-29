@@ -10,19 +10,26 @@ export const MemoryLegendElement: React.FC<{
     memSize: number;
     selectedTensorAddress: number | null;
     operationDetails: OperationDetails;
+    onLegendClick: (selectedTensorAddress: number) => void;
 }> = ({
     // no wrap eslint
     chunk,
     memSize,
     selectedTensorAddress,
     operationDetails,
+    onLegendClick,
 }) => {
+    const Component = !chunk.empty ? 'button' : 'div';
+
     return (
-        <div
+        <Component
             key={chunk.address}
             className={classNames('legend-item', {
+                button: !chunk.empty,
                 dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
             })}
+            // eslint-disable-next-line react/jsx-props-no-spreading
+            {...(!chunk.empty ? { type: 'button', onClick: () => onLegendClick(chunk.address) } : {})}
         >
             <div
                 className={classNames('memory-color-block', {
@@ -43,6 +50,6 @@ export const MemoryLegendElement: React.FC<{
                     {chunk.empty && 'Empty space'}
                 </div>
             </div>
-        </div>
+        </Component>
     );
 };
