@@ -4,12 +4,12 @@
 
 @use 'sass:color';
 @use './definitions/colours' as *;
+@use "@blueprintjs/colors/lib/scss/colors" as *;
 @use "@blueprintjs/core/src/blueprint.scss" with (
-    // $dark-button-background-color: $tt-sand-shade,
-    // $dark-button-background-color-hover: color.adjust($tt-sand-shade, $lightness: -5%),
-    // $dark-minimal-button-background-color: $tt-sand-shade,
-    // $dark-minimal-button-background-color-hover: color.adjust($tt-sand-shade, $lightness: 5%),
-    // $pt-dark-text-color
+    $dark-button-background-color: $tt-sand-shade,
+    $dark-button-background-color-hover: color.adjust($tt-sand-shade, $lightness: -5%),
+    $dark-minimal-button-background-color: $tt-sand-shade,
+    $dark-minimal-button-background-color-hover: color.adjust($tt-sand-shade, $lightness: 5%),
     $pt-dark-link-color: $tt-teal-accent,
     $control-checked-background-color: $tt-teal-accent,
     $control-checked-background-color-hover: color.adjust($tt-teal-accent, $lightness: -3%),
@@ -19,122 +19,16 @@
     // $dark-control-checked-background-color: #abc123,
     $pt-dark-icon-color: $tt-white,
     // "intent": (default, hover, active colors)
-    // $button-intents: (
-    //     "primary": (#abc123, #abc123, #abc123),
-    //     "success": (#abc123, #abc123, #abc123),
-    //     "warning": (#abc123, #abc123, #abc123),
-    //     "danger": (#abc123, #abc123, #abc123)
-    // ),
-    // $pt-intent-colors: (
-    //     "primary": $tt-purple,
-    //     "success": red,
-    //     "warning": red,
-    //     "danger" : red,
-    // ),
-    // $pt-dark-intent-text-colors: (
-    //     "primary": $tt-purple-accent,
-    //     "success": $tt-green-accent,
-    //     "warning": $tt-yellow,
-    //     "danger" : $tt-red,
-    // ),
-    // $pt-dark-input-intent-box-shadow-colors: (
-    //     "primary": #abc123,
-    //     "success": #abc123,
-    //     "warning": #abc123,
-    //     "danger": #abc123,
-    // )
+    $button-intents: (
+        "primary": ($tt-teal-shade, color.adjust($tt-teal-shade, $lightness: -5%), color.adjust($tt-teal-shade, $lightness: -10%)),
+        "success": ($green3, $green2, $green1),
+        "warning": ($tt-yellow, color.adjust($tt-yellow, $lightness: -5%), $tt-yellow),
+        "danger": ($tt-red-accent, color.adjust($tt-red-accent, $lightness: -5%), $tt-red-shade)
+    ),
+    $pt-dark-intent-text-colors: (
+        "primary": $tt-teal,
+        "success": $tt-green,
+        "warning": $tt-yellow,
+        "danger" : $tt-red,
+    ),
 );
-
-// Default
-.btn-default {
-    background-color: $tt-sand-shade !important;
-
-    &:hover {
-        background-color: color.adjust($tt-sand-shade, $lightness: -5%) !important;
-    }
-
-    .bp5-icon {
-        color: inherit !important;
-    }
-
-    &.bp5-minimal {
-        background-color: transparent !important;
-        color: $tt-slate-tint-2 !important;
-
-        &:hover {
-            background-color: rgba($tt-slate, 20%) !important;
-        }
-    }
-}
-
-// Primary
-.btn {
-    background-color: $tt-teal-shade !important;
-
-    &:hover {
-        background-color: color.adjust($tt-teal-shade, $lightness: -5%) !important;
-    }
-
-    &.bp5-minimal {
-        background-color: transparent !important;
-        color: $tt-teal !important;
-
-        &:hover {
-            background-color: rgba($tt-teal-accent, 20%) !important;
-        }
-    }
-}
-
-// Success
-.btn-success {
-    background-color: $tt-green-accent !important;
-
-    &:hover {
-        background-color: color.adjust($tt-green-accent, $lightness: -5%) !important;
-    }
-
-    &.bp5-minimal {
-        background-color: transparent !important;
-        color: $tt-green-tint-1 !important;
-
-        &:hover {
-            background-color: rgba($tt-green-accent, 20%) !important;
-        }
-    }
-}
-
-// Warning
-.btn-warning {
-    background-color: $tt-yellow !important;
-
-    &:hover {
-        background-color: color.adjust($tt-yellow, $lightness: -5%) !important;
-    }
-
-    &.bp5-minimal {
-        background-color: transparent !important;
-        color: $tt-yellow-tint-1 !important;
-
-        &:hover {
-            background-color: rgba($tt-yellow, 20%) !important;
-        }
-    }
-}
-
-// Danger
-.btn-error {
-    background-color: $tt-red-accent !important;
-
-    &:hover {
-        background-color: color.adjust($tt-red-accent, $lightness: -5%) !important;
-    }
-
-    &.bp5-minimal {
-        background-color: transparent !important;
-        color: $tt-red !important;
-
-        &:hover {
-            background-color: rgba($tt-red-accent, 20%) !important;
-        }
-    }
-}

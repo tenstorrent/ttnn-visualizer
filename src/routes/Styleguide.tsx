@@ -75,9 +75,9 @@ export default function Operations() {
 
             <h2>Colours</h2>
 
-            <p>Greys</p>
-            <div className='container flex'>
+            <div className='container flex wrap'>
                 <div className='container colour-container flex no-gap flex-column'>
+                    <p>Grey</p>
                     <div className='colour w-1' />
                     <div className='colour g-6' />
                     <div className='colour g-5' />
@@ -87,9 +87,6 @@ export default function Operations() {
                     <div className='colour g-1' />
                     <div className='colour b-1' />
                 </div>
-            </div>
-
-            <div className='container flex wrap'>
                 <div className='container colour-container flex no-gap flex-column'>
                     <p>Purple</p>
                     <div className='colour purple-base' />
@@ -176,54 +173,6 @@ export default function Operations() {
                     >
                         Your text here
                     </Button>
-
-                    <button
-                        type='button'
-                        className='btn-default bp5-button'
-                    >
-                        <span
-                            aria-hidden='true'
-                            className='bp5-icon bp5-icon-add'
-                        >
-                            <svg
-                                data-icon='add'
-                                height='16'
-                                role='img'
-                                viewBox='0 0 16 16'
-                                width='16'
-                            >
-                                <path
-                                    d='M10.99 6.99h-2v-2c0-.55-.45-1-1-1s-1 .45-1 1v2h-2c-.55 0-1 .45-1 1s.45 1 1 1h2v2c0 .55.45 1 1 1s1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1zm-3-7c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.68 6-6 6z'
-                                    fillRule='evenodd'
-                                />
-                            </svg>
-                        </span>
-                        <span className='bp5-button-text'>Your text here</span>
-                    </button>
-
-                    <button
-                        type='button'
-                        className='btn-default bp5-button bp5-minimal'
-                    >
-                        <span
-                            aria-hidden='true'
-                            className='bp5-icon bp5-icon-add'
-                        >
-                            <svg
-                                data-icon='add'
-                                height='16'
-                                role='img'
-                                viewBox='0 0 16 16'
-                                width='16'
-                            >
-                                <path
-                                    d='M10.99 6.99h-2v-2c0-.55-.45-1-1-1s-1 .45-1 1v2h-2c-.55 0-1 .45-1 1s.45 1 1 1h2v2c0 .55.45 1 1 1s1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1zm-3-7c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.68 6-6 6z'
-                                    fillRule='evenodd'
-                                />
-                            </svg>
-                        </span>
-                        <span className='bp5-button-text'>Your text here</span>
-                    </button>
                 </div>
 
                 <div>
@@ -242,54 +191,6 @@ export default function Operations() {
                     >
                         Your text here
                     </Button>
-
-                    <button
-                        type='button'
-                        className='btn bp5-button bp5-intent-primary'
-                    >
-                        <span
-                            aria-hidden='true'
-                            className='bp5-icon bp5-icon-add'
-                        >
-                            <svg
-                                data-icon='add'
-                                height='16'
-                                role='img'
-                                viewBox='0 0 16 16'
-                                width='16'
-                            >
-                                <path
-                                    d='M10.99 6.99h-2v-2c0-.55-.45-1-1-1s-1 .45-1 1v2h-2c-.55 0-1 .45-1 1s.45 1 1 1h2v2c0 .55.45 1 1 1s1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1zm-3-7c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.68 6-6 6z'
-                                    fillRule='evenodd'
-                                />
-                            </svg>
-                        </span>
-                        <span className='bp5-button-text'>Your text here</span>
-                    </button>
-
-                    <button
-                        type='button'
-                        className='btn bp5-button bp5-minimal bp5-intent-primary'
-                    >
-                        <span
-                            aria-hidden='true'
-                            className='bp5-icon bp5-icon-add'
-                        >
-                            <svg
-                                data-icon='add'
-                                height='16'
-                                role='img'
-                                viewBox='0 0 16 16'
-                                width='16'
-                            >
-                                <path
-                                    d='M10.99 6.99h-2v-2c0-.55-.45-1-1-1s-1 .45-1 1v2h-2c-.55 0-1 .45-1 1s.45 1 1 1h2v2c0 .55.45 1 1 1s1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1zm-3-7c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.68 6-6 6z'
-                                    fillRule='evenodd'
-                                />
-                            </svg>
-                        </span>
-                        <span className='bp5-button-text'>Your text here</span>
-                    </button>
                 </div>
 
                 <div>
@@ -308,54 +209,6 @@ export default function Operations() {
                     >
                         Your text here
                     </Button>
-
-                    <button
-                        type='button'
-                        className='btn-success bp5-button bp5-intent-success'
-                    >
-                        <span
-                            aria-hidden='true'
-                            className='bp5-icon bp5-icon-add'
-                        >
-                            <svg
-                                data-icon='add'
-                                height='16'
-                                role='img'
-                                viewBox='0 0 16 16'
-                                width='16'
-                            >
-                                <path
-                                    d='M10.99 6.99h-2v-2c0-.55-.45-1-1-1s-1 .45-1 1v2h-2c-.55 0-1 .45-1 1s.45 1 1 1h2v2c0 .55.45 1 1 1s1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1zm-3-7c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.68 6-6 6z'
-                                    fillRule='evenodd'
-                                />
-                            </svg>
-                        </span>
-                        <span className='bp5-button-text'>Your text here</span>
-                    </button>
-
-                    <button
-                        type='button'
-                        className='btn-success bp5-button bp5-minimal bp5-intent-success'
-                    >
-                        <span
-                            aria-hidden='true'
-                            className='bp5-icon bp5-icon-add'
-                        >
-                            <svg
-                                data-icon='add'
-                                height='16'
-                                role='img'
-                                viewBox='0 0 16 16'
-                                width='16'
-                            >
-                                <path
-                                    d='M10.99 6.99h-2v-2c0-.55-.45-1-1-1s-1 .45-1 1v2h-2c-.55 0-1 .45-1 1s.45 1 1 1h2v2c0 .55.45 1 1 1s1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1zm-3-7c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.68 6-6 6z'
-                                    fillRule='evenodd'
-                                />
-                            </svg>
-                        </span>
-                        <span className='bp5-button-text'>Your text here</span>
-                    </button>
                 </div>
 
                 <div>
@@ -374,54 +227,6 @@ export default function Operations() {
                     >
                         Your text here
                     </Button>
-
-                    <button
-                        type='button'
-                        className='btn-warning bp5-button bp5-intent-warning'
-                    >
-                        <span
-                            aria-hidden='true'
-                            className='bp5-icon bp5-icon-add'
-                        >
-                            <svg
-                                data-icon='add'
-                                height='16'
-                                role='img'
-                                viewBox='0 0 16 16'
-                                width='16'
-                            >
-                                <path
-                                    d='M10.99 6.99h-2v-2c0-.55-.45-1-1-1s-1 .45-1 1v2h-2c-.55 0-1 .45-1 1s.45 1 1 1h2v2c0 .55.45 1 1 1s1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1zm-3-7c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.68 6-6 6z'
-                                    fillRule='evenodd'
-                                />
-                            </svg>
-                        </span>
-                        <span className='bp5-button-text'>Your text here</span>
-                    </button>
-
-                    <button
-                        type='button'
-                        className='btn-warning bp5-button bp5-minimal bp5-intent-warning'
-                    >
-                        <span
-                            aria-hidden='true'
-                            className='bp5-icon bp5-icon-add'
-                        >
-                            <svg
-                                data-icon='add'
-                                height='16'
-                                role='img'
-                                viewBox='0 0 16 16'
-                                width='16'
-                            >
-                                <path
-                                    d='M10.99 6.99h-2v-2c0-.55-.45-1-1-1s-1 .45-1 1v2h-2c-.55 0-1 .45-1 1s.45 1 1 1h2v2c0 .55.45 1 1 1s1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1zm-3-7c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.68 6-6 6z'
-                                    fillRule='evenodd'
-                                />
-                            </svg>
-                        </span>
-                        <span className='bp5-button-text'>Your text here</span>
-                    </button>
                 </div>
 
                 <div>
@@ -440,54 +245,6 @@ export default function Operations() {
                     >
                         Your text here
                     </Button>
-
-                    <button
-                        type='button'
-                        className='btn-error bp5-button bp5-intent-danger'
-                    >
-                        <span
-                            aria-hidden='true'
-                            className='bp5-icon bp5-icon-add'
-                        >
-                            <svg
-                                data-icon='add'
-                                height='16'
-                                role='img'
-                                viewBox='0 0 16 16'
-                                width='16'
-                            >
-                                <path
-                                    d='M10.99 6.99h-2v-2c0-.55-.45-1-1-1s-1 .45-1 1v2h-2c-.55 0-1 .45-1 1s.45 1 1 1h2v2c0 .55.45 1 1 1s1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1zm-3-7c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.68 6-6 6z'
-                                    fillRule='evenodd'
-                                />
-                            </svg>
-                        </span>
-                        <span className='bp5-button-text'>Your text here</span>
-                    </button>
-
-                    <button
-                        type='button'
-                        className='btn-error bp5-button bp5-minimal bp5-intent-danger'
-                    >
-                        <span
-                            aria-hidden='true'
-                            className='bp5-icon bp5-icon-add'
-                        >
-                            <svg
-                                data-icon='add'
-                                height='16'
-                                role='img'
-                                viewBox='0 0 16 16'
-                                width='16'
-                            >
-                                <path
-                                    d='M10.99 6.99h-2v-2c0-.55-.45-1-1-1s-1 .45-1 1v2h-2c-.55 0-1 .45-1 1s.45 1 1 1h2v2c0 .55.45 1 1 1s1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1zm-3-7c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.68 6-6 6z'
-                                    fillRule='evenodd'
-                                />
-                            </svg>
-                        </span>
-                        <span className='bp5-button-text'>Your text here</span>
-                    </button>
                 </div>
             </div>
 
