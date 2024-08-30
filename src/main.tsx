@@ -43,7 +43,8 @@ FocusStyleManager.onlyShowFocusOnTabs();
 const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
-            refetchOnWindowFocus: false, // Messes with Plotly event handling
+            // Messes with Plotly event handling and we don't really need this anyway
+            refetchOnWindowFocus: false,
         },
     },
 });

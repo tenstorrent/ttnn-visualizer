@@ -266,7 +266,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
 
                         <Switch
-                            className='zoom-toggle'
                             label='Buffer zoom'
                             checked={zoomedInView}
                             onChange={() => setZoomedInView(!zoomedInView)}

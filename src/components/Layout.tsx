@@ -9,7 +9,7 @@ import TenstorrentLogo from './TenstorrentLogo';
 import ROUTES from '../definitions/routes';
 import { reportMetaAtom } from '../store/app';
 
-const BounceInOut = cssTransition({
+const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
     exit: ` no-toast-animation Toastify__bounce-exit`,
     appendPosition: true,
@@ -68,16 +68,11 @@ function Layout() {
                 <ToastContainer
                     position='top-right'
                     autoClose={false}
-                    hideProgressBar={false}
                     newestOnTop={false}
                     closeOnClick
-                    rtl={false}
-                    pauseOnFocusLoss
-                    draggable
-                    pauseOnHover
                     closeButton={false}
                     theme='light'
-                    transition={BounceInOut}
+                    transition={BounceIn}
                 />
             </main>
         </div>
