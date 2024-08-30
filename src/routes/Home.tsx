@@ -6,7 +6,7 @@ import { Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import LocalFolderSelector from '../components/report-selection/LocalFolderSelector';
 import RemoteSyncConfigurator from '../components/report-selection/RemoteSyncConfigurator';
-import 'styles/components/Home.scss';
+import 'styles/routes/Home.scss';
 
 function Home() {
     return (

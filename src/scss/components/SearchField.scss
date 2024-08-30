@@ -2,7 +2,6 @@
 
 .search-field {
     display: flex;
-    min-width: 250px;
 
     .bp5-input-group {
         display: flex;
@@ -16,7 +15,7 @@
                 margin-right: 5px;
 
                 svg {
-                    fill: $tt-dark-gray;
+                    fill: $tt-grey-5;
                 }
             }
         }

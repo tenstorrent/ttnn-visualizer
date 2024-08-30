@@ -5,35 +5,14 @@
 @use '../definitions/colours' as *;
 
 .operation-details-component {
-    a,
-    a:active,
-    a:visited {
-        color: $link-color;
-        margin: 0;
-        padding: 2px 0;
-        transition:
-            color 150ms linear,
-            background-color 150ms linear;
-        transition-delay: 10ms;
+    .selected-tensor {
+        color: $tt-white;
 
-        &.current {
-            color: $tt-white-text;
-            cursor: default;
-
-            &::before {
-                display: inline-block;
-                content: '\2714'; // checkmark
-                margin-right: 5px;
-            }
+        &::before {
+            display: inline-block;
+            content: '\2714'; // checkmark
+            margin-right: 5px;
         }
-    }
-
-    a:hover:not(.current) {
-        color: $tt-black;
-        background-color: $link-color;
-        transition:
-            color 0ms linear,
-            background-color 0ms linear;
     }
 
     .dram-memory-renderer,
@@ -153,11 +132,11 @@
         display: inline-block;
 
         &.empty {
-            background-color: $tt-white-text;
+            background-color: $tt-white;
         }
 
         &.empty-tensor {
-            background: repeating-linear-gradient(45deg, transparent, transparent 5px, $tt-red 5px, $tt-red 7px);
+            background: repeating-linear-gradient(45deg, transparent, transparent 5px, $tt-red-accent 5px, $tt-red-accent 7px);
         }
     }
 
@@ -181,7 +160,7 @@
         .tensor-name {
             display: inline-flex;
             align-items: center;
-            color: $tt-white-text;
+            color: $tt-white;
             gap: 8px;
             margin-bottom: 10px;
             font-size: inherit;
@@ -209,6 +188,31 @@
         font-weight: 500;
         margin-bottom: -14px;
         margin-top: 0;
+    }
+
+    .plot-instructions {
+        margin-top: -25px;
+        margin-bottom: 20px;
+        text-align: right;
+        padding-right: 5px;
+        padding-left: 5px;
+
+        &.hidden {
+            display: none;
+        }
+    }
+
+    .plot-instructions-floating {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: $tt-white;
+        color: $tt-black;
+        padding: 10px;
+
+        &.hidden {
+            display: none;
+        }
     }
 
     .not-found-message {

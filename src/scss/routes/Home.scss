@@ -3,13 +3,12 @@
 @use '../definitions/colours' as *;
 
 .home {
+    display: flex;
+    place-content: center center;
+    margin-top: 100px;
+
     h3 {
         margin: 0;
-    }
-
-    .bp5-form-group .bp5-form-group-sub-label,
-    .bp5-form-group .bp5-form-helper-text {
-        color: $tt-white-text;
     }
 
     .bp5-button {

@@ -167,6 +167,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                     />
                 </fieldset>
             </DialogBody>
+
             <DialogFooter
                 minimal
                 actions={

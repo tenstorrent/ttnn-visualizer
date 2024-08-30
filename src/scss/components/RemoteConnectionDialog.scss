@@ -4,21 +4,23 @@
 
 @use "../definitions/colours" as *;
 
+$tt-pending: $tt-yellow;
+
 .bp5-dialog.remote-connection-dialog {
-    background-color: $tt-slight-off-background;
+    background-color: $tt-grey-3;
 
     .bp5-dialog-header {
-        background-color: $tt-off-background;
+        background-color: $tt-grey-2;
 
         .bp5-icon, .bp5-heading {
-            color: $tt-light-gray;
+            color: $tt-grey-7;
         }
     }
 
-    .bp5-form-group-sub-label { color: $tt-light-gray; }
+    .bp5-form-group-sub-label { color: $tt-grey-7 }
 
     fieldset {
-        border: solid 1px $tt-medium-gray;
+        border: solid 1px $tt-grey-5;
         border-radius: 5px;
     }
 }
@@ -32,17 +34,15 @@
         animation: 0.7s steps(2) infinite alternate both;
     }
 
-    &.status-idle .connection-status-icon { color: $tt-medium-gray; }
+    &.status-idle .connection-status-icon { color: $tt-grey-5; }
 
     &.status-progress .connection-status-icon {
         animation-name: connection-test-progress;
-        color: $node-select;
+        color: $tt-yellow;
     }
-    &.status-failed .connection-status-icon { color: $core-highlight-inout; }
-    &.status-ok .connection-status-icon { color: $bright-highlight; }
 }
 
 @keyframes connection-test-progress {
-    from { color: $tt-medium-gray; }
-    to { color: $node-select; }
+    from { color: $tt-grey-5; }
+    to { color: $tt-yellow; }
 }

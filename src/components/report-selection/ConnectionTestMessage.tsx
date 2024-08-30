@@ -27,7 +27,7 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 
 function ConnectionTestMessage({ status, message }: ConnectionTestMessageProps) {
     return (
-        <div className={`verify-connection-item status-${ConnectionTestStates[status]}`}>
+        <div className={`verify-connection-item status-${ConnectionTestStates[status].toLowerCase()}`}>
             <Icon
                 className='connection-status-icon'
                 icon={ICON_MAP[status]}

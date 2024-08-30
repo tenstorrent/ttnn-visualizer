@@ -414,12 +414,18 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         key={op.id}
                                         className='operation-link'
                                     >
-                                        <Link
-                                            to={`${ROUTES.OPERATIONS}/${op.id}`}
-                                            className={classNames('', { current: operationId === op.id })}
-                                        >
-                                            {op.id} {op.name}
-                                        </Link>
+                                        {operationId === op.id ? (
+                                            <span className='selected-tensor'>
+                                                {op.id} {op.name}
+                                            </span>
+                                        ) : (
+                                            <Link
+                                                to={`${ROUTES.OPERATIONS}/${op.id}`}
+                                                className={classNames('', { current: operationId === op.id })}
+                                            >
+                                                {op.id} {op.name}
+                                            </Link>
+                                        )}
                                     </div>
                                 ))}
 
@@ -441,12 +447,18 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         key={op.id}
                                         className='operation-link'
                                     >
-                                        <Link
-                                            to={`${ROUTES.OPERATIONS}/${op.id}`}
-                                            className={classNames('', { current: operationId === op.id })}
-                                        >
-                                            {op.id} {op.name}
-                                        </Link>
+                                        {operationId === op.id ? (
+                                            <span className='selected-tensor'>
+                                                {op.id} {op.name}
+                                            </span>
+                                        ) : (
+                                            <Link
+                                                to={`${ROUTES.OPERATIONS}/${op.id}`}
+                                                className={classNames('', { current: operationId === op.id })}
+                                            >
+                                                {op.id} {op.name}
+                                            </Link>
+                                        )}
                                     </div>
                                 ))}
                             </div>
