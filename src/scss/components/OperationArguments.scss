@@ -2,11 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
+@use 'sass:color';
 @use '../definitions/colours' as *;
+
+$row-background: $tt-grey-2;
 
 .arguments-table {
     border-collapse: collapse;
-    color: $tt-white-text;
     width: 100%;
     margin-bottom: 20px;
 
@@ -18,10 +20,11 @@
     }
 
     tr {
-        background-color: $tt-slight-off-background;
+        background-color: color.adjust($row-background, $lightness: 2%);
 
         &:nth-of-type(odd) {
-            background-color: $tt-off-background;
+            background-color: color.adjust($row-background, $lightness: 8%);
+
         }
 
         th {

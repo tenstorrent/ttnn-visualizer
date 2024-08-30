@@ -4,12 +4,7 @@
 @use 'definitions/colours' as *;
 
 :root {
-    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-    line-height: 1.5;
-    font-weight: 400;
     color-scheme: light dark;
-    background-color: $tt-background;
-    color: $tt-white-text;
     font-synthesis: none;
     text-rendering: optimizelegibility;
     -webkit-font-smoothing: antialiased;
@@ -32,53 +27,29 @@ body {
     font-family: 'Arial Nova', Arial, sans-serif;
     height: 100vh;
     padding: 15px;
-    color: $tt-white-text;
-    background: $tt-background;
+    color: $tt-white;
+    background-color: $tt-background;
 }
 
 button {
-    background-color: #1a1a1a;
-    padding: 0.6em 1.2em;
-    border-radius: 8px;
-    border: none;
-    appearance: none;
-    font-family: inherit;
-    font-size: 1em;
-    font-weight: 500;
-    box-shadow:
-        0 8px 28px -6px rgb(24 39 75 / 12%),
-        0 18px 88px -4px rgb(24 39 75 / 14%);
-    cursor: pointer;
     opacity: 0.9;
-    transition: border-color 0.25s;
-
-    &:hover {
-        border-color: #646cff;
-    }
-
-    &:focus,
-    &:focus-visible {
-        outline: 4px auto -webkit-focus-ring-color;
-    }
-}
-
-a {
-    height: fit-content;
-    width: fit-content;
-    margin: 10px;
-    font-weight: 500;
-    color: $tt-light-blue;
-    text-decoration: inherit;
-
-    &:hover {
-        opacity: 1;
-        text-decoration: none;
-        color: $tt-purple;
-    }
 }
 
 hr {
     border: none;
-    border-bottom: 1px solid $tt-medium-gray;
+    border-bottom: 1px solid $tt-grey-5;
     margin: 0;
+}
+
+a {
+    text-decoration: underline;
+
+    &:focus {
+        text-decoration: none;
+        outline: none;
+    }
+
+    &:hover {
+        text-decoration: none;
+    }
 }

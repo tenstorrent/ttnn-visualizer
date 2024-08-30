@@ -16,7 +16,7 @@
     gap: 20px;
 
     fieldset {
-        border: solid 1px $tt-medium-gray;
+        border: solid 1px $tt-grey-5;
         border-radius: 5px;
         padding: 5px 20px 10px;
         display: flex;
@@ -29,7 +29,7 @@
         width: 35vw;
 
         & > .bp5-icon {
-            color: $tt-dark-gray;
+            color: $tt-grey-4
         }
 
         .folder-picker-wrapper {
@@ -53,7 +53,7 @@
             white-space: nowrap;
         }
 
-        .bp5-form-group-sub-label { color: $tt-light-gray; }
+        .bp5-form-group-sub-label { color: $tt-grey-7; }
     }
 
     legend {

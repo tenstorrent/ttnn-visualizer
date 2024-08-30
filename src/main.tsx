@@ -14,6 +14,7 @@ import Layout from './components/Layout';
 import Home from './routes/Home';
 import Operations from './routes/Operations';
 import OperationDetails from './routes/OperationDetails';
+import Styleguide from './routes/Styleguide';
 import ROUTES from './definitions/routes';
 
 const router = createBrowserRouter([
@@ -33,6 +34,10 @@ const router = createBrowserRouter([
             {
                 path: 'operations/:operationId',
                 element: <OperationDetails />,
+            },
+            {
+                path: 'styleguide',
+                element: <Styleguide />,
             },
         ],
     },

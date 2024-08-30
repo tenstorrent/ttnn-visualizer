@@ -11,7 +11,6 @@ $base-div-size: 13.3333px;
     position: relative;
     width: 80px;
     height: 80px;
-    color: $tt-medium-light-gray;
 
     div {
         position: absolute;
@@ -19,7 +18,7 @@ $base-div-size: 13.3333px;
         width: $base-div-size;
         height: $base-div-size;
         border-radius: 50%;
-        background-color: $tt-light-gray;
+        background-color: $tt-white;
         animation-timing-function: cubic-bezier(0, 1, 1, 0);
 
         &:nth-child(1) {
