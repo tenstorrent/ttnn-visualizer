@@ -93,7 +93,7 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
                 }
 
                 const originalColour = chartData[index].marker.color as string;
-                const lightlyDimmedColour = tinycolor(originalColour).desaturate(20).darken(5).toString();
+                const lightlyDimmedColour = tinycolor(originalColour).desaturate(15).darken(5).toString();
                 const dimmedColour = tinycolor(originalColour).desaturate(40).darken(15).toString();
 
                 if (selectedAddress) {
