@@ -103,6 +103,14 @@ devices = Table(
     Column("cb_limit", Integer),
 )
 
+device_operations = Table(
+    "captured_graph",
+    db.metadata,
+    Column("operation_id", db.ForeignKey("operations.operation_id")),
+    Column("captured_graph", Text),
+    PrimaryKeyConstraint("operation_id", "captured_graph")
+)
+
 
 class Device(db.Model):
     __table__ = devices
@@ -124,7 +132,8 @@ class Tensor(db.Model):
 
 class Buffer(db.Model):
     __table__ = buffers
-    device= relationship("Device")
+    device = relationship("Device")
+
 
 class InputTensor(db.Model):
     __table__ = input_tensors
@@ -147,7 +156,12 @@ class Operation(db.Model):
     outputs = db.relationship("OutputTensor", lazy="joined")
     stack_trace = db.relationship("StackTrace", lazy="joined")
     buffers = db.relationship("Buffer")
+    device_operations = db.relationship("DeviceOperation", lazy="joined")
 
 
 class OperationArgument(db.Model):
     __table__ = operation_arguments
+
+
+class DeviceOperation(db.Model):
+    __table__ = device_operations
