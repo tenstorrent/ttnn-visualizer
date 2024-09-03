@@ -181,6 +181,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         const index = event.points[0].curveNumber;
         // this is a hacky way to determine this
         if (index >= memory.length) {
+            // eslint-disable-next-line no-console
             console.log('Are we clicking on L1 small?');
         } else {
             const { address } = memory[index];
@@ -188,13 +189,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         }
     };
 
-    const onTensorClick = (id: number): void => {
-        const address = details.tensorList.find((t) => t.id === id)?.address || null;
-        setSelectedTensorAddress(address);
-        setSelectedTensor(id);
-
+    const onTensorClick = (address: number | null): void => {
         if (address) {
+            const tensor = details.getTensorForAddress(address);
             createToast(address);
+            setSelectedTensorAddress(address);
+
+            if (tensor) {
+                setSelectedTensor(tensor.id);
+            }
         }
     };
 
@@ -209,7 +212,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
         const tensor = details.getTensorForAddress(address);
         const buffer = details.buffers.find((b) => b.address === address);
-        const id = tensor?.id || (buffer?.address && toHex(buffer.address)) || null;
+        const id = tensor?.id || (buffer?.address && toHex(buffer.address));
 
         if (id) {
             const toastInstance = toast(

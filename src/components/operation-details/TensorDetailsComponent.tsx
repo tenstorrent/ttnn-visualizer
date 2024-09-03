@@ -9,7 +9,7 @@ export interface TensorDetailsComponentProps {
     tensor: TensorData;
     selectedAddress: number | null;
     memorySize: number;
-    onTensorClick: (tensorId: number) => void;
+    onTensorClick: (tensorId: number | null) => void;
 }
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
@@ -27,7 +27,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
             <button
                 type='button'
                 className='tensor-name'
-                onClick={() => onTensorClick(tensor.id)}
+                onClick={() => onTensorClick(tensor.address)}
             >
                 <div
                     className={classNames('memory-color-block', {
