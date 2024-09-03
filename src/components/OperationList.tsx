@@ -18,8 +18,8 @@ import 'styles/components/OperationsList.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { expandedOperationsAtom } from '../store/app';
-import MicroOperations from './MicroOperations';
 import { OperationDescription } from '../model/APIData';
+import DeviceOperations from './DeviceOperations';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -300,19 +300,15 @@ const OperationList = () => {
                                                 </p>
 
                                                 {operation.arguments && (
-                                                    <>
-                                                        <OperationArguments
-                                                            operation={operation}
-                                                            operationIndex={virtualRow.index}
-                                                            onCollapseTensor={virtualizer.scrollToIndex}
-                                                        />
+                                                    <OperationArguments
+                                                        operation={operation}
+                                                        operationIndex={virtualRow.index}
+                                                        onCollapseTensor={virtualizer.scrollToIndex}
+                                                    />
+                                                )}
 
-                                                        {operation.microOperations?.length ? (
-                                                            <MicroOperations
-                                                                microOperations={operation.microOperations}
-                                                            />
-                                                        ) : null}
-                                                    </>
+                                                {operation?.device_operations && (
+                                                    <DeviceOperations deviceOperations={operation.device_operations} />
                                                 )}
                                             </div>
                                         </Collapsible>
