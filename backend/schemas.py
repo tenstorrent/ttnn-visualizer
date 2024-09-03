@@ -75,12 +75,17 @@ class OperationArgumentsSchema(ma.SQLAlchemySchema):
     name = ma.auto_field()
     value = ma.auto_field()
 
+
 class DeviceOperationSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = DeviceOperation
 
     operation_id = ma.auto_field()
-    captured_graph = ma.auto_field()
+    captured_graph = ma.Method("get_captured_graph_data")
+
+    def get_captured_graph_data(self, obj):
+        return obj.get_captured_graph()
+
 
 class BufferSchema(ma.SQLAlchemyAutoSchema):
     class Meta:

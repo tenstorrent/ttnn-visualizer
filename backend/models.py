@@ -1,3 +1,5 @@
+import json
+
 from sqlalchemy import (
     Column,
     PrimaryKeyConstraint,
@@ -165,3 +167,8 @@ class OperationArgument(db.Model):
 
 class DeviceOperation(db.Model):
     __table__ = device_operations
+    def set_captured_graph(self, data):
+        self.captured_graph = json.dumps(data)
+
+    def get_captured_graph(self):
+        return json.loads(self.captured_graph)
