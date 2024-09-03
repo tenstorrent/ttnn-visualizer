@@ -38,12 +38,14 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
 
     return operationList.map((operation) => ({
         ...operation,
-        device_operations: operation.device_operations.map((deviceOperation) => ({
-            id: deviceOperation.counter,
-            connections: deviceOperation.connections,
-            node_type: deviceOperation.node_type,
-            params: deviceOperation.params,
-        })),
+        device_operations: operation.device_operations.map(
+            ({ counter: id, connections, node_type: nodeType, params }) => ({
+                id,
+                connections,
+                nodeType,
+                params,
+            }),
+        ),
     })) as OperationDescription[];
 };
 

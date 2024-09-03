@@ -116,6 +116,7 @@ export interface Node {
     connections: number[];
     id: number;
     counter?: number; // Gets remapped to id
-    node_type: NodeType;
+    node_type?: NodeType; // Gets remapped to nodeType
+    nodeType: NodeType;
     params: DeviceOperationParams;
 }
