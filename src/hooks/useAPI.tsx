@@ -38,7 +38,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
 
     return operationList.map((operation) => ({
         ...operation,
-        nodes: operation.device_operations.map((deviceOperation) => ({
+        device_operations: operation.device_operations.map((deviceOperation) => ({
             id: deviceOperation.counter,
             connections: deviceOperation.connections,
             node_type: deviceOperation.node_type,

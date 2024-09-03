@@ -19,6 +19,7 @@ import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { expandedOperationsAtom } from '../store/app';
 import { OperationDescription } from '../model/APIData';
+import DeviceOperations from './DeviceOperations';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -307,19 +308,7 @@ const OperationList = () => {
                                                 )}
 
                                                 {operation?.device_operations && (
-                                                    <table>
-                                                        <tbody>
-                                                            {operation?.device_operations?.map((deviceOperation) => (
-                                                                <tr
-                                                                    key={`operation-${operation.id}-deviceOperation-${deviceOperation.id}`}
-                                                                >
-                                                                    <td>{deviceOperation.id}</td>
-                                                                    <td>{deviceOperation.node_type}</td>
-                                                                    <td>{JSON.stringify(deviceOperation.params)}</td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
+                                                    <DeviceOperations deviceOperations={operation.device_operations} />
                                                 )}
                                             </div>
                                         </Collapsible>

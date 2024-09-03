@@ -29,12 +29,12 @@ import {
 } from '../../definitions/PlotConfigurations';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import Collapsible from '../Collapsible';
-import MicroOperations from '../MicroOperations';
 import OperationArguments from '../OperationArguments';
 import { selectedTensorAddressAtom } from '../../store/app';
 import useOutsideClick from '../../hooks/useOutsideClick';
 import { getBufferColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
+import DeviceOperations from '../DeviceOperations';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -506,9 +506,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 <div className='arguments-wrapper'>
                                     <OperationArguments operation={operation} />
 
-                                    {operation.microOperations.length ? (
-                                        <MicroOperations microOperations={operation.microOperations} />
-                                    ) : null}
+                                    {operation?.device_operations && (
+                                        <DeviceOperations deviceOperations={operation.device_operations} />
+                                    )}
                                 </div>
                             </>
                         )}
