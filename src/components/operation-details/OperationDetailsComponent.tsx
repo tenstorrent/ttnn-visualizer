@@ -74,7 +74,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const operation = operations?.find((op) => op.id === operationId);
 
-    if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
+    if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails || !operations) {
         return (
             <>
                 <OperationDetailsNavigation
@@ -86,11 +86,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         );
     }
 
-    const details: OperationDetails | null = new OperationDetails(operationDetails);
-    details.updateOperationNames(operations);
+    const details: OperationDetails | null = new OperationDetails(operationDetails, operations);
+    const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations);
 
-    const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails);
-    previousDetails.updateOperationNames(operations);
 
     const l1Small = details.memoryData(BufferType.L1_SMALL);
 

@@ -20,7 +20,6 @@ export const MemoryLegendElement: React.FC<{
     onLegendClick,
 }) => {
     const Component = !chunk.empty ? 'button' : 'div';
-
     return (
         <Component
             key={chunk.address}

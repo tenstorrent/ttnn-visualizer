@@ -59,6 +59,10 @@
             display: inline-flex;
             align-items: center;
             gap: 8px;
+
+            &.hidden {
+                display: none;
+            }
         }
 
         .operation-link {
@@ -108,6 +112,7 @@
                 display: inline-grid;
                 grid-template-columns: 1fr 1fr 0.75fr 1fr;
                 gap: 15px;
+                text-align: left;
 
                 .format-numbers {
                     text-align: right;
@@ -134,7 +139,13 @@
         }
 
         &.empty-tensor {
-            background: repeating-linear-gradient(45deg, transparent, transparent 5px, $tt-red-accent 5px, $tt-red-accent 7px);
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 5px,
+                $tt-red-accent 5px,
+                $tt-red-accent 7px
+            );
         }
     }
 

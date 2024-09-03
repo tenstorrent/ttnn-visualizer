@@ -11,11 +11,7 @@ export interface TensorData extends Tensor {
     layout: string;
     memory_config: string | null;
     device_id: number | null;
-    address: number | null;
-    buffer_type: BufferType | null;
-    io: 'input' | 'output' | null;
-    producerNames: string[]; // TODO: this is a very brittle way to connect producer ids to operation names
-    consumerNames: string[];
+    io: 'input' | 'output' | null; // TODO: validate usefulness in the future
 }
 
 export interface BufferData {
@@ -35,7 +31,7 @@ export interface OperationDetailsData extends Operation {
     stack_trace: string;
 }
 
-// TODO: we may want to revisit the 'default' portion fo the variable name
+// TODO: we may want to revisit the 'default' portion for the variable name
 export const defaultOperationDetailsData: OperationDetailsData = {
     id: 0,
     name: '',
