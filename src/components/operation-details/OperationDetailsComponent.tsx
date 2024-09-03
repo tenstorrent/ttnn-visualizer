@@ -249,6 +249,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         (chunk) => !chunk.empty && details.getTensorForAddress(chunk.address),
     );
 
+    // TODO: Look at refactoring this to avoid forwarding refs
     const ForwardedMemoryPlotRenderer = forwardRef(MemoryPlotRenderer);
 
     function assignRef(el: HTMLElement | null, index: number) {
