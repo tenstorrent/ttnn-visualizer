@@ -52,30 +52,4 @@ $row-background: $tt-grey-2;
             }
         }
     }
-
-    &.microops-table {
-        tr {
-            :first-child {
-                width: 75%
-            }
-        }
-    }
-}
-
-$micro-op-gap: 20px;
-
-.microops {
-    display: flex;
-    flex-wrap: wrap;
-    gap: $micro-op-gap;
-
-    > table {
-        flex-basis: calc(50% - calc($micro-op-gap / 2));
-        flex-grow: 1;
-        margin-bottom: 0;
-    }
-
-    .memory-config {
-        width: 100%;
-    }
 }

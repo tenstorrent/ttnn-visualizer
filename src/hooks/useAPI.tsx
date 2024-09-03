@@ -34,7 +34,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
     return defaultOperationDetailsData;
 };
 const fetchOperations = async (): Promise<OperationDescription[]> => {
-    const { data: operationList } = await axios.get<Omit<OperationDescription, 'microOperations'>[]>('/api/operations');
+    const { data: operationList } = await axios.get<OperationDescription[]>('/api/operations');
 
     return operationList.map((operation) => ({
         ...operation,
