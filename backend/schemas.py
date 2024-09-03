@@ -106,7 +106,7 @@ class OperationSchema(ma.SQLAlchemySchema):
     inputs = ma.List(ma.Nested(InputTensorSchema()))
     arguments = ma.List(ma.Nested(OperationArgumentsSchema()))
     stack_trace = ma.Method("get_stack_trace")
-    device_operations = ma.Nested(DeviceOperationSchema())
+    device_operations = ma.List(ma.Nested(DeviceOperationSchema()))
 
     def get_stack_trace(self, obj):
         if obj.stack_trace and len(obj.stack_trace):
