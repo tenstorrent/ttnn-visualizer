@@ -68,14 +68,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         }
     };
 
-    const plot1Ref = useRef<HTMLDivElement>(null);
-    const plot2Ref = useRef<HTMLDivElement>(null);
-    const plot3Ref = useRef<HTMLDivElement>(null);
-    const plot4Ref = useRef<HTMLDivElement>(null);
-    const plot5Ref = useRef<HTMLDivElement>(null);
-    const navRef = useRef<HTMLDivElement>(null);
+    const outsideRefs = useRef<HTMLElement[]>([]);
 
-    useOutsideClick([plot1Ref, plot2Ref, plot3Ref, plot4Ref, plot5Ref, navRef], onClickOutside);
+    useOutsideClick(outsideRefs.current, onClickOutside);
 
     const operation = operations?.find((op) => op.id === operationId);
 
@@ -256,6 +251,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const ForwardedMemoryPlotRenderer = forwardRef(MemoryPlotRenderer);
 
+    function assignRef(el: HTMLElement | null, index: number) {
+        if (el) {
+            outsideRefs.current[index] = el;
+        }
+    }
+
     return (
         <>
             <OperationDetailsNavigation
@@ -286,7 +287,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             isZoomedIn={zoomedInView}
                             memorySize={memorySizeL1}
                             configuration={L1RenderConfiguration}
-                            ref={plot1Ref}
+                            ref={(el) => assignRef(el, 0)}
                         />
 
                         <ForwardedMemoryPlotRenderer
@@ -299,7 +300,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             memorySize={memorySizeL1}
                             onBufferClick={onBufferClick}
                             configuration={L1RenderConfiguration}
-                            ref={plot2Ref}
+                            ref={(el) => assignRef(el, 1)}
                         />
 
                         {/* <Collapsible */}
@@ -320,7 +321,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             isZoomedIn={zoomedInView}
                             memorySize={DRAM_MEMORY_SIZE}
                             configuration={DRAMRenderConfiguration}
-                            ref={plot3Ref}
+                            ref={(el) => assignRef(el, 2)}
                         />
 
                         <ForwardedMemoryPlotRenderer
@@ -333,7 +334,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             memorySize={DRAM_MEMORY_SIZE}
                             onBufferClick={onDramBufferClick}
                             configuration={DRAMRenderConfiguration}
-                            ref={plot4Ref}
+                            ref={(el) => assignRef(el, 3)}
                         />
 
                         <ForwardedMemoryPlotRenderer
@@ -348,7 +349,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             memorySize={DRAM_MEMORY_SIZE}
                             onBufferClick={onDramDeltaClick}
                             configuration={DRAMRenderConfiguration}
-                            ref={plot5Ref}
+                            ref={(el) => assignRef(el, 4)}
                         />
 
                         <br />
@@ -396,7 +397,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             </div>
 
                             <div
-                                ref={navRef}
+                                ref={(el) => assignRef(el, 5)}
                                 className={classNames('producer-consumer', { hidden: selectedTensor === null })}
                             >
                                 <div
