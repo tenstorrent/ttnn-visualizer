@@ -2,17 +2,19 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { useRef, useState } from 'react';
+import React, { forwardRef, useRef, useState } from 'react';
 import { PlotMouseEvent } from 'plotly.js';
 import { Icon, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
+import { toast } from 'react-toastify';
+import { useAtom } from 'jotai';
 import { FragmentationEntry } from '../../model/APIData';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
-import { isEqual } from '../../functions/math';
+import { isEqual, toHex } from '../../functions/math';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
@@ -29,6 +31,10 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import Collapsible from '../Collapsible';
 import MicroOperations from '../MicroOperations';
 import OperationArguments from '../OperationArguments';
+import { selectedTensorAddressAtom } from '../../store/app';
+import useOutsideClick from '../../hooks/useOutsideClick';
+import { getBufferColor } from '../../functions/colorGenerator';
+import ToastTensorMessage from './ToastTensorMessage';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -48,15 +54,24 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
 
-    const [selectedTensorAddress, setSelectedTensorAddress] = useState<number | null>(null);
+    const [selectedTensorAddress, setSelectedTensorAddress] = useAtom(selectedTensorAddressAtom);
     const [selectedTensor, setSelectedTensor] = useState<number | null>(null);
+    const [toastId, setToastId] = useState<number | null>(null);
 
     const onClickOutside = () => {
         setSelectedTensorAddress(null);
         setSelectedTensor(null);
+
+        if (toastId) {
+            toast.dismiss(toastId);
+            setToastId(null);
+        }
     };
 
-    const navRef = useRef<HTMLDivElement>(null);
+    const outsideRefs = useRef<HTMLElement[]>([]);
+
+    useOutsideClick(outsideRefs.current, onClickOutside);
+
     const operation = operations?.find((op) => op.id === operationId);
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails) {
@@ -141,12 +156,14 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const selectTensorByAddress = (address: number): void => {
         setSelectedTensorAddress(address);
         setSelectedTensor(details.getTensorForAddress(address)?.id || null);
+        createToast(address);
     };
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEvent>): void => {
         const index = event.points[0].curveNumber;
         const { address } = dramDeltaObject.memory[index];
         selectTensorByAddress(address);
+        setSelectedTensorAddress(address);
     };
 
     const onDramBufferClick = (event: Readonly<PlotMouseEvent>): void => {
@@ -159,6 +176,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         const index = event.points[0].curveNumber;
         // this is a hacky way to determine this
         if (index >= memory.length) {
+            // eslint-disable-next-line no-console
             console.log('Are we clicking on L1 small?');
         } else {
             const { address } = memory[index];
@@ -166,10 +184,48 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         }
     };
 
-    const onTensorClick = (id: number): void => {
-        const address = details.tensorList.find((t) => t.id === id)?.address || null;
-        setSelectedTensorAddress(address);
-        setSelectedTensor(id);
+    const onTensorClick = (address: number | null): void => {
+        if (address) {
+            const tensor = details.getTensorForAddress(address);
+            createToast(address);
+            setSelectedTensorAddress(address);
+
+            if (tensor) {
+                setSelectedTensor(tensor.id);
+            }
+        }
+    };
+
+    const onLegendClick = (address: number) => {
+        selectTensorByAddress(address);
+    };
+
+    const createToast = (address: number) => {
+        if (toastId) {
+            toast.dismiss(toastId);
+        }
+
+        const tensor = details.getTensorForAddress(address);
+        const buffer = details.buffers.find((b) => b.address === address);
+        const id = tensor?.id || (buffer?.address && toHex(buffer.address));
+
+        if (id) {
+            const toastInstance = toast(
+                <ToastTensorMessage
+                    id={id}
+                    colour={getBufferColor(address)}
+                />,
+                {
+                    position: 'bottom-right',
+                    hideProgressBar: true,
+                    closeOnClick: true,
+                    onClick: () => setToastId(null),
+                    theme: 'light',
+                },
+            ) as number;
+
+            setToastId(toastInstance);
+        }
     };
 
     // TODO: keeping this as a reminder. this wont work properly while we pick tensor by address only, an only for a specific operation
@@ -193,6 +249,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         (chunk) => !chunk.empty && details.getTensorForAddress(chunk.address),
     );
 
+    // TODO: Look at refactoring this to avoid forwarding refs
+    const ForwardedMemoryPlotRenderer = forwardRef(MemoryPlotRenderer);
+
+    function assignRef(el: HTMLElement | null, index: number) {
+        if (el) {
+            outsideRefs.current[index] = el;
+        }
+    }
+
     return (
         <>
             <OperationDetailsNavigation
@@ -206,13 +271,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
 
                         <Switch
-                            label={zoomedInView ? 'Full buffer reports' : 'Zoom buffer reports'}
+                            label='Buffer zoom'
                             checked={zoomedInView}
                             onChange={() => setZoomedInView(!zoomedInView)}
                         />
 
                         <h3>L1 Memory</h3>
-                        <MemoryPlotRenderer
+                        <ForwardedMemoryPlotRenderer
                             title='Previous Summarized L1 Report'
                             className={classNames('l1-memory-renderer', {
                                 'empty-plot': previousChartData.length === 0,
@@ -223,9 +288,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             isZoomedIn={zoomedInView}
                             memorySize={memorySizeL1}
                             configuration={L1RenderConfiguration}
+                            ref={(el) => assignRef(el, 0)}
                         />
 
-                        <MemoryPlotRenderer
+                        <ForwardedMemoryPlotRenderer
                             title='Current Summarized L1 Report'
                             className={classNames('l1-memory-renderer', { 'empty-plot': chartData.length === 0 })}
                             plotZoomRangeStart={plotZoomRangeStart}
@@ -234,22 +300,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             isZoomedIn={zoomedInView}
                             memorySize={memorySizeL1}
                             onBufferClick={onBufferClick}
-                            onClickOutside={onClickOutside}
-                            additionalReferences={[navRef]}
                             configuration={L1RenderConfiguration}
+                            ref={(el) => assignRef(el, 1)}
                         />
-
-                        <aside className={classNames('plot-instructions', { hidden: chartData.length === 0 })}>
-                            Click on a buffer to focus
-                        </aside>
-
-                        <aside
-                            className={classNames('plot-instructions-floating', {
-                                hidden: selectedTensorAddress === null,
-                            })}
-                        >
-                            Buffer focused, click anywhere to reset
-                        </aside>
 
                         {/* <Collapsible */}
                         {/*    label={<h3>DRAM Memory</h3>} */}
@@ -257,7 +310,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {/*    isOpen={false} */}
                         {/* > */}
 
-                        <MemoryPlotRenderer
+                        <ForwardedMemoryPlotRenderer
                             title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
                             className={classNames('dram-memory-renderer', {
                                 'empty-plot': previosDramData.length === 0,
@@ -269,8 +322,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             isZoomedIn={zoomedInView}
                             memorySize={DRAM_MEMORY_SIZE}
                             configuration={DRAMRenderConfiguration}
+                            ref={(el) => assignRef(el, 2)}
                         />
-                        <MemoryPlotRenderer
+
+                        <ForwardedMemoryPlotRenderer
                             title='Current Summarized DRAM Report'
                             className={classNames('dram-memory-renderer', { 'empty-plot': dramData.length === 0 })}
                             plotZoomRangeStart={dramPlotZoomRangeStart}
@@ -279,11 +334,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             isZoomedIn={zoomedInView}
                             memorySize={DRAM_MEMORY_SIZE}
                             onBufferClick={onDramBufferClick}
-                            onClickOutside={onClickOutside}
-                            additionalReferences={[navRef]}
                             configuration={DRAMRenderConfiguration}
+                            ref={(el) => assignRef(el, 3)}
                         />
-                        <MemoryPlotRenderer
+
+                        <ForwardedMemoryPlotRenderer
                             title='DRAM Delta (difference between current and previous operation)'
                             className={classNames('dram-memory-renderer', {
                                 'empty-plot': dramDeltaObject.chartData.length === 0,
@@ -294,9 +349,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             isZoomedIn={zoomedInView}
                             memorySize={DRAM_MEMORY_SIZE}
                             onBufferClick={onDramDeltaClick}
-                            onClickOutside={onClickOutside}
-                            additionalReferences={[navRef]}
                             configuration={DRAMRenderConfiguration}
+                            ref={(el) => assignRef(el, 4)}
                         />
 
                         <br />
@@ -311,6 +365,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         memSize={memorySizeL1}
                                         selectedTensorAddress={selectedTensorAddress}
                                         operationDetails={details}
+                                        onLegendClick={onLegendClick}
                                     />
                                 ))}
                                 <hr />
@@ -321,6 +376,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         memSize={DRAM_MEMORY_SIZE}
                                         selectedTensorAddress={selectedTensorAddress}
                                         operationDetails={details}
+                                        onLegendClick={onLegendClick}
                                     />
                                 ))}
                                 <Collapsible
@@ -335,12 +391,14 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             memSize={DRAM_MEMORY_SIZE}
                                             selectedTensorAddress={selectedTensorAddress}
                                             operationDetails={details}
+                                            onLegendClick={onLegendClick}
                                         />
                                     ))}
                                 </Collapsible>
                             </div>
+
                             <div
-                                ref={navRef}
+                                ref={(el) => assignRef(el, 5)}
                                 className={classNames('producer-consumer', { hidden: selectedTensor === null })}
                             >
                                 <div
@@ -462,4 +520,5 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         </>
     );
 };
+
 export default OperationDetailsComponent;

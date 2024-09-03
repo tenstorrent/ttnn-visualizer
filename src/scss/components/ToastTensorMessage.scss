@@ -1,0 +1,11 @@
+.toast-tensor-message {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+
+    .memory-color-block {
+        width: 15px;
+        height: 15px;
+        display: inline-block;
+    }
+}

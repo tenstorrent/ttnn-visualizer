@@ -1,8 +1,10 @@
-import React, { useRef } from 'react';
+import { ForwardRefRenderFunction, useMemo, useState } from 'react';
+import tinycolor from 'tinycolor2';
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
-import useOutsideClick from '../../hooks/useOutsideClick';
+import { useAtomValue } from 'jotai';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { selectedTensorAddressAtom } from '../../store/app';
 
 export interface MemoryPlotRendererProps {
     chartData: Partial<PlotData>[];
@@ -10,27 +12,30 @@ export interface MemoryPlotRendererProps {
     memorySize: number;
     title: string;
     onBufferClick?: (event: PlotMouseEvent) => void;
-    onClickOutside?: (event: MouseEvent) => void;
     plotZoomRangeStart?: number;
     plotZoomRangeEnd?: number;
     className?: string;
-    additionalReferences?: React.RefObject<HTMLDivElement>[];
     configuration: PlotConfiguration;
 }
 
-const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
-    chartData,
-    isZoomedIn,
-    memorySize,
-    className = '',
-    title,
-    onBufferClick,
-    onClickOutside,
-    plotZoomRangeStart,
-    plotZoomRangeEnd,
-    additionalReferences = [],
-    configuration,
-}) => {
+const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRendererProps> = (
+    {
+        chartData,
+        isZoomedIn,
+        memorySize,
+        className = '',
+        title,
+        onBufferClick,
+        plotZoomRangeStart,
+        plotZoomRangeEnd,
+        configuration,
+    },
+    ref,
+) => {
+    const selectedAddress = useAtomValue(selectedTensorAddressAtom);
+    const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
+    const [augmentedChart, setAugmentedChart] = useState<Partial<PlotData>[]>(structuredClone(chartData));
+
     const layout: Partial<Layout> = {
         height: configuration.height,
         xaxis: {
@@ -80,22 +85,55 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
         staticPlot: onBufferClick === undefined,
     };
 
-    const plotRef = useRef<HTMLDivElement>(null);
+    useMemo(() => {
+        setAugmentedChart((currentState) =>
+            currentState.map((data, index) => {
+                if (!data?.marker?.color || !data?.x || !chartData?.[index]?.marker) {
+                    return data;
+                }
 
-    useOutsideClick([plotRef, ...additionalReferences], onClickOutside);
+                const originalColour = chartData[index].marker.color as string;
+                const lightlyDimmedColour = tinycolor(originalColour).desaturate(15).darken(5).toString();
+                const dimmedColour = tinycolor(originalColour).desaturate(40).darken(15).toString();
+
+                if (selectedAddress) {
+                    data.marker.color =
+                        hoveredPoint === data.x[0] || data.hovertemplate?.includes(selectedAddress.toString())
+                            ? originalColour
+                            : dimmedColour;
+
+                    return data;
+                }
+
+                // No selected address (but could be hovered)
+                if (hoveredPoint) {
+                    data.marker.color = hoveredPoint === data.x[0] ? originalColour : lightlyDimmedColour;
+
+                    return data;
+                }
+
+                data.marker.color = lightlyDimmedColour;
+
+                return data;
+            }),
+        );
+    }, [hoveredPoint, chartData, selectedAddress]);
 
     return (
         <div
             className={className}
-            ref={plotRef}
+            ref={ref}
         >
             <h3 className='plot-title'>{title}</h3>
+
             <Plot
                 className='memory-plot'
-                data={chartData}
+                data={augmentedChart}
                 layout={layout}
                 config={config}
                 onClick={onBufferClick}
+                onHover={(data) => setHoveredPoint(data.points[0].x as number)}
+                onUnhover={() => setHoveredPoint(null)}
             />
         </div>
     );

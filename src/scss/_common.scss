@@ -5,3 +5,10 @@
 .monospace {
     font-family: monospace;
 }
+
+// Using !important to override some 3rd party CSS
+.no-toast-animation {
+    /* stylelint-disable-next-line declaration-no-important */
+    display: none !important;
+}
+

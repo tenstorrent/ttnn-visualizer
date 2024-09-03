@@ -9,7 +9,7 @@ export interface TensorDetailsComponentProps {
     tensor: TensorData;
     selectedAddress: number | null;
     memorySize: number;
-    onTensorClick: (tensorId: number) => void;
+    onTensorClick: (tensorId: number | null) => void;
 }
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
@@ -24,7 +24,11 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 dimmed: tensor.address !== selectedAddress && selectedAddress !== null,
             })}
         >
-            <div className='tensor-name'>
+            <button
+                type='button'
+                className='tensor-name'
+                onClick={() => onTensorClick(tensor.address)}
+            >
                 <div
                     className={classNames('memory-color-block', {
                         'empty-tensor': tensor.address === null,
@@ -33,16 +37,10 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         backgroundColor: getBufferColor(tensor.address),
                     }}
                 />
-                <h4
-                    onClick={() => {
-                        onTensorClick(tensor.id);
-                    }}
-                >
-                    Tensor ID: {tensor.id}
-                </h4>
+                <h4>Tensor ID: {tensor.id}</h4>
 
                 <span className='format-numbers monospace'>{prettyPrintAddress(tensor.address, memorySize)}</span>
-            </div>
+            </button>
 
             <div className='tensor-meta'>
                 {tensor.buffer_type !== null && <p>Buffer type: {BufferTypeLabel[tensor.buffer_type]}</p>}
