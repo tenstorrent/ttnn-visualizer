@@ -111,7 +111,7 @@ class OperationSchema(ma.SQLAlchemySchema):
     inputs = ma.List(ma.Nested(InputTensorSchema()))
     arguments = ma.List(ma.Nested(OperationArgumentsSchema()))
     stack_trace = ma.Method("get_stack_trace")
-    device_operations = ma.List(ma.Nested(DeviceOperationSchema()))
+    device_operations = ma.Method("get_first_device_operation")
 
     def get_stack_trace(self, obj):
         if obj.stack_trace and len(obj.stack_trace):
@@ -123,6 +123,11 @@ class OperationSchema(ma.SQLAlchemySchema):
             first_trace = next((x for x in operation.stack_trace), "")
             return first_trace.stack_trace
         return ""
+
+    def get_first_device_operation(self, obj):
+        if obj.device_operations and len(obj.device_operations) > 0:
+            return obj.device_operations[0].get_captured_graph()
+        return None
 
 
 # Filesystem Schemas
