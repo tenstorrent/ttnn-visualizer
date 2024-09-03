@@ -269,7 +269,6 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
                     historical: opId! !== this.id,
                     bufferType: type,
                 };
-                console.log(historicalTensor);
                 tensorsByBufferAddress.set(bufferAddress, historicalTensor);
             }
         }
