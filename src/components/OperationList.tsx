@@ -18,7 +18,6 @@ import 'styles/components/OperationsList.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { expandedOperationsAtom } from '../store/app';
-import MicroOperations from './MicroOperations';
 import { OperationDescription } from '../model/APIData';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
@@ -300,19 +299,27 @@ const OperationList = () => {
                                                 </p>
 
                                                 {operation.arguments && (
-                                                    <>
-                                                        <OperationArguments
-                                                            operation={operation}
-                                                            operationIndex={virtualRow.index}
-                                                            onCollapseTensor={virtualizer.scrollToIndex}
-                                                        />
+                                                    <OperationArguments
+                                                        operation={operation}
+                                                        operationIndex={virtualRow.index}
+                                                        onCollapseTensor={virtualizer.scrollToIndex}
+                                                    />
+                                                )}
 
-                                                        {operation.microOperations?.length ? (
-                                                            <MicroOperations
-                                                                microOperations={operation.microOperations}
-                                                            />
-                                                        ) : null}
-                                                    </>
+                                                {operation?.device_operations && (
+                                                    <table>
+                                                        <tbody>
+                                                            {operation?.device_operations?.map((deviceOperation) => (
+                                                                <tr
+                                                                    key={`operation-${operation.id}-deviceOperation-${deviceOperation.id}`}
+                                                                >
+                                                                    <td>{deviceOperation.id}</td>
+                                                                    <td>{deviceOperation.node_type}</td>
+                                                                    <td>{JSON.stringify(deviceOperation.params)}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
                                                 )}
                                             </div>
                                         </Collapsible>

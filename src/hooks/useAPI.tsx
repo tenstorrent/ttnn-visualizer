@@ -5,7 +5,6 @@
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import {
-    MicroOperation,
     OperationDescription,
     OperationDetailsData,
     ReportMetaData,
@@ -35,21 +34,23 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
     return defaultOperationDetailsData;
 };
 const fetchOperations = async (): Promise<OperationDescription[]> => {
-    const [{ data: operationList }, { data: microOperations }] = await Promise.all([
-        axios.get<Omit<OperationDescription, 'microOperations'>[]>('/api/operations'),
-        axios.get<MicroOperation[]>('/api/operation-history'),
-    ]);
+    const { data: operationList } = await axios.get<Omit<OperationDescription, 'microOperations'>[]>('/api/operations');
 
     return operationList.map((operation) => ({
         ...operation,
-        microOperations:
-            microOperations.filter((microOperation) => microOperation.ttnn_operation_id === operation.id) || [],
+        nodes: operation.device_operations.map((deviceOperation) => ({
+            id: deviceOperation.counter,
+            connections: deviceOperation.connections,
+            node_type: deviceOperation.node_type,
+            params: deviceOperation.params,
+        })),
     })) as OperationDescription[];
 };
 
 /** @description
  * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const fetchAllBuffers = async (): Promise<any> => {
     const { data: buffers } = await axios.get('/api/get-operation-buffers');
 
