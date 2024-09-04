@@ -14,7 +14,7 @@ import { FragmentationEntry } from '../../model/APIData';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
-import { isEqual, toHex } from '../../functions/math';
+import { isEqual } from '../../functions/math';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
@@ -88,7 +88,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const details: OperationDetails | null = new OperationDetails(operationDetails, operations);
     const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations);
-
 
     const l1Small = details.memoryData(BufferType.L1_SMALL);
 
@@ -204,26 +203,24 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         }
 
         const tensor = details.getTensorForAddress(address);
-        const buffer = details.buffers.find((b) => b.address === address);
-        const id = tensor?.id || (buffer?.address && toHex(buffer.address));
+        const tensorId = tensor?.id;
 
-        if (id) {
-            const toastInstance = toast(
-                <ToastTensorMessage
-                    id={id}
-                    colour={getBufferColor(address)}
-                />,
-                {
-                    position: 'bottom-right',
-                    hideProgressBar: true,
-                    closeOnClick: true,
-                    onClick: () => setToastId(null),
-                    theme: 'light',
-                },
-            ) as number;
+        const toastInstance = toast(
+            <ToastTensorMessage
+                tensorId={tensorId}
+                address={address}
+                colour={getBufferColor(address)}
+            />,
+            {
+                position: 'bottom-right',
+                hideProgressBar: true,
+                closeOnClick: true,
+                onClick: () => setToastId(null),
+                theme: 'light',
+            },
+        ) as number;
 
-            setToastId(toastInstance);
-        }
+        setToastId(toastInstance);
     };
 
     // TODO: keeping this as a reminder. this wont work properly while we pick tensor by address only, an only for a specific operation
