@@ -17,8 +17,6 @@ from backend.models import (
 # Database Schemas
 
 
-
-
 class TensorSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Tensor
@@ -81,23 +79,23 @@ class OperationArgumentsSchema(ma.SQLAlchemySchema):
     value = ma.auto_field()
 
 
+class CapturedGraph(fields.Field):
+    def _serialize(self, value, attr, obj, **kwargs):
+        if value is None:
+            return []
+        values = json.loads(value)
+        for value in values:
+            id = value.pop("counter")
+            value.update({"id": id})
+        return values
+
+
 class DeviceOperationSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = DeviceOperation
 
-    class CapturedGraph(fields.Field):
-        def _serialize(self, value, attr, obj, **kwargs):
-            if value is None:
-                return []
-            values = json.loads(value)
-            for value in values:
-                id = value.pop("counter")
-                value.update({"id": id})
-            return values
-
     operation_id = ma.auto_field()
     captured_graph = CapturedGraph()
-
 
 
 class BufferSchema(ma.SQLAlchemyAutoSchema):
@@ -114,7 +112,6 @@ class OperationSchema(ma.SQLAlchemySchema):
     class Meta:
         model = Operation
 
-    stack_trace = fields.Method("get_stack_trace")
     operation_id = ma.auto_field()
     id = ma.Function(lambda obj: obj.operation_id)
     name = ma.auto_field()
@@ -124,13 +121,12 @@ class OperationSchema(ma.SQLAlchemySchema):
     inputs = ma.List(ma.Nested(InputTensorSchema()))
     arguments = ma.List(ma.Nested(OperationArgumentsSchema()))
     stack_trace = ma.Method("get_stack_trace")
-    device_operations = ma.Function(lambda obj: obj.captured_graph)
+    device_operations = ma.Nested(DeviceOperationSchema())
 
     def get_stack_trace(self, obj):
         if obj.stack_trace and len(obj.stack_trace):
             return next(x for x in obj.stack_trace).stack_trace
         return ""
-
 
 
 # Filesystem Schemas
