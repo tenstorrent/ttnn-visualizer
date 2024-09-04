@@ -1,3 +1,5 @@
+import json
+
 from marshmallow import fields, validates
 
 from backend.extensions import ma
@@ -13,6 +15,9 @@ from backend.models import (
 
 
 # Database Schemas
+
+
+
 
 class TensorSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
@@ -80,11 +85,19 @@ class DeviceOperationSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = DeviceOperation
 
-    operation_id = ma.auto_field()
-    captured_graph = ma.Method("get_captured_graph_data")
+    class CapturedGraph(fields.Field):
+        def _serialize(self, value, attr, obj, **kwargs):
+            if value is None:
+                return []
+            values = json.loads(value)
+            for value in values:
+                id = value.pop("counter")
+                value.update({"id": id})
+            return values
 
-    def get_captured_graph_data(self, obj):
-        return obj.get_captured_graph()
+    operation_id = ma.auto_field()
+    captured_graph = CapturedGraph()
+
 
 
 class BufferSchema(ma.SQLAlchemyAutoSchema):
@@ -111,23 +124,13 @@ class OperationSchema(ma.SQLAlchemySchema):
     inputs = ma.List(ma.Nested(InputTensorSchema()))
     arguments = ma.List(ma.Nested(OperationArgumentsSchema()))
     stack_trace = ma.Method("get_stack_trace")
-    device_operations = ma.Method("get_first_device_operation")
+    device_operations = ma.Function(lambda obj: obj.captured_graph)
 
     def get_stack_trace(self, obj):
         if obj.stack_trace and len(obj.stack_trace):
             return next(x for x in obj.stack_trace).stack_trace
         return ""
 
-    def get_stack_trace(self, operation):
-        if hasattr(operation, "stack_trace"):
-            first_trace = next((x for x in operation.stack_trace), "")
-            return first_trace.stack_trace
-        return ""
-
-    def get_first_device_operation(self, obj):
-        if obj.device_operations and len(obj.device_operations) > 0:
-            return obj.device_operations[0].get_captured_graph()
-        return None
 
 
 # Filesystem Schemas

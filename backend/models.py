@@ -6,12 +6,18 @@ from sqlalchemy import (
     Table,
     Integer,
     String,
+    JSON,
+    types,
     Text,
     Float,
+    TypeDecorator,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from backend.extensions import db
+
+
+
 
 operations = Table(
     "operations",
@@ -109,9 +115,12 @@ device_operations = Table(
     "captured_graph",
     db.metadata,
     Column("operation_id", db.ForeignKey("operations.operation_id")),
-    Column("captured_graph", Text),
+    Column("captured_graph", Text,),
     PrimaryKeyConstraint("operation_id", "captured_graph")
 )
+
+
+
 
 
 class Device(db.Model):
@@ -158,7 +167,7 @@ class Operation(db.Model):
     outputs = db.relationship("OutputTensor", lazy="joined")
     stack_trace = db.relationship("StackTrace", lazy="joined")
     buffers = db.relationship("Buffer")
-    device_operations = db.relationship("DeviceOperation", lazy="joined")
+    device_operations = db.relationship("DeviceOperation", uselist=False, lazy="joined")
 
 
 class OperationArgument(db.Model):
@@ -167,8 +176,3 @@ class OperationArgument(db.Model):
 
 class DeviceOperation(db.Model):
     __table__ = device_operations
-    def set_captured_graph(self, data):
-        self.captured_graph = json.dumps(data)
-
-    def get_captured_graph(self):
-        return json.loads(self.captured_graph)
