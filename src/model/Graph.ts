@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { BufferType } from "./BufferType";
+import { BufferType } from './BufferType';
 
 export interface Operation {
     id: number;
@@ -20,7 +20,6 @@ export interface Tensor {
     producerNames: string[];
     consumerNames: string[];
 }
-
 
 // TODO: if this data proves itself pointless, we should remove it
 export interface HistoricalTensor extends Tensor {

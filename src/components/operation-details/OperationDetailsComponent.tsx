@@ -89,7 +89,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const details: OperationDetails | null = new OperationDetails(operationDetails, operations);
     const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations);
 
-
     const l1Small = details.memoryData(BufferType.L1_SMALL);
 
     const { chartData, memory, fragmentation } = details.memoryData();

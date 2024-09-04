@@ -7,7 +7,7 @@ import { ScrollToOptions } from '@tanstack/react-virtual';
 import { useRef } from 'react';
 import ExpandableTensor from './ExpandableTensor';
 
-import { OperationDescription } from "../model/APIData";
+import { OperationDescription } from '../model/APIData';
 
 interface OperationArgumentsProps {
     operation: OperationDescription;
