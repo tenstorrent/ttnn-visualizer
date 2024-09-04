@@ -2,7 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { BufferType } from './BufferType';
 import { Operation, Tensor } from './Graph';
 
 export interface TensorData extends Tensor {
@@ -111,8 +110,6 @@ interface DeviceOperationParams {
 export interface Node {
     connections: number[];
     id: number;
-    counter?: number; // Gets remapped to id
-    node_type?: NodeType; // Gets remapped to nodeType
-    nodeType: NodeType;
+    node_type: NodeType;
     params: DeviceOperationParams;
 }

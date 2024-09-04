@@ -18,9 +18,9 @@ function DeviceOperations({ deviceOperations }: DeviceOperationsData) {
                     </tr>
 
                     {deviceOperations.map((op) => (
-                        <tr key={`${op.id}-${op.nodeType}`}>
+                        <tr key={`${op.id}-${op.node_type}`}>
                             <td>{op.id}</td>
-                            <td>{op.nodeType}</td>
+                            <td>{op.node_type}</td>
                             <td>{JSON.stringify(op.params)}</td>
                         </tr>
                     ))}

@@ -36,17 +36,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
 const fetchOperations = async (): Promise<OperationDescription[]> => {
     const { data: operationList } = await axios.get<OperationDescription[]>('/api/operations');
 
-    return operationList.map((operation) => ({
-        ...operation,
-        device_operations: operation.device_operations.map(
-            ({ counter: id, connections, node_type: nodeType, params }) => ({
-                id,
-                connections,
-                nodeType,
-                params,
-            }),
-        ),
-    })) as OperationDescription[];
+    return operationList;
 };
 
 /** @description
