@@ -8,7 +8,10 @@ import { formatSize, toHex } from '../functions/math';
 import {
     BufferData,
     Chunk,
+    DeviceOperation,
     FragmentationEntry,
+    Node,
+    NodeType,
     OperationDescription,
     OperationDetailsData,
     TensorData,
@@ -32,11 +35,15 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     tensorList: TensorData[];
 
+    device_operations: Node[] = [];
+
     private historicalTensorListByAddress: Map<number, HistoricalTensor> = new Map();
 
     private historicalTensorListById: Map<number, HistoricalTensor> = new Map();
 
     private operations: OperationDescription[] = [];
+
+    public deviceOperations: DeviceOperation[] = [];
 
     constructor(data: OperationDetailsData, operations: OperationDescription[]) {
         this.id = data.id;
@@ -46,6 +53,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.l1_sizes = data.l1_sizes;
         this.stack_trace = data.stack_trace;
         this.operations = operations;
+        this.device_operations = data.device_operations;
 
         this.inputs.forEach((tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
@@ -91,6 +99,46 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.historicalTensorListById = new Map(
             Array.from(this.historicalTensorListByAddress.values()).map((tensor) => [tensor.id, tensor]),
         );
+
+        const deviceOpList: Node[] = [];
+        this.device_operations.forEach((node) => {
+            if (node.node_type === NodeType.function_start) {
+                this.deviceOperations.push({
+                    indentLevel: deviceOpList.length,
+                    name: node.params.name,
+                    cbList: [],
+                    deallocateAll: false,
+                });
+                deviceOpList.push(node);
+            }
+            if (node.node_type === NodeType.function_end) {
+                deviceOpList.pop();
+            }
+            if (node.node_type === NodeType.circular_buffer_allocate) {
+                const deviceOpNode = deviceOpList.at(-1);
+                if (deviceOpNode) {
+                    const deviceOp = this.deviceOperations.find((op) => op.name === deviceOpNode.params.name);
+
+                    if (deviceOp) {
+                        deviceOp.cbList.push({
+                            address: parseInt(node.params.address, 10),
+                            size: parseInt(node.params.size, 10),
+                            core_range_set: node.params.core_range_set,
+                        });
+                    }
+                }
+            }
+            if (node.node_type === NodeType.circular_buffer_deallocate_all) {
+                const deviceOpNode = deviceOpList.at(-1);
+                if (deviceOpNode) {
+                    const deviceOp = this.deviceOperations.find((op) => op.name === deviceOpNode.params.name);
+
+                    if (deviceOp) {
+                        deviceOp.deallocateAll = true;
+                    }
+                }
+            }
+        });
     }
 
     private getChartData(memory: Chunk[]): Partial<PlotData>[] {
@@ -184,6 +232,7 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
         fragmentation: FragmentationEntry[];
         condensed: Chunk;
         condensedChart: Partial<PlotData>[];
+        cbChartData: Partial<PlotData>[];
     } {
         const fragmentation: FragmentationEntry[] = [];
         const memory: Chunk[] =
@@ -210,6 +259,8 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
             }
         });
 
+        const cbMemory = this.deviceOperations.flatMap((op) => op.cbList);
+
         const condensed: Chunk = {
             address: memory[0]?.address || 0,
             // eslint-disable-next-line no-unsafe-optional-chaining
@@ -217,8 +268,16 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
         };
 
         const chartData = this.getChartData(memory);
+        const cbChartData = this.getChartData(cbMemory);
 
-        return { chartData, memory, fragmentation, condensed, condensedChart: this.getChartData([condensed]) };
+        return {
+            chartData,
+            memory,
+            fragmentation,
+            condensed,
+            condensedChart: this.getChartData([condensed]),
+            cbChartData,
+        };
     }
 
     public getMemoryDelta(delta1: Chunk[], delta2: Chunk[]) {
