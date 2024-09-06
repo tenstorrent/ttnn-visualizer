@@ -48,8 +48,7 @@ const TensorList = () => {
     };
 
     useMemo(() => {
-        if (fetchedTensors) {
-            console.log(fetchedTensors);
+        if (fetchedTensors && operations) {
             let tensors = [...fetchedTensors];
 
             if (filterQuery) {

@@ -8,6 +8,7 @@ import {
     OperationDescription,
     OperationDetailsData,
     ReportMetaData,
+    TensorData,
     defaultOperationDetailsData,
 } from '../model/APIData';
 
@@ -116,4 +117,14 @@ export const useNextOperation = (operationId: number) => {
 
 export const useReportMeta = () => {
     return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
+};
+
+export const fetchTensors = async (): Promise<TensorData[]> => {
+    const { data: tensorList } = await axios.get<TensorData[]>('/api/tensors');
+
+    return tensorList;
+};
+
+export const useTensors = () => {
+    return useQuery<TensorData[], AxiosError>('get-tensors', fetchTensors);
 };
