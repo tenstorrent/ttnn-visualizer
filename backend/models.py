@@ -144,6 +144,7 @@ class Tensor(db.Model):
 class Buffer(db.Model):
     __table__ = buffers
     device = relationship("Device")
+    operation = relationship("Operation", lazy="selectin", back_populates="buffers")
 
 
 class InputTensor(db.Model):
