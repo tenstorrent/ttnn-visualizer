@@ -10,6 +10,7 @@ from backend.models import (
     Device,
     Operation,
     Tensor,
+    Buffer
 )
 from backend.remotes import (
     RemoteConnection,
@@ -24,6 +25,7 @@ from backend.remotes import (
 from backend.schemas import (
     OperationSchema,
     TensorSchema,
+    BufferSchema,
 )
 from backend.utils import timer
 
@@ -94,8 +96,28 @@ def get_config():
 @api.route("/tensors", methods=["GET"])
 def get_tensors():
     tensors = Tensor.query.all()
-    return TensorSchema().dump(tensors, many=True)
+    return TensorSchema(
+        exclude=["tensor_id"]
+    ).dump(tensors, many=True)
 
+
+@api.route("/buffer", methods=["GET"])
+def get_next_buffer():
+    address = request.args.get("address")
+    operation_id = request.args.get("operation_id")
+
+    if not address or not operation_id:
+        return Response(status=HTTPStatus.BAD_REQUEST)
+
+    buffer = Buffer.query.filter(
+        Buffer.address == address,
+        Buffer.operation_id > operation_id
+    ).order_by(Buffer.operation_id.asc()).first()
+
+    if not buffer:
+        return Response(status=HTTPStatus.NOT_FOUND)
+
+    return BufferSchema().dump(buffer)
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
 def get_tensor(tensor_id):
