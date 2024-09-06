@@ -41,6 +41,30 @@ export const defaultOperationDetailsData: OperationDetailsData = {
     stack_trace: '',
 };
 
+export const defaultTensorData: TensorData = {
+    buffer_type: 0,
+    id: 0,
+    shape: '',
+    dtype: '',
+    layout: '',
+    memory_config: '',
+    device_id: 0,
+    io: null,
+    address: null,
+    producers: [],
+    consumers: [],
+    producerNames: [],
+    consumerNames: [],
+};
+
+export const defaultBuffer: BufferData = {
+    operation_id: 0,
+    device_id: 0,
+    address: 0,
+    max_size_per_bank: 0,
+    buffer_type: 0,
+};
+
 export interface Chunk {
     address: number;
     size: number;

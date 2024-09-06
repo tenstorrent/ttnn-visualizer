@@ -5,11 +5,14 @@
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import {
+    BufferData,
     OperationDescription,
     OperationDetailsData,
     ReportMetaData,
     TensorData,
+    defaultBuffer,
     defaultOperationDetailsData,
+    defaultTensorData,
 } from '../model/APIData';
 
 const fetchOperationDetails = async (id: number | null): Promise<OperationDetailsData> => {
@@ -120,11 +123,45 @@ export const useReportMeta = () => {
 };
 
 export const fetchTensors = async (): Promise<TensorData[]> => {
-    const { data: tensorList } = await axios.get<TensorData[]>('/api/tensors');
+    try {
+        const { data: tensorList } = await axios.get<TensorData[]>('/api/tensors', {
+            maxRedirects: 1,
+        });
 
-    return tensorList;
+        return tensorList;
+    } catch (error: unknown) {
+        if (axios.isAxiosError(error)) {
+            if (error.response && error.response.status >= 400 && error.response.status < 500) {
+                // we may want to handle this differently
+                throw error;
+            }
+            if (error.response && error.response.status >= 500) {
+                throw error;
+            }
+        }
+    }
+
+    return [defaultTensorData];
 };
 
 export const useTensors = () => {
     return useQuery<TensorData[], AxiosError>('get-tensors', fetchTensors);
+};
+
+export const fetchNextUseOfBuffer = async (address: number | null, consumers: number[]): Promise<BufferData> => {
+    if (!address || !consumers.length) {
+        return defaultBuffer;
+    }
+
+    const { data: buffer } = await axios.get(
+        `/api/buffer?address=${address}&operation_id=${consumers[consumers.length - 1]}`,
+    );
+
+    return buffer;
+};
+
+export const useNextBuffer = (address: number | null, consumers: number[], queryKey: string) => {
+    return useQuery<BufferData, AxiosError>(queryKey, {
+        queryFn: () => fetchNextUseOfBuffer(address, consumers),
+    });
 };

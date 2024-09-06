@@ -6,15 +6,19 @@ import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { Icon, Intent } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import SearchField from './SearchField';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/OperationsList.scss';
 import { useOperationsList, useTensors } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { Tensor } from '../model/Graph';
-import { OperationDescription, TensorData } from '../model/APIData';
+import { OperationDescription } from '../model/APIData';
 import { BufferTypeLabel } from '../model/BufferType';
-import NextBuffer from './NextBuffer';
+import Collapsible from './Collapsible';
+import OperationComponent from './OperationComponent';
+import BufferTable from './BufferTable';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -53,7 +57,7 @@ const TensorList = () => {
 
             if (filterQuery) {
                 tensors = fetchedTensors?.filter((tensor) =>
-                    getTensorFilterName(tensor, operations).toLowerCase().includes(filterQuery.toLowerCase()),
+                    getTensorFilterName(tensor).toLowerCase().includes(filterQuery.toLowerCase()),
                 );
             }
 
@@ -123,6 +127,7 @@ const TensorList = () => {
                         {operations && filteredTensorList?.length ? (
                             virtualItems.map((virtualRow) => {
                                 const tensor = filteredTensorList[virtualRow.index];
+                                const deallocationOperation = getDeallocation(tensor, operations);
 
                                 return (
                                     <li
@@ -130,55 +135,32 @@ const TensorList = () => {
                                         key={virtualRow.index}
                                         data-index={virtualRow.index}
                                         ref={virtualizer.measureElement}
-                                        style={
-                                            {
-                                                // display:
-                                                //     !getDeallocation(tensor, operations) &&
-                                                //     Number.isInteger(tensor.buffer_type)
-                                                //         ? 'block'
-                                                //         : 'none',
-                                            }
-                                        }
                                     >
-                                        Tensor {tensor.id} <br />
-                                        {tensor?.address} (
-                                        {tensor.buffer_type ? BufferTypeLabel[tensor.buffer_type] : 'nullType'})
-                                        <br />
-                                        {tensor.producers.length
-                                            ? `Producers: ${tensor.producers.toString()}`
-                                            : 'Producers: n/a'}
-                                        <br />
-                                        {tensor.consumers.length
-                                            ? `Consumers: ${tensor.consumers.toString()}`
-                                            : 'Consumers: n/a'}
-                                        <ul>
-                                            <li>
-                                                {getDeallocation(tensor, operations)
-                                                    ? `Deallocate found in Operation ${getDeallocation(tensor, operations).toString()}`
-                                                    : 'No deallocate operation found'}
-                                            </li>
-                                            <li>
-                                                {tensor.address && tensor.consumers.length ? (
-                                                    <NextBuffer
-                                                        address={tensor.address}
-                                                        consumers={tensor.consumers}
-                                                        queryKey={virtualRow.index}
+                                        <Collapsible
+                                            label={
+                                                <OperationComponent
+                                                    filterName={getTensorFilterName(tensor)}
+                                                    filterQuery={filterQuery}
+                                                    icon={IconNames.FLOW_LINEAR}
+                                                    intent={Intent.PRIMARY}
+                                                />
+                                            }
+                                            additionalElements={
+                                                !deallocationOperation ? (
+                                                    <Icon
+                                                        icon={IconNames.WARNING_SIGN}
+                                                        intent={Intent.WARNING}
                                                     />
-                                                ) : (
-                                                    'No subsequent buffer found'
-                                                )}
-                                            </li>
-                                            <li>
-                                                {operations
-                                                    .filter(
-                                                        (operation) =>
-                                                            tensor.consumers.includes(operation.id) ||
-                                                            tensor.producers.includes(operation.id),
-                                                    )
-                                                    .map((put) => `${put.id} ${put.name}`)
-                                                    .join(', ')}
-                                            </li>
-                                        </ul>
+                                                ) : undefined
+                                            }
+                                            keepChildrenMounted={false}
+                                        >
+                                            <BufferTable
+                                                tensor={tensor}
+                                                operations={operations}
+                                                queryKey={virtualRow.index.toString()}
+                                            />
+                                        </Collapsible>
                                     </li>
                                 );
                             })
@@ -195,8 +177,13 @@ const TensorList = () => {
     );
 };
 
-function getTensorFilterName(tensor: TensorData, operations: OperationDescription[]) {
-    return `${tensor.id.toString()} ${tensor.shape} ${getDeallocation(tensor, operations)}`;
+function getTensorFilterName(tensor: Tensor) {
+    const bufferTypeLabel =
+        Number.isInteger(tensor.buffer_type) && tensor.buffer_type !== null
+            ? BufferTypeLabel[tensor.buffer_type]
+            : '(?)';
+
+    return `Tensor ${tensor.id} ${bufferTypeLabel}`;
 }
 
 function getDeallocation(tensor: Tensor, operations: OperationDescription[]) {
