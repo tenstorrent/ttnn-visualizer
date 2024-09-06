@@ -5,6 +5,7 @@
 const ROUTES = Object.freeze({
     HOME: '/',
     OPERATIONS: '/operations',
+    TENSORS: '/tensors',
     STYLEGUIDE: '/styleguide',
 });
 
