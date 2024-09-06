@@ -1,18 +1,13 @@
-import json
-
 from sqlalchemy import (
     Column,
     PrimaryKeyConstraint,
     Table,
     Integer,
     String,
-    JSON,
-    types,
     Text,
     Float,
-    TypeDecorator,
 )
-from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy.orm import relationship
 
 from backend.extensions import db
 

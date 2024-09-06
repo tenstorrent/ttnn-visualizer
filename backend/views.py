@@ -123,9 +123,10 @@ def get_tensor(tensor_id):
         return Response(status=HTTPStatus.NOT_FOUND)
     return TensorSchema().dump(tensor)
 
+
 @api.route("/operation-buffers", methods=["GET"])
 def get_operation_buffers():
-    buffers = [{'operation_id': o.operation_id, 'buffers': o.buffers }for o in Operation.query.all()]
+    buffers = [{'operation_id': o.operation_id, 'buffers': o.buffers} for o in Operation.query.all()]
     for buffer in buffers:
         buffer_data = buffer.get('buffers')
         buffer.update({'buffers': BufferSchema().dump(buffer_data, many=True)})
