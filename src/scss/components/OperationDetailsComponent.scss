@@ -15,6 +15,16 @@
         }
     }
 
+    .chart-controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+
+        .bp5-control {
+            margin-bottom: 0;
+        }
+    }
+
     .dram-memory-renderer,
     .l1-memory-renderer {
         .memory-plot {

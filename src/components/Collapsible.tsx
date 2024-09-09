@@ -64,7 +64,12 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
                     isOpen={isOpenState}
                     keepChildrenMounted={keepChildrenMounted}
                 >
-                    <div className={contentClassName} style={contentStyles}>{children}</div>
+                    <div
+                        className={contentClassName}
+                        style={contentStyles}
+                    >
+                        {children}
+                    </div>
                 </Collapse>
             )}
         </div>
