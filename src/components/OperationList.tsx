@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
@@ -279,6 +279,7 @@ const OperationList = () => {
                                                 <OperationComponent
                                                     filterName={getOperationFilterName(operation)}
                                                     filterQuery={filterQuery}
+                                                    intent={Intent.WARNING}
                                                 />
                                             }
                                             keepChildrenMounted={false}

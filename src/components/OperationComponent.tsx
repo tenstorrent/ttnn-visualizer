@@ -24,7 +24,6 @@ const OperationComponent: React.FC<OperationProps> = ({
     return (
         <div className='operation-component'>
             <Icon
-                className='operation-icon'
                 size={20}
                 icon={icon}
                 intent={intent}
