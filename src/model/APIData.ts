@@ -19,6 +19,7 @@ export interface BufferData {
     address: number;
     max_size_per_bank: number;
     buffer_type: number;
+    next_usage?: number;
 }
 
 export interface OperationDetailsData extends Operation {

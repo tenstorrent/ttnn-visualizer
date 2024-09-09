@@ -157,6 +157,8 @@ export const fetchNextUseOfBuffer = async (address: number | null, consumers: nu
         `/api/buffer?address=${address}&operation_id=${consumers[consumers.length - 1]}`,
     );
 
+    buffer.nextUsage = buffer.operation_id - consumers[consumers.length - 1];
+
     return buffer;
 };
 

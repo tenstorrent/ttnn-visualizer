@@ -32,7 +32,8 @@ function BufferTable({ tensor, operations, queryKey }: BufferTableProps) {
                 <tr>
                     <th>Deallocation</th>
                     <td>
-                        {buffer ? (
+                        {isLoading ? 'Loading...' : undefined}
+                        {buffer && !isLoading && deallocationOperation ? (
                             <span className='deallocation-status'>
                                 Deallocation found in Operation {deallocationOperation}
                                 <Icon
@@ -40,8 +41,6 @@ function BufferTable({ tensor, operations, queryKey }: BufferTableProps) {
                                     intent={Intent.SUCCESS}
                                 />
                             </span>
-                        ) : isLoading ? (
-                            'Loading...'
                         ) : (
                             <span className='deallocation-status'>
                                 Missing deallocation operation
@@ -57,13 +56,12 @@ function BufferTable({ tensor, operations, queryKey }: BufferTableProps) {
                 <tr>
                     <th>Next allocation</th>
                     <td>
-                        {buffer && address ? (
+                        {isLoading ? 'Loading...' : undefined}
+                        {buffer && address && !isLoading ? (
                             <>
                                 {toHex(address)} next allocated in Operation {buffer.operation_id} (+
-                                {buffer.operation_id - consumers[consumers.length - 1]} operations)
+                                {buffer.next_usage} operations)
                             </>
-                        ) : isLoading ? (
-                            'Loading...'
                         ) : (
                             'No subsequent buffer found'
                         )}
@@ -75,7 +73,7 @@ function BufferTable({ tensor, operations, queryKey }: BufferTableProps) {
 }
 
 function getDeallocation(tensor: Tensor, operations: OperationDescription[]) {
-    // TODO: Maybe we can strengthen this logic to ensure we're looking at deallocations
+    // TODO: Maybe we can strengthen this logic to ensure we're looking at deallocations rather than just checking the name
     const matchingInputs = operations.filter(
         (operation) =>
             operation.name.includes('deallocate') && operation.inputs.find((input) => input.id === tensor.id),

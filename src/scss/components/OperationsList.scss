@@ -23,9 +23,26 @@
     }
 
     .result-count {
-        flex-grow: 1;
         text-align: right;
         margin-bottom: 0;
+    }
+
+    .memory-leak-count {
+        flex-grow: 1;
+        text-align: center;
+        margin-bottom: 0;
+        align-items: center;
+        gap: 5px;
+        display: flex;
+        justify-content: center;
+
+        > .success {
+            color: $tt-success;
+        }
+
+        > .warning {
+            color: $tt-warning;
+        }
     }
 
     .scrollable-element {
