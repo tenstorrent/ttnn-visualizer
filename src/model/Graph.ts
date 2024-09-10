@@ -14,7 +14,7 @@ export interface Operation {
 export interface Tensor {
     address: number | null;
     id: number;
-    bufferType: BufferType | null;
+    buffer_type: BufferType | null;
     producers: number[];
     consumers: number[];
     producerNames: string[];

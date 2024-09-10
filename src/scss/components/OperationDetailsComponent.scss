@@ -56,7 +56,6 @@
         grid-template-columns: 1fr auto;
         align-items: start;
         gap: 25px;
-        min-height: 120px;
     }
 
     .producer-consumer {
@@ -242,5 +241,22 @@
         display: flex;
         flex-wrap: wrap;
         gap: 20px;
+    }
+
+    .graph {
+        display: flex;
+        gap: 20px;
+        align-items: center;
+        margin-bottom: 20px;
+
+        .column:first-child {
+            flex-basis: calc(100% - 280px);
+            flex-shrink: 1;
+        }
+
+        .column:last-child {
+            flex-basis: 280px;
+            flex-grow: 1;
+        }
     }
 }
