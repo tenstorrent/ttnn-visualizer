@@ -7,7 +7,7 @@ import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import { selectedTensorAddressAtom } from '../../store/app';
 
 export interface MemoryPlotRendererProps {
-    chartData: Partial<PlotData>[];
+    chartDataList: Partial<PlotData>[][];
     isZoomedIn: boolean;
     memorySize: number;
     title: string;
@@ -20,7 +20,7 @@ export interface MemoryPlotRendererProps {
 
 const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRendererProps> = (
     {
-        chartData,
+        chartDataList,
         isZoomedIn,
         memorySize,
         className = '',
@@ -32,8 +32,11 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
     },
     ref,
 ) => {
+    const chartData = useMemo(() => chartDataList.flat(), [chartDataList]);
+
     const selectedAddress = useAtomValue(selectedTensorAddressAtom);
     const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
+
     const [augmentedChart, setAugmentedChart] = useState<Partial<PlotData>[]>(structuredClone(chartData));
 
     const layout: Partial<Layout> = {
@@ -92,7 +95,7 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
                     return data;
                 }
 
-                const originalColour = chartData[index].marker.color as string;
+                const originalColour = chartData[index].marker?.color as string;
                 const lightlyDimmedColour = tinycolor(originalColour).desaturate(15).darken(5).toString();
                 const dimmedColour = tinycolor(originalColour).desaturate(40).darken(15).toString();
 

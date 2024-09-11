@@ -28,6 +28,7 @@ export interface OperationDetailsData extends Operation {
     buffers: BufferData[];
     l1_sizes: number[];
     stack_trace: string;
+    device_operations: Node[];
 }
 
 // TODO: we may want to revisit the 'default' portion for the variable name
@@ -39,6 +40,7 @@ export const defaultOperationDetailsData: OperationDetailsData = {
     buffers: [],
     l1_sizes: [],
     stack_trace: '',
+    device_operations: [],
 };
 
 export interface Chunk {
@@ -73,17 +75,17 @@ export interface OperationDescription extends Operation {
     device_operations: Node[];
 }
 
-enum NodeType {
-    capture_start,
-    capture_end,
-    function_start,
-    function_end,
-    buffer,
-    buffer_allocate,
-    buffer_deallocate,
-    circular_buffer_allocate,
-    circular_buffer_deallocate_all,
-    tensor,
+export enum NodeType {
+    capture_start = 'capture_start',
+    capture_end = 'capture_end',
+    function_start = 'function_start',
+    function_end = 'function_end',
+    buffer = 'buffer',
+    buffer_allocate = 'buffer_allocate',
+    buffer_deallocate = 'buffer_deallocate',
+    circular_buffer_allocate = 'circular_buffer_allocate',
+    circular_buffer_deallocate_all = 'circular_buffer_deallocate_all',
+    tensor = 'tensor',
 }
 
 enum DeviceOperationLayoutTypes {
@@ -101,10 +103,11 @@ interface DeviceOperationParams {
     name: string;
     tensor_id: number;
     shape: string;
-    address: number;
+    address: string;
     layout: DeviceOperationLayoutTypes;
-    size: number;
+    size: string;
     type: DeviceOperationTypes;
+    core_range_set: string;
 }
 
 export interface Node {
@@ -112,4 +115,15 @@ export interface Node {
     id: number;
     node_type: NodeType;
     params: DeviceOperationParams;
+}
+
+export interface DeviceOperation {
+    name: string;
+    cbList: CircularBuffer[];
+    deallocateAll: boolean;
+    indentLevel: number; // device ops nesting level indicator
+}
+
+export interface CircularBuffer extends Chunk {
+    core_range_set: string;
 }
