@@ -45,7 +45,7 @@ const MINIMAL_DRAM_MEMORY_RANGE_OFFSET = 0.9998;
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const { data: operations } = useOperationsList();
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
-    const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
+    // const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
 
     const {
         operationDetails: { data: operationDetails, isLoading, status },
@@ -270,12 +270,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             checked={zoomedInViewMainMemory}
                             onChange={() => setZoomedInViewMainMemory(!zoomedInViewMainMemory)}
                         />
-
-                        <Switch
-                            label='CBs zoom'
-                            checked={zoomedInViewCBMemory}
-                            onChange={() => setZoomedInViewCBMemory(!zoomedInViewCBMemory)}
-                        />
+                        {/* TODO: prep for next feature */}
+                        {/* <Switch */}
+                        {/*    label='CBs zoom' */}
+                        {/*    checked={zoomedInViewCBMemory} */}
+                        {/*    onChange={() => setZoomedInViewCBMemory(!zoomedInViewCBMemory)} */}
+                        {/* /> */}
 
                         <h3>L1 Memory</h3>
                         <ForwardedMemoryPlotRenderer
