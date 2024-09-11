@@ -5,6 +5,23 @@ authors = []
 description = "TT Visualizer"
 readme = "README.md"
 requires-python = ">=3.12"
+dependencies= [
+
+"gunicorn~=22.0.0",
+# uvicorn==0.30.1
+# paramiko~=3.4.0
+# marshmallow==3.21.3
+# flask_marshmallow==1.2.1
+# flask_cors==4.0.1
+# flask_sqlalchemy==3.1.1
+# pydantic==2.7.3
+# pydantic_core==2.18.4
+# flask_static_digest==0.4.1
+# marshmallow-sqlalchemy==1.0.0
+# setuptools==65.5.0
+# python-dotenv==1.0.1
+
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -12,7 +29,8 @@ classifiers = [
 ]
 
 [tool.setuptools]
-packages = ["backend", "backend.config", "backend.data"]
+packages = ["backend", "backend.config"]
+
 
 [build-system]
 requires = [

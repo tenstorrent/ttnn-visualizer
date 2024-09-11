@@ -1,1 +1,2 @@
 graft backend/static
+prune backend/data/
