@@ -243,23 +243,6 @@
         gap: 20px;
     }
 
-    .graph {
-        display: flex;
-        gap: 20px;
-        align-items: center;
-        margin-bottom: 20px;
-
-        .column:first-child {
-            flex-basis: calc(100% - 280px);
-            flex-shrink: 1;
-        }
-
-        .column:last-child {
-            flex-basis: 280px;
-            flex-grow: 1;
-        }
-    }
-
     .no-buffer-type-selected {
         margin-top: 20px;
         margin-bottom: 0;
