@@ -1,0 +1,23 @@
+[project]
+name = "ttnn-visualizer"
+version = "0.0.1"
+authors = []
+description = "TT Visualizer"
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[tool.setuptools]
+packages = ["backend", "backend.config", "backend.data"]
+
+[build-system]
+requires = [
+  "setuptools==69.5.1",
+  "setuptools-scm==7.1.0",
+  "wheel",
+]
+build-backend = "setuptools.build_meta"
