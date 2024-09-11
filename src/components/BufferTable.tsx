@@ -60,15 +60,18 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                     </td>
                 </tr>
 
-                <tr>
-                    <th>Next allocation</th>
-                    <td>
-                        {isLoading ? 'Loading...' : undefined}
-                        {buffer?.next_usage && address && !isLoading
-                            ? `${toHex(address)} next allocated in Operation ${buffer.operation_id} (+${buffer.next_usage} operations)`
-                            : 'No subsequent buffer found at this address'}
-                    </td>
-                </tr>
+                {isLoading ||
+                    (address && (
+                        <tr>
+                            <th>Next allocation</th>
+                            <td>
+                                {isLoading ? 'Loading...' : undefined}
+                                {buffer?.next_usage && address && !isLoading
+                                    ? `${toHex(address)} next allocated in Operation ${buffer.operation_id} (+${buffer.next_usage} operations)`
+                                    : 'No subsequent buffer found at this address'}
+                            </td>
+                        </tr>
+                    ))}
             </tbody>
         </table>
     );

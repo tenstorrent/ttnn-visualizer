@@ -281,7 +281,7 @@ function getTensorFilterName(tensor: Tensor) {
     const bufferTypeLabel =
         Number.isInteger(tensor.buffer_type) && tensor.buffer_type !== null
             ? BufferTypeLabel[tensor.buffer_type]
-            : '(?)';
+            : 'null';
 
     return `Tensor ${tensor.id} ${bufferTypeLabel}`;
 }
