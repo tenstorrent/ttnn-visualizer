@@ -255,6 +255,7 @@ const TensorList = () => {
                                             }
                                         >
                                             <BufferTable
+                                                className='buffer-data'
                                                 tensor={tensor}
                                                 operations={operations}
                                                 queryKey={virtualRow.index.toString()}

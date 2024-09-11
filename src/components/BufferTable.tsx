@@ -5,6 +5,7 @@
 import 'styles/components/BufferTable.scss';
 import { Icon, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import classNames from 'classnames';
 import { Tensor } from '../model/Graph';
 import { OperationDescription } from '../model/APIData';
 import { useNextBuffer } from '../hooks/useAPI';
@@ -14,16 +15,17 @@ interface BufferTableProps {
     tensor: Tensor;
     operations: OperationDescription[];
     queryKey: string;
+    className?: string;
 }
 
-function BufferTable({ tensor, operations, queryKey }: BufferTableProps) {
+function BufferTable({ tensor, operations, queryKey, className }: BufferTableProps) {
     const { address, consumers } = tensor;
     const lastOperation = tensor.consumers[tensor.consumers.length - 1];
     const deallocationOperation = getDeallocation(tensor, operations);
     const { data: buffer, isLoading } = useNextBuffer(address, consumers, queryKey);
 
     return (
-        <table className='buffer-table'>
+        <table className={classNames('buffer-table', className)}>
             <tbody>
                 <tr>
                     <th>Last used</th>
