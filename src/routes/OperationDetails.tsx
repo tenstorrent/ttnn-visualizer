@@ -1,25 +1,25 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { useParams } from 'react-router';
-import { useState } from 'react';
+import { Helmet } from 'react-helmet-async';
 import OperationDetailsComponent from '../components/operation-details/OperationDetailsComponent';
-import OperationDetailsNavigation from '../components/OperationDetailsNavigation';
+import { useOperationDetails } from '../hooks/useAPI';
 
 export default function OperationDetails() {
-    const [isFullStackTrace, setIsFullStackTrace] = useState(false);
     const { operationId } = useParams();
     const intOperationId = operationId ? parseInt(operationId, 10) : 0;
+    const { operation } = useOperationDetails(intOperationId);
 
     return (
         operationId && (
             <>
-                <OperationDetailsNavigation
-                    operationId={intOperationId}
-                    isFullStackTrace={isFullStackTrace}
+                <Helmet
+                    title={operation?.name ? `${operationId} ${operation?.name}` : `Not found Operation ${operationId}`}
                 />
-                <OperationDetailsComponent
-                    operationId={intOperationId}
-                    isFullStackTrace={isFullStackTrace}
-                    toggleStackTraceHandler={setIsFullStackTrace}
-                />
+
+                <OperationDetailsComponent operationId={intOperationId} />
             </>
         )
     );

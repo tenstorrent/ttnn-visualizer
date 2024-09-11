@@ -7,13 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, useState } from 'react';
 import RemoteConnectionDialog from './RemoteConnectionDialog';
-
-interface RemoteConnection {
-    name: string;
-    host: string;
-    port: number;
-    path: string;
-}
+import { RemoteConnection } from '../../definitions/RemoteConnection';
 
 const formatConnectionString = (connection?: RemoteConnection) => {
     if (!connection) {
@@ -44,39 +38,47 @@ const renderRemoteConnection: ItemRenderer<RemoteConnection> = (connection, { ha
 };
 
 interface RemoteConnectionSelectorProps {
-    connections: RemoteConnection[];
+    connectionList: RemoteConnection[];
     connection?: RemoteConnection;
     disabled: boolean;
     loading: boolean;
     offline: boolean;
     onSelectConnection: (connection: RemoteConnection) => void;
+    onEditConnection: (updatedConnection: RemoteConnection, currentConnection?: RemoteConnection) => void;
     onRemoveConnection: (connection: RemoteConnection) => void;
-    onSyncRemoteFolders: (connection: RemoteConnection) => void;
+    onSyncRemoteFolderList: (connection: RemoteConnection) => void;
 }
 
 const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
-    connections,
+    connectionList,
     connection,
     disabled,
     loading,
     offline,
     onSelectConnection,
+    onEditConnection,
     onRemoveConnection,
-    onSyncRemoteFolders,
+    onSyncRemoteFolderList,
 }) => {
     const [isEditdialogOpen, setIsEditDialogOpen] = useState(false);
-    const selectedConnection = connection ?? connections[0];
+    const selectedConnection = connection ?? connectionList[0];
 
     return (
         <div className='buttons-container'>
             <Select
                 className='remote-connection-select'
-                items={connections}
+                items={connectionList}
                 itemRenderer={renderRemoteConnection}
                 disabled={disabled}
                 filterable
                 itemPredicate={filterRemoteConnections}
-                noResults={<MenuItem disabled text='No results' roleStructure='listoption' />}
+                noResults={
+                    <MenuItem
+                        disabled
+                        text='No results'
+                        roleStructure='listoption'
+                    />
+                }
                 onItemSelect={onSelectConnection}
             >
                 <Button
@@ -104,17 +106,23 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
             <RemoteConnectionDialog
                 key={`${selectedConnection?.name}${selectedConnection?.host}${selectedConnection?.port}${selectedConnection?.path}`}
                 open={isEditdialogOpen}
-                onAddConnection={() => {}}
+                onAddConnection={(updatedConnection) => {
+                    setIsEditDialogOpen(false);
+                    onEditConnection(updatedConnection, connection);
+                }}
+                onClose={() => {
+                    setIsEditDialogOpen(false);
+                }}
                 title='Edit remote connection'
                 buttonLabel='Save connection'
                 remoteConnection={selectedConnection}
             />
             <Button
-                icon={IconNames.LOG_IN}
+                icon={IconNames.LOCATE}
                 disabled={disabled || !selectedConnection}
                 loading={loading}
                 text='Fetch remote folders list'
-                onClick={() => onSyncRemoteFolders(selectedConnection)}
+                onClick={() => onSyncRemoteFolderList(selectedConnection)}
             />
         </div>
     );

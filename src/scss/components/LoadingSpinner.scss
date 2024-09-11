@@ -4,46 +4,110 @@
 
 @use '../definitions/colours' as *;
 
+$base-div-size: 13.3333px;
+
 .loading-spinner {
-    color: $tt-purple;
     display: inline-block;
     position: relative;
     width: 80px;
     height: 80px;
 
     div {
-        box-sizing: border-box;
-        display: block;
         position: absolute;
-        width: 64px;
-        height: 64px;
-        margin: 8px;
-        border: 6px solid currentcolor;
+        top: 33.3333px;
+        width: $base-div-size;
+        height: $base-div-size;
         border-radius: 50%;
-        animation: loading-spinner 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
-        border-color: currentcolor transparent transparent;
+        background-color: $tt-white;
+        animation-timing-function: cubic-bezier(0, 1, 1, 0);
+
+        &:nth-child(1) {
+            left: 8px;
+            animation: loading-spinner1 0.6s infinite;
+        }
+
+        &:nth-child(2) {
+            left: 8px;
+            animation: loading-spinner2 0.6s infinite;
+        }
+
+        &:nth-child(3) {
+            left: 32px;
+            animation: loading-spinner2 0.6s infinite;
+        }
+
+        &:nth-child(4) {
+            left: 56px;
+            animation: loading-spinner3 0.6s infinite;
+        }
+    }
+
+    &.small {
+        width: 40px;
+        height: 20px;
+
+        div {
+            top:  calc($base-div-size / 2);
+            width: calc($base-div-size / 2);
+            height: calc($base-div-size / 2);
+
+            &:nth-child(1) {
+                left: 4px;
+            }
+
+            &:nth-child(2) {
+                left: 4px;
+                animation: loading-spinner2small 0.6s infinite;
+            }
+
+            &:nth-child(3) {
+                left: 16px;
+                animation: loading-spinner2small 0.6s infinite;
+            }
+
+            &:nth-child(4) {
+                left: 28px;
+            }
+        }
     }
 }
 
-.loading-spinner div:nth-child(1) {
-  animation-delay: -0.45s;
+@keyframes loading-spinner1 {
+    0% {
+        transform: scale(0);
+    }
+
+    100% {
+        transform: scale(1);
+    }
 }
 
-.loading-spinner div:nth-child(2) {
-  animation-delay: -0.3s;
+@keyframes loading-spinner3 {
+    0% {
+        transform: scale(1);
+    }
+
+    100% {
+        transform: scale(0);
+    }
 }
 
-.loading-spinner div:nth-child(3) {
-  animation-delay: -0.15s;
+@keyframes loading-spinner2 {
+    0% {
+        transform: translate(0, 0);
+    }
+
+    100% {
+        transform: translate(24px, 0);
+    }
 }
 
-@keyframes loading-spinner {
-  0% {
-    transform: rotate(0deg);
-  }
+@keyframes loading-spinner2small {
+    0% {
+        transform: translate(0, 0);
+    }
 
-  100% {
-    transform: rotate(360deg);
-  }
+    100% {
+        transform: translate(12px, 0);
+    }
 }
-

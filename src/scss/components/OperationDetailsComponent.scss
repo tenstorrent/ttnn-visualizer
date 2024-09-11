@@ -4,27 +4,70 @@
 
 @use '../definitions/colours' as *;
 
-.operation-details-loader {
-    position: absolute;
-    top: 78px;
-    left: 233px;
-    scale: 0.4;
-
-    .loading-spinner {
-        color: $tt-medium-light-gray;
-    }
-}
-
 .operation-details-component {
+    .selected-tensor {
+        color: $tt-white;
 
+        &::before {
+            display: inline-block;
+            content: '\2714'; // checkmark
+            margin-right: 5px;
+        }
+    }
+
+    .dram-memory-renderer,
     .l1-memory-renderer {
+        .memory-plot {
+            width: 100%;
+            height: 110px;
+        }
+
+        &.identical-plot {
+            .memory-plot {
+                opacity: 0.5;
+            }
+        }
+
         &.empty-plot {
             opacity: 0.4;
         }
+    }
 
-        .l1-memory-plot {
-            width: 100%;
-            height: 110px;
+    .dram-memory-renderer {
+        .memory-plot {
+            height: 80px;
+        }
+
+        margin-bottom: 10px;
+    }
+
+    .plot-tensor-details {
+        display: inline-grid;
+        grid-template-columns: 1fr auto;
+        align-items: start;
+        gap: 25px;
+        min-height: 120px;
+    }
+
+    .producer-consumer {
+        &.hidden {
+            display: none;
+        }
+
+        .title {
+            font-size: 18px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+
+            &.hidden {
+                display: none;
+            }
+        }
+
+        .operation-link {
+            margin-left: #{14px + 8px}; // icon width + gap
+            margin-bottom: 3px;
         }
     }
 
@@ -35,10 +78,31 @@
         flex-direction: column;
         row-gap: 5px;
 
+        hr {
+            margin: 10px 0;
+        }
+
+        .full-dram-legend {
+            display: grid;
+        }
+
         .legend-item {
             display: inline-grid;
             gap: 5px;
             grid-template-columns: 20px 1fr;
+
+            &.button {
+                font-size: inherit;
+
+                &:focus,
+                &:hover {
+                    .legend-details {
+                        .format-numbers:first-child {
+                            text-decoration: underline;
+                        }
+                    }
+                }
+            }
 
             &.dimmed {
                 opacity: 0.4;
@@ -46,19 +110,18 @@
 
             .legend-details {
                 display: inline-grid;
-                grid-template-columns: 1fr 1fr .75fr 1fr;
+                grid-template-columns: 1fr 1fr 0.75fr 1fr;
                 gap: 15px;
+                text-align: left;
 
                 .format-numbers {
                     text-align: right;
-                    font-family: monospace;
 
                     &.keep-left {
                         text-align: left;
                     }
                 }
             }
-
 
             .legend-text {
                 font-size: 0.875rem;
@@ -71,13 +134,17 @@
         height: 15px;
         display: inline-block;
 
+        &.empty {
+            background-color: $tt-white;
+        }
+
         &.empty-tensor {
             background: repeating-linear-gradient(
-                    45deg,
-                    transparent,
-                    transparent 5px,
-                    red 5px,
-                    red 7px
+                45deg,
+                transparent,
+                transparent 5px,
+                $tt-red-accent 5px,
+                $tt-red-accent 7px
             );
         }
     }
@@ -87,29 +154,40 @@
         grid-template-columns: 1fr 1fr;
         gap: 5px;
 
-
         .tensor-item {
             margin-top: 20px;
 
             &.dimmed {
                 opacity: 0.5;
             }
+
+            h4 {
+                cursor: pointer;
+            }
         }
 
         .tensor-name {
             display: inline-flex;
             align-items: center;
-            color: $tt-white-text;
+            color: $tt-white;
             gap: 8px;
             margin-bottom: 10px;
+            font-size: inherit;
 
             h4 {
                 margin: 0;
             }
+
+            &:focus,
+            &:hover {
+                h4 {
+                    text-decoration: underline;
+                }
+            }
         }
 
         .tensor-meta {
-            padding-left: 40px;
+            padding-left: 25px;
         }
     }
 
@@ -135,12 +213,24 @@
         position: fixed;
         bottom: 20px;
         right: 20px;
-        background-color: $tt-white-text;
+        background-color: $tt-white;
         color: $tt-black;
         padding: 10px;
 
         &.hidden {
             display: none;
         }
+    }
+
+    .not-found-message {
+        font-size: 20px;
+        margin-top: 10px;
+    }
+
+    .arguments-wrapper {
+        padding-top: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
     }
 }

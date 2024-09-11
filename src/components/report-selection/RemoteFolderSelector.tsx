@@ -6,70 +6,53 @@ import { Button, Icon, MenuItem, Spinner, Tooltip } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
-
-interface RemoteConnection {
-    name: string;
-    host: string;
-    port: number;
-    path: string;
-}
-
-interface RemoteFolder {
-    /** Name of the test results folder */
-    testName: string;
-    /** Remote absolute path to the test results folder */
-    remotePath: string;
-    /** Local absolute path to the test results folder */
-    localPath: string;
-    /** Last time the folder was modified on remote */
-    lastModified: string;
-    /** Last time the folder was synced */
-    lastSynced?: string;
-}
+import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
+import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
+import useRemoteConnection from '../../hooks/useRemote';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
     timeStyle: 'short',
 });
 
-const formatRemoteFolderName = (folder?: RemoteFolder, connection?: RemoteConnection) => {
-    if (!folder) {
+const MAX_REPORT_NAME_LENGTH = 50;
+
+const formatRemoteFolderName = (
+    folder?: RemoteFolder,
+    connection?: RemoteConnection,
+    selectedConnection?: RemoteConnection,
+) => {
+    if (!folder || !selectedConnection) {
         return 'n/a';
     }
 
-    if (!connection) {
-        return folder.testName;
-    }
+    return connection?.name ?? folder.remotePath.replace(selectedConnection.path, '');
+};
 
-    return `${connection.name} — ${folder.testName}`;
+const getTestName = (folder: RemoteFolder) => {
+    return folder.testName.length > MAX_REPORT_NAME_LENGTH
+        ? `${folder.testName.slice(0, MAX_REPORT_NAME_LENGTH)}...`
+        : folder.testName;
 };
 
 const filterFolders =
-    (connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
+    (connection?: RemoteConnection, selectedConnection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
     (query, folder) => {
-        return formatRemoteFolderName(folder, connection).toLowerCase().includes(query.toLowerCase());
+        return formatRemoteFolderName(folder, connection, selectedConnection)
+            .toLowerCase()
+            .includes(query.toLowerCase());
     };
-
-const isLocalFolderOutdated = (folder: RemoteFolder) => {
-    if (!folder.lastSynced) {
-        return true;
-    }
-
-    const lastSynced = new Date(folder.lastSynced);
-    const lastModified = new Date(folder.lastModified);
-
-    return lastModified > lastSynced;
-};
 
 const remoteFolderRenderer =
     (syncingFolderList: boolean, connection?: RemoteConnection): ItemRenderer<RemoteFolder> =>
     (folder, { handleClick, modifiers }) => {
+        const { persistentState } = useRemoteConnection();
+
         if (!modifiers.matchesPredicate) {
             return null;
         }
 
         const { lastSynced, lastModified } = folder;
-
         let statusIcon = (
             <Tooltip
                 content={`Fetching folder status, last sync: ${
@@ -81,14 +64,17 @@ const remoteFolderRenderer =
         );
 
         if (!syncingFolderList) {
-            if (isLocalFolderOutdated(folder)) {
+            if (isRemoteFolderOutdated(folder)) {
                 statusIcon = (
                     <Tooltip
                         content={`Folder is stale, last sync: ${
                             lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
                         }`}
                     >
-                        <Icon icon={IconNames.HISTORY} color='goldenrod' />
+                        <Icon
+                            icon={IconNames.HISTORY}
+                            color='goldenrod'
+                        />
                     </Tooltip>
                 );
             } else {
@@ -98,22 +84,33 @@ const remoteFolderRenderer =
                             lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
                         }`}
                     >
-                        <Icon icon={IconNames.UPDATED} color='green' />
+                        <Icon
+                            icon={IconNames.UPDATED}
+                            color='green'
+                        />
                     </Tooltip>
                 );
             }
         }
+
+        const getLabelElement = () => (
+            <>
+                <span className='test-name'>{getTestName(folder)}</span>
+                {statusIcon}
+            </>
+        );
 
         return (
             <MenuItem
                 className='remote-folder-item'
                 active={modifiers.active}
                 disabled={modifiers.disabled}
-                key={`${formatRemoteFolderName(folder, connection)}${lastSynced ?? lastModified}`}
+                key={`${formatRemoteFolderName(folder, connection, persistentState.selectedConnection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
-                text={formatRemoteFolderName(folder)}
-                // @ts-expect-error - Hack abusing label, it actually works.
-                label={statusIcon}
+                text={formatRemoteFolderName(folder, undefined, persistentState.selectedConnection)}
+                textClassName='folder-path'
+                icon={IconNames.FOLDER_CLOSE}
+                labelElement={getLabelElement()}
                 labelClassName='remote-folder-status-icon'
             />
         );
@@ -121,7 +118,7 @@ const remoteFolderRenderer =
 
 interface RemoteFolderSelectorProps {
     remoteFolder?: RemoteFolder;
-    remoteFolders?: RemoteFolder[];
+    remoteFolderList?: RemoteFolder[];
     remoteConnection?: RemoteConnection;
     loading?: boolean;
     updatingFolderList?: boolean;
@@ -132,7 +129,7 @@ interface RemoteFolderSelectorProps {
 
 const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = ({
     remoteFolder,
-    remoteFolders = [],
+    remoteFolderList = [],
     remoteConnection,
     loading = false,
     updatingFolderList = false,
@@ -141,25 +138,38 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     fallbackLabel = '(No selection)',
     icon = IconNames.FOLDER_OPEN,
 }) => {
+    const { persistentState } = useRemoteConnection();
+
     return (
         <div className='buttons-container'>
             <Select
                 className='remote-folder-select'
-                items={remoteFolders ?? []}
+                items={remoteFolderList ?? []}
                 itemRenderer={remoteFolderRenderer(updatingFolderList, remoteConnection)}
                 filterable
-                itemPredicate={filterFolders(remoteConnection)}
-                noResults={<MenuItem disabled text='No results' roleStructure='listoption' />}
-                disabled={loading || remoteFolders?.length === 0}
+                itemPredicate={filterFolders(remoteConnection, persistentState.selectedConnection)}
+                noResults={
+                    <MenuItem
+                        disabled
+                        text='No results'
+                        roleStructure='listoption'
+                    />
+                }
+                disabled={loading || remoteFolderList?.length === 0}
                 onItemSelect={onSelectFolder}
             >
                 <Button
                     icon={icon as IconName}
-                    rightIcon={remoteFolders && remoteFolders?.length > 0 ? IconNames.CARET_DOWN : undefined}
-                    disabled={loading || remoteFolders?.length === 0}
-                    text={remoteFolder ? formatRemoteFolderName(remoteFolder, remoteConnection) : fallbackLabel}
+                    rightIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
+                    disabled={loading || remoteFolderList?.length === 0}
+                    text={
+                        remoteFolder
+                            ? formatRemoteFolderName(remoteFolder, remoteConnection, persistentState.selectedConnection)
+                            : fallbackLabel
+                    }
                 />
             </Select>
+
             {children}
         </div>
     );

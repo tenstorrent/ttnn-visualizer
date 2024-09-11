@@ -1,24 +1,59 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
+import { useCallback, useEffect } from 'react';
 import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
 import 'styles/components/OperationDetailsNavigation.scss';
 import ROUTES from '../definitions/routes';
+import LoadingSpinner from './LoadingSpinner';
+import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
 
 interface OperationDetailsNavigationProps {
     operationId: number;
-    isFullStackTrace: boolean;
+    isLoading: boolean;
 }
 
-function OperationDetailsNavigation({ operationId, isFullStackTrace }: OperationDetailsNavigationProps) {
+function OperationDetailsNavigation({ operationId, isLoading }: OperationDetailsNavigationProps) {
     const navigate = useNavigate();
     const { operation } = useOperationDetails(operationId);
     const previousOperation = usePreviousOperation(operationId);
     const nextOperation = useNextOperation(operationId);
 
+    const navigateToPreviousOperation = useCallback(() => {
+        navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`);
+    }, [navigate, previousOperation]);
+
+    const navigateToNextOperation = useCallback(() => {
+        navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`);
+    }, [navigate, nextOperation]);
+
+    useEffect(() => {
+        const handleKeyPress = (e: KeyboardEvent) => {
+            const { key } = e;
+
+            if (key === 'ArrowLeft' && previousOperation) {
+                navigateToPreviousOperation();
+            }
+
+            if (key === 'ArrowRight' && nextOperation) {
+                navigateToNextOperation();
+            }
+        };
+
+        window.document.addEventListener('keyup', handleKeyPress);
+
+        return () => {
+            window.document.removeEventListener('keyup', handleKeyPress);
+        };
+    }, [navigateToPreviousOperation, navigateToNextOperation, previousOperation, nextOperation]);
+
     return (
-        <nav>
-            <ButtonGroup className='operation-details-navigation'>
+        <nav className='operation-details-navigation'>
+            <ButtonGroup className='button-group'>
                 <Tooltip
                     content={previousOperation ? `${previousOperation?.id} ${previousOperation?.name}` : ''}
                     placement={PopoverPosition.TOP}
@@ -27,9 +62,7 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace }: Operation
                     <Button
                         icon={IconNames.ArrowLeft}
                         disabled={!previousOperation}
-                        onClick={() =>
-                            navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`, { state: { isFullStackTrace } })
-                        }
+                        onClick={navigateToPreviousOperation}
                         outlined
                     />
                 </Tooltip>
@@ -41,7 +74,11 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace }: Operation
                     <Button
                         icon={IconNames.LIST}
                         onClick={() =>
-                            navigate(`${ROUTES.OPERATIONS}`, { state: { previousOperationId: operationId } })
+                            navigate(`${ROUTES.OPERATIONS}`, {
+                                state: {
+                                    previousOperationId: operationId,
+                                },
+                            })
                         }
                         outlined
                     />
@@ -55,13 +92,16 @@ function OperationDetailsNavigation({ operationId, isFullStackTrace }: Operation
                     <Button
                         rightIcon={IconNames.ArrowRight}
                         disabled={!nextOperation}
-                        onClick={() =>
-                            navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`, { state: { isFullStackTrace } })
-                        }
+                        onClick={navigateToNextOperation}
                         outlined
                     />
                 </Tooltip>
-                <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
+
+                {isLoading ? (
+                    <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
+                ) : (
+                    <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
+                )}
             </ButtonGroup>
         </nav>
     );

@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
+
+@use 'sass:color';
+@use './definitions/colours' as *;
+@use "@blueprintjs/colors/lib/scss/colors" as *;
+
+$dark-button-background-base: $tt-grey-2;
+
+@use "@blueprintjs/core/src/blueprint.scss" with (
+    $dark-button-background-color: $dark-button-background-base,
+    $dark-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: -5%),
+    $dark-minimal-button-background-color: $dark-button-background-base,
+    $dark-minimal-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: 5%),
+    $pt-dark-link-color: $tt-teal-accent,
+    $control-checked-background-color: $tt-teal-accent,
+    $control-checked-background-color-hover: color.adjust($tt-teal-accent, $lightness: -3%),
+    $control-checked-background-color-active: color.adjust($tt-teal-accent, $lightness: -6%),
+    $dark-progress-track-color: $tt-teal-shade,
+    $dark-progress-head-color: $tt-teal-accent,
+    // $dark-control-checked-background-color: #abc123,
+    $pt-dark-icon-color: $tt-white,
+    // "intent": (default, hover, active colors)
+    $button-intents: (
+        "primary": ($tt-teal-shade, color.adjust($tt-teal-shade, $lightness: -5%), color.adjust($tt-teal-shade, $lightness: -10%)),
+        "success": ($green3, $green2, $green1),
+        "warning": ($tt-yellow, color.adjust($tt-yellow, $lightness: -5%), $tt-yellow),
+        "danger": ($tt-red-accent, color.adjust($tt-red-accent, $lightness: -5%), $tt-red-shade)
+    ),
+    $pt-dark-intent-text-colors: (
+        "primary": $tt-teal,
+        "success": $tt-green,
+        "warning": $tt-yellow,
+        "danger" : $tt-red,
+    ),
+);

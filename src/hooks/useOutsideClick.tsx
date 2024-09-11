@@ -1,21 +1,31 @@
-import React, { useEffect } from 'react';
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-const useOutsideClick = (ref: React.RefObject<HTMLElement>, handler?: (event: MouseEvent) => void) => {
+import { useEffect } from 'react';
+
+const useOutsideClick = (elements: HTMLElement[], handler?: (event: MouseEvent) => void) => {
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (ref.current && !ref.current.contains(event.target as Node) && handler) {
-                handler(event);
+            if (handler) {
+                const clickedOutside = elements.every((el) => el && !el.contains(event.target as Node));
+
+                if (clickedOutside) {
+                    handler(event);
+                }
             }
         };
+
         if (handler !== undefined) {
             document.addEventListener('mousedown', handleClickOutside);
         }
+
         return () => {
             if (handler !== undefined) {
                 document.removeEventListener('mousedown', handleClickOutside);
             }
         };
-    }, [ref, handler]);
+    }, [elements, handler]);
 };
 
 export default useOutsideClick;

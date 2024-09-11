@@ -3,21 +3,35 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 import React from 'react';
-import { Icon } from '@blueprintjs/core';
+import { Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import HighlightedText from './HighlightedText';
-import '../scss/components/Operation.scss';
+import '../scss/components/ListItem.scss';
 
-interface OperationProps {
+interface ListItemProps {
     filterName: string;
     filterQuery: string;
+    icon?: IconName;
+    intent?: Intent;
 }
 
-const OperationComponent: React.FC<OperationProps> = ({ filterName, filterQuery }) => {
+const ListItem: React.FC<ListItemProps> = ({
+    filterName,
+    filterQuery,
+    icon = IconNames.CUBE,
+    intent = Intent.NONE,
+}) => {
     return (
-        <div className='operation-component'>
-            <Icon className='operation-icon' size={20} icon={IconNames.CUBE} />
-            <HighlightedText text={filterName} filter={filterQuery} />
+        <div className='list-item'>
+            <Icon
+                size={20}
+                icon={icon}
+                intent={intent}
+            />
+            <HighlightedText
+                text={filterName}
+                filter={filterQuery}
+            />
             {/* <Button title='Operation tensor report' minimal small icon={IconNames.GRAPH} /> */}
             {/* <Button title='Stack trace' minimal small icon={IconNames.CODE} /> */}
             {/* <GoldenTensorComparisonIndicator value={op.goldenGlobal} /> */}
@@ -26,4 +40,4 @@ const OperationComponent: React.FC<OperationProps> = ({ filterName, filterQuery 
     );
 };
 
-export default OperationComponent;
+export default ListItem;

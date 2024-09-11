@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
 
 # Editor directories and files
 .vscode/*
@@ -25,4 +26,15 @@ dist-ssr
 
 myenv
 **.sqlite
-backend/__pycache__/*
+**/__pycache__/
+
+# Docker
+/docker/SSH/data/
+*.pub
+*.key
+id_ed*
+/docker/SSH/config
+
+# Backend
+/backend/data
+.env

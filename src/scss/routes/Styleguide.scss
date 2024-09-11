@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
+@use '../definitions/colours' as *;
+
+.container {
+    margin-bottom: 20px;
+}
+
+.flex {
+    display: flex;
+    gap: 10px;
+
+    &.no-gap {
+        gap: 0
+    }
+
+    &.wrap {
+        flex-wrap: wrap;
+    }
+
+    &.no-wrap {
+        flex-wrap: nowrap;
+    }
+
+    &.flex-column {
+        flex-direction: column;
+    }
+}
+
+.short-width {
+    width: 270px;
+}
+
+.colour-container {
+    flex-basis: 10%;
+
+    .colour {
+        height: 30px;
+
+        &.g-1 {
+            background-color: $tt-grey-2;
+        }
+
+        &.g-2 {
+            background-color: $tt-grey-3;
+        }
+
+        &.g-3 {
+            background-color: $tt-grey-4;
+        }
+
+        &.g-4 {
+            background-color: $tt-grey-5;
+        }
+
+        &.g-5 {
+            background-color: $tt-grey-6;
+        }
+
+        &.g-6 {
+            background-color: $tt-grey-7;
+        }
+
+        &.b-1 {
+            background-color: $tt-black;
+        }
+
+        &.w-1 {
+            background-color: $tt-white;
+        }
+
+        @each $colour-name, $shades in $tt-colours {
+            @each $shade-name, $shade-value in $shades {
+              &.#{$colour-name}-#{$shade-name} {
+                background-color: $shade-value;
+              }
+            }
+        }
+    }
+}

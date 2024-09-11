@@ -9,9 +9,17 @@
     align-items: center;
     margin-bottom: 1rem;
     justify-content: space-between;
+
+    .tt-logo {
+        margin: -20px;
+    }
 }
 
 .report-title {
     font-size: 18px;
     font-weight: 700;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    max-width: 250px;
 }

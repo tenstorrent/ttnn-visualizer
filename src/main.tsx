@@ -1,15 +1,22 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from 'react-query';
-import { FocusStyleManager } from '@blueprintjs/core';
+import { FocusStyleManager, OverlaysProvider } from '@blueprintjs/core';
 import './index.scss';
+import { HelmetProvider } from 'react-helmet-async';
 import ErrorPage from './error-page';
 import Layout from './components/Layout';
 import Home from './routes/Home';
 import Operations from './routes/Operations';
 import OperationDetails from './routes/OperationDetails';
+import Styleguide from './routes/Styleguide';
 import ROUTES from './definitions/routes';
+import Tensors from './routes/Tensors';
 
 const router = createBrowserRouter([
     {
@@ -29,17 +36,36 @@ const router = createBrowserRouter([
                 path: 'operations/:operationId',
                 element: <OperationDetails />,
             },
+            {
+                path: 'tensors',
+                element: <Tensors />,
+            },
+            {
+                path: 'styleguide',
+                element: <Styleguide />,
+            },
         ],
     },
 ]);
 
 FocusStyleManager.onlyShowFocusOnTabs();
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            // Messes with Plotly event handling and we don't really need this anyway
+            refetchOnWindowFocus: false,
+        },
+    },
+});
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
-        <React.StrictMode>
-            <RouterProvider router={router} />
-        </React.StrictMode>
+        <HelmetProvider>
+            <React.StrictMode>
+                <OverlaysProvider>
+                    <RouterProvider router={router} />
+                </OverlaysProvider>
+            </React.StrictMode>
+        </HelmetProvider>
     </QueryClientProvider>,
 );

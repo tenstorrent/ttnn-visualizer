@@ -2,44 +2,135 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-/* Tenstorrent powerpoint theme */
-$tt-yellow: #ffd10a;
-$tt-red: #f04f5e;
-$tt-purple: #786bb0;
-$tt-background: #33333d;
-$tt-off-background: #44444d;
-$tt-slight-off-background: #383840;
-$tt-very-dark-gray: #1c2127;
-$tt-black: #000;
-$tt-white-text: #fefef6;
-$tt-extra-light-gray: #f5f5f5;
-$tt-light-gray: #eeeee6;
-$tt-medium-light-gray: #cbcbcb;
-$tt-medium-gray: #909096;
-$tt-dark-gray: #606066;
-$hr: #676767;
-$tt-light-blue: #72deff;
-$tt-medium-blue: #008cab;
-$tt-dark-blue: #004c9b;
-$bright-highlight: #9f0;
-$node-select: #ffd500;
-$node-select-focus: #99c4ff;
-$core-highlight-inout: #ff3c00;
-$core-highlight-output: #07f;
-$pipe-select: #fff58a;
-$c-dram: #7abdcc;
-$hc-core: #f996ff;
-$c-core: #a5cc7a;
-$c-router: #d0c079;
-$c-eth: #a794ee;
-$c-pcix: #ee9794;
-$progress-bar-track: #262626;
-$progress-bar-fill: #7abdcc;
-$link-saturation-track: #2d72d2;
-$link-saturation-fill: rgb(95 107 124 / 20%);
-$detailed-vew-component: #a6bce5;
-$detailed-vew-light-text: #99c4ff;
-$sort-header: #d8e4f6;
-$focus-ring: rgb(142 243 47 / 90%);
-$alert-color: #FF6C0A;
-$queue-color: #5F6B7C;
+@use "@blueprintjs/colors/lib/scss/colors" as *;
+
+// New Greys
+$tt-black: #202020;
+$tt-grey-2: #343434;
+$tt-grey-3: #464646;
+$tt-grey-4: #575757;
+$tt-grey-5: #A7AFB6;
+$tt-grey-6: #CED4DA;
+$tt-grey-7: #DEE2E6;
+$tt-white: #fff;
+
+// tt-purple
+$tt-purple: #bcb3f7;
+$tt-purple-tint-1: #d0c8ff;
+$tt-purple-tint-2: #e2defc;
+$tt-purple-accent: #7c68fa;
+$tt-purple-shade: #4b456e;
+
+// tt-red
+$tt-red: #ff9e8a;
+$tt-red-tint-1: #eab1a5;
+$tt-red-tint-2: #f4d8d2;
+$tt-red-accent: #fa512e;
+$tt-red-shade: #8d2914;
+
+// tt-blue
+$tt-blue: #7584e6;
+$tt-blue-tint-1: #9ca8f2;
+$tt-blue-tint-2: #ccd2f9;
+$tt-blue-accent: #5164e0;
+$tt-blue-shade: #252c5b;
+
+// tt-yellow
+$tt-yellow: #f6bc42;
+$tt-yellow-tint-1: #f9d68e;
+$tt-yellow-tint-2: #f5e2ba;
+$tt-yellow-accent: #c2a261;
+$tt-yellow-shade: #8b7039;
+
+// tt-teal
+$tt-teal: #74c5df;
+$tt-teal-tint-1: #9bdbf0;
+$tt-teal-tint-2: #c7f1ff;
+$tt-teal-accent: #3eb7de;
+$tt-teal-shade: #0d4d62;
+
+// tt-green
+$tt-green: #6faba0;
+$tt-green-tint-1: #92c9bf;
+$tt-green-tint-2: #c7efe8;
+$tt-green-accent: #608c84;
+$tt-green-shade: #103525;
+
+// tt-sand
+$tt-sand: #cdc2a6;
+$tt-sand-tint-1: #e5d7b5;
+$tt-sand-tint-2: #eeeae0;
+$tt-sand-accent: #a2987a;
+$tt-sand-shade: #3a3433;
+
+// tt-slate
+$tt-slate: #737999;
+$tt-slate-tint-1: #979dbd;
+$tt-slate-tint-2: #edeff9;
+$tt-slate-accent: #606891;
+$tt-slate-shade: #101636;
+
+// Shared variables
+$tt-background: $tt-grey-2;
+$tt-colours: (
+  "purple": (
+    "base": $tt-purple,
+    "tint-1": $tt-purple-tint-1,
+    "tint-2": $tt-purple-tint-2,
+    "accent": $tt-purple-accent,
+    "shade": $tt-purple-shade,
+  ),
+  "red": (
+    "base": $tt-red,
+    "tint-1": $tt-red-tint-1,
+    "tint-2": $tt-red-tint-2,
+    "accent": $tt-red-accent,
+    "shade": $tt-red-shade,
+  ),
+  "blue": (
+    "base": $tt-blue,
+    "tint-1": $tt-blue-tint-1,
+    "tint-2": $tt-blue-tint-2,
+    "accent": $tt-blue-accent,
+    "shade": $tt-blue-shade,
+  ),
+  "yellow": (
+    "base": $tt-yellow,
+    "tint-1": $tt-yellow-tint-1,
+    "tint-2": $tt-yellow-tint-2,
+    "accent": $tt-yellow-accent,
+    "shade": $tt-yellow-shade,
+  ),
+  "teal": (
+    "base": $tt-teal,
+    "tint-1": $tt-teal-tint-1,
+    "tint-2": $tt-teal-tint-2,
+    "accent": $tt-teal-accent,
+    "shade": $tt-teal-shade,
+  ),
+  "green": (
+    "base": $tt-green,
+    "tint-1": $tt-green-tint-1,
+    "tint-2": $tt-green-tint-2,
+    "accent": $tt-green-accent,
+    "shade": $tt-green-shade,
+  ),
+  "sand": (
+    "base": $tt-sand,
+    "tint-1": $tt-sand-tint-1,
+    "tint-2": $tt-sand-tint-2,
+    "accent": $tt-sand-accent,
+    "shade": $tt-sand-shade,
+  ),
+  "slate": (
+    "base": $tt-slate,
+    "tint-1": $tt-slate-tint-1,
+    "tint-2": $tt-slate-tint-2,
+    "accent": $tt-slate-accent,
+    "shade": $tt-slate-shade,
+  )
+);
+
+// Contextual colours
+$tt-warning: $tt-yellow;
+$tt-success: $green4;

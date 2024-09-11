@@ -4,22 +4,18 @@
 
 @use 'styles/definitions/colours' as *;
 
-.operation-component {
+.list-item {
     display: flex;
     align-items: center;
     gap: 10px;
-    color: $tt-white-text;
     font-size: 20px;
 
-    [type="button"] .bp5-icon {
-        color: $tt-white-text;
-    }
-
-    .operation-icon.bp5-icon svg {
-        fill: $tt-yellow;
-    }
     .highlighted-text {
-        color: $tt-white-text;
+        color: $tt-white;
         font-size: 20px;
+
+        mark {
+            background-color: $tt-yellow;
+        }
     }
 }

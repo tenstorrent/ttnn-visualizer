@@ -1,14 +1,25 @@
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Button, Classes } from '@blueprintjs/core';
+import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { Button, Classes, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { Helmet } from 'react-helmet-async';
+import { useAtomValue } from 'jotai';
+import { ToastContainer, cssTransition } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.min.css';
 import TenstorrentLogo from './TenstorrentLogo';
-import { useReportMeta } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
+import { reportMetaAtom } from '../store/app';
+
+const BounceIn = cssTransition({
+    enter: `Toastify--animate Toastify__bounce-enter`,
+    exit: ` no-toast-animation Toastify__bounce-exit`,
+    appendPosition: true,
+    collapseDuration: 0,
+    collapse: true,
+});
 
 function Layout() {
     const navigate = useNavigate();
-    const location = useLocation();
-    const report = useReportMeta();
+    const meta = useAtomValue(reportMetaAtom);
 
     const handleNavigate = (path: string) => {
         navigate(path);
@@ -16,31 +27,53 @@ function Layout() {
 
     return (
         <div className={Classes.DARK}>
+            <Helmet
+                defaultTitle='TTNN Visualizer'
+                titleTemplate='%s | TTNN Visualizer'
+            >
+                <meta charSet='utf-8' />
+            </Helmet>
+
             <header className='app-header'>
-                <Link to={ROUTES.HOME}>
+                <Link
+                    className='tt-logo'
+                    to={ROUTES.HOME}
+                >
                     <TenstorrentLogo />
                 </Link>
 
-                {/* TODO: Handle navigation variations differently */}
-                {location.pathname !== ROUTES.HOME && (
-                    <>
-                        <span className='report-title'>{report.report_name}</span>
-
-                        <nav>
-                            <Button
-                                minimal
-                                icon={IconNames.FOLDER_SHARED_OPEN}
-                                onClick={() => handleNavigate(ROUTES.HOME)}
-                            >
-                                Select report
-                            </Button>
-                        </nav>
-                    </>
+                {meta?.report_name && (
+                    <Tooltip
+                        content={meta.report_name}
+                        className='report-title'
+                    >
+                        <span className='report-title'>{meta.report_name}</span>
+                    </Tooltip>
                 )}
+
+                <nav>
+                    <Button
+                        minimal
+                        icon={IconNames.FOLDER_SHARED_OPEN}
+                        onClick={() => handleNavigate(ROUTES.HOME)}
+                    >
+                        Select report
+                    </Button>
+                </nav>
             </header>
 
             <main>
                 <Outlet />
+
+                <ToastContainer
+                    position='top-right'
+                    autoClose={false}
+                    newestOnTop={false}
+                    closeOnClick
+                    closeButton={false}
+                    theme='light'
+                    transition={BounceIn}
+                />
             </main>
         </div>
     );

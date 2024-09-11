@@ -7,12 +7,14 @@ import { IconNames } from '@blueprintjs/icons';
 import React, { useEffect } from 'react';
 import { JSX } from 'react/jsx-runtime';
 import '../scss/components/Collapsible.scss';
+import classNames from 'classnames';
 
 interface CollapsibleProps {
     label: string | JSX.Element;
     additionalElements?: string | JSX.Element;
     isOpen?: boolean;
     contentStyles?: React.CSSProperties;
+    contentClassName?: string;
     keepChildrenMounted?: boolean;
     onExpandToggle?: () => void;
 }
@@ -22,6 +24,7 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
     additionalElements = undefined,
     isOpen = true,
     contentStyles = {},
+    contentClassName = '',
     keepChildrenMounted = true,
     onExpandToggle,
     children,
@@ -58,8 +61,16 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
                 {additionalElements && additionalElements}
             </div>
             {children && (
-                <Collapse isOpen={isOpenState} keepChildrenMounted={keepChildrenMounted}>
-                    <div style={contentStyles}>{children}</div>
+                <Collapse
+                    isOpen={isOpenState}
+                    keepChildrenMounted={keepChildrenMounted}
+                >
+                    <div
+                        className={classNames(contentClassName)}
+                        style={contentStyles}
+                    >
+                        {children}
+                    </div>
                 </Collapse>
             )}
         </div>

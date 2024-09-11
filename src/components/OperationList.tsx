@@ -3,39 +3,49 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useAtom } from 'jotai';
 import SearchField from './SearchField';
 import Collapsible from './Collapsible';
-import OperationComponent from './OperationComponent';
-import { Operation } from '../model/Graph';
 import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/OperationsList.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
+import { expandedOperationsAtom, shouldCollapseAllOperationsAtom } from '../store/app';
+import { OperationDescription } from '../model/APIData';
+import DeviceOperations from './DeviceOperations';
+import ListItem from './ListItem';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
 
-const OperationList = () => {
-    const [filterQuery, setFilterQuery] = useState('');
-    const [filteredOperationsList, setFilteredOperationsList] = useState<Operation[]>([]);
-    const [expandedOperations, setExpandedOperations] = useState<number[]>([]);
-    const [shouldSortDescending, setShouldSortDescending] = useState(false);
-    const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
-    const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
-    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+enum SortingOptions {
+    OFF,
+    ASCENDING,
+    DESCENDING,
+}
 
-    const { data: fetchedOperations, error, isLoading } = useOperationsList();
+const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
-
+    const { data: fetchedOperations, error, isLoading } = useOperationsList();
     const scrollElementRef = useRef(null);
+
+    const [filterQuery, setFilterQuery] = useState('');
+    const [filteredOperationsList, setFilteredOperationsList] = useState<OperationDescription[]>([]);
+    const [shouldSortByID, setShouldSortByID] = useState<SortingOptions>(SortingOptions.ASCENDING);
+    const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
+    const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
+    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
+    const [expandedOperations, setExpandedOperations] = useAtom(expandedOperationsAtom);
+
     const virtualizer = useVirtualizer({
         count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => scrollElementRef.current,
@@ -60,8 +70,18 @@ const OperationList = () => {
         });
     };
 
-    const handleReversingList = () => {
-        setShouldSortDescending((shouldSort) => !shouldSort);
+    const handleSortByID = () => {
+        setShouldSortDuration(SortingOptions.OFF);
+        setShouldSortByID(
+            shouldSortByID === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
+        );
+    };
+
+    const handleSortByDuration = () => {
+        setShouldSortByID(SortingOptions.OFF);
+        setShouldSortDuration(
+            shouldSortDuration === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
+        );
     };
 
     const handleExpandAllToggle = () => {
@@ -88,13 +108,23 @@ const OperationList = () => {
                 );
             }
 
-            if (shouldSortDescending) {
-                operations = operations.reverse();
+            if (isSortingModeActive(shouldSortByID)) {
+                operations = operations.sort((a, b) => a.id - b.id);
+
+                if (shouldSortByID === SortingOptions.DESCENDING) {
+                    operations = operations.reverse();
+                }
+            } else if (isSortingModeActive(shouldSortDuration)) {
+                operations = operations.sort((a, b) => a.duration - b.duration);
+
+                if (shouldSortDuration === SortingOptions.DESCENDING) {
+                    operations = operations.reverse();
+                }
             }
 
             setFilteredOperationsList(operations);
         }
-    }, [fetchedOperations, filterQuery, shouldSortDescending]);
+    }, [fetchedOperations, filterQuery, shouldSortByID, shouldSortDuration]);
 
     useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;
@@ -102,7 +132,7 @@ const OperationList = () => {
         if (initialOperationId && virtualizer) {
             const operationIndex =
                 fetchedOperations?.findIndex(
-                    (operation: Operation) => operation.id === parseInt(initialOperationId, 10),
+                    (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
                 ) || 0;
 
             // Looks better if we scroll to the previous index
@@ -126,6 +156,7 @@ const OperationList = () => {
                     searchQuery={filterQuery}
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
+
                 <ButtonGroup minimal>
                     <Tooltip
                         content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
@@ -136,13 +167,42 @@ const OperationList = () => {
                             rightIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
                         />
                     </Tooltip>
+
                     <Tooltip
-                        content={shouldSortDescending ? 'Sort ascending' : 'Sort descending'}
+                        content={
+                            shouldSortByID === SortingOptions.DESCENDING
+                                ? 'Sort by id descending'
+                                : 'Sort by id ascending'
+                        }
                         placement={PopoverPosition.TOP}
                     >
                         <Button
-                            onClick={() => handleReversingList()}
-                            icon={shouldSortDescending ? IconNames.SortAlphabeticalDesc : IconNames.SortAlphabetical}
+                            onClick={() => handleSortByID()}
+                            icon={
+                                shouldSortByID === SortingOptions.DESCENDING
+                                    ? IconNames.SortAlphabeticalDesc
+                                    : IconNames.SortAlphabetical
+                            }
+                            outlined={isSortingModeActive(shouldSortByID)}
+                        />
+                    </Tooltip>
+
+                    <Tooltip
+                        content={
+                            shouldSortDuration === SortingOptions.DESCENDING
+                                ? 'Sort by duration descending'
+                                : 'Sort by duration ascending'
+                        }
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => handleSortByDuration()}
+                            icon={
+                                shouldSortDuration === SortingOptions.DESCENDING
+                                    ? IconNames.SortNumericalDesc
+                                    : IconNames.SortNumerical
+                            }
+                            outlined={isSortingModeActive(shouldSortDuration)}
                         />
                     </Tooltip>
 
@@ -215,31 +275,40 @@ const OperationList = () => {
                                         <Collapsible
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
-                                                <OperationComponent
+                                                <ListItem
                                                     filterName={getOperationFilterName(operation)}
                                                     filterQuery={filterQuery}
+                                                    intent={Intent.WARNING}
                                                 />
                                             }
                                             keepChildrenMounted={false}
                                             additionalElements={
-                                                <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
-                                                    <Button
-                                                        title='Buffer view'
-                                                        minimal
-                                                        small
-                                                        className='buffer-view'
-                                                        icon={IconNames.SEGMENTED_CONTROL}
-                                                    />
-                                                </Link>
+                                                <Button
+                                                    title='Buffer view'
+                                                    minimal
+                                                    small
+                                                    className='buffer-view'
+                                                    icon={IconNames.SEGMENTED_CONTROL}
+                                                    onClick={() => navigate(`${ROUTES.OPERATIONS}/${operation.id}`)}
+                                                />
                                             }
                                             isOpen={expandedOperations.includes(operation.id)}
                                         >
                                             <div className='arguments-wrapper'>
+                                                <p className='monospace'>
+                                                    Python execution time: {operation.duration}s
+                                                </p>
+
                                                 {operation.arguments && (
                                                     <OperationArguments
-                                                        operationId={operation.id}
-                                                        data={operation.arguments}
+                                                        operation={operation}
+                                                        operationIndex={virtualRow.index}
+                                                        onCollapseTensor={virtualizer.scrollToIndex}
                                                     />
+                                                )}
+
+                                                {operation?.device_operations && (
+                                                    <DeviceOperations deviceOperations={operation.device_operations} />
                                                 )}
                                             </div>
                                         </Collapsible>
@@ -259,8 +328,12 @@ const OperationList = () => {
     );
 };
 
-function getOperationFilterName(operation: Operation) {
+function getOperationFilterName(operation: OperationDescription) {
     return `${operation.id.toString()} ${operation.name}`;
+}
+
+function isSortingModeActive(sorting: SortingOptions) {
+    return sorting === SortingOptions.ASCENDING || sorting === SortingOptions.DESCENDING;
 }
 
 export default OperationList;

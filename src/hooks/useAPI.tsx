@@ -1,31 +1,85 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
-import { OperationDetailsData } from '../model/APIData';
-import { Operation } from '../model/Graph';
+import {
+    BufferData,
+    OperationDescription,
+    OperationDetailsData,
+    ReportMetaData,
+    TensorData,
+    defaultBuffer,
+    defaultOperationDetailsData,
+    defaultTensorData,
+} from '../model/APIData';
 
-const fetchOperationDetails = async (id: number): Promise<OperationDetailsData> => {
-    const response = await axios.get<OperationDetailsData>(`/api/get-operation-details/${id}`);
-    return response.data;
+const fetchOperationDetails = async (id: number | null): Promise<OperationDetailsData> => {
+    if (id === null) {
+        return defaultOperationDetailsData;
+    }
+    try {
+        const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/operations/${id}`, {
+            maxRedirects: 1,
+        });
+        return operationDetails;
+    } catch (error: unknown) {
+        if (axios.isAxiosError(error)) {
+            if (error.response && error.response.status >= 400 && error.response.status < 500) {
+                // we may want to handle this differently
+                throw error;
+            }
+            if (error.response && error.response.status >= 500) {
+                throw error;
+            }
+        }
+    }
+    return defaultOperationDetailsData;
 };
-const fetchOperations = async (): Promise<Operation[]> => {
-    const { data: operationList } = await axios.get<Operation[]>('/api/get-operations');
+const fetchOperations = async (): Promise<OperationDescription[]> => {
+    const { data: operationList } = await axios.get<OperationDescription[]>('/api/operations');
+
     return operationList;
 };
 
-export const useOperationsList = () => {
-    return useQuery<Operation[], AxiosError>('get-operations', fetchOperations);
+/** @description
+ * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const fetchAllBuffers = async (): Promise<any> => {
+    const { data: buffers } = await axios.get('/api/get-operation-buffers');
+
+    return buffers;
 };
 
-export const useOperationDetails = (operationId: number) => {
+const fetchReportMeta = async (): Promise<ReportMetaData> => {
+    const { data: meta } = await axios.get<ReportMetaData>('/api/config');
+
+    return meta;
+};
+
+export const useOperationsList = () => {
+    return useQuery<OperationDescription[], AxiosError>('get-operations', fetchOperations);
+};
+
+export const useAllBuffers = () => {
+    return useQuery<{ operation_id: number; buffers: [] }[], AxiosError>('get-operation-buffers', fetchAllBuffers);
+};
+
+export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
     const operation = operations?.filter((_operation) => {
         return _operation.id === operationId;
     })[0];
-    const operationDetails = useQuery<OperationDetailsData>(['get-operation-detail', operationId], () =>
-        fetchOperationDetails(operationId),
+    const operationDetails = useQuery<OperationDetailsData>(
+        ['get-operation-detail', operationId],
+        () => fetchOperationDetails(operationId),
+        {
+            retry: 2,
+            retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
+        },
     );
-
-    // TODO: consider useQueries or include operation data on BE
 
     return {
         operation,
@@ -41,7 +95,7 @@ export const usePreviousOperationDetails = (operationId: number) => {
         return operationList[index + 1]?.id === operationId;
     });
 
-    return useOperationDetails(operation?.id || -1);
+    return useOperationDetails(operation ? operation.id : null);
 };
 
 export const usePreviousOperation = (operationId: number) => {
@@ -65,21 +119,52 @@ export const useNextOperation = (operationId: number) => {
 };
 
 export const useReportMeta = () => {
-    // TODO: Get this information from somewhere
-    return {
-        cache_path: '/localdev/aknezevic/.cache/ttnn',
-        model_cache_path: '/localdev/aknezevic/.cache/ttnn/models',
-        tmp_dir: '/tmp/ttnn',
-        enable_model_cache: true,
-        enable_fast_runtime_mode: false,
-        throw_exception_on_fallback: true,
-        enable_logging: true,
-        enable_graph_report: false,
-        enable_detailed_buffer_report: true,
-        enable_detailed_tensor_report: false,
-        enable_comparison_mode: false,
-        comparison_mode_pcc: 0.99,
-        root_report_path: 'generated/ttnn/reports',
-        report_name: 'resnet',
-    };
+    return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
+};
+
+export const fetchTensors = async (): Promise<TensorData[]> => {
+    try {
+        const { data: tensorList } = await axios.get<TensorData[]>('/api/tensors', {
+            maxRedirects: 1,
+        });
+
+        return tensorList;
+    } catch (error: unknown) {
+        if (axios.isAxiosError(error)) {
+            if (error.response && error.response.status >= 400 && error.response.status < 500) {
+                // we may want to handle this differently
+                throw error;
+            }
+            if (error.response && error.response.status >= 500) {
+                throw error;
+            }
+        }
+    }
+
+    return [defaultTensorData];
+};
+
+export const useTensors = () => {
+    return useQuery<TensorData[], AxiosError>('get-tensors', fetchTensors);
+};
+
+export const fetchNextUseOfBuffer = async (address: number | null, consumers: number[]): Promise<BufferData> => {
+    if (!address || !consumers.length) {
+        return defaultBuffer;
+    }
+
+    const { data: buffer } = await axios.get(
+        `/api/buffer?address=${address}&operation_id=${consumers[consumers.length - 1]}`,
+    );
+
+    buffer.next_usage = buffer.operation_id - consumers[consumers.length - 1];
+
+    return buffer;
+};
+
+export const useNextBuffer = (address: number | null, consumers: number[], queryKey: string) => {
+    return useQuery<BufferData, AxiosError>(queryKey, {
+        queryFn: () => fetchNextUseOfBuffer(address, consumers),
+        retry: false,
+    });
 };
