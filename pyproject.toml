@@ -41,4 +41,4 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project.scripts]
-spam-cli = "backend.appserver:run_server"
+ttnn-visualizer = "backend.appserver:serve"

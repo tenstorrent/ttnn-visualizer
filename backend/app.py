@@ -11,7 +11,6 @@ from backend import settings
 from dotenv import load_dotenv
 
 
-
 def create_app(settings_override=None):
     from backend.views import api
 
@@ -26,8 +25,8 @@ def create_app(settings_override=None):
     flask_env = environ.get("FLASK_ENV", "development")
     app.config.from_object(getattr(settings, flask_env))
 
-    logging.basicConfig(level=app.config.get('LOG_LEVEL', 'INFO'))
-    
+    logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
+
     if settings_override:
         app.config.update(settings_override)
 
@@ -36,7 +35,7 @@ def create_app(settings_override=None):
     app.register_blueprint(api)
 
     # Load dotenv from root directory
-    dotenv_path = Path(__file__).parent.parent.joinpath('.env')
+    dotenv_path = Path(__file__).parent.parent.joinpath(".env")
     if dotenv_path.exists():
         load_dotenv(str(dotenv_path))
 
