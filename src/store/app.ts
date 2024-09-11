@@ -12,6 +12,7 @@ const reportLocationKey = 'reportLocation';
 export const reportMetaAtom = atomWithStorage<ReportMetaData | null>(reportMetaKey, null);
 export const reportLocationAtom = atomWithStorage<'local' | 'remote' | null>(reportLocationKey, null);
 export const isFullStackTraceAtom = atom(false);
+export const shouldCollapseAllOperationsAtom = atom(false);
 export const expandedOperationsAtom = atom<number[]>([]);
 export const expandedTensorsAtom = atom<number[]>([]);
 export const selectedTensorAddressAtom = atom<number | null>(null);

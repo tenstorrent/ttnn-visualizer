@@ -16,7 +16,7 @@ import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/OperationsList.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
-import { expandedOperationsAtom } from '../store/app';
+import { expandedOperationsAtom, shouldCollapseAllOperationsAtom } from '../store/app';
 import { OperationDescription } from '../model/APIData';
 import DeviceOperations from './DeviceOperations';
 import ListItem from './ListItem';
@@ -41,10 +41,9 @@ const OperationList = () => {
     const [filteredOperationsList, setFilteredOperationsList] = useState<OperationDescription[]>([]);
     const [shouldSortByID, setShouldSortByID] = useState<SortingOptions>(SortingOptions.ASCENDING);
     const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
-    const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
-
+    const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
     const [expandedOperations, setExpandedOperations] = useAtom(expandedOperationsAtom);
 
     const virtualizer = useVirtualizer({
