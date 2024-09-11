@@ -387,8 +387,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             </>
                         )}
 
-                        <br />
-                        <br />
                         <div className='plot-tensor-details'>
                             <div className='legend'>
                                 {isL1Active &&
