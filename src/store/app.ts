@@ -14,4 +14,5 @@ export const reportLocationAtom = atomWithStorage<'local' | 'remote' | null>(rep
 export const isFullStackTraceAtom = atom(false);
 export const shouldCollapseAllOperationsAtom = atom(false);
 export const expandedOperationsAtom = atom<number[]>([]);
+export const expandedTensorsAtom = atom<number[]>([]);
 export const selectedTensorAddressAtom = atom<number | null>(null);

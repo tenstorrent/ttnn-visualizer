@@ -16,6 +16,7 @@ import Operations from './routes/Operations';
 import OperationDetails from './routes/OperationDetails';
 import Styleguide from './routes/Styleguide';
 import ROUTES from './definitions/routes';
+import Tensors from './routes/Tensors';
 
 const router = createBrowserRouter([
     {
@@ -34,6 +35,10 @@ const router = createBrowserRouter([
             {
                 path: 'operations/:operationId',
                 element: <OperationDetails />,
+            },
+            {
+                path: 'tensors',
+                element: <Tensors />,
             },
             {
                 path: 'styleguide',

@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
+@use "@blueprintjs/colors/lib/scss/colors" as *;
+
 // New Greys
 $tt-black: #202020;
 $tt-grey-2: #343434;
@@ -128,3 +130,7 @@ $tt-colours: (
     "shade": $tt-slate-shade,
   )
 );
+
+// Contextual colours
+$tt-warning: $tt-yellow;
+$tt-success: $green4;
