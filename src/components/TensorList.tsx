@@ -145,6 +145,30 @@ const TensorList = () => {
                             rightIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
                         />
                     </Tooltip>
+
+                    <Tooltip
+                        content='Scroll to top'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => {
+                                virtualizer.scrollToIndex(0);
+                            }}
+                            icon={IconNames.DOUBLE_CHEVRON_UP}
+                        />
+                    </Tooltip>
+
+                    <Tooltip
+                        content='Scroll to bottom'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => {
+                                virtualizer.scrollToIndex(numberOfTensors - 1);
+                            }}
+                            icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                        />
+                    </Tooltip>
                 </ButtonGroup>
 
                 <p className='memory-leak-count'>

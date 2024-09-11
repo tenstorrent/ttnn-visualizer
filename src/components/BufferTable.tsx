@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import 'styles/components/BufferTable.scss';
 import { Icon, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -19,7 +23,7 @@ function BufferTable({ tensor, operations, queryKey }: BufferTableProps) {
     const { data: buffer, isLoading } = useNextBuffer(address, consumers, queryKey);
 
     return (
-        <table>
+        <table className='buffer-table'>
             <tbody>
                 <tr>
                     <th>Last used</th>

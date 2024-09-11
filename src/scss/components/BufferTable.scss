@@ -2,8 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-.deallocation-status {
-    display: flex;
-    align-items: center;
-    gap: 5px;
+.buffer-table {
+    td, th {
+        padding: 5px 10px;
+    }
+
+    .deallocation-status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
 }
