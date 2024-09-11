@@ -33,6 +33,7 @@ function BufferTable({ tensor, operations, queryKey }: BufferTableProps) {
                     <th>Deallocation</th>
                     <td>
                         {isLoading ? 'Loading...' : undefined}
+
                         {buffer && !isLoading && deallocationOperation ? (
                             <span className='deallocation-status'>
                                 Deallocation found in Operation {deallocationOperation}
@@ -57,14 +58,9 @@ function BufferTable({ tensor, operations, queryKey }: BufferTableProps) {
                     <th>Next allocation</th>
                     <td>
                         {isLoading ? 'Loading...' : undefined}
-                        {buffer && address && !isLoading ? (
-                            <>
-                                {toHex(address)} next allocated in Operation {buffer.operation_id} (+
-                                {buffer.next_usage} operations)
-                            </>
-                        ) : (
-                            'No subsequent buffer found'
-                        )}
+                        {buffer?.next_usage && address && !isLoading
+                            ? `${toHex(address)} next allocated in Operation ${buffer.operation_id} (+${buffer.next_usage} operations)`
+                            : 'No subsequent buffer found at this address'}
                     </td>
                 </tr>
             </tbody>
@@ -79,7 +75,7 @@ function getDeallocation(tensor: Tensor, operations: OperationDescription[]) {
             operation.name.includes('deallocate') && operation.inputs.find((input) => input.id === tensor.id),
     );
 
-    return matchingInputs.map((x) => x.id).toString() || '';
+    return matchingInputs.map((x) => x.id).toString();
 }
 
 export default BufferTable;

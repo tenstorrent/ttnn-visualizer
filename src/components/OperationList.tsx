@@ -11,7 +11,6 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useAtom } from 'jotai';
 import SearchField from './SearchField';
 import Collapsible from './Collapsible';
-import OperationComponent from './OperationComponent';
 import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/OperationsList.scss';
@@ -20,6 +19,7 @@ import ROUTES from '../definitions/routes';
 import { expandedOperationsAtom } from '../store/app';
 import { OperationDescription } from '../model/APIData';
 import DeviceOperations from './DeviceOperations';
+import ListItem from './ListItem';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -276,7 +276,7 @@ const OperationList = () => {
                                         <Collapsible
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
-                                                <OperationComponent
+                                                <ListItem
                                                     filterName={getOperationFilterName(operation)}
                                                     filterQuery={filterQuery}
                                                     intent={Intent.WARNING}

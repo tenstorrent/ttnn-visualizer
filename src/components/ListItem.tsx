@@ -6,23 +6,23 @@ import React from 'react';
 import { Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import HighlightedText from './HighlightedText';
-import '../scss/components/Operation.scss';
+import '../scss/components/ListItem.scss';
 
-interface OperationProps {
+interface ListItemProps {
     filterName: string;
     filterQuery: string;
     icon?: IconName;
     intent?: Intent;
 }
 
-const OperationComponent: React.FC<OperationProps> = ({
+const ListItem: React.FC<ListItemProps> = ({
     filterName,
     filterQuery,
     icon = IconNames.CUBE,
     intent = Intent.NONE,
 }) => {
     return (
-        <div className='operation-component'>
+        <div className='list-item'>
             <Icon
                 size={20}
                 icon={icon}
@@ -40,4 +40,4 @@ const OperationComponent: React.FC<OperationProps> = ({
     );
 };
 
-export default OperationComponent;
+export default ListItem;

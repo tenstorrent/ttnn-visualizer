@@ -157,7 +157,7 @@ export const fetchNextUseOfBuffer = async (address: number | null, consumers: nu
         `/api/buffer?address=${address}&operation_id=${consumers[consumers.length - 1]}`,
     );
 
-    buffer.nextUsage = buffer.operation_id - consumers[consumers.length - 1];
+    buffer.next_usage = buffer.operation_id - consumers[consumers.length - 1];
 
     return buffer;
 };
@@ -165,5 +165,6 @@ export const fetchNextUseOfBuffer = async (address: number | null, consumers: nu
 export const useNextBuffer = (address: number | null, consumers: number[], queryKey: string) => {
     return useQuery<BufferData, AxiosError>(queryKey, {
         queryFn: () => fetchNextUseOfBuffer(address, consumers),
+        retry: false,
     });
 };

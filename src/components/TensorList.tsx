@@ -18,9 +18,9 @@ import { Tensor } from '../model/Graph';
 import { OperationDescription } from '../model/APIData';
 import { BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
-import OperationComponent from './OperationComponent';
 import BufferTable from './BufferTable';
 import { expandedTensorsAtom } from '../store/app';
+import ListItem from './ListItem';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -214,7 +214,7 @@ const TensorList = () => {
                                             keepChildrenMounted={false}
                                             isOpen={expandedTensors.includes(tensor.id)}
                                             label={
-                                                <OperationComponent
+                                                <ListItem
                                                     filterName={getTensorFilterName(tensor)}
                                                     filterQuery={filterQuery}
                                                     icon={IconNames.FLOW_LINEAR}
