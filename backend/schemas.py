@@ -102,6 +102,7 @@ class BufferSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Buffer
 
+    operation_id = ma.auto_field()
     address = ma.auto_field()
     max_size_per_bank = ma.auto_field()
     buffer_type = ma.auto_field()

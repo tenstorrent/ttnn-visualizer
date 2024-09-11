@@ -5,12 +5,12 @@
 import { Helmet } from 'react-helmet-async';
 import { useSetAtom } from 'jotai';
 import { useEffect } from 'react';
-import OperationList from '../components/OperationList';
 import { useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom } from '../store/app';
+import TensorList from '../components/TensorList';
 import TempNav from '../components/TempNav';
 
-export default function Operations() {
+export default function Tensors() {
     const report = useReportMeta();
     const setMeta = useSetAtom(reportMetaAtom);
 
@@ -23,9 +23,9 @@ export default function Operations() {
 
     return (
         <>
-            <Helmet title='Operations' />
+            <Helmet title='Tensors' />
             <TempNav />
-            <OperationList />
+            <TensorList />
         </>
     );
 }

@@ -7,6 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import React, { useEffect } from 'react';
 import { JSX } from 'react/jsx-runtime';
 import '../scss/components/Collapsible.scss';
+import classNames from 'classnames';
 
 interface CollapsibleProps {
     label: string | JSX.Element;
@@ -65,7 +66,7 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
                     keepChildrenMounted={keepChildrenMounted}
                 >
                     <div
-                        className={contentClassName}
+                        className={classNames(contentClassName)}
                         style={contentStyles}
                     >
                         {children}

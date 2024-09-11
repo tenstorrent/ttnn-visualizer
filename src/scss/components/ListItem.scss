@@ -4,15 +4,11 @@
 
 @use 'styles/definitions/colours' as *;
 
-.operation-component {
+.list-item {
     display: flex;
     align-items: center;
     gap: 10px;
     font-size: 20px;
-
-    .operation-icon.bp5-icon svg {
-        fill: $tt-yellow
-    }
 
     .highlighted-text {
         color: $tt-white;
