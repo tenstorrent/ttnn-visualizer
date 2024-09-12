@@ -16,9 +16,6 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from .extensions import db
 
-
-
-
 operations = Table(
     "operations",
     db.metadata,

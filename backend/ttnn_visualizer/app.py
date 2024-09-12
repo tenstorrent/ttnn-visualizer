@@ -7,7 +7,7 @@ import flask
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_cors import CORS
-from . import settings
+from backend.ttnn_visualizer import settings
 from dotenv import load_dotenv
 import os
 
