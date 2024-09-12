@@ -48,7 +48,6 @@ function Layout() {
                                 <Button
                                     text='Home'
                                     onClick={() => handleNavigate(ROUTES.HOME)}
-                                    active={window.location.pathname === ROUTES.HOME}
                                     intent={window.location.pathname === ROUTES.HOME ? Intent.PRIMARY : Intent.NONE}
                                     minimal
                                 />
@@ -56,7 +55,6 @@ function Layout() {
                                 <Button
                                     text='Operations'
                                     onClick={() => handleNavigate(ROUTES.OPERATIONS)}
-                                    active={window.location.pathname === ROUTES.OPERATIONS}
                                     intent={
                                         window.location.pathname === ROUTES.OPERATIONS ? Intent.PRIMARY : Intent.NONE
                                     }
@@ -66,7 +64,6 @@ function Layout() {
                                 <Button
                                     text='Tensors'
                                     onClick={() => handleNavigate(ROUTES.TENSORS)}
-                                    active={window.location.pathname === ROUTES.TENSORS}
                                     intent={window.location.pathname === ROUTES.TENSORS ? Intent.PRIMARY : Intent.NONE}
                                     minimal
                                 />
@@ -74,7 +71,6 @@ function Layout() {
                                 <Button
                                     text='Styleguide'
                                     onClick={() => handleNavigate(ROUTES.STYLEGUIDE)}
-                                    active={window.location.pathname === ROUTES.STYLEGUIDE}
                                     intent={
                                         window.location.pathname === ROUTES.STYLEGUIDE ? Intent.PRIMARY : Intent.NONE
                                     }

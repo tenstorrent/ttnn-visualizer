@@ -9,6 +9,7 @@
 
 $dark-button-background-base: $tt-grey-2;
 $dark-primary-background-base: $tt-purple-shade;
+$dark-primary-intent-color: $tt-purple;
 $dark-warning-background-base: $tt-yellow;
 $dark-danger-background-base: $tt-red-accent;
 
@@ -33,17 +34,28 @@ $dark-danger-background-base: $tt-red-accent;
         "danger": ($dark-danger-background-base, color.adjust($dark-danger-background-base, $lightness: -5%), $tt-red-shade)
     ),
     $pt-dark-intent-text-colors: (
-        "primary": $tt-purple,
+        "primary": $dark-primary-intent-color,
         "success": $tt-green,
         "warning": $dark-warning-background-base,
         "danger" : $tt-red,
     ),
-    $dark-navbar-background-color: transparent,
+    $dark-navbar-background-color: transparent
 );
 
 // Overrides for BlueprintJS which cannot be done via SASS variables
 .bp5-dark {
     .bp5-navbar {
         box-shadow: none;
+    }
+
+    .bp5-button {
+        &.bp5-minimal {
+            &.bp5-intent-primary {
+                &:hover {
+                    background-color: $dark-primary-background-base;
+                    color: $dark-primary-intent-color;
+                }
+            }
+        }
     }
 }
