@@ -173,11 +173,8 @@ For MacOS you need to use the 'magic' socket file. The docker-compose.yml file h
 
 Before running the application ensure that your keys are added to the agent (`ssh-add -L`). If your keys are not present, run `ssh-add` to add them.
 
-### Running project
+### Installing
 
-To run the application you can simply run `docker-compose up web`. To rebuild add the build flag, `docker-compose up web --build`. 
-
-To use the [provided SSH container](./docker/SSH/README.md) with the compose configuration you can substitute `web` in the above commands for `ssh`. To run the container in the background use `docker-compose up ssh -d`
-
-To connect to this container through the remote connection manager you use the name of the service (`ssh`) as the 'host' and the default SSH port 22. 
+Download the wheel file from the [releases page]() and install using `pip install release_name.whl`. After installation 
+simply run `ttnn-visualizer` to start the application.
 
