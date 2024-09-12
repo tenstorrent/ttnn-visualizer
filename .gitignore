@@ -36,6 +36,6 @@ id_ed*
 /docker/SSH/config
 
 # Backend
-/backend/data
-/backend/static
+backend/data
+backend/static
 .env
