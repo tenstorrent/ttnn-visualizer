@@ -1,5 +1,5 @@
 [project]
-name = "ttnn-visualizer"
+name = "ttnn_visualizer"
 version = "0.0.1"
 authors = []
 description = "TT Visualizer"
@@ -29,8 +29,13 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-[tool.setuptools.package-dir]
-ttnn_visualizer = "backend"
+
+[tool.setuptools]
+package-dir = {"" = "backend"}
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+
 
 [build-system]
 requires = [
