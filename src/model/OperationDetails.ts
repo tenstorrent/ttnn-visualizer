@@ -300,7 +300,7 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
 
         for (const buffer of this.buffers) {
             const bufferAddress = buffer.address;
-            const type = buffer.buffer_type;
+            const bufferType = buffer.buffer_type;
             let opId: number | undefined;
             let tensor: Tensor | undefined;
 
@@ -326,7 +326,7 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
                     ...tensor,
                     parentOperationId: opId!,
                     historical: opId! !== this.id,
-                    bufferType: type,
+                    buffer_type: bufferType,
                 };
                 tensorsByBufferAddress.set(bufferAddress, historicalTensor);
             }
