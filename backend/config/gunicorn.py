@@ -3,9 +3,10 @@
 import multiprocessing
 import os
 from pathlib import Path
-
-from ..utils import str_to_bool
 from dotenv import load_dotenv
+
+def str_to_bool(string_value):
+    return string_value.lower() in ("yes", "true", "t", "1")
 
 # Load dotenv from root directory
 dotenv_path = Path(__file__).parent.parent.parent.joinpath('.env')

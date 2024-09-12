@@ -41,4 +41,4 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project.scripts]
-ttnn-visualizer = "backend.appserver:serve"
+ttnn-visualizer = "ttnn_visualizer.appserver:serve"
