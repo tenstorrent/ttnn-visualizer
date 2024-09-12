@@ -6,13 +6,13 @@ from pathlib import Path
 
 from flask import Blueprint, Response, current_app, request
 
-from .models import (
+from ttnn_visualizer.models import (
     Device,
     Operation,
     Tensor,
     Buffer
 )
-from .remotes import (
+from ttnn_visualizer.remotes import (
     RemoteConnection,
     RemoteFolder,
     RemoteFolderException,
@@ -22,12 +22,12 @@ from .remotes import (
     read_remote_file,
     sync_test_folders,
 )
-from .schemas import (
+from ttnn_visualizer.schemas import (
     OperationSchema,
     TensorSchema,
     BufferSchema,
 )
-from .utils import timer
+from ttnn_visualizer.utils import timer
 
 logger = logging.getLogger(__name__)
 

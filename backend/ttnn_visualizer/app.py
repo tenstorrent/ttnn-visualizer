@@ -7,7 +7,7 @@ import flask
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_cors import CORS
-from backend.ttnn_visualizer import settings
+from ttnn_visualizer import settings
 from dotenv import load_dotenv
 import os
 
@@ -21,7 +21,7 @@ def list_files(startpath, log):
             log('{}{}'.format(subindent, f))
 
 def create_app(settings_override=None):
-    from .views import api
+    from ttnn_visualizer.views import api
 
     """
     Create a Flask application using the app factory pattern.
@@ -78,7 +78,7 @@ def create_app(settings_override=None):
 
 
 def extensions(app: flask.Flask):
-    from .extensions import flask_static_digest, db, ma
+    from ttnn_visualizer.extensions import flask_static_digest, db, ma
 
     """
     Register 0 or more extensions (mutates the app passed in).

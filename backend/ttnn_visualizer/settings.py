@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from .utils import str_to_bool
+from ttnn_visualizer.utils import str_to_bool
 
 
 class Config(object):
