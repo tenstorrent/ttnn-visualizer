@@ -8,7 +8,6 @@ import { useEffect } from 'react';
 import OperationList from '../components/OperationList';
 import { useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom } from '../store/app';
-import TempNav from '../components/TempNav';
 
 export default function Operations() {
     const report = useReportMeta();
@@ -24,7 +23,6 @@ export default function Operations() {
     return (
         <>
             <Helmet title='Operations' />
-            <TempNav />
             <OperationList />
         </>
     );
