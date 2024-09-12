@@ -1,6 +1,5 @@
 import { Link, Outlet, useNavigate } from 'react-router-dom';
-import { Button, Classes, Tooltip } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
+import { Alignment, Button, Classes, Intent, Navbar, Tooltip } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
@@ -35,30 +34,64 @@ function Layout() {
             </Helmet>
 
             <header className='app-header'>
-                <Link
-                    className='tt-logo'
-                    to={ROUTES.HOME}
-                >
-                    <TenstorrentLogo />
-                </Link>
-
-                {meta?.report_name && (
-                    <Tooltip
-                        content={meta.report_name}
-                        className='report-title'
+                <nav className='nav-container'>
+                    <Link
+                        className='tt-logo'
+                        to={ROUTES.HOME}
                     >
-                        <span className='report-title'>{meta.report_name}</span>
-                    </Tooltip>
-                )}
+                        <TenstorrentLogo />
+                    </Link>
 
-                <nav>
-                    <Button
-                        minimal
-                        icon={IconNames.FOLDER_SHARED_OPEN}
-                        onClick={() => handleNavigate(ROUTES.HOME)}
-                    >
-                        Select report
-                    </Button>
+                    <Navbar>
+                        <>
+                            <Navbar.Group align={Alignment.RIGHT}>
+                                <Button
+                                    text='Home'
+                                    onClick={() => handleNavigate(ROUTES.HOME)}
+                                    active={window.location.pathname === ROUTES.HOME}
+                                    intent={window.location.pathname === ROUTES.HOME ? Intent.PRIMARY : Intent.NONE}
+                                    minimal
+                                />
+
+                                <Button
+                                    text='Operations'
+                                    onClick={() => handleNavigate(ROUTES.OPERATIONS)}
+                                    active={window.location.pathname === ROUTES.OPERATIONS}
+                                    intent={
+                                        window.location.pathname === ROUTES.OPERATIONS ? Intent.PRIMARY : Intent.NONE
+                                    }
+                                    minimal
+                                />
+
+                                <Button
+                                    text='Tensors'
+                                    onClick={() => handleNavigate(ROUTES.TENSORS)}
+                                    active={window.location.pathname === ROUTES.TENSORS}
+                                    intent={window.location.pathname === ROUTES.TENSORS ? Intent.PRIMARY : Intent.NONE}
+                                    minimal
+                                />
+
+                                <Button
+                                    text='Styleguide'
+                                    onClick={() => handleNavigate(ROUTES.STYLEGUIDE)}
+                                    active={window.location.pathname === ROUTES.STYLEGUIDE}
+                                    intent={
+                                        window.location.pathname === ROUTES.STYLEGUIDE ? Intent.PRIMARY : Intent.NONE
+                                    }
+                                    minimal
+                                />
+                            </Navbar.Group>
+
+                            {meta?.report_name && (
+                                <Tooltip
+                                    content={meta.report_name}
+                                    className='report-title'
+                                >
+                                    <span>{meta.report_name}</span>
+                                </Tooltip>
+                            )}
+                        </>
+                    </Navbar>
                 </nav>
             </header>
 

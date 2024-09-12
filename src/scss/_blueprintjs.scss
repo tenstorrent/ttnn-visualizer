@@ -8,6 +8,9 @@
 @use "@blueprintjs/colors/lib/scss/colors" as *;
 
 $dark-button-background-base: $tt-grey-2;
+$dark-primary-background-base: $tt-purple-shade;
+$dark-warning-background-base: $tt-yellow;
+$dark-danger-background-base: $tt-red-accent;
 
 @use "@blueprintjs/core/src/blueprint.scss" with (
     $dark-button-background-color: $dark-button-background-base,
@@ -24,15 +27,23 @@ $dark-button-background-base: $tt-grey-2;
     $pt-dark-icon-color: $tt-white,
     // "intent": (default, hover, active colors)
     $button-intents: (
-        "primary": ($tt-teal-shade, color.adjust($tt-teal-shade, $lightness: -5%), color.adjust($tt-teal-shade, $lightness: -10%)),
+        "primary": ($dark-primary-background-base, color.adjust($dark-primary-background-base, $lightness: -5%), color.adjust($dark-primary-background-base, $lightness: -10%)),
         "success": ($green3, $green2, $green1),
-        "warning": ($tt-yellow, color.adjust($tt-yellow, $lightness: -5%), $tt-yellow),
-        "danger": ($tt-red-accent, color.adjust($tt-red-accent, $lightness: -5%), $tt-red-shade)
+        "warning": ($dark-warning-background-base, color.adjust($dark-warning-background-base, $lightness: -5%), $dark-warning-background-base),
+        "danger": ($dark-danger-background-base, color.adjust($dark-danger-background-base, $lightness: -5%), $tt-red-shade)
     ),
     $pt-dark-intent-text-colors: (
-        "primary": $tt-teal,
+        "primary": $tt-purple,
         "success": $tt-green,
-        "warning": $tt-yellow,
+        "warning": $dark-warning-background-base,
         "danger" : $tt-red,
     ),
+    $dark-navbar-background-color: transparent,
 );
+
+// Overrides for BlueprintJS which cannot be done via SASS variables
+.bp5-dark {
+    .bp5-navbar {
+        box-shadow: none;
+    }
+}
