@@ -2,8 +2,8 @@ import json
 
 from marshmallow import fields, validates
 
-from backend.extensions import ma
-from backend.models import (
+from .extensions import ma
+from .models import (
     Tensor,
     OperationArgument,
     Operation,

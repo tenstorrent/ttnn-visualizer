@@ -7,12 +7,21 @@ import flask
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_cors import CORS
-from backend import settings
+from . import settings
 from dotenv import load_dotenv
+import os
 
+def list_files(startpath, log):
+    for root, dirs, files in os.walk(startpath):
+        level = root.replace(startpath, '').count(os.sep)
+        indent = ' ' * 4 * (level)
+        print('{}{}/'.format(indent, os.path.basename(root)))
+        subindent = ' ' * 4 * (level + 1)
+        for f in files:
+            log('{}{}'.format(subindent, f))
 
 def create_app(settings_override=None):
-    from backend.views import api
+    from .views import api
 
     """
     Create a Flask application using the app factory pattern.
@@ -21,11 +30,17 @@ def create_app(settings_override=None):
     :return: Flask app
     """
 
-    app = Flask(__name__, static_folder="../public", static_url_path="/")
+    app = Flask(__name__, static_folder="./static", static_url_path="/")
+
     flask_env = environ.get("FLASK_ENV", "development")
     app.config.from_object(getattr(settings, flask_env))
+    import pathlib
 
     logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
+    app.logger.info(f"Starting TTNN Visualizer in {flask_env} mode")
+
+    parent_dir = pathlib.Path(__file__).parent.resolve()
+    list_files(str(parent_dir), app.logger.info)
 
     if settings_override:
         app.config.update(settings_override)
@@ -63,7 +78,7 @@ def create_app(settings_override=None):
 
 
 def extensions(app: flask.Flask):
-    from backend.extensions import flask_static_digest, db, ma
+    from .extensions import flask_static_digest, db, ma
 
     """
     Register 0 or more extensions (mutates the app passed in).

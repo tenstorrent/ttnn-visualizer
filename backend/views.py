@@ -6,13 +6,13 @@ from pathlib import Path
 
 from flask import Blueprint, Response, current_app, request
 
-from backend.models import (
+from .models import (
     Device,
     Operation,
     Tensor,
     Buffer
 )
-from backend.remotes import (
+from .remotes import (
     RemoteConnection,
     RemoteFolder,
     RemoteFolderException,
@@ -22,12 +22,12 @@ from backend.remotes import (
     read_remote_file,
     sync_test_folders,
 )
-from backend.schemas import (
+from .schemas import (
     OperationSchema,
     TensorSchema,
     BufferSchema,
 )
-from backend.utils import timer
+from .utils import timer
 
 logger = logging.getLogger(__name__)
 

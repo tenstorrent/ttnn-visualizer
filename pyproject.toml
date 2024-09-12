@@ -22,15 +22,15 @@ dependencies= [
 "python-dotenv==1.0.1",
 
 ]
+
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 
-[tool.setuptools]
-packages = ["backend", "backend.config"]
-
+[tool.setuptools.package-dir]
+ttnn_visualizer = "backend"
 
 [build-system]
 requires = [
