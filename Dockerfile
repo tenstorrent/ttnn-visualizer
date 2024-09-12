@@ -64,7 +64,7 @@ RUN mkdir -p /public
 
 # USER python
 
-COPY --chown=python:python ./backend/requirements.txt ./
+COPY --chown=python:python backend/ttnn_visualizer/requirements.txt ./
 COPY --chown=python:python ./.env* /app/
 COPY --chown=python:python ./backend/bin ./bin
 
