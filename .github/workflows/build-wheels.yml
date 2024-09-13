@@ -4,17 +4,23 @@ on: [push, pull_request]
 
 env:
   CIBW_BUILD_VERBOSITY: 1
-
 jobs:
 
     build_wheel:
         runs-on: ubuntu-latest
         steps:
           - uses: actions/checkout@v2
+          - name: Use Node.js
+            uses: actions/setup-node@v3
+            with:
+                node-version: v22.1.0
+          - run: npm install
+          - run: npm run build
           - name: Set up Python
             uses: actions/setup-python@v2
             with:
               python-version: 3.9
+
           - name: Build wheel and install
             run: |
               python -m pip install --user --upgrade build
