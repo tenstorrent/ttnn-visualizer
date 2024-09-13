@@ -4,21 +4,13 @@ from pathlib import Path
 import shutil
 from flask import Flask
 import flask
+import pathlib
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_cors import CORS
 from ttnn_visualizer import settings
 from dotenv import load_dotenv
 import os
-
-def list_files(startpath, log):
-    for root, dirs, files in os.walk(startpath):
-        level = root.replace(startpath, '').count(os.sep)
-        indent = ' ' * 4 * (level)
-        print('{}{}/'.format(indent, os.path.basename(root)))
-        subindent = ' ' * 4 * (level + 1)
-        for f in files:
-            log('{}{}'.format(subindent, f))
 
 def create_app(settings_override=None):
     from ttnn_visualizer.views import api
@@ -30,17 +22,14 @@ def create_app(settings_override=None):
     :return: Flask app
     """
 
-    app = Flask(__name__, static_folder="./static", static_url_path="/")
+    parent_dir = Path(__file__).parent.resolve()
+    app = Flask(__name__, static_folder=str(parent_dir.joinpath('static')), static_url_path="/")
 
     flask_env = environ.get("FLASK_ENV", "development")
     app.config.from_object(getattr(settings, flask_env))
-    import pathlib
 
     logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
     app.logger.info(f"Starting TTNN Visualizer in {flask_env} mode")
-
-    parent_dir = pathlib.Path(__file__).parent.resolve()
-    list_files(str(parent_dir), app.logger.info)
 
     if settings_override:
         app.config.update(settings_override)
