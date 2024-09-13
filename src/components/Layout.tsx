@@ -65,13 +65,6 @@ function Layout() {
                                     active={window.location.pathname === ROUTES.TENSORS}
                                     minimal
                                 />
-
-                                <Button
-                                    text='Styleguide'
-                                    onClick={() => handleNavigate(ROUTES.STYLEGUIDE)}
-                                    active={window.location.pathname === ROUTES.STYLEGUIDE}
-                                    minimal
-                                />
                             </Navbar.Group>
 
                             {meta?.report_name && (
