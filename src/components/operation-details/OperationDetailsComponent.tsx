@@ -4,7 +4,7 @@
 
 import React, { Fragment, forwardRef, useRef, useState } from 'react';
 import { PlotMouseEvent } from 'plotly.js';
-import { Icon, Switch } from '@blueprintjs/core';
+import { Icon, Intent, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
@@ -511,7 +511,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             <Icon
                                                 className='operation-icon'
                                                 size={13}
-                                                icon={IconNames.CUBE_ADD}
+                                                intent={Intent.PRIMARY}
+                                                icon={IconNames.FLOW_LINEAR}
                                             />
                                             &nbsp;
                                             {deviceOperation.name}
