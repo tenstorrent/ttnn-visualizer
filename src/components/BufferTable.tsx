@@ -6,6 +6,7 @@ import 'styles/components/BufferTable.scss';
 import { Icon, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
+import { Link } from 'react-router-dom';
 import { Tensor } from '../model/Graph';
 import { OperationDescription } from '../model/APIData';
 import { useNextBuffer } from '../hooks/useAPI';
@@ -32,9 +33,9 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                     <th>Last used</th>
                     <td>
                         Last used by{' '}
-                        <a href={`${ROUTES.OPERATIONS}/${lastOperation}`}>
+                        <Link to={`${ROUTES.OPERATIONS}/${lastOperation}`}>
                             {lastOperation} {operations.find((operation) => operation.id === lastOperation)?.name}
-                        </a>
+                        </Link>
                     </td>
                 </tr>
 
@@ -46,14 +47,14 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                         {buffer && !isLoading && deallocationOperation ? (
                             <div>
                                 Deallocation found in{' '}
-                                <a href={`${ROUTES.OPERATIONS}/${deallocationOperation}`}>
+                                <Link to={`${ROUTES.OPERATIONS}/${deallocationOperation}`}>
                                     {deallocationOperation}{' '}
                                     {
                                         operations.find(
                                             (operation) => operation.id === parseInt(deallocationOperation, 10),
                                         )?.name
                                     }
-                                </a>
+                                </Link>
                                 <Icon
                                     className='deallocation-icon'
                                     icon={IconNames.TICK}
@@ -82,10 +83,10 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                                 {buffer?.next_usage && address && !isLoading ? (
                                     <span>
                                         {toHex(address)} next allocated in{' '}
-                                        <a href={`${ROUTES.OPERATIONS}/${buffer.operation_id}`}>
+                                        <Link to={`${ROUTES.OPERATIONS}/${buffer.operation_id}`}>
                                             {buffer.operation_id}{' '}
                                             {operations.find((operation) => operation.id === buffer.operation_id)?.name}
-                                        </a>{' '}
+                                        </Link>{' '}
                                         (+{buffer.next_usage} operations)
                                     </span>
                                 ) : (
