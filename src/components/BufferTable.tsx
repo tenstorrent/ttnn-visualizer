@@ -10,6 +10,7 @@ import { Tensor } from '../model/Graph';
 import { OperationDescription } from '../model/APIData';
 import { useNextBuffer } from '../hooks/useAPI';
 import { toHex } from '../functions/math';
+import ROUTES from '../definitions/routes';
 
 interface BufferTableProps {
     tensor: Tensor;
@@ -30,8 +31,11 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                 <tr>
                     <th>Last used</th>
                     <td>
-                        Last used by Operation {lastOperation}{' '}
-                        {operations.find((operation) => operation.id === lastOperation)?.name}
+                        Last used by{' '}
+                        <a href={`${ROUTES.OPERATIONS}/${lastOperation}`}>
+                            Operation {lastOperation}{' '}
+                            {operations.find((operation) => operation.id === lastOperation)?.name}
+                        </a>
                     </td>
                 </tr>
 
@@ -41,21 +45,31 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                         {isLoading ? 'Loading...' : undefined}
 
                         {buffer && !isLoading && deallocationOperation ? (
-                            <span className='deallocation-status'>
-                                Deallocation found in Operation {deallocationOperation}
+                            <div>
+                                Deallocation found in{' '}
+                                <a href={`${ROUTES.OPERATIONS}/${deallocationOperation}`}>
+                                    Operation {deallocationOperation}{' '}
+                                    {
+                                        operations.find(
+                                            (operation) => operation.id === parseInt(deallocationOperation, 10),
+                                        )?.name
+                                    }
+                                </a>
                                 <Icon
+                                    className='deallocation-icon'
                                     icon={IconNames.TICK}
                                     intent={Intent.SUCCESS}
                                 />
-                            </span>
+                            </div>
                         ) : (
-                            <span className='deallocation-status'>
+                            <div>
                                 Missing deallocation operation
                                 <Icon
+                                    className='deallocation-icon'
                                     icon={IconNames.WARNING_SIGN}
                                     intent={Intent.WARNING}
                                 />
-                            </span>
+                            </div>
                         )}
                     </td>
                 </tr>
@@ -66,9 +80,18 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                             <th>Next allocation</th>
                             <td>
                                 {isLoading ? 'Loading...' : undefined}
-                                {buffer?.next_usage && address && !isLoading
-                                    ? `${toHex(address)} next allocated in Operation ${buffer.operation_id} (+${buffer.next_usage} operations)`
-                                    : 'No subsequent buffer found at this address'}
+                                {buffer?.next_usage && address && !isLoading ? (
+                                    <span>
+                                        {toHex(address)} next allocated in{' '}
+                                        <a href={`${ROUTES.OPERATIONS}/${buffer.operation_id}`}>
+                                            Operation {buffer.operation_id}{' '}
+                                            {operations.find((operation) => operation.id === buffer.operation_id)?.name}
+                                        </a>{' '}
+                                        (+{buffer.next_usage} operations)
+                                    </span>
+                                ) : (
+                                    'No subsequent buffer found at this address'
+                                )}
                             </td>
                         </tr>
                     ))}
