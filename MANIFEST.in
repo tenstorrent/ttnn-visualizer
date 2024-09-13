@@ -1,2 +1,2 @@
-graft backend/static
-prune backend/data/
+graft backend/ttnn_visualizer/static
+prune backend/ttnn_visualizer/data
