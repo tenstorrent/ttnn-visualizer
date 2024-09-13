@@ -47,15 +47,4 @@ $dark-danger-background-base: $tt-red-accent;
     .bp5-navbar {
         box-shadow: none;
     }
-
-    .bp5-button {
-        &.bp5-minimal {
-            &.bp5-intent-primary {
-                &:hover {
-                    background-color: $dark-primary-background-base;
-                    color: $dark-primary-intent-color;
-                }
-            }
-        }
-    }
 }

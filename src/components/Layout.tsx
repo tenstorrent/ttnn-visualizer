@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate } from 'react-router-dom';
-import { Alignment, Button, Classes, Intent, Navbar, Tooltip } from '@blueprintjs/core';
+import { Alignment, Button, Classes, Navbar, Tooltip } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
@@ -48,32 +48,28 @@ function Layout() {
                                 <Button
                                     text='Home'
                                     onClick={() => handleNavigate(ROUTES.HOME)}
-                                    intent={window.location.pathname === ROUTES.HOME ? Intent.PRIMARY : Intent.NONE}
+                                    active={window.location.pathname === ROUTES.HOME}
                                     minimal
                                 />
 
                                 <Button
                                     text='Operations'
                                     onClick={() => handleNavigate(ROUTES.OPERATIONS)}
-                                    intent={
-                                        window.location.pathname === ROUTES.OPERATIONS ? Intent.PRIMARY : Intent.NONE
-                                    }
+                                    active={window.location.pathname === ROUTES.OPERATIONS}
                                     minimal
                                 />
 
                                 <Button
                                     text='Tensors'
                                     onClick={() => handleNavigate(ROUTES.TENSORS)}
-                                    intent={window.location.pathname === ROUTES.TENSORS ? Intent.PRIMARY : Intent.NONE}
+                                    active={window.location.pathname === ROUTES.TENSORS}
                                     minimal
                                 />
 
                                 <Button
                                     text='Styleguide'
                                     onClick={() => handleNavigate(ROUTES.STYLEGUIDE)}
-                                    intent={
-                                        window.location.pathname === ROUTES.STYLEGUIDE ? Intent.PRIMARY : Intent.NONE
-                                    }
+                                    active={window.location.pathname === ROUTES.STYLEGUIDE}
                                     minimal
                                 />
                             </Navbar.Group>
