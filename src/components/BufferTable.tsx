@@ -33,8 +33,7 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                     <td>
                         Last used by{' '}
                         <a href={`${ROUTES.OPERATIONS}/${lastOperation}`}>
-                            Operation {lastOperation}{' '}
-                            {operations.find((operation) => operation.id === lastOperation)?.name}
+                            {lastOperation} {operations.find((operation) => operation.id === lastOperation)?.name}
                         </a>
                     </td>
                 </tr>
@@ -48,7 +47,7 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                             <div>
                                 Deallocation found in{' '}
                                 <a href={`${ROUTES.OPERATIONS}/${deallocationOperation}`}>
-                                    Operation {deallocationOperation}{' '}
+                                    {deallocationOperation}{' '}
                                     {
                                         operations.find(
                                             (operation) => operation.id === parseInt(deallocationOperation, 10),
@@ -84,7 +83,7 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                                     <span>
                                         {toHex(address)} next allocated in{' '}
                                         <a href={`${ROUTES.OPERATIONS}/${buffer.operation_id}`}>
-                                            Operation {buffer.operation_id}{' '}
+                                            {buffer.operation_id}{' '}
                                             {operations.find((operation) => operation.id === buffer.operation_id)?.name}
                                         </a>{' '}
                                         (+{buffer.next_usage} operations)
