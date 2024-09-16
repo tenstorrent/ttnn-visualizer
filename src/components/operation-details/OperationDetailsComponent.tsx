@@ -550,7 +550,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             <Icon
                                                 className='operation-icon'
                                                 size={13}
-                                                icon={IconNames.CUBE_ADD}
+                                                intent={Intent.PRIMARY}
+                                                icon={IconNames.FLOW_LINEAR}
                                             />
                                             &nbsp;
                                             {deviceOperation.name}
