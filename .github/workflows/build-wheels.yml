@@ -1,6 +1,15 @@
 name: Build wheel
 
-on: [push, pull_request]
+
+on:
+    push:
+        # Sequence of patterns matched against refs/heads
+        branches:
+            - feature/package-as-wheel
+        # Sequence of patterns matched against refs/tags
+        tags:
+            - v2
+            - v1.*
 
 env:
   CIBW_BUILD_VERBOSITY: 1
@@ -29,5 +38,5 @@ jobs:
 
           - uses: actions/upload-artifact@v4
             with:
-                name: build-${{ github.sha }}
+                name: ttnn_visualizer_${{ github.ref_name }}.zip
                 path: ./dist/*.whl
