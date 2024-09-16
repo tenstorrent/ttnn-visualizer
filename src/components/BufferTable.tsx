@@ -6,10 +6,12 @@ import 'styles/components/BufferTable.scss';
 import { Icon, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
+import { Link } from 'react-router-dom';
 import { Tensor } from '../model/Graph';
 import { OperationDescription } from '../model/APIData';
 import { useNextBuffer } from '../hooks/useAPI';
 import { toHex } from '../functions/math';
+import ROUTES from '../definitions/routes';
 
 interface BufferTableProps {
     tensor: Tensor;
@@ -30,8 +32,10 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                 <tr>
                     <th>Last used</th>
                     <td>
-                        Last used by Operation {lastOperation}{' '}
-                        {operations.find((operation) => operation.id === lastOperation)?.name}
+                        Last used by{' '}
+                        <Link to={`${ROUTES.OPERATIONS}/${lastOperation}`}>
+                            {lastOperation} {operations.find((operation) => operation.id === lastOperation)?.name}
+                        </Link>
                     </td>
                 </tr>
 
@@ -41,21 +45,31 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                         {isLoading ? 'Loading...' : undefined}
 
                         {buffer && !isLoading && deallocationOperation ? (
-                            <span className='deallocation-status'>
-                                Deallocation found in Operation {deallocationOperation}
+                            <div>
+                                Deallocation found in{' '}
+                                <Link to={`${ROUTES.OPERATIONS}/${deallocationOperation}`}>
+                                    {deallocationOperation}{' '}
+                                    {
+                                        operations.find(
+                                            (operation) => operation.id === parseInt(deallocationOperation, 10),
+                                        )?.name
+                                    }
+                                </Link>
                                 <Icon
+                                    className='deallocation-icon'
                                     icon={IconNames.TICK}
                                     intent={Intent.SUCCESS}
                                 />
-                            </span>
+                            </div>
                         ) : (
-                            <span className='deallocation-status'>
+                            <div>
                                 Missing deallocation operation
                                 <Icon
+                                    className='deallocation-icon'
                                     icon={IconNames.WARNING_SIGN}
                                     intent={Intent.WARNING}
                                 />
-                            </span>
+                            </div>
                         )}
                     </td>
                 </tr>
@@ -66,9 +80,18 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                             <th>Next allocation</th>
                             <td>
                                 {isLoading ? 'Loading...' : undefined}
-                                {buffer?.next_usage && address && !isLoading
-                                    ? `${toHex(address)} next allocated in Operation ${buffer.operation_id} (+${buffer.next_usage} operations)`
-                                    : 'No subsequent buffer found at this address'}
+                                {buffer?.next_usage && address && !isLoading ? (
+                                    <span>
+                                        {toHex(address)} next allocated in{' '}
+                                        <Link to={`${ROUTES.OPERATIONS}/${buffer.operation_id}`}>
+                                            {buffer.operation_id}{' '}
+                                            {operations.find((operation) => operation.id === buffer.operation_id)?.name}
+                                        </Link>{' '}
+                                        (+{buffer.next_usage} operations)
+                                    </span>
+                                ) : (
+                                    'No subsequent buffer found at this address'
+                                )}
                             </td>
                         </tr>
                     ))}

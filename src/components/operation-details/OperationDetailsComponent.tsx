@@ -4,7 +4,7 @@
 
 import React, { Fragment, forwardRef, useRef, useState } from 'react';
 import { PlotMouseEvent } from 'plotly.js';
-import { Icon, Intent, Switch } from '@blueprintjs/core';
+import { Button, ButtonGroup, Icon, Intent, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
@@ -15,7 +15,6 @@ import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
 import { isEqual } from '../../functions/math';
-import TensorDetailsComponent from './TensorDetailsComponent';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
@@ -30,10 +29,11 @@ import {
 import { MemoryLegendElement } from './MemoryLegendElement';
 import Collapsible from '../Collapsible';
 import OperationArguments from '../OperationArguments';
-import { selectedTensorAddressAtom } from '../../store/app';
+import { isDramActiveAtom, isL1ActiveAtom, selectedTensorAddressAtom } from '../../store/app';
 import useOutsideClick from '../../hooks/useOutsideClick';
 import { getBufferColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
+import TensorDetailsComponent from './TensorDetailsComponent';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -54,6 +54,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
 
+    const [isL1Active, setIsL1Active] = useAtom(isL1ActiveAtom);
+    const [isDramActive, setIsDramActive] = useAtom(isDramActiveAtom);
     const [selectedTensorAddress, setSelectedTensorAddress] = useAtom(selectedTensorAddressAtom);
     const [selectedTensor, setSelectedTensor] = useState<number | null>(null);
     const [toastId, setToastId] = useState<number | null>(null);
@@ -264,12 +266,31 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 {!isLoading && Number.isSafeInteger(operationDetails?.id) ? (
                     <>
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
+                        <div className='chart-controls'>
+                            <ButtonGroup>
+                                <Button
+                                    intent={isL1Active ? Intent.SUCCESS : Intent.NONE}
+                                    onClick={() => setIsL1Active(!isL1Active)}
+                                    icon={isL1Active ? IconNames.EYE_OPEN : IconNames.EYE_OFF}
+                                >
+                                    L1 Memory
+                                </Button>
+                                <Button
+                                    intent={isDramActive ? Intent.SUCCESS : Intent.NONE}
+                                    onClick={() => setIsDramActive(!isDramActive)}
+                                    icon={isDramActive ? IconNames.EYE_OPEN : IconNames.EYE_OFF}
+                                >
+                                    DRAM
+                                </Button>
+                            </ButtonGroup>
 
-                        <Switch
-                            label='Buffer zoom'
-                            checked={zoomedInViewMainMemory}
-                            onChange={() => setZoomedInViewMainMemory(!zoomedInViewMainMemory)}
-                        />
+                            <Switch
+                                label='Buffer zoom'
+                                checked={zoomedInViewMainMemory}
+                                onChange={() => setZoomedInViewMainMemory(!zoomedInViewMainMemory)}
+                            />
+                        </div>
+
                         {/* TODO: prep for next feature */}
                         {/* <Switch */}
                         {/*    label='CBs zoom' */}
@@ -277,125 +298,143 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {/*    onChange={() => setZoomedInViewCBMemory(!zoomedInViewCBMemory)} */}
                         {/* /> */}
 
-                        <h3>L1 Memory</h3>
-                        <ForwardedMemoryPlotRenderer
-                            title='Previous Summarized L1 Report'
-                            className={classNames('l1-memory-renderer', {
-                                'empty-plot': previousChartData.length === 0,
-                            })}
-                            plotZoomRangeStart={plotZoomRangeStart}
-                            plotZoomRangeEnd={plotZoomRangeEnd}
-                            chartDataList={[previousChartData]}
-                            isZoomedIn={zoomedInViewMainMemory}
-                            memorySize={memorySizeL1}
-                            configuration={L1RenderConfiguration}
-                            ref={(el) => assignRef(el, 0)}
-                        />
+                        {!isL1Active && !isDramActive && (
+                            <p className='no-buffer-type-selected'>No buffer types selected.</p>
+                        )}
 
-                        <ForwardedMemoryPlotRenderer
-                            title='Current Summarized L1 Report'
-                            className={classNames('l1-memory-renderer', { 'empty-plot': chartData.length === 0 })}
-                            plotZoomRangeStart={plotZoomRangeStart}
-                            plotZoomRangeEnd={plotZoomRangeEnd}
-                            chartDataList={[cbChartData, chartData, l1Small.condensedChart]}
-                            isZoomedIn={zoomedInViewMainMemory}
-                            memorySize={memorySizeL1}
-                            onBufferClick={onBufferClick}
-                            configuration={L1RenderConfiguration}
-                            ref={(el) => assignRef(el, 1)}
-                        />
+                        {isL1Active && (
+                            <>
+                                <h3>L1 Memory</h3>
+                                <ForwardedMemoryPlotRenderer
+                                    title='Previous Summarized L1 Report'
+                                    className={classNames('l1-memory-renderer', {
+                                        'empty-plot': previousChartData.length === 0,
+                                    })}
+                                    plotZoomRangeStart={plotZoomRangeStart}
+                                    plotZoomRangeEnd={plotZoomRangeEnd}
+                                    chartDataList={[previousChartData]}
+                                    isZoomedIn={zoomedInViewMainMemory}
+                                    memorySize={memorySizeL1}
+                                    configuration={L1RenderConfiguration}
+                                    ref={(el) => assignRef(el, 0)}
+                                />
 
-                        {/* <Collapsible */}
-                        {/*    label={<h3>DRAM Memory</h3>} */}
-                        {/*    contentClassName='full-dram-legend' */}
-                        {/*    isOpen={false} */}
-                        {/* > */}
+                                <ForwardedMemoryPlotRenderer
+                                    title='Current Summarized L1 Report'
+                                    className={classNames('l1-memory-renderer', {
+                                        'empty-plot': chartData.length === 0,
+                                    })}
+                                    plotZoomRangeStart={plotZoomRangeStart}
+                                    plotZoomRangeEnd={plotZoomRangeEnd}
+                                    chartDataList={[cbChartData, chartData, l1Small.condensedChart]}
+                                    isZoomedIn={zoomedInViewMainMemory}
+                                    memorySize={memorySizeL1}
+                                    onBufferClick={onBufferClick}
+                                    configuration={L1RenderConfiguration}
+                                    ref={(el) => assignRef(el, 1)}
+                                />
+                            </>
+                        )}
 
-                        <ForwardedMemoryPlotRenderer
-                            title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
-                            className={classNames('dram-memory-renderer', {
-                                'empty-plot': previosDramData.length === 0,
-                                'identical-plot': dramHasntChanged,
-                            })}
-                            plotZoomRangeStart={dramPlotZoomRangeStart}
-                            plotZoomRangeEnd={dramPlotZoomRangeEnd}
-                            chartDataList={[previosDramData]}
-                            isZoomedIn={zoomedInViewMainMemory}
-                            memorySize={DRAM_MEMORY_SIZE}
-                            configuration={DRAMRenderConfiguration}
-                            ref={(el) => assignRef(el, 2)}
-                        />
+                        {isDramActive && (
+                            <>
+                                <h3>DRAM</h3>
 
-                        <ForwardedMemoryPlotRenderer
-                            title='Current Summarized DRAM Report'
-                            className={classNames('dram-memory-renderer', { 'empty-plot': dramData.length === 0 })}
-                            plotZoomRangeStart={dramPlotZoomRangeStart}
-                            plotZoomRangeEnd={dramPlotZoomRangeEnd}
-                            chartDataList={[dramData]}
-                            isZoomedIn={zoomedInViewMainMemory}
-                            memorySize={DRAM_MEMORY_SIZE}
-                            onBufferClick={onDramBufferClick}
-                            configuration={DRAMRenderConfiguration}
-                            ref={(el) => assignRef(el, 3)}
-                        />
+                                <ForwardedMemoryPlotRenderer
+                                    title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
+                                    className={classNames('dram-memory-renderer', {
+                                        'empty-plot': previosDramData.length === 0,
+                                        'identical-plot': dramHasntChanged,
+                                    })}
+                                    plotZoomRangeStart={dramPlotZoomRangeStart}
+                                    plotZoomRangeEnd={dramPlotZoomRangeEnd}
+                                    chartDataList={[previosDramData]}
+                                    isZoomedIn={zoomedInViewMainMemory}
+                                    memorySize={DRAM_MEMORY_SIZE}
+                                    configuration={DRAMRenderConfiguration}
+                                    ref={(el) => assignRef(el, 2)}
+                                />
 
-                        <ForwardedMemoryPlotRenderer
-                            title='DRAM Delta (difference between current and previous operation)'
-                            className={classNames('dram-memory-renderer', {
-                                'empty-plot': dramDeltaObject.chartData.length === 0,
-                            })}
-                            plotZoomRangeStart={dramPlotZoomRangeStart}
-                            plotZoomRangeEnd={dramPlotZoomRangeEnd}
-                            chartDataList={[dramDeltaObject.chartData]}
-                            isZoomedIn={zoomedInViewMainMemory}
-                            memorySize={DRAM_MEMORY_SIZE}
-                            onBufferClick={onDramDeltaClick}
-                            configuration={DRAMRenderConfiguration}
-                            ref={(el) => assignRef(el, 4)}
-                        />
+                                <ForwardedMemoryPlotRenderer
+                                    title='Current Summarized DRAM Report'
+                                    className={classNames('dram-memory-renderer', {
+                                        'empty-plot': dramData.length === 0,
+                                    })}
+                                    plotZoomRangeStart={dramPlotZoomRangeStart}
+                                    plotZoomRangeEnd={dramPlotZoomRangeEnd}
+                                    chartDataList={[dramData]}
+                                    isZoomedIn={zoomedInViewMainMemory}
+                                    memorySize={DRAM_MEMORY_SIZE}
+                                    onBufferClick={onDramBufferClick}
+                                    configuration={DRAMRenderConfiguration}
+                                    ref={(el) => assignRef(el, 3)}
+                                />
 
-                        <br />
-                        <br />
-                        {/* </Collapsible> */}
+                                <ForwardedMemoryPlotRenderer
+                                    title='DRAM Delta (difference between current and previous operation)'
+                                    className={classNames('dram-memory-renderer', {
+                                        'empty-plot': dramDeltaObject.chartData.length === 0,
+                                    })}
+                                    plotZoomRangeStart={dramPlotZoomRangeStart}
+                                    plotZoomRangeEnd={dramPlotZoomRangeEnd}
+                                    chartDataList={[dramDeltaObject.chartData]}
+                                    isZoomedIn={zoomedInViewMainMemory}
+                                    memorySize={DRAM_MEMORY_SIZE}
+                                    onBufferClick={onDramDeltaClick}
+                                    configuration={DRAMRenderConfiguration}
+                                    ref={(el) => assignRef(el, 4)}
+                                />
+                            </>
+                        )}
+
                         <div className='plot-tensor-details'>
                             <div className='legend'>
-                                {memoryReport.map((chunk) => (
-                                    <MemoryLegendElement
-                                        chunk={chunk}
-                                        key={chunk.address}
-                                        memSize={memorySizeL1}
-                                        selectedTensorAddress={selectedTensorAddress}
-                                        operationDetails={details}
-                                        onLegendClick={onLegendClick}
-                                    />
-                                ))}
-                                <hr />
-                                {dramTensorsOnly.map((chunk) => (
-                                    <MemoryLegendElement
-                                        chunk={chunk}
-                                        key={chunk.address}
-                                        memSize={DRAM_MEMORY_SIZE}
-                                        selectedTensorAddress={selectedTensorAddress}
-                                        operationDetails={details}
-                                        onLegendClick={onLegendClick}
-                                    />
-                                ))}
-                                <Collapsible
-                                    label='Full DRAM Legend'
-                                    contentClassName='full-dram-legend'
-                                    isOpen={false}
-                                >
-                                    {dramMemoryReport.map((chunk) => (
+                                {isL1Active &&
+                                    memoryReport.map((chunk) => (
                                         <MemoryLegendElement
                                             chunk={chunk}
                                             key={chunk.address}
-                                            memSize={DRAM_MEMORY_SIZE}
+                                            memSize={memorySizeL1}
                                             selectedTensorAddress={selectedTensorAddress}
                                             operationDetails={details}
                                             onLegendClick={onLegendClick}
                                         />
                                     ))}
-                                </Collapsible>
+
+                                {isDramActive && isL1Active && <hr />}
+
+                                {isDramActive && (
+                                    <>
+                                        {/* // TODO: Refactor this because it looks weird when there are no tensors but there are DRAM buffers */}
+                                        {dramTensorsOnly.map((chunk) => (
+                                            <MemoryLegendElement
+                                                chunk={chunk}
+                                                key={chunk.address}
+                                                memSize={DRAM_MEMORY_SIZE}
+                                                selectedTensorAddress={selectedTensorAddress}
+                                                operationDetails={details}
+                                                onLegendClick={onLegendClick}
+                                            />
+                                        ))}
+
+                                        <Collapsible
+                                            label='Full DRAM Legend'
+                                            contentClassName='full-dram-legend'
+                                            isOpen={false}
+                                        >
+                                            {dramMemoryReport.map((chunk) => (
+                                                <MemoryLegendElement
+                                                    chunk={chunk}
+                                                    key={chunk.address}
+                                                    memSize={DRAM_MEMORY_SIZE}
+                                                    selectedTensorAddress={selectedTensorAddress}
+                                                    operationDetails={details}
+                                                    onLegendClick={onLegendClick}
+                                                />
+                                            ))}
+                                        </Collapsible>
+                                    </>
+                                )}
                             </div>
 
                             <div
@@ -475,7 +514,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         <div className='tensor-list'>
                             <div className='inputs'>
                                 <h3>Inputs</h3>
-                                {details.inputs?.map((tensor) => (
+                                {details.inputs.map((tensor) => (
                                     <TensorDetailsComponent
                                         tensor={tensor}
                                         key={tensor.id}
@@ -488,7 +527,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                             <div className='outputs'>
                                 <h3>Outputs</h3>
-                                {details.outputs?.map((tensor) => (
+                                {details.outputs.map((tensor) => (
                                     <TensorDetailsComponent
                                         tensor={tensor}
                                         key={tensor.id}
@@ -496,7 +535,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
                                     />
-                                ))}
+                                ))}{' '}
                             </div>
                         </div>
                         {details.deviceOperations.length > 0 && (

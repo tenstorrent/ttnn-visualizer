@@ -46,6 +46,7 @@ const OperationList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
     const [expandedOperations, setExpandedOperations] = useAtom(expandedOperationsAtom);
 
+    // TODO: Figure out an initial scroll position based on last used operation
     const virtualizer = useVirtualizer({
         count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => scrollElementRef.current,
