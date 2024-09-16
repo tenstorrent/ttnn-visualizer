@@ -1,7 +1,9 @@
 [project]
 name = "ttnn_visualizer"
-version = "0.0.1"
 authors = []
+dynamic = [
+   "version"
+]
 description = "TT Visualizer"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -36,6 +38,7 @@ package-dir = {"" = "backend"}
 [tool.setuptools.packages.find]
 where = ["backend"]
 
+[tool.setuptools_scm]
 
 [build-system]
 requires = [
