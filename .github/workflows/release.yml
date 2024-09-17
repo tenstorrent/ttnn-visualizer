@@ -5,10 +5,7 @@ on:
     push:
         # Sequence of patterns matched against refs/heads
         branches:
-            - dev
-        # Sequence of patterns matched against refs/tags
-        tags:
-            - v*
+            - main
 
 jobs:
 
@@ -39,7 +36,8 @@ jobs:
                   python3 scripts/bump_pyproject_version.py
                   git add pyproject.toml
                   cat pyproject.toml
+
             - name: Commit changes
               run: |
                   git commit -m "chore(release): bump versions"
-                  git push origin dev
+                  git push origin main
