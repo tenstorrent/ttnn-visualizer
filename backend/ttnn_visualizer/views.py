@@ -6,8 +6,13 @@ from pathlib import Path
 from backend.database import create_update_database
 from flask import Blueprint, Response, current_app, request
 
-from backend.models import Device, Operation, Tensor, Buffer
-from backend.remotes import (
+from ttnn_visualizer.models import (
+    Device,
+    Operation,
+    Tensor,
+    Buffer
+)
+from ttnn_visualizer.remotes import (
     RemoteConnection,
     RemoteFolder,
     RemoteFolderException,
@@ -17,12 +22,12 @@ from backend.remotes import (
     read_remote_file,
     sync_test_folders,
 )
-from backend.schemas import (
+from ttnn_visualizer.schemas import (
     OperationSchema,
     TensorSchema,
     BufferSchema,
 )
-from backend.utils import timer
+from ttnn_visualizer.utils import timer
 
 logger = logging.getLogger(__name__)
 

@@ -2,19 +2,17 @@ import logging
 from os import environ
 from pathlib import Path
 
-import flask
-from dotenv import load_dotenv
 from flask import Flask
-from flask_cors import CORS
+import flask
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
-
-from backend import settings
-from backend.database import create_update_database
-
+from flask_cors import CORS
+from ttnn_visualizer import settings
+from dotenv import load_dotenv
+from ttnn_visualizer.database import create_update_database
 
 def create_app(settings_override=None):
-    from backend.views import api
+    from ttnn_visualizer.views import api
 
     """
     Create a Flask application using the app factory pattern.
@@ -57,7 +55,6 @@ def create_app(settings_override=None):
     extensions(app)
 
     if flask_env == "production":
-
         @app.route("/", defaults={"path": ""})
         @app.route("/<path:path>")
         def catch_all(path):
@@ -67,7 +64,7 @@ def create_app(settings_override=None):
 
 
 def extensions(app: flask.Flask):
-    from backend.extensions import flask_static_digest, db, ma
+    from ttnn_visualizer.extensions import flask_static_digest, db, ma
 
     """
     Register 0 or more extensions (mutates the app passed in).
