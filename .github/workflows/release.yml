@@ -3,9 +3,9 @@ name: Release
 
 on:
     push:
-        # Sequence of patterns matched against refs/heads
         branches:
-            - main
+            # Change to main when ready for automated versioning
+            - main_
 
 jobs:
 
