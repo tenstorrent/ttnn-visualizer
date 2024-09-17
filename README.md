@@ -117,19 +117,16 @@ _Developer Note_
 
 Available image versions can be found [here](https://github.com/tenstorrent/ttnn-visualizer/pkgs/container/ttnn-visualizer).
 
-#### Docker Volumes
-
-In order to avoid having to re-download reports when re-creating the image it is recommended to create a volume to store the report data. A volume can be created using the docker volume command, `docker volume create report-data`. This volume should be mounted in the container at `/app/backend/data`. 
 
 #### Running Image
 
 *MacOS Run Command* 
 
-`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v report-data:/app/backend/data -v /run/host-services/ssh-auth.sock:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
+`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v ./data:/app/backend/data -v /run/host-services/ssh-auth.sock:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
 
 *Linux Run Command*
 
-`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v report-data/app/backend/data -v $SSH_AUTH_SOCK:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
+`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v ./data:/app/backend/data -v $SSH_AUTH_SOCK:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
 
 Or using docker compose:
 
@@ -145,15 +142,13 @@ services:
     environment:
       - SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock
     volumes:
-      # Volume for report data
-      - report-data:/app/backend/data
+      # Directory/volume for stored report data
+      - ./data:/app/backend/data
       # Linux configuration
       - ${SSH_AUTH_SOCK}:/ssh-agent
       # MacOS configuration
       # - /run/host-services/ssh-auth.sock:/ssh-agent
 
-volumes:
-  report-data:
 ```
 
 ### SSH
