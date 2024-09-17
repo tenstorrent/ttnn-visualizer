@@ -22,14 +22,10 @@ def create_app(settings_override=None):
     :return: Flask app
     """
 
+    static_assets_dir = environ.get("STATIC_ASSETS", "/public")
     flask_env = environ.get("FLASK_ENV", "development")
 
-    if flask_env == "development":
-        static_folder = "../dist"
-    elif flask_env == "production":
-        static_folder = "/public"
-
-    app = Flask(__name__, static_folder=static_folder, static_url_path="/")
+    app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
 
     app.config.from_object(getattr(settings, flask_env))
 
