@@ -36,7 +36,7 @@ services:
       - SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock
     volumes:
       # Volume for report data
-      - report-data:/app/backend/data
+      - ./data:/app/backend/data
 
       # Linux configuration
       # - ${SSH_AUTH_SOCK}:/ssh-agent

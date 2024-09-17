@@ -22,12 +22,21 @@ def create_app(settings_override=None):
     :return: Flask app
     """
 
-    app = Flask(__name__, static_folder="../public", static_url_path="/")
     flask_env = environ.get("FLASK_ENV", "development")
+
+    if flask_env == "development":
+        static_folder = "../dist"
+    elif flask_env == "production":
+        static_folder = "/public"
+
+    app = Flask(__name__, static_folder=static_folder, static_url_path="/")
+
     app.config.from_object(getattr(settings, flask_env))
 
     logging.basicConfig(level=app.config.get('LOG_LEVEL', 'INFO'))
-    
+
+    app.logger.info(f"Starting TTNN visualizer in {flask_env} mode")
+
     if settings_override:
         app.config.update(settings_override)
 
