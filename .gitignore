@@ -36,5 +36,8 @@ id_ed*
 /docker/SSH/config
 
 # Backend
-/backend/data
+backend/ttnn_visualizer/data
+backend/ttnn_visualizer/static
+backend/*egg-info
+build
 .env
