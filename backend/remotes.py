@@ -171,8 +171,10 @@ def get_remote_folder_config_paths(remote_connection, ssh_client) -> List[str]:
             if TEST_CONFIG_FILE in directory_files:
                 project_configs.append(Path(dirname, TEST_CONFIG_FILE))
     if not project_configs:
+        error = f"No projects found at remote path: {remote_path}"
+        logger.info(error)
         raise NoProjectsException(
-            status=400, message="No project configs found at path"
+            status=400, message=error
         )
     return project_configs
 
@@ -204,6 +206,7 @@ def get_remote_folders(
                 )
                 config_file.close()
             except IOError as err:
+                logger.info(f"Error reading remote folders: {err}")
                 raise FileNotFoundError(f"Failed to read config from {config}: {err}")
     return remote_folder_data
 
@@ -219,7 +222,9 @@ def get_remote_test_folders(remote_connection: RemoteConnection) -> List[RemoteF
     client = get_client(remote_connection)
     remote_config_paths = get_remote_folder_config_paths(remote_connection, client)
     if not remote_config_paths:
-        raise NoProjectsException(f"No projects found at {remote_connection.path}")
+        error = f"No projects found at {remote_connection.path}"
+        logger.info(error)
+        raise NoProjectsException(error)
     return get_remote_folders(client, remote_config_paths)
 
 
@@ -267,6 +272,18 @@ def sync_test_folders(remote_connection: RemoteConnection, remote_folder: Remote
             sftp.chdir(str(directory))
             for file in files:
                 sftp.get(file, str(Path(destination_dir, file)))
+
+
+def list_keys_from_agent():
+    if os.getenv("USE_SSH_AGENT", True):
+        logger.info("Checking for SSH agent keys")
+        agent = Agent()
+        keys = agent.get_keys()
+        if not keys:
+            logger.info("No SSH keys found. Is the ssh-agent running?")
+        else:
+            for key in keys:
+                logger.info(f"Found key: {key}")
 
 
 @remote_exception_handler

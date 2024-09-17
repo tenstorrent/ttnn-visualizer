@@ -1,15 +1,17 @@
 import logging
+import shutil
 from os import environ
 from pathlib import Path
-import shutil
-from flask import Flask
+
 import flask
+from dotenv import load_dotenv
+from flask import Flask
+from flask_cors import CORS
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
-from flask_cors import CORS
-from backend import settings
-from dotenv import load_dotenv
 
+from backend import settings
+from backend.remotes import list_keys_from_agent
 
 
 def create_app(settings_override=None):
@@ -33,6 +35,8 @@ def create_app(settings_override=None):
 
     app.logger.info(f"Starting TTNN visualizer in {flask_env} mode")
 
+    list_keys_from_agent()
+
     if settings_override:
         app.config.update(settings_override)
 
@@ -43,6 +47,7 @@ def create_app(settings_override=None):
     # Load dotenv from root directory
     dotenv_path = Path(__file__).parent.parent.joinpath('.env')
     if dotenv_path.exists():
+        app.logger.info(f"Loading .environment file from {dotenv_path}")
         load_dotenv(str(dotenv_path))
 
     # Ensure there is always a schema to reference
@@ -59,7 +64,6 @@ def create_app(settings_override=None):
     extensions(app)
 
     if flask_env == "production":
-
         @app.route("/", defaults={"path": ""})
         @app.route("/<path:path>")
         def catch_all(path):
