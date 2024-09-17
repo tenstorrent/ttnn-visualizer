@@ -55,6 +55,3 @@ services:
         - "keypath=./id_ed25519.pub"
     ports:
       - "${DOCKER_SSH_PORT_FORWARD:-2222}:22"
-
-volumes:
-  report-data:
