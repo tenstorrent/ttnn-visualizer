@@ -2,8 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { Fragment, forwardRef, useRef, useState } from 'react';
-import { PlotMouseEvent } from 'plotly.js';
+import React, { forwardRef, Fragment, useRef, useState } from 'react';
 import { Button, ButtonGroup, Icon, Intent, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
@@ -25,6 +24,7 @@ import {
     CONDENSED_PLOT_CHUNK_COLOR,
     DRAMRenderConfiguration,
     L1RenderConfiguration,
+    PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import Collapsible from '../Collapsible';
@@ -158,29 +158,23 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         createToast(address);
     };
 
-    const onDramDeltaClick = (event: Readonly<PlotMouseEvent>): void => {
-        const index = event.points[0].curveNumber;
-        const { address } = dramDeltaObject.memory[index];
+    const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
+        // this may or may not work correctly. need to doublecheck tensor selection for DRAM and DRAM delta
+        const { address } = event.points[0].data.memoryData;
         selectTensorByAddress(address);
-        setSelectedTensorAddress(address);
+        setSelectedTensorAddress(address); // TODO: why is there a second setSelectedTensorAddress here?
     };
 
-    const onDramBufferClick = (event: Readonly<PlotMouseEvent>): void => {
-        const index = event.points[0].curveNumber;
-        const { address } = dramMemory[index];
+    const onDramBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
+        // this may or may not work correctly. need to doublecheck tensor selection for DRAM and DRAM delta
+        const { address } = event.points[0].data.memoryData;
         selectTensorByAddress(address);
     };
 
-    const onBufferClick = (event: Readonly<PlotMouseEvent>): void => {
-        const index = event.points[0].curveNumber;
-        // this is a hacky way to determine this
-        if (index >= memory.length) {
-            // eslint-disable-next-line no-console
-            console.log('Are we clicking on L1 small?');
-        } else {
-            const { address } = memory[index];
-            selectTensorByAddress(address);
-        }
+    const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
+        const { address } = event.points[0].data.memoryData;
+        // TODO: we now have a tensor in event.points[0].data.memoryData.tensor Maybe we shoudl just use that?
+        selectTensorByAddress(address);
     };
 
     const onTensorClick = (address: number | null): void => {
@@ -550,8 +544,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             <Icon
                                                 className='operation-icon'
                                                 size={13}
-                                                intent={Intent.PRIMARY}
-                                                icon={IconNames.FLOW_LINEAR}
+                                                intent={Intent.SUCCESS}
+                                                icon={IconNames.CUBE_ADD}
                                             />
                                             &nbsp;
                                             {deviceOperation.name}
@@ -608,3 +602,4 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 };
 
 export default OperationDetailsComponent;
+

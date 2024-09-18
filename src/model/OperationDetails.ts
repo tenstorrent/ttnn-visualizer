@@ -101,44 +101,46 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         );
 
         const deviceOpList: Node[] = [];
-        this.device_operations.forEach((node) => {
-            if (node.node_type === NodeType.function_start) {
-                this.deviceOperations.push({
-                    indentLevel: deviceOpList.length,
-                    name: node.params.name,
-                    cbList: [],
-                    deallocateAll: false,
-                });
-                deviceOpList.push(node);
-            }
-            if (node.node_type === NodeType.function_end) {
-                deviceOpList.pop();
-            }
-            if (node.node_type === NodeType.circular_buffer_allocate) {
-                const deviceOpNode = deviceOpList.at(-1);
-                if (deviceOpNode) {
-                    const deviceOp = this.deviceOperations.find((op) => op.name === deviceOpNode.params.name);
+        if (this.device_operations !== null) {
+            this.device_operations.forEach((node) => {
+                if (node.node_type === NodeType.function_start) {
+                    this.deviceOperations.push({
+                        indentLevel: deviceOpList.length,
+                        name: node.params.name,
+                        cbList: [],
+                        deallocateAll: false,
+                    });
+                    deviceOpList.push(node);
+                }
+                if (node.node_type === NodeType.function_end) {
+                    deviceOpList.pop();
+                }
+                if (node.node_type === NodeType.circular_buffer_allocate) {
+                    const deviceOpNode = deviceOpList.at(-1);
+                    if (deviceOpNode) {
+                        const deviceOp = this.deviceOperations.find((op) => op.name === deviceOpNode.params.name);
 
-                    if (deviceOp) {
-                        deviceOp.cbList.push({
-                            address: parseInt(node.params.address, 10),
-                            size: parseInt(node.params.size, 10),
-                            core_range_set: node.params.core_range_set,
-                        });
+                        if (deviceOp) {
+                            deviceOp.cbList.push({
+                                address: parseInt(node.params.address, 10),
+                                size: parseInt(node.params.size, 10),
+                                core_range_set: node.params.core_range_set,
+                            });
+                        }
                     }
                 }
-            }
-            if (node.node_type === NodeType.circular_buffer_deallocate_all) {
-                const deviceOpNode = deviceOpList.at(-1);
-                if (deviceOpNode) {
-                    const deviceOp = this.deviceOperations.find((op) => op.name === deviceOpNode.params.name);
+                if (node.node_type === NodeType.circular_buffer_deallocate_all) {
+                    const deviceOpNode = deviceOpList.at(-1);
+                    if (deviceOpNode) {
+                        const deviceOp = this.deviceOperations.find((op) => op.name === deviceOpNode.params.name);
 
-                    if (deviceOp) {
-                        deviceOp.deallocateAll = true;
+                        if (deviceOp) {
+                            deviceOp.deallocateAll = true;
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
     }
 
     private getChartData(memory: Chunk[]): Partial<PlotData>[] {
@@ -159,7 +161,11 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                         simplify: false,
                     },
                 },
-
+                memoryData: {
+                    address,
+                    size,
+                    tensor,
+                },
                 hoverinfo: 'none',
                 hovertemplate: `
 <span style="color:${color};font-size:20px;">&#9632;</span>

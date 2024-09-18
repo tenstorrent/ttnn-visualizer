@@ -1,9 +1,9 @@
 import { ForwardRefRenderFunction, useMemo, useState } from 'react';
 import tinycolor from 'tinycolor2';
 import Plot from 'react-plotly.js';
-import { Config, Layout, PlotData, PlotMouseEvent } from 'plotly.js';
+import { Config, Layout, PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { PlotConfiguration, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
 import { selectedTensorAddressAtom } from '../../store/app';
 
 export interface MemoryPlotRendererProps {
@@ -11,7 +11,7 @@ export interface MemoryPlotRendererProps {
     isZoomedIn: boolean;
     memorySize: number;
     title: string;
-    onBufferClick?: (event: PlotMouseEvent) => void;
+    onBufferClick?: (event: Readonly<PlotMouseEventCustom>) => void;
     plotZoomRangeStart?: number;
     plotZoomRangeEnd?: number;
     className?: string;
@@ -128,12 +128,12 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
             ref={ref}
         >
             <h3 className='plot-title'>{title}</h3>
-
             <Plot
                 className='memory-plot'
                 data={augmentedChart}
                 layout={layout}
                 config={config}
+                // @ts-expect-error PlotMouseEventCustom extends PlotMouseEvent and should be fine
                 onClick={onBufferClick}
                 onHover={(data) => setHoveredPoint(data.points[0].x as number)}
                 onUnhover={() => setHoveredPoint(null)}

@@ -1,3 +1,6 @@
+import { PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
+import { HistoricalTensor } from '../model/Graph';
+
 export const L1RenderConfiguration = {
     height: 110,
     margin: {
@@ -32,3 +35,19 @@ export interface PlotConfiguration {
 }
 
 export const CONDENSED_PLOT_CHUNK_COLOR = '#9c9e9f';
+
+export interface PlotMouseEventCustom extends PlotMouseEvent {
+    points: PlotDatumCustom[];
+}
+
+export interface PlotDatumCustom extends PlotDatum {
+    data: PlotDataCustom;
+}
+
+export interface PlotDataCustom extends PlotData {
+    memoryData: {
+        address: number;
+        size: number;
+        tensor: HistoricalTensor | null;
+    };
+}
