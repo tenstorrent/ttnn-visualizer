@@ -35,8 +35,6 @@ def create_app(settings_override=None):
 
     app.logger.info(f"Starting TTNN visualizer in {flask_env} mode")
 
-    list_keys_from_agent()
-
     if settings_override:
         app.config.update(settings_override)
 

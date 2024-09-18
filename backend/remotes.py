@@ -274,21 +274,7 @@ def sync_test_folders(remote_connection: RemoteConnection, remote_folder: Remote
                 sftp.get(file, str(Path(destination_dir, file)))
 
 
-def list_keys_from_agent():
-    if os.getenv("USE_SSH_AGENT", True):
-        logger.info("Checking for SSH agent keys")
-        agent = Agent()
-        keys = agent.get_keys()
-        if not keys:
-            logger.info("No SSH keys found. Is the ssh-agent running?")
-        else:
-            for key in keys:
-                logger.info(f"Found key: {key}")
-
-
 @remote_exception_handler
 def check_remote_path(remote_connection):
     ssh_client = get_client(remote_connection)
     get_remote_folder_config_paths(remote_connection, ssh_client)
-
-
