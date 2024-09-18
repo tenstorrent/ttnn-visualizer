@@ -3,13 +3,12 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 .buffer-table {
-    td, th {
+    td,
+    th {
         padding: 5px 10px;
     }
 
-    .deallocation-status {
-        display: flex;
-        align-items: center;
-        gap: 10px;
+    .deallocation-icon {
+        margin-left: 5px;
     }
 }

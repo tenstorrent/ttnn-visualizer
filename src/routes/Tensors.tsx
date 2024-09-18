@@ -8,7 +8,6 @@ import { useEffect } from 'react';
 import { useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom } from '../store/app';
 import TensorList from '../components/TensorList';
-import TempNav from '../components/TempNav';
 
 export default function Tensors() {
     const report = useReportMeta();
@@ -24,7 +23,6 @@ export default function Tensors() {
     return (
         <>
             <Helmet title='Tensors' />
-            <TempNav />
             <TensorList />
         </>
     );

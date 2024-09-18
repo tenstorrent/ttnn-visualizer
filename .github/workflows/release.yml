@@ -1,0 +1,43 @@
+name: Release
+
+
+on:
+    push:
+        branches:
+            # Change to main when ready for automated versioning
+            - main_
+
+jobs:
+
+    update-version:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v2
+              # TODO Replace email with official email
+            - run: git config --global user.email "support@tenstorrent.com"
+            - run: git config --global user.name "CI Job"
+
+            - name: Use Node.js
+              uses: actions/setup-node@v3
+              with:
+                  node-version: v22.1.0
+
+            - name: Bump version for Node.js (package.json)
+              run: |
+                  npm version patch # Or `minor` / `major` depending on your needs
+                  git add package.json
+                  cat package.json
+              env:
+                  CI: true
+
+            - name: Bump version for Python (pyproject.toml)
+              run: |
+                  python -m pip install --user --upgrade toml
+                  python3 scripts/bump_pyproject_version.py
+                  git add pyproject.toml
+                  cat pyproject.toml
+
+            - name: Commit changes
+              run: |
+                  git commit -m "chore(release): bump versions"
+                  git push origin main

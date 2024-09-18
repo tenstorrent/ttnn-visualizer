@@ -18,10 +18,6 @@ class Config(object):
     DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))
     TESTING = False
 
-    SERVER_NAME = os.getenv(
-        "SERVER_NAME", "localhost:{0}".format(os.getenv("PORT", "8000"))
-    )
-
     # SQLAlchemy.
     DATABASE_OPTIONS = "check_same_thread=False"
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))

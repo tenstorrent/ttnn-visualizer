@@ -5,21 +5,42 @@
 @use 'definitions/colours' as *;
 
 .app-header {
+    padding: 15px;
+    padding-bottom: 0;
+    margin-bottom: 1rem;
+}
+
+.nav-container {
     display: flex;
     align-items: center;
-    margin-bottom: 1rem;
-    justify-content: space-between;
+    justify-content: space-around;
 
     .tt-logo {
-        margin: -20px;
+        // TODO: Sort logo viewbox so we don't have to do this
+        margin: -30px;
     }
 }
 
 .report-title {
-    font-size: 18px;
-    font-weight: 700;
+    font-size: 12px;
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
-    max-width: 250px;
+    max-width: 300px;
+    margin-top: 17px;
+    float: right;
+    margin-right: 15px;
+    padding-right: 15px;
+    position: relative;
+
+    &::after {
+        content: '';
+        display: inline-block;
+        width: 1px;
+        background-color: $tt-grey-5;
+        height: 100%;
+        position: absolute;
+        right: 0;
+        top: 0;
+    }
 }
