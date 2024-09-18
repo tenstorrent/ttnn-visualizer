@@ -31,7 +31,7 @@ def create_app(settings_override=None):
     flask_env = environ.get("FLASK_ENV", "development")
 
     app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
-    
+   
     app.config.from_object(getattr(settings, flask_env))
 
     logging.basicConfig(level=app.config.get('LOG_LEVEL', 'INFO'))
@@ -44,7 +44,6 @@ def create_app(settings_override=None):
     middleware(app)
 
     app.register_blueprint(api)
-
 
     # Ensure there is always a schema to reference
     # In the future we can probabably re-init the DB or
