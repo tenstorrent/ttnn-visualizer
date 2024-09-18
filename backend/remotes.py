@@ -111,6 +111,7 @@ def get_client(remote_connection: RemoteConnection) -> SSHClient:
         agent = Agent()
         logger.info(f"Found {len(agent.get_keys())} in agent")
         if not agent.get_keys():
+            logger.info("No keys found in agent, is ssh-agent running and mounted?")
             raise SSHException("No keys found")
         connection_args.update({"look_for_keys": True})
     else:
