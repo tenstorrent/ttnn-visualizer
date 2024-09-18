@@ -1,5 +1,7 @@
 # TTNN Visualizer 
 
+A tool for visualizing the Tenstorrent Neural Network (TTNN) model.
+
 ## Running Application
 
 ### Downloading Docker Image
