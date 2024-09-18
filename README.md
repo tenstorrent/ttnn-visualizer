@@ -20,7 +20,10 @@ Other image versions can be found [here](https://github.com/tenstorrent/ttnn-vis
 #### Running Image
 
 The following commands will run the docker image on your machine. See the docker-compose configuration section for a 
-description of the run options.
+description of the run options. 
+
+*Note*: Docker Desktop for MacOS does not currently forward the ssh-agent. To run the container with a forwarded ssh-agent
+add your keys to the agent using `ssh-add` before running the docker run command in your terminal.
 
 *MacOS Run Command*
 
