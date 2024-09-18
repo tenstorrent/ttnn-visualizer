@@ -23,11 +23,15 @@ def create_app(settings_override=None):
     :return: Flask app
     """
 
+    dotenv_path = Path(__file__).parent.parent.joinpath('.env')
+    if dotenv_path.exists():
+        load_dotenv(str(dotenv_path))
+
     static_assets_dir = environ.get("STATIC_ASSETS", "/public")
     flask_env = environ.get("FLASK_ENV", "development")
 
     app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
-
+    
     app.config.from_object(getattr(settings, flask_env))
 
     logging.basicConfig(level=app.config.get('LOG_LEVEL', 'INFO'))
@@ -41,11 +45,6 @@ def create_app(settings_override=None):
 
     app.register_blueprint(api)
 
-    # Load dotenv from root directory
-    dotenv_path = Path(__file__).parent.parent.joinpath('.env')
-    if dotenv_path.exists():
-        app.logger.info(f"Loading .environment file from {dotenv_path}")
-        load_dotenv(str(dotenv_path))
 
     # Ensure there is always a schema to reference
     # In the future we can probabably re-init the DB or
