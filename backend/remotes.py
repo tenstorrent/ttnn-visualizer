@@ -111,6 +111,7 @@ def get_client(remote_connection: RemoteConnection) -> SSHClient:
         agent = Agent()
         logger.info(f"Found {len(agent.get_keys())} in agent")
         if not agent.get_keys():
+            logger.info("No keys found in agent, is ssh-agent running and mounted?")
             raise SSHException("No keys found")
         connection_args.update({"look_for_keys": True})
     else:
@@ -171,8 +172,10 @@ def get_remote_folder_config_paths(remote_connection, ssh_client) -> List[str]:
             if TEST_CONFIG_FILE in directory_files:
                 project_configs.append(Path(dirname, TEST_CONFIG_FILE))
     if not project_configs:
+        error = f"No projects found at remote path: {remote_path}"
+        logger.info(error)
         raise NoProjectsException(
-            status=400, message="No project configs found at path"
+            status=400, message=error
         )
     return project_configs
 
@@ -204,6 +207,7 @@ def get_remote_folders(
                 )
                 config_file.close()
             except IOError as err:
+                logger.info(f"Error reading remote folders: {err}")
                 raise FileNotFoundError(f"Failed to read config from {config}: {err}")
     return remote_folder_data
 
@@ -219,7 +223,9 @@ def get_remote_test_folders(remote_connection: RemoteConnection) -> List[RemoteF
     client = get_client(remote_connection)
     remote_config_paths = get_remote_folder_config_paths(remote_connection, client)
     if not remote_config_paths:
-        raise NoProjectsException(f"No projects found at {remote_connection.path}")
+        error = f"No projects found at {remote_connection.path}"
+        logger.info(error)
+        raise NoProjectsException(error)
     return get_remote_folders(client, remote_config_paths)
 
 
@@ -273,5 +279,3 @@ def sync_test_folders(remote_connection: RemoteConnection, remote_folder: Remote
 def check_remote_path(remote_connection):
     ssh_client = get_client(remote_connection)
     get_remote_folder_config_paths(remote_connection, ssh_client)
-
-

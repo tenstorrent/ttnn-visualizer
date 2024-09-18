@@ -1,15 +1,16 @@
 import logging
+import shutil
 from os import environ
 from pathlib import Path
-import shutil
-from flask import Flask
+
 import flask
+from dotenv import load_dotenv
+from flask import Flask
+from flask_cors import CORS
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
-from flask_cors import CORS
-from backend import settings
-from dotenv import load_dotenv
 
+from backend import settings
 
 
 def create_app(settings_override=None):
@@ -22,11 +23,15 @@ def create_app(settings_override=None):
     :return: Flask app
     """
 
+    dotenv_path = Path(__file__).parent.parent.joinpath('.env')
+    if dotenv_path.exists():
+        load_dotenv(str(dotenv_path))
+
     static_assets_dir = environ.get("STATIC_ASSETS", "/public")
     flask_env = environ.get("FLASK_ENV", "development")
 
     app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
-
+   
     app.config.from_object(getattr(settings, flask_env))
 
     logging.basicConfig(level=app.config.get('LOG_LEVEL', 'INFO'))
@@ -39,11 +44,6 @@ def create_app(settings_override=None):
     middleware(app)
 
     app.register_blueprint(api)
-
-    # Load dotenv from root directory
-    dotenv_path = Path(__file__).parent.parent.joinpath('.env')
-    if dotenv_path.exists():
-        load_dotenv(str(dotenv_path))
 
     # Ensure there is always a schema to reference
     # In the future we can probabably re-init the DB or
@@ -59,7 +59,6 @@ def create_app(settings_override=None):
     extensions(app)
 
     if flask_env == "production":
-
         @app.route("/", defaults={"path": ""})
         @app.route("/<path:path>")
         def catch_all(path):
