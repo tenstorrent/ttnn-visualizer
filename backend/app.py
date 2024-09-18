@@ -11,7 +11,6 @@ from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from backend import settings
-from backend.remotes import list_keys_from_agent
 
 
 def create_app(settings_override=None):
