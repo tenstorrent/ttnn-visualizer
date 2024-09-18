@@ -2,7 +2,7 @@ name: Create and publish a Docker image
 
 on:
   push:
-      branches: [ "main", "dev", "bugfix/docker-install-fixes" ]
+    branches: [ "main", "dev", "bugfix/docker-install-fixes" ]
     tags:
       - 'v*'
 
