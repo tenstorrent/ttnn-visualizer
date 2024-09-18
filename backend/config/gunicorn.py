@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 
 # Load dotenv from root directory
 dotenv_path = Path(__file__).parent.parent.parent.joinpath('.env')
-print(f"Looking for .env at {dotenv_path}")
 if dotenv_path.exists():
     load_dotenv(str(dotenv_path))
 
