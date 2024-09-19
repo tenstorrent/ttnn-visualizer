@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 @use '../definitions/colours' as *;
 
 .operations-wrap {
@@ -23,26 +24,9 @@
     }
 
     .result-count {
+        flex-grow: 1;
         text-align: right;
         margin-bottom: 0;
-    }
-
-    .memory-leak-count {
-        flex-grow: 1;
-        text-align: center;
-        margin-bottom: 0;
-        align-items: center;
-        gap: 5px;
-        display: flex;
-        justify-content: center;
-
-        > .success {
-            color: $tt-success;
-        }
-
-        > .warning {
-            color: $tt-warning;
-        }
     }
 
     .scrollable-element {
@@ -97,7 +81,4 @@
         overflow-anchor: none;
     }
 
-    .buffer-data {
-        margin-left: 26px;
-    }
 }

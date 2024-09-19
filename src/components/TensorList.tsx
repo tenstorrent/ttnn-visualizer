@@ -6,25 +6,30 @@ import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Button, ButtonGroup, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, Checkbox, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
+import { MultiSelect } from '@blueprintjs/select';
 import SearchField from './SearchField';
 import LoadingSpinner from './LoadingSpinner';
-import 'styles/components/OperationsList.scss';
 import { useOperationsList, useTensors } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { Tensor } from '../model/Graph';
 import { OperationDescription } from '../model/APIData';
-import { BufferTypeLabel } from '../model/BufferType';
+import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
 import BufferTable from './BufferTable';
 import { expandedTensorsAtom } from '../store/app';
 import ListItem from './ListItem';
+import '@blueprintjs/select/lib/css/blueprint-select.css';
+import 'styles/components/OperationsList.scss';
+import 'styles/components/TensorList.scss';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
+
+type BufferTypeKeys = keyof typeof BufferType;
 
 const TensorList = () => {
     const location = useLocation();
@@ -38,6 +43,8 @@ const TensorList = () => {
     const [filteredTensorList, setFilteredTensorList] = useState<Tensor[]>([]);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const [shouldShowMemoryLeaks, setShouldShowMemoryLeaks] = useState(false);
+    const [bufferTypeFilters, setBufferTypeFilters] = useState<BufferTypeKeys[]>([]);
 
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
 
@@ -78,13 +85,27 @@ const TensorList = () => {
         );
     };
 
+    const handleToggleMemoryLeaks = () => {
+        setShouldShowMemoryLeaks(!shouldShowMemoryLeaks);
+    };
+
+    const updateBufferTypeFilter = (bufferType: BufferTypeKeys) => {
+        setBufferTypeFilters((currentFilters: BufferTypeKeys[]) => {
+            if (currentFilters.includes(bufferType)) {
+                return currentFilters.filter((item) => item !== bufferType);
+            }
+            return [...currentFilters, bufferType];
+        });
+    };
+
     useMemo(() => {
         let count = 0;
 
         if (operations) {
             filteredTensorList.forEach((tensor) => {
                 const deallocationOperation = getDeallocation(tensor, operations);
-                if (deallocationOperation) {
+
+                if (!deallocationOperation) {
                     count++;
                 }
             });
@@ -103,9 +124,21 @@ const TensorList = () => {
                 );
             }
 
+            if (shouldShowMemoryLeaks) {
+                tensors = tensors.filter((tensor) => !getDeallocation(tensor, operations));
+            }
+
+            if (bufferTypeFilters?.length > 0) {
+                tensors = tensors.filter(
+                    (tensor) =>
+                        tensor?.buffer_type !== null &&
+                        bufferTypeFilters.includes(BufferType[tensor.buffer_type] as BufferTypeKeys),
+                );
+            }
+
             setFilteredTensorList(tensors);
         }
-    }, [operations, fetchedTensors, filterQuery]);
+    }, [operations, fetchedTensors, filterQuery, shouldShowMemoryLeaks, bufferTypeFilters]);
 
     useEffect(() => {
         const initialTensorId = location.state?.previousOperationId;
@@ -147,6 +180,31 @@ const TensorList = () => {
                         />
                     </Tooltip>
 
+                    {memoryLeakCount ? (
+                        <Tooltip
+                            content='Filter memory leaks'
+                            placement={PopoverPosition.TOP}
+                        >
+                            <Button
+                                onClick={() => handleToggleMemoryLeaks()}
+                                icon={IconNames.WARNING_SIGN}
+                                intent={shouldShowMemoryLeaks ? Intent.WARNING : Intent.NONE}
+                                text={memoryLeakCount}
+                            />
+                        </Tooltip>
+                    ) : (
+                        <Tooltip
+                            content='No memory leaks detected'
+                            placement={PopoverPosition.TOP}
+                        >
+                            <Button
+                                onClick={() => handleToggleMemoryLeaks()}
+                                icon={IconNames.TICK}
+                                intent={Intent.SUCCESS}
+                            />
+                        </Tooltip>
+                    )}
+
                     <Tooltip
                         content='Scroll to top'
                         placement={PopoverPosition.TOP}
@@ -170,27 +228,20 @@ const TensorList = () => {
                             icon={IconNames.DOUBLE_CHEVRON_DOWN}
                         />
                     </Tooltip>
-                </ButtonGroup>
 
-                <p className='memory-leak-count'>
-                    {memoryLeakCount ? (
-                        <>
-                            <span className='warning'>{memoryLeakCount} potential memory leaks</span>
-                            <Icon
-                                icon={IconNames.WARNING_SIGN}
-                                intent={Intent.WARNING}
-                            />
-                        </>
-                    ) : (
-                        <>
-                            <span className='success'>No memory leaks detected</span>
-                            <Icon
-                                icon={IconNames.TICK}
-                                intent={Intent.SUCCESS}
-                            />
-                        </>
-                    )}
-                </p>
+                    <MultiSelect
+                        items={getBufferTypeFilterOptions(fetchedTensors)}
+                        placeholder='Buffer type filter...'
+                        // Type requires this but it seems pointless
+                        onItemSelect={() => {}}
+                        selectedItems={bufferTypeFilters}
+                        itemRenderer={(value: BufferTypeKeys, _props) =>
+                            BufferTypeItem(value, updateBufferTypeFilter, bufferTypeFilters)
+                        }
+                        tagRenderer={(buffer) => buffer}
+                        onRemove={(type) => updateBufferTypeFilter(type)}
+                    />
+                </ButtonGroup>
 
                 {!isLoading && (
                     <p className='result-count'>
@@ -296,5 +347,31 @@ function getDeallocation(tensor: Tensor, operations: OperationDescription[]) {
 
     return matchingInputs.map((x) => x.id).toString() || '';
 }
+
+function getBufferTypeFilterOptions(tensors?: Tensor[]) {
+    const bufferTypes =
+        tensors?.map((tensor) => (tensor.buffer_type !== null ? BufferType[tensor.buffer_type] : '')) || [];
+    const uniqueBufferTypes = Array.from(new Set(bufferTypes.filter((type) => type)));
+
+    return uniqueBufferTypes as BufferTypeKeys[];
+}
+
+const BufferTypeItem = (
+    type: BufferTypeKeys,
+    onClick: (type: BufferTypeKeys) => void,
+    selectedBufferTypes: BufferTypeKeys[],
+) => {
+    return (
+        <li>
+            <Checkbox
+                className='buffer-type-checkbox'
+                key={type}
+                label={type}
+                checked={selectedBufferTypes.includes(type)}
+                onClick={() => onClick(type)}
+            />
+        </li>
+    );
+};
 
 export default TensorList;
