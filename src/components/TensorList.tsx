@@ -281,7 +281,7 @@ const TensorList = () => {
 
                                 return (
                                     <li
-                                        className='list'
+                                        className='list-item-container'
                                         key={virtualRow.index}
                                         data-index={virtualRow.index}
                                         ref={virtualizer.measureElement}
