@@ -13,7 +13,7 @@ import SearchField from './SearchField';
 import Collapsible from './Collapsible';
 import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
-import 'styles/components/OperationsList.scss';
+import 'styles/components/ListView.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { expandedOperationsAtom, shouldCollapseAllOperationsAtom } from '../store/app';
@@ -148,7 +148,8 @@ const OperationList = () => {
     }, [virtualizer, fetchedOperations, location, navigate]);
 
     return (
-        <fieldset className='operations-wrap'>
+        // TODO: Turn this into a generation ListView component used by OperationList and TensorList
+        <fieldset className='list-wrap'>
             <legend>Operations</legend>
 
             <div className='list-controls'>
@@ -256,7 +257,7 @@ const OperationList = () => {
                     }}
                 >
                     <ul
-                        className='operations-list'
+                        className='list-container'
                         style={{
                             // Tracks scroll position
                             transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
@@ -268,7 +269,7 @@ const OperationList = () => {
 
                                 return (
                                     <li
-                                        className='operation'
+                                        className='list-item'
                                         key={virtualRow.index}
                                         data-index={virtualRow.index}
                                         ref={virtualizer.measureElement}

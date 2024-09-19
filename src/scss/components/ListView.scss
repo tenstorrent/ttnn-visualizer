@@ -4,7 +4,7 @@
 
 @use '../definitions/colours' as *;
 
-.operations-wrap {
+.list-wrap {
     border: solid 1px #909096;
     border-radius: 5px;
     padding: 10px 40px 40px;
@@ -62,7 +62,7 @@
         }
     }
 
-    .operations-list {
+    .list-container {
         position: absolute;
         top: 0;
         left: 0;
@@ -73,7 +73,7 @@
         margin-bottom: 0;
     }
 
-    .operation {
+    .list-item {
         padding-bottom: 15px;
 
         // Style added to avoid possible infinite scroll loops

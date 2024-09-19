@@ -22,7 +22,7 @@ import BufferTable from './BufferTable';
 import { expandedTensorsAtom } from '../store/app';
 import ListItem from './ListItem';
 import '@blueprintjs/select/lib/css/blueprint-select.css';
-import 'styles/components/OperationsList.scss';
+import 'styles/components/ListView.scss';
 import 'styles/components/TensorList.scss';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
@@ -159,7 +159,8 @@ const TensorList = () => {
     }, [virtualizer, fetchedTensors, location, navigate]);
 
     return (
-        <fieldset className='operations-wrap'>
+        // TODO: Turn this into a generation ListView component used by OperationList and TensorList
+        <fieldset className='list-wrap'>
             <legend>Tensors</legend>
 
             <div className='list-controls'>
@@ -267,7 +268,7 @@ const TensorList = () => {
                     }}
                 >
                     <ul
-                        className='operations-list'
+                        className='list-container'
                         style={{
                             // Tracks scroll position
                             transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
@@ -280,7 +281,7 @@ const TensorList = () => {
 
                                 return (
                                     <li
-                                        className='operation'
+                                        className='list'
                                         key={virtualRow.index}
                                         data-index={virtualRow.index}
                                         ref={virtualizer.measureElement}
