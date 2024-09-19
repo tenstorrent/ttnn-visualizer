@@ -113,7 +113,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     }
 
     const { memorySizeL1 } = details;
-    const MINIMAL_MEMORY_RANGE_OFFSET_CB = memorySizeL1 * 0.999;
+    const MINIMAL_MEMORY_RANGE_OFFSET_CB = memorySizeL1 * 0.001;
 
     let plotZoomRangeStart =
         Math.min(memory[0]?.address || memorySizeL1, previousMemory[0]?.address || memorySizeL1) *
@@ -305,7 +305,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 }}
                             />
                             {/* TODO: there is a known issue if we come back to an op with no device operations this contrl will be disabled but set to zoom
-                              there is a workaround but it needs eventual fixing */}
+                              there is a workaround but it needs eventual fixing
+                              Also details.deviceOperations is an incorrect check, we should check if there are any CBs in the device operations
+                              */}
                             <Switch
                                 label='Circular Buffer zoom'
                                 checked={zoomedInViewCBMemory}
