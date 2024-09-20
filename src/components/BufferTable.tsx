@@ -21,14 +21,14 @@ interface BufferTableProps {
 }
 
 function BufferTable({ tensor, operations, queryKey, className }: BufferTableProps) {
-    const { address, consumers } = tensor;
+    const { address, consumers, dtype, layout, shape } = tensor;
     const lastOperation = tensor.consumers[tensor.consumers.length - 1];
     const deallocationOperation = getDeallocation(tensor, operations);
     const { data: buffer, isLoading } = useNextBuffer(address, consumers, queryKey);
 
     return (
         <table className={classNames('buffer-table arguments-table', className)}>
-            <caption>Buffers</caption>
+            <caption>Tensor</caption>
 
             <tbody>
                 <tr>
@@ -38,12 +38,12 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
 
                 <tr>
                     <th>dtype</th>
-                    <td>{tensor.dtype}</td>
+                    <td>{dtype}</td>
                 </tr>
 
                 <tr>
                     <th>layout</th>
-                    <td>{tensor.layout}</td>
+                    <td>{layout}</td>
                 </tr>
 
                 <tr>
@@ -53,7 +53,7 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
 
                 <tr>
                     <th>shape</th>
-                    <td>{tensor.shape}</td>
+                    <td>{shape}</td>
                 </tr>
 
                 <tr>
