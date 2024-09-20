@@ -8,13 +8,13 @@ import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { Tensor } from '../model/Graph';
-import { OperationDescription } from '../model/APIData';
+import { OperationDescription, TensorData } from '../model/APIData';
 import { useNextBuffer } from '../hooks/useAPI';
 import { toHex } from '../functions/math';
 import ROUTES from '../definitions/routes';
 
 interface BufferTableProps {
-    tensor: Tensor;
+    tensor: TensorData;
     operations: OperationDescription[];
     queryKey: string;
     className?: string;
@@ -27,8 +27,35 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
     const { data: buffer, isLoading } = useNextBuffer(address, consumers, queryKey);
 
     return (
-        <table className={classNames('buffer-table', className)}>
+        <table className={classNames('buffer-table arguments-table', className)}>
+            <caption>Buffers</caption>
+
             <tbody>
+                <tr>
+                    <th>device_id</th>
+                    <td>{tensor.device_id}</td>
+                </tr>
+
+                <tr>
+                    <th>dtype</th>
+                    <td>{tensor.dtype}</td>
+                </tr>
+
+                <tr>
+                    <th>layout</th>
+                    <td>{tensor.layout}</td>
+                </tr>
+
+                <tr>
+                    <th>memory_config</th>
+                    <td className='break-word'>{tensor.memory_config}</td>
+                </tr>
+
+                <tr>
+                    <th>shape</th>
+                    <td>{tensor.shape}</td>
+                </tr>
+
                 <tr>
                     <th>Last used</th>
                     <td>

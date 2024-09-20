@@ -15,7 +15,7 @@ import 'styles/components/OperationsList.scss';
 import { useOperationsList, useTensors } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { Tensor } from '../model/Graph';
-import { OperationDescription } from '../model/APIData';
+import { OperationDescription, TensorData } from '../model/APIData';
 import { BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
 import BufferTable from './BufferTable';
@@ -35,7 +35,7 @@ const TensorList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [filterQuery, setFilterQuery] = useState('');
     const [memoryLeakCount, setMemoryLeakCount] = useState(0);
-    const [filteredTensorList, setFilteredTensorList] = useState<Tensor[]>([]);
+    const [filteredTensorList, setFilteredTensorList] = useState<TensorData[]>([]);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
 
@@ -255,12 +255,13 @@ const TensorList = () => {
                                                 ) : undefined
                                             }
                                         >
-                                            <BufferTable
-                                                className='buffer-data'
-                                                tensor={tensor}
-                                                operations={operations}
-                                                queryKey={virtualRow.index.toString()}
-                                            />
+                                            <div className='arguments-wrapper'>
+                                                <BufferTable
+                                                    tensor={tensor}
+                                                    operations={operations}
+                                                    queryKey={virtualRow.index.toString()}
+                                                />
+                                            </div>
                                         </Collapsible>
                                     </li>
                                 );
