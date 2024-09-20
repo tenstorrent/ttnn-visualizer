@@ -28,8 +28,6 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
 
     return (
         <table className={classNames('buffer-table arguments-table', className)}>
-            <caption>Tensor</caption>
-
             <tbody>
                 <tr>
                     <th>device_id</th>
