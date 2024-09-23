@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { forwardRef, Fragment, useRef, useState } from 'react';
+import React, { Fragment, forwardRef, useRef, useState } from 'react';
 import { Button, ButtonGroup, Icon, Intent, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
@@ -602,4 +602,3 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 };
 
 export default OperationDetailsComponent;
-

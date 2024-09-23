@@ -6,7 +6,7 @@ import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Button, ButtonGroup, Checkbox, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, Checkbox, Icon, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import { MultiSelect } from '@blueprintjs/select';
@@ -43,7 +43,7 @@ const TensorList = () => {
     const [filteredTensorList, setFilteredTensorList] = useState<Tensor[]>([]);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
-    const [shouldShowMemoryLeaks, setShouldShowMemoryLeaks] = useState(false);
+    const [filterMemoryLeaks, setFilterMemoryLeaks] = useState(false);
     const [bufferTypeFilters, setBufferTypeFilters] = useState<BufferTypeKeys[]>([]);
 
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
@@ -86,7 +86,7 @@ const TensorList = () => {
     };
 
     const handleToggleMemoryLeaks = () => {
-        setShouldShowMemoryLeaks(!shouldShowMemoryLeaks);
+        setFilterMemoryLeaks(!filterMemoryLeaks);
     };
 
     const updateBufferTypeFilter = (bufferType: BufferTypeKeys) => {
@@ -124,7 +124,7 @@ const TensorList = () => {
                 );
             }
 
-            if (shouldShowMemoryLeaks) {
+            if (filterMemoryLeaks) {
                 tensors = tensors.filter((tensor) => !getDeallocation(tensor, operations));
             }
 
@@ -138,7 +138,7 @@ const TensorList = () => {
 
             setFilteredTensorList(tensors);
         }
-    }, [operations, fetchedTensors, filterQuery, shouldShowMemoryLeaks, bufferTypeFilters]);
+    }, [operations, fetchedTensors, filterQuery, filterMemoryLeaks, bufferTypeFilters]);
 
     useEffect(() => {
         const initialTensorId = location.state?.previousOperationId;
@@ -181,30 +181,18 @@ const TensorList = () => {
                         />
                     </Tooltip>
 
-                    {memoryLeakCount ? (
-                        <Tooltip
-                            content='Filter memory leaks'
-                            placement={PopoverPosition.TOP}
-                        >
-                            <Button
-                                onClick={() => handleToggleMemoryLeaks()}
-                                icon={IconNames.WARNING_SIGN}
-                                intent={shouldShowMemoryLeaks ? Intent.WARNING : Intent.NONE}
-                                text={memoryLeakCount}
-                            />
-                        </Tooltip>
-                    ) : (
-                        <Tooltip
-                            content='No memory leaks detected'
-                            placement={PopoverPosition.TOP}
-                        >
-                            <Button
-                                onClick={() => handleToggleMemoryLeaks()}
-                                icon={IconNames.TICK}
-                                intent={Intent.SUCCESS}
-                            />
-                        </Tooltip>
-                    )}
+                    <Tooltip
+                        content={memoryLeakCount ? 'Filter memory leaks' : 'No memory leaks found'}
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => handleToggleMemoryLeaks()}
+                            icon={memoryLeakCount ? IconNames.WARNING_SIGN : IconNames.TICK}
+                            intent={memoryLeakCount && filterMemoryLeaks ? Intent.WARNING : Intent.NONE}
+                            text={memoryLeakCount}
+                            disabled={!memoryLeakCount}
+                        />
+                    </Tooltip>
 
                     <Tooltip
                         content='Scroll to top'
@@ -241,6 +229,13 @@ const TensorList = () => {
                         }
                         tagRenderer={(buffer) => buffer}
                         onRemove={(type) => updateBufferTypeFilter(type)}
+                        noResults={
+                            <MenuItem
+                                disabled
+                                text='No results.'
+                                roleStructure='listoption'
+                            />
+                        }
                     />
                 </ButtonGroup>
 
