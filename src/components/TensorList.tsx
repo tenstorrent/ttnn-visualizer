@@ -182,7 +182,7 @@ const TensorList = () => {
                     </Tooltip>
 
                     <Tooltip
-                        content={memoryLeakCount ? 'Filter memory leaks' : 'No memory leaks found'}
+                        content={memoryLeakCount ? 'Toggle only memory leaks' : 'No memory leaks found'}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
