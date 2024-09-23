@@ -11,6 +11,7 @@ from ttnn_visualizer import settings
 from dotenv import load_dotenv
 from ttnn_visualizer.database import create_update_database
 
+
 def create_app(settings_override=None):
     from ttnn_visualizer.views import api
 
@@ -55,6 +56,7 @@ def create_app(settings_override=None):
     extensions(app)
 
     if flask_env == "production":
+
         @app.route("/", defaults={"path": ""})
         @app.route("/<path:path>")
         def catch_all(path):
