@@ -222,13 +222,16 @@ const TensorList = () => {
                         items={getBufferTypeFilterOptions(fetchedTensors)}
                         placeholder='Buffer type filter...'
                         // Type requires this but it seems pointless
-                        onItemSelect={() => {}}
+                        onItemSelect={(selectedType) => updateBufferTypeFilter(selectedType)}
                         selectedItems={bufferTypeFilters}
                         itemRenderer={(value: BufferTypeKeys, _props) =>
                             BufferTypeItem(value, updateBufferTypeFilter, bufferTypeFilters)
                         }
                         tagRenderer={(buffer) => buffer}
                         onRemove={(type) => updateBufferTypeFilter(type)}
+                        itemPredicate={(query, bufferType) =>
+                            !query || bufferType.toLowerCase().includes(query.toLowerCase())
+                        }
                         noResults={
                             <MenuItem
                                 disabled
@@ -236,6 +239,7 @@ const TensorList = () => {
                                 roleStructure='listoption'
                             />
                         }
+                        resetOnSelect
                     />
                 </ButtonGroup>
 
@@ -358,10 +362,9 @@ const BufferTypeItem = (
     selectedBufferTypes: BufferTypeKeys[],
 ) => {
     return (
-        <li>
+        <li key={type}>
             <Checkbox
                 className='buffer-type-checkbox'
-                key={type}
                 label={type}
                 checked={selectedBufferTypes.includes(type)}
                 onClick={() => onClick(type)}
