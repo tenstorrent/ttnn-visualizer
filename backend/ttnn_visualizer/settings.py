@@ -5,7 +5,6 @@ from ttnn_visualizer.utils import str_to_bool
 
 
 class Config(object):
-
     TEST_CONFIG_FILE = "config.json"
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
     ACTIVE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("active")
@@ -38,9 +37,6 @@ class TestingConfig(Config):
 
 
 class ProductionConfig(Config):
-    SERVER_NAME = os.getenv(
-        "SERVER_NAME", "127.0.0.1:{0}".format(os.getenv("PORT", "8000"))
-    )
     SQLALCHEMY_TRACK_MODIFICATIONS = True
     SQLALCHEMY_ECHO = False
     DEBUG = False
