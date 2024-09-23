@@ -10,7 +10,8 @@ from backend.models import (
     InputTensor,
     StackTrace,
     OutputTensor,
-    Buffer, DeviceOperation,
+    Buffer,
+    DeviceOperation,
 )
 
 
@@ -122,7 +123,7 @@ class OperationSchema(ma.SQLAlchemySchema):
     inputs = ma.List(ma.Nested(InputTensorSchema()))
     arguments = ma.List(ma.Nested(OperationArgumentsSchema()))
     stack_trace = ma.Method("get_stack_trace")
-    device_operations = fields.Pluck(DeviceOperationSchema(), 'captured_graph')
+    device_operations = fields.Pluck(DeviceOperationSchema(), "captured_graph")
 
     def get_stack_trace(self, obj):
         if obj.stack_trace and len(obj.stack_trace):

@@ -174,9 +174,7 @@ def get_remote_folder_config_paths(remote_connection, ssh_client) -> List[str]:
     if not project_configs:
         error = f"No projects found at remote path: {remote_path}"
         logger.info(error)
-        raise NoProjectsException(
-            status=400, message=error
-        )
+        raise NoProjectsException(status=400, message=error)
     return project_configs
 
 
