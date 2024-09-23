@@ -1,5 +1,4 @@
 import logging
-import shutil
 from os import environ
 from pathlib import Path
 
@@ -11,6 +10,7 @@ from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from backend import settings
+from backend.database import create_update_database
 
 
 def create_app(settings_override=None):
@@ -31,7 +31,7 @@ def create_app(settings_override=None):
     flask_env = environ.get("FLASK_ENV", "development")
 
     app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
-   
+
     app.config.from_object(getattr(settings, flask_env))
 
     logging.basicConfig(level=app.config.get('LOG_LEVEL', 'INFO'))
@@ -51,10 +51,8 @@ def create_app(settings_override=None):
     ACTIVE_DATA_DIRECTORY = app.config["ACTIVE_DATA_DIRECTORY"]
 
     active_db_path = Path(ACTIVE_DATA_DIRECTORY, "db.sqlite")
-    empty_db_path = Path(__file__).parent.resolve().joinpath("empty.sqlite")
-    if not active_db_path.exists():
-        active_db_path.parent.mkdir(exist_ok=True, parents=True)
-        shutil.copy(empty_db_path, active_db_path)
+    active_db_path.parent.mkdir(exist_ok=True, parents=True)
+    create_update_database(active_db_path)
 
     extensions(app)
 
