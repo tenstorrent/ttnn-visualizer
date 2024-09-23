@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { forwardRef, Fragment, useRef, useState } from 'react';
+import React, { Fragment, forwardRef, useRef, useState } from 'react';
 import { Button, ButtonGroup, Icon, Intent, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
@@ -40,12 +40,13 @@ interface OperationDetailsProps {
 }
 
 const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
+
 const MINIMAL_DRAM_MEMORY_RANGE_OFFSET = 0.9998;
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const { data: operations } = useOperationsList();
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
-    // const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
+    const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
 
     const {
         operationDetails: { data: operationDetails, isLoading, status },
@@ -112,6 +113,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     }
 
     const { memorySizeL1 } = details;
+    const MINIMAL_MEMORY_RANGE_OFFSET_CB = memorySizeL1 * 0.001;
 
     let plotZoomRangeStart =
         Math.min(memory[0]?.address || memorySizeL1, previousMemory[0]?.address || memorySizeL1) *
@@ -125,6 +127,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 : 0,
         ) *
         (1 / MINIMAL_MEMORY_RANGE_OFFSET);
+
+    const cbZoomStart =
+        details.deviceOperations
+            .map((op) => op.cbList.map((cb) => cb.address))
+            .flat()
+            .sort((a, b) => a - b)[0] - MINIMAL_MEMORY_RANGE_OFFSET_CB;
+
+    const cbZoomEnd =
+        details.deviceOperations
+            .map((op) => op.cbList.map((cd) => cd.address + cd.size))
+            .flat()
+            .sort((a, b) => a - b)
+            .reverse()[0] + MINIMAL_MEMORY_RANGE_OFFSET_CB;
 
     if (plotZoomRangeEnd < plotZoomRangeStart) {
         plotZoomRangeStart = 0;
@@ -277,14 +292,34 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     DRAM
                                 </Button>
                             </ButtonGroup>
-
+                        </div>
+                        <div className='zoom-controls'>
                             <Switch
                                 label='Buffer zoom'
                                 checked={zoomedInViewMainMemory}
-                                onChange={() => setZoomedInViewMainMemory(!zoomedInViewMainMemory)}
+                                onChange={() => {
+                                    if (!zoomedInViewMainMemory) {
+                                        setZoomedInViewCBMemory(false);
+                                    }
+                                    setZoomedInViewMainMemory(!zoomedInViewMainMemory);
+                                }}
+                            />
+                            {/* TODO: there is a known issue if we come back to an op with no device operations this contrl will be disabled but set to zoom
+                              there is a workaround but it needs eventual fixing
+                              Also details.deviceOperations is an incorrect check, we should check if there are any CBs in the device operations
+                              */}
+                            <Switch
+                                label='Circular Buffer zoom'
+                                checked={zoomedInViewCBMemory}
+                                disabled={details.deviceOperations.length === 0}
+                                onChange={() => {
+                                    setZoomedInViewCBMemory(!zoomedInViewCBMemory);
+                                    if (!zoomedInViewCBMemory) {
+                                        setZoomedInViewMainMemory(false);
+                                    }
+                                }}
                             />
                         </div>
-
                         {/* TODO: prep for next feature */}
                         {/* <Switch */}
                         {/*    label='CBs zoom' */}
@@ -312,7 +347,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     configuration={L1RenderConfiguration}
                                     ref={(el) => assignRef(el, 0)}
                                 />
-
+                                {/* TODO: we shoudl provide plotZoomRangeStart and plotZoomRangeEnd as a toople */}
                                 <ForwardedMemoryPlotRenderer
                                     title='Current Summarized L1 Report'
                                     className={classNames('l1-memory-renderer', {
@@ -320,6 +355,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     })}
                                     plotZoomRangeStart={plotZoomRangeStart}
                                     plotZoomRangeEnd={plotZoomRangeEnd}
+                                    isZoomedInCb={zoomedInViewCBMemory}
+                                    cbZoomRange={[cbZoomStart, cbZoomEnd]}
                                     chartDataList={[cbChartData, chartData, l1Small.condensedChart]}
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={memorySizeL1}
@@ -602,4 +639,3 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 };
 
 export default OperationDetailsComponent;
-

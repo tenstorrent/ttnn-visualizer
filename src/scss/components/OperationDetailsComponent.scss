@@ -19,10 +19,15 @@
         display: flex;
         gap: 10px;
         align-items: center;
+        margin-bottom: 20px;
 
         .bp5-control {
             margin-bottom: 0;
         }
+    }
+
+    .zoom-controls {
+        margin-bottom: 0;
     }
 
     .dram-memory-renderer,
