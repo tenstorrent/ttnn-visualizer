@@ -3,15 +3,10 @@ import logging
 import shutil
 from http import HTTPStatus
 from pathlib import Path
-from backend.database import create_update_database
+from ttnn_visualizer.database import create_update_database
 from flask import Blueprint, Response, current_app, request
 
-from ttnn_visualizer.models import (
-    Device,
-    Operation,
-    Tensor,
-    Buffer
-)
+from ttnn_visualizer.models import Device, Operation, Tensor, Buffer
 from ttnn_visualizer.remotes import (
     RemoteConnection,
     RemoteFolder,
@@ -168,7 +163,7 @@ def create_upload_files():
         f"Copying file tree from f{report_directory} to {active_data_directory}"
     )
     shutil.copytree(report_directory, active_data_directory, dirs_exist_ok=True)
-    create_update_database(Path(active_data_directory / 'db.sqlite'))
+    create_update_database(Path(active_data_directory / "db.sqlite"))
     return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
 
 
@@ -232,5 +227,5 @@ def use_remote_folder():
             response=f"{connection_directory} does not exist.",
         )
     shutil.copytree(connection_directory, active_data_directory, dirs_exist_ok=True)
-    create_update_database(Path(active_data_directory / 'db.sqlite'))
+    create_update_database(Path(active_data_directory / "db.sqlite"))
     return Response(status=HTTPStatus.OK)
