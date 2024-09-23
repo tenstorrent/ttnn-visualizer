@@ -1,6 +1,7 @@
 import json
 import logging
 import shutil
+from curses.ascii import isdigit
 from http import HTTPStatus
 from pathlib import Path
 from backend.database import create_update_database
@@ -126,10 +127,23 @@ def get_tensor(tensor_id):
 
 @api.route("/operation-buffers", methods=["GET"])
 def get_operation_buffers():
-    buffers = [{'operation_id': o.operation_id, 'buffers': o.buffers} for o in Operation.query.all()]
+    buffer_type = request.args.get("buffer_type", None)
+    if buffer_type and isdigit(buffer_type):
+        buffer_type = int(buffer_type)
+    else:
+        buffer_type = None
+
+    buffers = [
+        {"operation_id": o.operation_id, "buffers": o.buffers}
+        for o in Operation.query.all()
+    ]
     for buffer in buffers:
-        buffer_data = buffer.get('buffers')
-        buffer.update({'buffers': BufferSchema().dump(buffer_data, many=True)})
+        buffer_data = buffer.get("buffers")
+        if buffer_type:
+            buffer_data = list(
+                filter(lambda b: b.buffer_type == int(buffer_type), buffer_data)
+            )
+        buffer.update({"buffers": BufferSchema().dump(buffer_data, many=True)})
     return buffers
 
 
@@ -172,7 +186,7 @@ def create_upload_files():
         f"Copying file tree from f{report_directory} to {active_data_directory}"
     )
     shutil.copytree(report_directory, active_data_directory, dirs_exist_ok=True)
-    create_update_database(Path(active_data_directory / 'db.sqlite'))
+    create_update_database(Path(active_data_directory / "db.sqlite"))
     return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
 
 
@@ -236,5 +250,5 @@ def use_remote_folder():
             response=f"{connection_directory} does not exist.",
         )
     shutil.copytree(connection_directory, active_data_directory, dirs_exist_ok=True)
-    create_update_database(Path(active_data_directory / 'db.sqlite'))
+    create_update_database(Path(active_data_directory / "db.sqlite"))
     return Response(status=HTTPStatus.OK)
