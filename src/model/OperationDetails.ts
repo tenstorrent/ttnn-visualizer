@@ -223,11 +223,11 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
         return {
             producers: tensor.producers.map((op, index) => ({
                 id: op,
-                name: tensor.producerNames[index],
+                name: tensor?.producerNames[index],
             })),
             consumers: tensor.consumers.map((op, index) => ({
                 id: op,
-                name: tensor.consumerNames[index],
+                name: tensor?.consumerNames[index],
             })),
         };
     }
