@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -e
+
+# Always keep this here as it ensures your latest built assets make their way
+# into your volume persisted public directory.
+cp -r /public /app/backend/ttnn_visualizer/static
+
+echo "Running as user: $(whoami)"
+echo "Keys present in agent: $(ssh-add -L)"
+echo "Current env $(env)"
+exec "$@"
