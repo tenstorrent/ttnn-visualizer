@@ -1,3 +1,2 @@
 graft backend/ttnn_visualizer/static
-include backend/ttnn_visualizer/empty.sqlite
 prune backend/ttnn_visualizer/data
