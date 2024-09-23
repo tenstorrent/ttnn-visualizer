@@ -40,9 +40,3 @@ exclude = '''
 )/
 '''
 
-[flake8]
-ignore ="E203, E266, E501, W503, F403, F401"
-exclude = "tests/*"
-max-complexity = 10
-max-line-length = 88
-select = "B,C,E,F,W,T4,B9"
