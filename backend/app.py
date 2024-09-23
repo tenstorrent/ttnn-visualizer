@@ -23,7 +23,7 @@ def create_app(settings_override=None):
     :return: Flask app
     """
 
-    dotenv_path = Path(__file__).parent.parent.joinpath('.env')
+    dotenv_path = Path(__file__).parent.parent.joinpath(".env")
     if dotenv_path.exists():
         load_dotenv(str(dotenv_path))
 
@@ -31,10 +31,10 @@ def create_app(settings_override=None):
     flask_env = environ.get("FLASK_ENV", "development")
 
     app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
-   
+
     app.config.from_object(getattr(settings, flask_env))
 
-    logging.basicConfig(level=app.config.get('LOG_LEVEL', 'INFO'))
+    logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
 
     app.logger.info(f"Starting TTNN visualizer in {flask_env} mode")
 
@@ -59,6 +59,7 @@ def create_app(settings_override=None):
     extensions(app)
 
     if flask_env == "production":
+
         @app.route("/", defaults={"path": ""})
         @app.route("/<path:path>")
         def catch_all(path):

@@ -17,8 +17,6 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 from backend.extensions import db
 
 
-
-
 operations = Table(
     "operations",
     db.metadata,
@@ -74,7 +72,7 @@ stack_traces = Table(
     db.metadata,
     Column("operation_id", db.ForeignKey("operations.operation_id")),
     Column("stack_trace", Text),
-    PrimaryKeyConstraint("operation_id", "stack_trace")
+    PrimaryKeyConstraint("operation_id", "stack_trace"),
 )
 
 buffers = Table(
@@ -115,12 +113,12 @@ device_operations = Table(
     "captured_graph",
     db.metadata,
     Column("operation_id", db.ForeignKey("operations.operation_id")),
-    Column("captured_graph", Text,),
-    PrimaryKeyConstraint("operation_id", "captured_graph")
+    Column(
+        "captured_graph",
+        Text,
+    ),
+    PrimaryKeyConstraint("operation_id", "captured_graph"),
 )
-
-
-
 
 
 class Device(db.Model):
@@ -130,7 +128,9 @@ class Device(db.Model):
 class Tensor(db.Model):
     __table__ = tensors
     input_tensors = relationship("InputTensor", back_populates="tensor", lazy="joined")
-    output_tensors = relationship("OutputTensor", back_populates="tensor", lazy="joined")
+    output_tensors = relationship(
+        "OutputTensor", back_populates="tensor", lazy="joined"
+    )
 
     @property
     def producers(self):
@@ -148,7 +148,9 @@ class Buffer(db.Model):
 
 class InputTensor(db.Model):
     __table__ = input_tensors
-    tensor = db.relationship("Tensor", back_populates="input_tensors", innerjoin=True, lazy="joined")
+    tensor = db.relationship(
+        "Tensor", back_populates="input_tensors", innerjoin=True, lazy="joined"
+    )
 
 
 class StackTrace(db.Model):
@@ -157,7 +159,9 @@ class StackTrace(db.Model):
 
 class OutputTensor(db.Model):
     __table__ = output_tensors
-    tensor = db.relationship("Tensor", back_populates="output_tensors", innerjoin=True, lazy="joined")
+    tensor = db.relationship(
+        "Tensor", back_populates="output_tensors", innerjoin=True, lazy="joined"
+    )
 
 
 class Operation(db.Model):
