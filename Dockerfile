@@ -63,7 +63,7 @@ RUN chmod 0755 bin/* && bin/pip3-install
 COPY --chown=python:python ./backend /app/backend
 
 # Copy the assets rom the frontend build to the public folder in app container
-COPY --chown=python:python --from=assets /app/assets/static /public
+COPY --chown=python:python --from=assets /app/assets/backend/ttnn_visualizer/static /public
 
 # Create directory for user data (reports/etc)
 RUN mkdir -p /app/backend/ttnn_visualizer/data && chmod a+rw /app/backend/ttnn_visualizer/data
