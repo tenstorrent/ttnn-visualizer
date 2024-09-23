@@ -38,6 +38,7 @@ id_ed*
 # Backend
 backend/ttnn_visualizer/data
 backend/ttnn_visualizer/static
+/backend/data/*
 backend/*egg-info
 build
 .env
