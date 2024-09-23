@@ -13,6 +13,8 @@ export enum BufferType {
     TRACE,
 }
 
+export type BufferTypeKeys = keyof typeof BufferType;
+
 export const BufferTypeLabel: Record<BufferType, string> = {
     [BufferType.DRAM]: 'DRAM',
     [BufferType.L1]: 'L1',

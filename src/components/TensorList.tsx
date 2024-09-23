@@ -16,7 +16,7 @@ import { useOperationsList, useTensors } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { Tensor } from '../model/Graph';
 import { OperationDescription } from '../model/APIData';
-import { BufferType, BufferTypeLabel } from '../model/BufferType';
+import { BufferType, BufferTypeKeys, BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
 import BufferTable from './BufferTable';
 import { expandedTensorsAtom } from '../store/app';
@@ -28,8 +28,6 @@ import 'styles/components/TensorList.scss';
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
-
-type BufferTypeKeys = keyof typeof BufferType;
 
 const TensorList = () => {
     const location = useLocation();
@@ -219,7 +217,7 @@ const TensorList = () => {
                     </Tooltip>
 
                     <MultiSelect
-                        items={getBufferTypeFilterOptions(fetchedTensors)}
+                        items={fetchedTensors ? getBufferTypeFilterOptions(fetchedTensors) : []}
                         placeholder='Buffer type filter...'
                         // Type requires this but it seems pointless
                         onItemSelect={(selectedType) => updateBufferTypeFilter(selectedType)}
@@ -348,12 +346,14 @@ function getDeallocation(tensor: Tensor, operations: OperationDescription[]) {
     return matchingInputs.map((x) => x.id).toString() || '';
 }
 
-function getBufferTypeFilterOptions(tensors?: Tensor[]) {
-    const bufferTypes =
-        tensors?.map((tensor) => (tensor.buffer_type !== null ? BufferType[tensor.buffer_type] : '')) || [];
-    const uniqueBufferTypes = Array.from(new Set(bufferTypes.filter((type) => type)));
-
-    return uniqueBufferTypes as BufferTypeKeys[];
+function getBufferTypeFilterOptions(tensors: Tensor[]) {
+    return [
+        ...new Set(
+            tensors
+                ?.map((tensor) => (tensor.buffer_type !== null ? BufferType[tensor.buffer_type] : ''))
+                .filter(Boolean) ?? [],
+        ),
+    ] as BufferTypeKeys[];
 }
 
 const BufferTypeItem = (
