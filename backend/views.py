@@ -1,7 +1,6 @@
 import json
 import logging
 import shutil
-from curses.ascii import isdigit
 from http import HTTPStatus
 from pathlib import Path
 from backend.database import create_update_database
@@ -127,8 +126,8 @@ def get_tensor(tensor_id):
 
 @api.route("/operation-buffers", methods=["GET"])
 def get_operation_buffers():
-    buffer_type = request.args.get("buffer_type", None)
-    if buffer_type and isdigit(buffer_type):
+    buffer_type = request.args.get("buffer_type", "")
+    if buffer_type and str.isdigit(buffer_type):
         buffer_type = int(buffer_type)
     else:
         buffer_type = None
