@@ -17,3 +17,32 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = [ "backend",]
+
+[tool.black]
+line-length = 88
+target-version = ['py37']
+include = 'backend/\.pyi?$'
+exclude = '''
+/(
+    \.git
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+
+    # The following are specific to Black, you probably don't want those.
+    | blib2to3
+    | tests/data
+)/
+'''
+
+[flake8]
+ignore ="E203, E266, E501, W503, F403, F401"
+exclude = "tests/*"
+max-complexity = 10
+max-line-length = 88
+select = "B,C,E,F,W,T4,B9"
