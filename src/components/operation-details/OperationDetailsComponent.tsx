@@ -39,7 +39,7 @@ interface OperationDetailsProps {
     operationId: number;
 }
 
-const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
+const MEMORY_RANGE_OFFSET = 0.01;
 
 const MINIMAL_DRAM_MEMORY_RANGE_OFFSET = 0.9998;
 
@@ -113,33 +113,29 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     }
 
     const { memorySizeL1 } = details;
-    const MINIMAL_MEMORY_RANGE_OFFSET_CB = memorySizeL1 * 0.001;
 
-    let plotZoomRangeStart =
-        Math.min(memory[0]?.address || memorySizeL1, previousMemory[0]?.address || memorySizeL1) *
-        MINIMAL_MEMORY_RANGE_OFFSET;
+    let plotZoomRangeStart = Math.min(memory[0]?.address || memorySizeL1, previousMemory[0]?.address || memorySizeL1);
 
-    let plotZoomRangeEnd =
-        Math.max(
-            memory.length > 0 ? memory[memory.length - 1].address + memory[memory.length - 1].size : 0,
-            previousMemory.length > 0
-                ? previousMemory[previousMemory.length - 1].address + previousMemory[previousMemory.length - 1].size
-                : 0,
-        ) *
-        (1 / MINIMAL_MEMORY_RANGE_OFFSET);
+    let plotZoomRangeEnd = Math.max(
+        memory.length > 0 ? memory[memory.length - 1].address + memory[memory.length - 1].size : 0,
+        previousMemory.length > 0
+            ? previousMemory[previousMemory.length - 1].address + previousMemory[previousMemory.length - 1].size
+            : 0,
+    );
 
-    const cbZoomStart =
-        details.deviceOperations
-            .map((op) => op.cbList.map((cb) => cb.address))
-            .flat()
-            .sort((a, b) => a - b)[0] - MINIMAL_MEMORY_RANGE_OFFSET_CB;
+    const cbZoomStart = details.deviceOperations
+        .map((op) => op.cbList.map((cb) => cb.address))
+        .flat()
+        .sort((a, b) => a - b)[0];
 
-    const cbZoomEnd =
-        details.deviceOperations
-            .map((op) => op.cbList.map((cd) => cd.address + cd.size))
-            .flat()
-            .sort((a, b) => a - b)
-            .reverse()[0] + MINIMAL_MEMORY_RANGE_OFFSET_CB;
+    const cbZoomEnd = details.deviceOperations
+        .map((op) => op.cbList.map((cd) => cd.address + cd.size))
+        .flat()
+        .sort((a, b) => a - b)
+        .reverse()[0];
+    const MINIMAL_MEMORY_RANGE_OFFSET_CB = (cbZoomEnd - cbZoomStart) * MEMORY_RANGE_OFFSET;
+
+    const MINIMAL_MEMORY_RANGE_OFFSET = (plotZoomRangeEnd - plotZoomRangeStart) * MEMORY_RANGE_OFFSET;
 
     if (plotZoomRangeEnd < plotZoomRangeStart) {
         plotZoomRangeStart = 0;
@@ -174,21 +170,18 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     };
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        // this may or may not work correctly. need to doublecheck tensor selection for DRAM and DRAM delta
         const { address } = event.points[0].data.memoryData;
         selectTensorByAddress(address);
-        setSelectedTensorAddress(address); // TODO: why is there a second setSelectedTensorAddress here?
     };
 
     const onDramBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        // this may or may not work correctly. need to doublecheck tensor selection for DRAM and DRAM delta
         const { address } = event.points[0].data.memoryData;
         selectTensorByAddress(address);
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address } = event.points[0].data.memoryData;
-        // TODO: we now have a tensor in event.points[0].data.memoryData.tensor Maybe we shoudl just use that?
+        // TODO: we now have a tensor in event.points[0].data.memoryData.tensor Maybe we should just use that?
         selectTensorByAddress(address);
     };
 
@@ -320,12 +313,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 }}
                             />
                         </div>
-                        {/* TODO: prep for next feature */}
-                        {/* <Switch */}
-                        {/*    label='CBs zoom' */}
-                        {/*    checked={zoomedInViewCBMemory} */}
-                        {/*    onChange={() => setZoomedInViewCBMemory(!zoomedInViewCBMemory)} */}
-                        {/* /> */}
 
                         {!isL1Active && !isDramActive && (
                             <p className='no-buffer-type-selected'>No buffer types selected.</p>
@@ -339,8 +326,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     className={classNames('l1-memory-renderer', {
                                         'empty-plot': previousChartData.length === 0,
                                     })}
-                                    plotZoomRangeStart={plotZoomRangeStart}
-                                    plotZoomRangeEnd={plotZoomRangeEnd}
+                                    plotZoomRange={[
+                                        plotZoomRangeStart - MINIMAL_MEMORY_RANGE_OFFSET,
+                                        plotZoomRangeEnd + MINIMAL_MEMORY_RANGE_OFFSET,
+                                    ]}
                                     chartDataList={[previousChartData]}
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={memorySizeL1}
@@ -353,11 +342,20 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     className={classNames('l1-memory-renderer', {
                                         'empty-plot': chartData.length === 0,
                                     })}
-                                    plotZoomRangeStart={plotZoomRangeStart}
-                                    plotZoomRangeEnd={plotZoomRangeEnd}
+                                    plotZoomRange={[
+                                        plotZoomRangeStart - MINIMAL_MEMORY_RANGE_OFFSET,
+                                        plotZoomRangeEnd + MINIMAL_MEMORY_RANGE_OFFSET,
+                                    ]}
                                     isZoomedInCb={zoomedInViewCBMemory}
-                                    cbZoomRange={[cbZoomStart, cbZoomEnd]}
-                                    chartDataList={[cbChartData, chartData, l1Small.condensedChart]}
+                                    cbZoomRange={[
+                                        cbZoomStart - MINIMAL_MEMORY_RANGE_OFFSET_CB,
+                                        cbZoomEnd + MINIMAL_MEMORY_RANGE_OFFSET_CB,
+                                    ]}
+                                    chartDataList={[
+                                        cbChartData,
+                                        chartData,
+                                        l1Small.memory.length > 0 ? l1Small.condensedChart : [],
+                                    ]}
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={memorySizeL1}
                                     onBufferClick={onBufferClick}
@@ -377,8 +375,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         'empty-plot': previosDramData.length === 0,
                                         'identical-plot': dramHasntChanged,
                                     })}
-                                    plotZoomRangeStart={dramPlotZoomRangeStart}
-                                    plotZoomRangeEnd={dramPlotZoomRangeEnd}
+                                    plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
                                     chartDataList={[previosDramData]}
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={DRAM_MEMORY_SIZE}
@@ -391,8 +388,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     className={classNames('dram-memory-renderer', {
                                         'empty-plot': dramData.length === 0,
                                     })}
-                                    plotZoomRangeStart={dramPlotZoomRangeStart}
-                                    plotZoomRangeEnd={dramPlotZoomRangeEnd}
+                                    plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
                                     chartDataList={[dramData]}
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={DRAM_MEMORY_SIZE}
@@ -406,8 +402,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     className={classNames('dram-memory-renderer', {
                                         'empty-plot': dramDeltaObject.chartData.length === 0,
                                     })}
-                                    plotZoomRangeStart={dramPlotZoomRangeStart}
-                                    plotZoomRangeEnd={dramPlotZoomRangeEnd}
+                                    plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
                                     chartDataList={[dramDeltaObject.chartData]}
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={DRAM_MEMORY_SIZE}
