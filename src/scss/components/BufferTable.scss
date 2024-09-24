@@ -8,6 +8,10 @@
 $row-background: $tt-grey-2;
 
 .buffer-table {
+    th {
+        width: 160px;
+    }
+
     .deallocation-icon {
         margin-left: 5px;
     }

@@ -2,16 +2,16 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import 'styles/components/BufferTable.scss';
 import { Icon, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { Tensor } from '../model/Graph';
 import { OperationDescription, TensorData } from '../model/APIData';
-import { useNextBuffer } from '../hooks/useAPI';
 import { toHex } from '../functions/math';
 import ROUTES from '../definitions/routes';
+import { useNextBuffer } from '../hooks/useAPI';
+import 'styles/components/BufferTable.scss';
 
 interface BufferTableProps {
     tensor: TensorData;
@@ -31,7 +31,7 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
             <tbody>
                 <tr>
                     <th>device_id</th>
-                    <td>{tensor.device_id}</td>
+                    <td>{tensor.device_id ?? 'n/a'}</td>
                 </tr>
 
                 <tr>
@@ -46,7 +46,7 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
 
                 <tr>
                     <th>memory_config</th>
-                    <td className='break-word'>{tensor.memory_config}</td>
+                    <td className='break-word'>{tensor.memory_config ?? 'n/a'}</td>
                 </tr>
 
                 <tr>
@@ -99,27 +99,24 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
                     </td>
                 </tr>
 
-                {isLoading ||
-                    (address && (
-                        <tr>
-                            <th>Next allocation</th>
-                            <td>
-                                {isLoading ? 'Loading...' : undefined}
-                                {buffer?.next_usage && address && !isLoading ? (
-                                    <span>
-                                        {toHex(address)} next allocated in{' '}
-                                        <Link to={`${ROUTES.OPERATIONS}/${buffer.operation_id}`}>
-                                            {buffer.operation_id}{' '}
-                                            {operations.find((operation) => operation.id === buffer.operation_id)?.name}
-                                        </Link>{' '}
-                                        (+{buffer.next_usage} operations)
-                                    </span>
-                                ) : (
-                                    'No subsequent buffer found at this address'
-                                )}
-                            </td>
-                        </tr>
-                    ))}
+                <tr>
+                    <th>Next allocation</th>
+                    <td>
+                        {isLoading ? 'Loading...' : undefined}
+                        {buffer?.next_usage && address && !isLoading ? (
+                            <span>
+                                {toHex(address)} next allocated in{' '}
+                                <Link to={`${ROUTES.OPERATIONS}/${buffer.operation_id}`}>
+                                    {buffer.operation_id}{' '}
+                                    {operations.find((operation) => operation.id === buffer.operation_id)?.name}
+                                </Link>{' '}
+                                (+{buffer.next_usage} operations)
+                            </span>
+                        ) : (
+                            'No subsequent buffer found at this address'
+                        )}
+                    </td>
+                </tr>
             </tbody>
         </table>
     );
