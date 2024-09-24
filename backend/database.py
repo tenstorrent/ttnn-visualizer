@@ -1,4 +1,3 @@
-import sqlite3
 from logging import getLogger
 
 from sqlalchemy import text
@@ -8,8 +7,8 @@ logger = getLogger(__name__)
 
 def create_update_database(session):
     """
-    Creates or updates database with all tables
-    :param sqlite_db_path Path to target SQLite database
+    Updates database schema to ensure no missing tables
+    :param session: Current DB session
     :return:
     """
     session.execute(
