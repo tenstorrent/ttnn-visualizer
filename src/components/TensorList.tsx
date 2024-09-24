@@ -16,7 +16,7 @@ import { useOperationsList, useTensors } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { Tensor } from '../model/Graph';
 import { OperationDescription } from '../model/APIData';
-import { BufferType, BufferTypeKeys, BufferTypeLabel } from '../model/BufferType';
+import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
 import BufferTable from './BufferTable';
 import { expandedTensorsAtom } from '../store/app';
@@ -42,7 +42,7 @@ const TensorList = () => {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [filterMemoryLeaks, setFilterMemoryLeaks] = useState(false);
-    const [bufferTypeFilters, setBufferTypeFilters] = useState<BufferTypeKeys[]>([]);
+    const [bufferTypeFilters, setBufferTypeFilters] = useState<BufferType[]>([]);
 
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
 
@@ -87,8 +87,8 @@ const TensorList = () => {
         setFilterMemoryLeaks(!filterMemoryLeaks);
     };
 
-    const updateBufferTypeFilter = (bufferType: BufferTypeKeys) => {
-        setBufferTypeFilters((currentFilters: BufferTypeKeys[]) => {
+    const updateBufferTypeFilter = (bufferType: BufferType) => {
+        setBufferTypeFilters((currentFilters: BufferType[]) => {
             if (currentFilters.includes(bufferType)) {
                 return currentFilters.filter((item) => item !== bufferType);
             }
@@ -128,9 +128,7 @@ const TensorList = () => {
 
             if (bufferTypeFilters?.length > 0) {
                 tensors = tensors.filter(
-                    (tensor) =>
-                        tensor?.buffer_type !== null &&
-                        bufferTypeFilters.includes(BufferType[tensor.buffer_type] as BufferTypeKeys),
+                    (tensor) => tensor?.buffer_type !== null && bufferTypeFilters.includes(tensor.buffer_type),
                 );
             }
 
@@ -222,13 +220,13 @@ const TensorList = () => {
                         // Type requires this but it seems pointless
                         onItemSelect={(selectedType) => updateBufferTypeFilter(selectedType)}
                         selectedItems={bufferTypeFilters}
-                        itemRenderer={(value: BufferTypeKeys, _props) =>
+                        itemRenderer={(value: BufferType, _props) =>
                             BufferTypeItem(value, updateBufferTypeFilter, bufferTypeFilters)
                         }
-                        tagRenderer={(buffer) => buffer}
+                        tagRenderer={(buffer) => BufferTypeLabel[buffer]}
                         onRemove={(type) => updateBufferTypeFilter(type)}
                         itemPredicate={(query, bufferType) =>
-                            !query || bufferType.toLowerCase().includes(query.toLowerCase())
+                            !query || BufferTypeLabel[bufferType].toLowerCase().includes(query.toLowerCase())
                         }
                         noResults={
                             <MenuItem
@@ -350,22 +348,18 @@ function getBufferTypeFilterOptions(tensors: Tensor[]) {
     return [
         ...new Set(
             tensors
-                ?.map((tensor) => (tensor.buffer_type !== null ? BufferType[tensor.buffer_type] : ''))
-                .filter(Boolean) ?? [],
+                ?.map((tensor) => (tensor.buffer_type !== null ? tensor.buffer_type : ''))
+                .filter((value) => Number.isInteger(value)) ?? [],
         ),
-    ] as BufferTypeKeys[];
+    ] as BufferType[];
 }
 
-const BufferTypeItem = (
-    type: BufferTypeKeys,
-    onClick: (type: BufferTypeKeys) => void,
-    selectedBufferTypes: BufferTypeKeys[],
-) => {
+const BufferTypeItem = (type: BufferType, onClick: (type: BufferType) => void, selectedBufferTypes: BufferType[]) => {
     return (
         <li key={type}>
             <Checkbox
                 className='buffer-type-checkbox'
-                label={type}
+                label={BufferTypeLabel[type]}
                 checked={selectedBufferTypes.includes(type)}
                 onClick={() => onClick(type)}
             />
