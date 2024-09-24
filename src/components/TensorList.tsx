@@ -18,9 +18,9 @@ import { Tensor } from '../model/Graph';
 import { OperationDescription, TensorData } from '../model/APIData';
 import { BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
-import BufferTable from './BufferTable';
 import { expandedTensorsAtom } from '../store/app';
 import ListItem from './ListItem';
+import BufferDetails from './BufferDetails';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -256,7 +256,7 @@ const TensorList = () => {
                                             }
                                         >
                                             <div className='arguments-wrapper'>
-                                                <BufferTable
+                                                <BufferDetails
                                                     tensor={tensor}
                                                     operations={operations}
                                                     queryKey={virtualRow.index.toString()}
