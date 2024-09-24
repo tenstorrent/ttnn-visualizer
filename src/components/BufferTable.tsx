@@ -20,6 +20,22 @@ interface BufferTableProps {
     className?: string;
 }
 
+interface ShardSpec {
+    grid: string;
+    shape: [number, number];
+    orientation: string;
+    halo: number;
+}
+
+const TH_LABELS = {
+    shard_spec: 'ShardSpec',
+    memory_layout: 'MemoryLayout',
+    grid: 'CoreRangeSet',
+    shape: 'Shape',
+    orientation: 'ShardOrientation',
+    halo: 'Halo',
+};
+
 function BufferTable({ tensor, operations, queryKey, className }: BufferTableProps) {
     const { address, consumers, dtype, layout, shape } = tensor;
     const lastOperation = tensor.consumers[tensor.consumers.length - 1];
@@ -30,27 +46,51 @@ function BufferTable({ tensor, operations, queryKey, className }: BufferTablePro
         <table className={classNames('buffer-table arguments-table', className)}>
             <tbody>
                 <tr>
-                    <th>device_id</th>
+                    <th>Device Id</th>
                     <td>{tensor.device_id ?? 'n/a'}</td>
                 </tr>
 
                 <tr>
-                    <th>dtype</th>
+                    <th>DataType</th>
                     <td>{dtype}</td>
                 </tr>
 
                 <tr>
-                    <th>layout</th>
+                    <th>Layout</th>
                     <td>{layout}</td>
                 </tr>
 
-                <tr>
-                    <th>memory_config</th>
-                    <td className='break-word'>{tensor.memory_config ?? 'n/a'}</td>
-                </tr>
+                {tensor?.memory_config
+                    ? Object.entries(parseMemoryConfig(tensor.memory_config)).map(([key, value]) => (
+                          <tr key={key}>
+                              {key === 'shard_spec' && value && typeof value !== 'string' ? (
+                                  <>
+                                      <th>{getThLabel(key)}</th>
+                                      <td>
+                                          <table>
+                                              <tbody>
+                                                  {Object.entries(value as ShardSpec).map(([innerKey, innerValue]) => (
+                                                      <tr key={innerKey}>
+                                                          <th>{getThLabel(innerKey as keyof typeof TH_LABELS)}</th>
+                                                          <td>{innerValue}</td>
+                                                      </tr>
+                                                  ))}
+                                              </tbody>
+                                          </table>
+                                      </td>
+                                  </>
+                              ) : (
+                                  <>
+                                      <th>{getThLabel(key as keyof typeof TH_LABELS)}</th>
+                                      <td>{value as string}</td>
+                                  </>
+                              )}
+                          </tr>
+                      ))
+                    : null}
 
                 <tr>
-                    <th>shape</th>
+                    <th>Shape</th>
                     <td>{shape}</td>
                 </tr>
 
@@ -130,6 +170,48 @@ function getDeallocation(tensor: Tensor, operations: OperationDescription[]) {
     );
 
     return matchingInputs.map((x) => x.id).toString();
+}
+
+function parseMemoryConfig(string: string) {
+    const regex = /MemoryConfig\((.*)\)$/;
+    const match = string.match(regex);
+
+    if (match) {
+        const capturedString = match[1];
+
+        const memoryLayoutPattern = /memory_layout=([A-Za-z_:]+)/;
+        const shardSpecPattern =
+            /shard_spec=ShardSpec\(grid=\{(\[.*?\])\},shape=\{(\d+),\s*(\d+)\},orientation=ShardOrientation::([A-Z_]+),halo=(\d+)\)/;
+
+        // Extracting the values using regular expressions
+        const memoryLayoutMatch = capturedString.match(memoryLayoutPattern);
+        const shardSpecMatch = capturedString.match(shardSpecPattern);
+
+        // Assign values if the matches are found
+        const memoryLayout = memoryLayoutMatch ? memoryLayoutMatch[1] : null;
+        const shardSpec = shardSpecMatch
+            ? {
+                  grid: shardSpecMatch[1],
+                  shape: [parseInt(shardSpecMatch[2], 10), parseInt(shardSpecMatch[3], 10)],
+                  orientation: shardSpecMatch[4],
+                  halo: parseInt(shardSpecMatch[5], 10),
+              }
+            : null;
+
+        // console.log('shardSpec', shardSpecMatch);
+
+        // Return the result as a JSON object
+        return {
+            memory_layout: memoryLayout,
+            shard_spec: shardSpec || 'std::nullopt',
+        };
+    }
+
+    return string;
+}
+
+function getThLabel(key: keyof typeof TH_LABELS) {
+    return TH_LABELS[key];
 }
 
 export default BufferTable;
