@@ -1,5 +1,7 @@
 import React from 'react';
 import classNames from 'classnames';
+import { Icon, Tooltip } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import { FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor } from '../../functions/colorGenerator';
@@ -20,6 +22,16 @@ export const MemoryLegendElement: React.FC<{
     onLegendClick,
 }) => {
     const Component = !chunk.empty ? 'button' : 'div';
+    const emptyChunkLabel = (
+        <>
+            Empty space{' '}
+            {chunk.largestEmpty && (
+                <Tooltip content='Largest empty memory space'>
+                    <Icon icon={IconNames.TICK} />
+                </Tooltip>
+            )}
+        </>
+    );
     return (
         <Component
             key={chunk.address}
@@ -46,7 +58,7 @@ export const MemoryLegendElement: React.FC<{
                     {!chunk.empty && operationDetails.getTensorForAddress(chunk.address) && (
                         <>Tensor {operationDetails.getTensorForAddress(chunk.address)?.id}</>
                     )}
-                    {chunk.empty && 'Empty space'}
+                    {chunk.empty && emptyChunkLabel}
                 </div>
             </div>
         </Component>
