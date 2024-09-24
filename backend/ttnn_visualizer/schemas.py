@@ -2,8 +2,8 @@ import json
 
 from marshmallow import fields, validates
 
-from backend.extensions import ma
-from backend.models import (
+from ttnn_visualizer.extensions import ma
+from ttnn_visualizer.models import (
     Tensor,
     OperationArgument,
     Operation,
