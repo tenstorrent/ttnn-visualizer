@@ -162,8 +162,9 @@ def create_upload_files():
     logger.info(
         f"Copying file tree from f{report_directory} to {active_data_directory}"
     )
-    create_update_database(Path(report_directory / "db.sqlite"))
     shutil.copytree(report_directory, active_data_directory, dirs_exist_ok=True)
+    db = current_app.extensions["sqlalchemy"]
+    create_update_database(db.session)
     return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
 
 
@@ -226,6 +227,7 @@ def use_remote_folder():
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
             response=f"{connection_directory} does not exist.",
         )
-    create_update_database(Path(connection_directory / "db.sqlite"))
     shutil.copytree(connection_directory, active_data_directory, dirs_exist_ok=True)
+    db = current_app.extensions["sqlalchemy"]
+    create_update_database(db.session)
     return Response(status=HTTPStatus.OK)

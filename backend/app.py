@@ -52,7 +52,6 @@ def create_app(settings_override=None):
 
     active_db_path = Path(ACTIVE_DATA_DIRECTORY, "db.sqlite")
     active_db_path.parent.mkdir(exist_ok=True, parents=True)
-    create_update_database(active_db_path)
 
     extensions(app)
 
@@ -79,6 +78,10 @@ def extensions(app: flask.Flask):
     db.init_app(app)
     ma.init_app(app)
     flask_static_digest.init_app(app)
+
+    with app.app_context():
+        db = app.extensions["sqlalchemy"]
+        create_update_database(db.session)
 
     # For automatically reflecting table data
     # with app.app_context():
