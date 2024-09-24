@@ -8,7 +8,7 @@ from backend.utils import str_to_bool
 from dotenv import load_dotenv
 
 # Load dotenv from root directory
-dotenv_path = Path(__file__).parent.parent.parent.joinpath('.env')
+dotenv_path = Path(__file__).parent.parent.parent.joinpath(".env")
 if dotenv_path.exists():
     load_dotenv(str(dotenv_path))
 

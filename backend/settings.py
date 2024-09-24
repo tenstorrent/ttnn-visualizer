@@ -10,7 +10,6 @@ class Config(object):
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
     ACTIVE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("active")
     ACTIVE_DB_PATH = Path(ACTIVE_DATA_DIRECTORY, "db.sqlite")
-    EMPTY_DB_PATH = Path(__file__).parent.resolve().joinpath("empty.sqlite")
     SEND_FILE_MAX_AGE_DEFAULT = 0
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False
