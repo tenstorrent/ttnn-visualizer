@@ -1,8 +1,6 @@
 name: Build wheel
 
 on:
-    release:
-        types: [ 'created', 'edited', 'unpublished' ]
     push:
         branches:
             - main
@@ -42,18 +40,3 @@ jobs:
                 with:
                     name: ttnn_visualizer_${{ github.sha }}
                     path: ./dist/*.whl
-
-    upload-release:
-        runs-on: ubuntu-20.04
-        if: github.event.type == 'release'
-        needs: build_wheel
-        steps:
-            -   name: '📦 Upload Release'
-                run: |
-                    cd ${{github.workspace}}
-                    ls -l
-                    echo ${{github.event.release}}
-                    # gh release upload ${{github.event.release.tag_name}} ttnn_visualizer_${{github.sha}}
-                env:
-                    GITHUB_TOKEN: ${{ github.TOKEN }}
-                shell: bash
