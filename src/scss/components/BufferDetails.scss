@@ -20,3 +20,13 @@ $row-background: $tt-grey-2;
         word-break: break-word;
     }
 }
+
+.analysis-table {
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    background-color: $tt-grey-4;
+
+    th, td {
+        padding: 5px;
+    }
+}

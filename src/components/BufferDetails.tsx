@@ -44,12 +44,11 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
 
     return (
         <>
-            <table>
+            <table className='analysis-table'>
                 <tbody>
                     <tr>
                         <th>Last used</th>
                         <td>
-                            Last used by{' '}
                             <Link to={`${ROUTES.OPERATIONS}/${lastOperation}`}>
                                 {lastOperation} {operations.find((operation) => operation.id === lastOperation)?.name}
                             </Link>
