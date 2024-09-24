@@ -12,6 +12,7 @@ class Config(object):
     ACTIVE_DB_PATH = Path(ACTIVE_DATA_DIRECTORY, "db.sqlite")
     SEND_FILE_MAX_AGE_DEFAULT = 0
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    MIGRATE_ON_COPY = False
     SQLALCHEMY_ECHO = False
     SECRET_KEY = os.getenv("SECRET_KEY", "90909")
     DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))

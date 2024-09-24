@@ -1,4 +1,5 @@
 import logging
+import shutil
 from os import environ
 from pathlib import Path
 
@@ -52,7 +53,10 @@ def create_app(settings_override=None):
 
     active_db_path = Path(ACTIVE_DATA_DIRECTORY, "db.sqlite")
     active_db_path.parent.mkdir(exist_ok=True, parents=True)
-    create_update_database(active_db_path)
+    empty_db_path = Path(__file__).parent.resolve().joinpath("empty.sqlite")
+
+    if not active_db_path.exists():
+        shutil.copy(empty_db_path, active_db_path)
 
     extensions(app)
 
