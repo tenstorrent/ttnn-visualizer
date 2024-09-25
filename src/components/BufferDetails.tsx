@@ -38,7 +38,7 @@ const HEADER_LABELS = {
 
 function BufferDetails({ tensor, operations, queryKey, className }: BufferDetailsProps) {
     const { address, consumers, dtype, layout, shape } = tensor;
-    const lastOperation = tensor.consumers[tensor.consumers.length - 1];
+    const lastOperationId: number = tensor.consumers[tensor.consumers.length - 1];
     const deallocationOperationId = getDeallocationOperation(tensor, operations);
     const { data: buffer, isLoading } = useNextBuffer(address, consumers, queryKey);
 
@@ -49,8 +49,9 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
                     <tr>
                         <th>Last used</th>
                         <td>
-                            <Link to={`${ROUTES.OPERATIONS}/${lastOperation}`}>
-                                {lastOperation} {operations.find((operation) => operation.id === lastOperation)?.name}
+                            <Link to={`${ROUTES.OPERATIONS}/${lastOperationId}`}>
+                                {lastOperationId}{' '}
+                                {operations.find((operation) => operation.id === lastOperationId)?.name}
                             </Link>
                         </td>
                     </tr>
@@ -166,7 +167,7 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
     );
 }
 
-function getDeallocationOperation(tensor: Tensor, operations: OperationDescription[]) {
+function getDeallocationOperation(tensor: Tensor, operations: OperationDescription[]): number | undefined {
     // TODO: Maybe we can strengthen this logic to ensure we're looking at deallocations rather than just checking the name
     const matchingInputs = operations.filter(
         (operation) =>
