@@ -75,6 +75,7 @@ export interface Chunk {
 
 export interface FragmentationEntry extends Chunk {
     empty?: boolean;
+    largestEmpty?: boolean;
 }
 
 export interface ReportMetaData {

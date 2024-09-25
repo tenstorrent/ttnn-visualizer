@@ -13,8 +13,7 @@ export interface MemoryPlotRendererProps {
     memorySize: number;
     title: string;
     onBufferClick?: (event: Readonly<PlotMouseEventCustom>) => void;
-    plotZoomRangeStart?: number;
-    plotZoomRangeEnd?: number;
+    plotZoomRange?: [start: number, end: number];
     cbZoomRange?: [start: number, end: number];
     className?: string;
     configuration: PlotConfiguration;
@@ -28,8 +27,7 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
         className = '',
         title,
         onBufferClick,
-        plotZoomRangeStart,
-        plotZoomRangeEnd,
+        plotZoomRange,
         isZoomedInCb = false,
         cbZoomRange,
         configuration,
@@ -43,7 +41,7 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
 
     const [augmentedChart, setAugmentedChart] = useState<Partial<PlotData>[]>(structuredClone(chartData));
 
-    let range = [isZoomedIn ? plotZoomRangeStart : 0, isZoomedIn ? plotZoomRangeEnd : memorySize];
+    let range = isZoomedIn ? plotZoomRange : [0, memorySize];
 
     if (isZoomedInCb && cbZoomRange) {
         range = cbZoomRange;
