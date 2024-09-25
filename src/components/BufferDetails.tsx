@@ -44,7 +44,7 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
 
     return (
         <>
-            <table className='analysis-table'>
+            <table className='ttnn-table analysis-table'>
                 <tbody>
                     <tr>
                         <th>Last used</th>
@@ -78,14 +78,14 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
                                     />
                                 </div>
                             ) : (
-                                <div>
+                                <>
                                     Missing deallocation operation
                                     <Icon
                                         className='deallocation-icon'
                                         icon={IconNames.WARNING_SIGN}
                                         intent={Intent.WARNING}
                                     />
-                                </div>
+                                </>
                             )}
                         </td>
                     </tr>
@@ -108,7 +108,7 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
                 </tbody>
             </table>
 
-            <table className={classNames('buffer-table arguments-table', className)}>
+            <table className={classNames('ttnn-table two-tone-rows buffer-table', className)}>
                 <tbody>
                     <tr>
                         <th>Device Id</th>
@@ -132,7 +132,7 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
                                       <>
                                           <th>{getThLabel(key)}</th>
                                           <td>
-                                              <table>
+                                              <table className='ttnn-table alt-two-tone-rows'>
                                                   <tbody>
                                                       {Object.entries(value as ShardSpec).map(
                                                           ([innerKey, innerValue]) => (

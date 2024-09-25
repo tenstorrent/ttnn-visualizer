@@ -8,25 +8,18 @@
 $row-background: $tt-grey-2;
 
 .buffer-table {
+    width: 100%;
+
     th {
         width: 160px;
-    }
-
-    .deallocation-icon {
-        margin-left: 5px;
-    }
-
-    .break-word {
-        word-break: break-word;
     }
 }
 
 .analysis-table {
-    border-collapse: collapse;
     margin-bottom: 20px;
-    background-color: $tt-grey-4;
+    background-color: $tt-grey-3;
 
-    th, td {
-        padding: 5px;
+    .deallocation-icon {
+        margin-left: 5px;
     }
 }

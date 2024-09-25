@@ -29,7 +29,7 @@ function OperationArguments({ operationIndex, operation, onCollapseTensor }: Ope
     };
 
     return (
-        <table className='arguments-table has-vertical-headings'>
+        <table className='ttnn-table two-tone-rows arguments-table has-vertical-headings'>
             <caption>Arguments</caption>
 
             <tbody>
