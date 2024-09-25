@@ -27,7 +27,7 @@ interface ShardSpec {
     halo: number;
 }
 
-const TH_LABELS = {
+const HEADER_LABELS = {
     shard_spec: 'ShardSpec',
     memory_layout: 'MemoryLayout',
     grid: 'CoreRangeSet',
@@ -39,7 +39,7 @@ const TH_LABELS = {
 function BufferDetails({ tensor, operations, queryKey, className }: BufferDetailsProps) {
     const { address, consumers, dtype, layout, shape } = tensor;
     const lastOperation = tensor.consumers[tensor.consumers.length - 1];
-    const deallocationOperation = getDeallocation(tensor, operations);
+    const deallocationOperationId = getDeallocationOperation(tensor, operations);
     const { data: buffer, isLoading } = useNextBuffer(address, consumers, queryKey);
 
     return (
@@ -60,16 +60,12 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
                         <td>
                             {isLoading ? 'Loading...' : undefined}
 
-                            {buffer && !isLoading && deallocationOperation ? (
+                            {buffer && !isLoading && deallocationOperationId ? (
                                 <div>
                                     Deallocation found in{' '}
-                                    <Link to={`${ROUTES.OPERATIONS}/${deallocationOperation}`}>
-                                        {deallocationOperation}{' '}
-                                        {
-                                            operations.find(
-                                                (operation) => operation.id === parseInt(deallocationOperation, 10),
-                                            )?.name
-                                        }
+                                    <Link to={`${ROUTES.OPERATIONS}/${deallocationOperationId}`}>
+                                        {deallocationOperationId}{' '}
+                                        {operations.find((operation) => operation.id === deallocationOperationId)?.name}
                                     </Link>
                                     <Icon
                                         className='deallocation-icon'
@@ -130,7 +126,7 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
                               <tr key={key}>
                                   {key === 'shard_spec' && value && typeof value !== 'string' ? (
                                       <>
-                                          <th>{getThLabel(key)}</th>
+                                          <th>{getHeaderLabel(key)}</th>
                                           <td>
                                               <table className='ttnn-table alt-two-tone-rows'>
                                                   <tbody>
@@ -138,7 +134,9 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
                                                           ([innerKey, innerValue]) => (
                                                               <tr key={innerKey}>
                                                                   <th>
-                                                                      {getThLabel(innerKey as keyof typeof TH_LABELS)}
+                                                                      {getHeaderLabel(
+                                                                          innerKey as keyof typeof HEADER_LABELS,
+                                                                      )}
                                                                   </th>
                                                                   <td>{innerValue}</td>
                                                               </tr>
@@ -150,7 +148,7 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
                                       </>
                                   ) : (
                                       <>
-                                          <th>{getThLabel(key as keyof typeof TH_LABELS)}</th>
+                                          <th>{getHeaderLabel(key as keyof typeof HEADER_LABELS)}</th>
                                           <td>{value as string}</td>
                                       </>
                                   )}
@@ -168,14 +166,14 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
     );
 }
 
-function getDeallocation(tensor: Tensor, operations: OperationDescription[]) {
+function getDeallocationOperation(tensor: Tensor, operations: OperationDescription[]) {
     // TODO: Maybe we can strengthen this logic to ensure we're looking at deallocations rather than just checking the name
     const matchingInputs = operations.filter(
         (operation) =>
             operation.name.includes('deallocate') && operation.inputs.find((input) => input.id === tensor.id),
     );
 
-    return matchingInputs.map((x) => x.id).toString();
+    return matchingInputs.map((x) => x.id)[0];
 }
 
 function parseMemoryConfig(string: string) {
@@ -189,11 +187,9 @@ function parseMemoryConfig(string: string) {
         const shardSpecPattern =
             /shard_spec=ShardSpec\(grid=\{(\[.*?\])\},shape=\{(\d+),\s*(\d+)\},orientation=ShardOrientation::([A-Z_]+),halo=(\d+)\)/;
 
-        // Extracting the values using regular expressions
         const memoryLayoutMatch = capturedString.match(memoryLayoutPattern);
         const shardSpecMatch = capturedString.match(shardSpecPattern);
 
-        // Assign values if the matches are found
         const memoryLayout = memoryLayoutMatch ? memoryLayoutMatch[1] : null;
         const shardSpec = shardSpecMatch
             ? {
@@ -204,9 +200,6 @@ function parseMemoryConfig(string: string) {
               }
             : null;
 
-        // console.log('shardSpec', shardSpecMatch);
-
-        // Return the result as a JSON object
         return {
             memory_layout: memoryLayout,
             shard_spec: shardSpec || 'std::nullopt',
@@ -216,8 +209,8 @@ function parseMemoryConfig(string: string) {
     return string;
 }
 
-function getThLabel(key: keyof typeof TH_LABELS) {
-    return TH_LABELS[key];
+function getHeaderLabel(key: keyof typeof HEADER_LABELS) {
+    return HEADER_LABELS[key];
 }
 
 export default BufferDetails;
