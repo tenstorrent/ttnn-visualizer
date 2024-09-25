@@ -2,10 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-@use 'sass:color';
 @use '../definitions/colours' as *;
-
-$row-background: $tt-grey-2;
 
 .buffer-table {
     width: 100%;

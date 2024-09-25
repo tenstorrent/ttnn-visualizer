@@ -43,7 +43,7 @@ $row-background: $tt-grey-2;
             background-color: color.adjust($row-background, $lightness: 12%);
 
             &:nth-of-type(odd) {
-                background-color: color.adjust($row-background, $lightness: 5%);
+                background-color: color.adjust($row-background, $lightness: 4%);
             }
         }
     }
