@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate } from 'react-router-dom';
-import { Alignment, Button, Classes, Navbar, Tooltip } from '@blueprintjs/core';
+import { Alignment, Button, Classes, Intent, Navbar, Tooltip } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
@@ -42,40 +42,44 @@ function Layout() {
                         <TenstorrentLogo />
                     </Link>
 
+                    {meta?.report_name && (
+                        <Tooltip
+                            content={meta.report_name}
+                            className='report-title'
+                        >
+                            <span>{meta.report_name}</span>
+                        </Tooltip>
+                    )}
+
                     <Navbar>
-                        <>
-                            <Navbar.Group align={Alignment.RIGHT}>
-                                <Button
-                                    text='Home'
-                                    onClick={() => handleNavigate(ROUTES.HOME)}
-                                    active={window.location.pathname === ROUTES.HOME}
-                                    minimal
-                                />
+                        <Navbar.Group align={Alignment.RIGHT}>
+                            <Button
+                                text='Home'
+                                onClick={() => handleNavigate(ROUTES.HOME)}
+                                active={hasMatchingPath(ROUTES.HOME)}
+                                intent={hasMatchingPath(ROUTES.HOME) ? Intent.PRIMARY : Intent.NONE}
+                                minimal
+                                large
+                            />
 
-                                <Button
-                                    text='Operations'
-                                    onClick={() => handleNavigate(ROUTES.OPERATIONS)}
-                                    active={window.location.pathname === ROUTES.OPERATIONS}
-                                    minimal
-                                />
+                            <Button
+                                text='Operations'
+                                onClick={() => handleNavigate(ROUTES.OPERATIONS)}
+                                active={hasMatchingPath(ROUTES.OPERATIONS)}
+                                intent={hasMatchingPath(ROUTES.OPERATIONS) ? Intent.PRIMARY : Intent.NONE}
+                                minimal
+                                large
+                            />
 
-                                <Button
-                                    text='Tensors'
-                                    onClick={() => handleNavigate(ROUTES.TENSORS)}
-                                    active={window.location.pathname === ROUTES.TENSORS}
-                                    minimal
-                                />
-                            </Navbar.Group>
-
-                            {meta?.report_name && (
-                                <Tooltip
-                                    content={meta.report_name}
-                                    className='report-title'
-                                >
-                                    <span>{meta.report_name}</span>
-                                </Tooltip>
-                            )}
-                        </>
+                            <Button
+                                text='Tensors'
+                                onClick={() => handleNavigate(ROUTES.TENSORS)}
+                                active={hasMatchingPath(ROUTES.TENSORS)}
+                                intent={hasMatchingPath(ROUTES.TENSORS) ? Intent.PRIMARY : Intent.NONE}
+                                minimal
+                                large
+                            />
+                        </Navbar.Group>
                     </Navbar>
                 </nav>
             </header>
@@ -95,6 +99,10 @@ function Layout() {
             </main>
         </div>
     );
+}
+
+function hasMatchingPath(path: string) {
+    return window.location.pathname === path;
 }
 
 export default Layout;
