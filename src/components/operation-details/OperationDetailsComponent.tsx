@@ -27,7 +27,6 @@ import {
     PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
 import { MemoryLegendElement } from './MemoryLegendElement';
-import Collapsible from '../Collapsible';
 import OperationArguments from '../OperationArguments';
 import { isDramActiveAtom, isL1ActiveAtom, selectedTensorAddressAtom } from '../../store/app';
 import useOutsideClick from '../../hooks/useOutsideClick';
@@ -41,6 +40,7 @@ interface OperationDetailsProps {
 
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 const DRAM_PADDING_RATIO = 0.9998;
+const MAX_DRAM_MEMORY_REPORT_LENGTH = 20;
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const { data: operations } = useOperationsList();
@@ -59,6 +59,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [selectedTensorAddress, setSelectedTensorAddress] = useAtom(selectedTensorAddressAtom);
     const [selectedTensor, setSelectedTensor] = useState<number | null>(null);
     const [toastId, setToastId] = useState<number | null>(null);
+    const [showFullDRAMLegend, setShowFullDRAMLegend] = useState(false);
 
     const onClickOutside = () => {
         setSelectedTensorAddress(null);
@@ -243,10 +244,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const dramDeltaObject = details.getMemoryDelta(dramDelta, reverseDramDelta);
 
-    const dramTensorsOnly = dramMemoryReport.filter(
-        (chunk) => !chunk.empty && details.getTensorForAddress(chunk.address),
-    );
-
     // TODO: Look at refactoring this to avoid forwarding refs
     const ForwardedMemoryPlotRenderer = forwardRef(MemoryPlotRenderer);
 
@@ -358,6 +355,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     configuration={L1RenderConfiguration}
                                     ref={(el) => assignRef(el, 1)}
                                 />
+
+                                <div className='legend'>
+                                    {memoryReport.map((chunk) => (
+                                        <MemoryLegendElement
+                                            chunk={chunk}
+                                            key={chunk.address}
+                                            memSize={memorySizeL1}
+                                            selectedTensorAddress={selectedTensorAddress}
+                                            operationDetails={details}
+                                            onLegendClick={onLegendClick}
+                                        />
+                                    ))}
+                                </div>
                             </>
                         )}
 
@@ -406,29 +416,26 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     configuration={DRAMRenderConfiguration}
                                     ref={(el) => assignRef(el, 4)}
                                 />
-                            </>
-                        )}
 
-                        <div className='plot-tensor-details'>
-                            <div className='legend'>
-                                {isL1Active &&
-                                    memoryReport.map((chunk) => (
+                                <div
+                                    className={classNames('legend', {
+                                        'lengthy-dram': dramMemoryReport.length > MAX_DRAM_MEMORY_REPORT_LENGTH,
+                                    })}
+                                >
+                                    {/* // TODO: Refactor this because it looks weird when there are no tensors but there are DRAM buffers */}
+                                    {dramMemoryReport.slice(0, MAX_DRAM_MEMORY_REPORT_LENGTH).map((chunk) => (
                                         <MemoryLegendElement
                                             chunk={chunk}
                                             key={chunk.address}
-                                            memSize={memorySizeL1}
+                                            memSize={DRAM_MEMORY_SIZE}
                                             selectedTensorAddress={selectedTensorAddress}
                                             operationDetails={details}
                                             onLegendClick={onLegendClick}
                                         />
                                     ))}
 
-                                {isDramActive && isL1Active && <hr />}
-
-                                {isDramActive && (
-                                    <>
-                                        {/* // TODO: Refactor this because it looks weird when there are no tensors but there are DRAM buffers */}
-                                        {dramTensorsOnly.map((chunk) => (
+                                    {showFullDRAMLegend &&
+                                        dramMemoryReport.slice(MAX_DRAM_MEMORY_REPORT_LENGTH).map((chunk) => (
                                             <MemoryLegendElement
                                                 chunk={chunk}
                                                 key={chunk.address}
@@ -439,26 +446,20 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             />
                                         ))}
 
-                                        <Collapsible
-                                            label='Full DRAM Legend'
-                                            contentClassName='full-dram-legend'
-                                            isOpen={false}
+                                    {dramMemoryReport.length > MAX_DRAM_MEMORY_REPORT_LENGTH ? (
+                                        <Button
+                                            icon={IconNames.EXPAND_ALL}
+                                            minimal
+                                            onClick={() => setShowFullDRAMLegend(!showFullDRAMLegend)}
                                         >
-                                            {dramMemoryReport.map((chunk) => (
-                                                <MemoryLegendElement
-                                                    chunk={chunk}
-                                                    key={chunk.address}
-                                                    memSize={DRAM_MEMORY_SIZE}
-                                                    selectedTensorAddress={selectedTensorAddress}
-                                                    operationDetails={details}
-                                                    onLegendClick={onLegendClick}
-                                                />
-                                            ))}
-                                        </Collapsible>
-                                    </>
-                                )}
-                            </div>
+                                            Toggle Full DRAM legend
+                                        </Button>
+                                    ) : null}
+                                </div>
+                            </>
+                        )}
 
+                        <div className='plot-tensor-details'>
                             <div
                                 ref={(el) => assignRef(el, 5)}
                                 className={classNames('producer-consumer', { hidden: selectedTensor === null })}

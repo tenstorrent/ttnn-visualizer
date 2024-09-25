@@ -92,12 +92,8 @@
         flex-direction: column;
         row-gap: 5px;
 
-        hr {
-            margin: 10px 0;
-        }
-
-        .full-dram-legend {
-            display: grid;
+        &.lengthy-dram {
+            align-items: center;
         }
 
         .legend-item {
@@ -124,7 +120,7 @@
 
             .legend-details {
                 display: inline-grid;
-                grid-template-columns: 1fr 1fr 0.75fr 1fr;
+                grid-template-columns: 1fr 1.2fr 0.75fr 1fr;
                 gap: 15px;
                 text-align: left;
 
