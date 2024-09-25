@@ -2,6 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
+@use 'sass:color';
+@use './definitions/colours' as *;
+
 .monospace {
     font-family: monospace;
 }
@@ -12,3 +15,57 @@
     display: none !important;
 }
 
+// Generic table styles
+$row-background: $tt-grey-2;
+
+.ttnn-table {
+    border-collapse: collapse;
+
+    caption {
+        text-align: left;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    &.two-tone-rows {
+        tr {
+            background-color: color.adjust($row-background, $lightness: 2%);
+
+            &:nth-of-type(odd) {
+                background-color: color.adjust($row-background, $lightness: 8%);
+            }
+        }
+    }
+
+    &.alt-two-tone-rows {
+        tr {
+            background-color: color.adjust($row-background, $lightness: 12%);
+
+            &:nth-of-type(odd) {
+                background-color: color.adjust($row-background, $lightness: 4%);
+            }
+        }
+    }
+
+    th {
+        font-weight: 700;
+    }
+
+    th,
+    td {
+        padding: 6px 12px;
+        vertical-align: top;
+        text-align: left;
+    }
+
+    &.has-vertical-headings {
+        tr {
+            td {
+                &:first-child {
+                    font-weight: 700;
+                }
+            }
+        }
+    }
+}

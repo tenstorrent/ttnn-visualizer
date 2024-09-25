@@ -15,15 +15,15 @@ import LoadingSpinner from './LoadingSpinner';
 import { useOperationsList, useTensors } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { Tensor } from '../model/Graph';
-import { OperationDescription } from '../model/APIData';
+import { OperationDescription, TensorData } from '../model/APIData';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
-import BufferTable from './BufferTable';
 import { expandedTensorsAtom } from '../store/app';
 import ListItem from './ListItem';
 import '@blueprintjs/select/lib/css/blueprint-select.css';
 import 'styles/components/ListView.scss';
 import 'styles/components/TensorList.scss';
+import BufferDetails from './BufferDetails';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -38,7 +38,7 @@ const TensorList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [filterQuery, setFilterQuery] = useState('');
     const [memoryLeakCount, setMemoryLeakCount] = useState(0);
-    const [filteredTensorList, setFilteredTensorList] = useState<Tensor[]>([]);
+    const [filteredTensorList, setFilteredTensorList] = useState<TensorData[]>([]);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [filterMemoryLeaks, setFilterMemoryLeaks] = useState(false);
@@ -302,12 +302,13 @@ const TensorList = () => {
                                                 ) : undefined
                                             }
                                         >
-                                            <BufferTable
-                                                className='buffer-data'
-                                                tensor={tensor}
-                                                operations={operations}
-                                                queryKey={virtualRow.index.toString()}
-                                            />
+                                            <div className='arguments-wrapper'>
+                                                <BufferDetails
+                                                    tensor={tensor}
+                                                    operations={operations}
+                                                    queryKey={virtualRow.index.toString()}
+                                                />
+                                            </div>
                                         </Collapsible>
                                     </li>
                                 );

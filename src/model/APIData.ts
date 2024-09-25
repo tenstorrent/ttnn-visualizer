@@ -115,13 +115,13 @@ export enum NodeType {
 }
 
 enum DeviceOperationLayoutTypes {
-    INTERLEAVED,
-    SINGLE_BANK,
+    INTERLEAVED = 'INTERLEAVED',
+    SINGLE_BANK = 'SINGLE_BANK',
 }
 
 enum DeviceOperationTypes {
-    L1,
-    DRAM,
+    L1 = 'L1',
+    DRAM = 'DRAM',
 }
 
 interface DeviceOperationParams {
