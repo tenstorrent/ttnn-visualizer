@@ -61,6 +61,15 @@ jobs:
         id: package-version
         uses: martinbeentjes/npm-get-version-action@v1.3.1
 
+      -   name: Get wheel file name
+          id: get_wheel
+          run: |
+              # Find the .whl file and store its name in a variable
+              FILE=$(find /home/runner/work/ttnn-visualizer/ -name "*.whl" -type f)
+              echo "Found wheel file: $FILE"
+              # Set output to the found file name
+              echo "wheel_name=$FILE" >> $GITHUB_ENV
+
       - run: |
             ls -al ./
             ls -al /home/runner/work/ttnn-visualizer/
@@ -71,6 +80,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: /home/runner/work/ttnn-visualizer/ttnn_visualizer-${{ steps.package-version.outputs.current-version}}-py3-none-any.whl
+          asset_path: /home/runner/work/ttnn-visualizer/${{ env.wheel_name }}
           asset_name: ttnn-visualizer-${{ github.event.release.tag_name }}.whl
           asset_content_type: application/octet-stream
