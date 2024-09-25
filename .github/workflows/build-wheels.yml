@@ -1,0 +1,42 @@
+name: Build wheel
+
+on:
+    push:
+        branches:
+            - main
+            - dev
+            - feature/package-as-wheel
+
+env:
+    CIBW_BUILD_VERBOSITY: 1
+    VITE_API_ROOT: api
+
+jobs:
+
+    build_wheel:
+        runs-on: ubuntu-20.04
+        steps:
+            -   uses: actions/checkout@v2
+            -   name: Use Node.js
+                uses: actions/setup-node@v3
+                with:
+                    node-version: v22.1.0
+            -   run: npm install
+            -   run: npm run build
+
+            -   name: Set up Python
+                uses: actions/setup-python@v2
+                with:
+                    python-version: 3.9
+
+            -   name: Build wheel and install
+                run: |
+                    python -m pip install --user --upgrade build
+                    python -m build --wheel
+                    cd ${{github.workspace}}
+                    ls -al
+
+            -   uses: actions/upload-artifact@v4
+                with:
+                    name: ttnn_visualizer_${{ github.sha }}
+                    path: ./dist/*.whl

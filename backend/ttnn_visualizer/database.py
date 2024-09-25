@@ -3,6 +3,7 @@ from logging import getLogger
 
 logger = getLogger(__name__)
 
+
 def create_update_database(sqlite_db_path):
     """
     Creates or updates database with all tables
@@ -88,5 +89,3 @@ def create_update_database(sqlite_db_path):
                 (operation_id int, captured_graph text)"""
     )
     sqlite_connection.commit()
-
-

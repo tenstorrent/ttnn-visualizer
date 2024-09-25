@@ -14,8 +14,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
-from backend.extensions import db
-
+from ttnn_visualizer.extensions import db
 
 operations = Table(
     "operations",

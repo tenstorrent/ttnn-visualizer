@@ -3,11 +3,11 @@ import logging
 import shutil
 from http import HTTPStatus
 from pathlib import Path
-from backend.database import create_update_database
+from ttnn_visualizer.database import create_update_database
 from flask import Blueprint, Response, current_app, request
 
-from backend.models import Device, Operation, Tensor, Buffer
-from backend.remotes import (
+from ttnn_visualizer.models import Device, Operation, Tensor, Buffer
+from ttnn_visualizer.remotes import (
     RemoteConnection,
     RemoteFolder,
     RemoteFolderException,
@@ -17,12 +17,12 @@ from backend.remotes import (
     read_remote_file,
     sync_test_folders,
 )
-from backend.schemas import (
+from ttnn_visualizer.schemas import (
     OperationSchema,
     TensorSchema,
     BufferSchema,
 )
-from backend.utils import timer
+from ttnn_visualizer.utils import timer
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +163,8 @@ def create_upload_files():
         f"Copying file tree from f{report_directory} to {active_data_directory}"
     )
     shutil.copytree(report_directory, active_data_directory, dirs_exist_ok=True)
-    create_update_database(Path(active_data_directory / 'db.sqlite'))
+    if current_app.config["MIGRATE_ON_COPY"]:
+        create_update_database(Path(active_data_directory / "db.sqlite"))
     return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
 
 
@@ -226,6 +227,8 @@ def use_remote_folder():
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
             response=f"{connection_directory} does not exist.",
         )
+
     shutil.copytree(connection_directory, active_data_directory, dirs_exist_ok=True)
-    create_update_database(Path(active_data_directory / 'db.sqlite'))
+    if current_app.config["MIGRATE_ON_COPY"]:
+        create_update_database(Path(active_data_directory / "db.sqlite"))
     return Response(status=HTTPStatus.OK)

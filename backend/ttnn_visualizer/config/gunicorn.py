@@ -3,9 +3,8 @@
 import multiprocessing
 import os
 from pathlib import Path
-
-from backend.utils import str_to_bool
 from dotenv import load_dotenv
+from ttnn_visualizer.utils import str_to_bool
 
 # Load dotenv from root directory
 dotenv_path = Path(__file__).parent.parent.parent.joinpath(".env")
