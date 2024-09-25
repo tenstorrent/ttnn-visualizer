@@ -223,11 +223,11 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
         return {
             producers: tensor.producers.map((op, index) => ({
                 id: op,
-                name: tensor.producerNames[index],
+                name: tensor?.producerNames[index],
             })),
             consumers: tensor.consumers.map((op, index) => ({
                 id: op,
-                name: tensor.consumerNames[index],
+                name: tensor?.consumerNames[index],
             })),
         };
     }
@@ -239,6 +239,7 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
         condensed: Chunk;
         condensedChart: Partial<PlotData>[];
         cbChartData: Partial<PlotData>[];
+        cbMemory: Chunk[];
     } {
         const fragmentation: FragmentationEntry[] = [];
         const memory: Chunk[] =
@@ -252,9 +253,20 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
                 })
                 .sort((a, b) => a.address - b.address) || [];
 
-        memory.forEach((chunk, index) => {
+        const cbMemory = bufferType === BufferType.L1 ? this.deviceOperations.flatMap((op) => op.cbList) : [];
+
+        const totalMemory = [
+            { address: 0, size: 0 },
+            ...cbMemory,
+            ...memory,
+            {
+                address: this.memorySizeL1,
+                size: 0,
+            },
+        ].sort((a, b) => a.address - b.address);
+        totalMemory.forEach((chunk, index) => {
             if (index > 0) {
-                const prevChunk = memory[index - 1];
+                const prevChunk = totalMemory[index - 1];
                 if (prevChunk.address + prevChunk.size !== chunk.address) {
                     fragmentation.push({
                         address: prevChunk.address + prevChunk.size,
@@ -265,7 +277,15 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
             }
         });
 
-        const cbMemory = this.deviceOperations.flatMap((op) => op.cbList);
+        const largestEmpty = fragmentation.reduce((prev, current) => {
+            return prev.size > current.size ? prev : current;
+        });
+
+        fragmentation.forEach((fragment) => {
+            if (fragment.size === largestEmpty.size) {
+                fragment.largestEmpty = true;
+            }
+        });
 
         const condensed: Chunk = {
             address: memory[0]?.address || 0,
@@ -283,6 +303,7 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
             condensed,
             condensedChart: this.getChartData([condensed]),
             cbChartData,
+            cbMemory,
         };
     }
 
@@ -304,6 +325,7 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
 
         const currentOperation = this.operations.find((op) => op.id === this.id);
 
+        // eslint-disable-next-line no-restricted-syntax
         for (const buffer of this.buffers) {
             const bufferAddress = buffer.address;
             const bufferType = buffer.buffer_type;

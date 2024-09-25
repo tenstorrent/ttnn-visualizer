@@ -2,11 +2,19 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
+@use '../definitions/colours' as *;
+
 .buffer-table {
-    td,
+    width: 100%;
+
     th {
-        padding: 5px 10px;
+        width: 160px;
     }
+}
+
+.analysis-table {
+    margin-bottom: 20px;
+    background-color: $tt-grey-3;
 
     .deallocation-icon {
         margin-left: 5px;

@@ -4,6 +4,7 @@ from timeit import default_timer
 
 logger = logging.getLogger(__name__)
 
+
 def str_to_bool(string_value):
     return string_value.lower() in ("yes", "true", "t", "1")
 

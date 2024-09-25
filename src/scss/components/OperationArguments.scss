@@ -8,48 +8,13 @@
 $row-background: $tt-grey-2;
 
 .arguments-table {
-    border-collapse: collapse;
     width: 100%;
     margin-bottom: 20px;
 
-    caption {
-        text-align: left;
-        font-size: 16px;
-        font-weight: 700;
-        margin-bottom: 10px;
-    }
-
-    tr {
-        background-color: color.adjust($row-background, $lightness: 2%);
-
-        &:nth-of-type(odd) {
-            background-color: color.adjust($row-background, $lightness: 8%);
-
-        }
-
-        th {
-            font-weight: 700;
-        }
-
-        th,
-        td {
-            padding: 6px 12px;
-            vertical-align: top;
-            text-align: left;
-
-            &.expandable-tensor {
-                word-break: break-word; // Can get really long strings in the table cell which cause horizontal overflows
-            }
-        }
-    }
-
-    &.has-vertical-headings {
-        tr {
-            td {
-                &:first-child {
-                    font-weight: 700;
-                }
-            }
+    th,
+    td {
+        &.expandable-tensor {
+            word-break: break-word; // Can get really long strings in the table cell which cause horizontal overflows
         }
     }
 }

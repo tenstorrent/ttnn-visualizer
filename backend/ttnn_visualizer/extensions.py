@@ -5,9 +5,11 @@ from flask_static_digest import FlaskStaticDigest
 
 class SQLiteAlchemy(SQLAlchemy):
     def apply_driver_hacks(self, app, info, options):
-        options.update({
-            'isolation_level': 'AUTOCOMMIT',
-        })
+        options.update(
+            {
+                "isolation_level": "AUTOCOMMIT",
+            }
+        )
         super(SQLiteAlchemy, self).apply_driver_hacks(app, info, options)
 
 

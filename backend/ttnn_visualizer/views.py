@@ -3,16 +3,11 @@ import logging
 import shutil
 from http import HTTPStatus
 from pathlib import Path
-
+from ttnn_visualizer.database import create_update_database
 from flask import Blueprint, Response, current_app, request
 
-from backend.models import (
-    Device,
-    Operation,
-    Tensor,
-    Buffer
-)
-from backend.remotes import (
+from ttnn_visualizer.models import Device, Operation, Tensor, Buffer
+from ttnn_visualizer.remotes import (
     RemoteConnection,
     RemoteFolder,
     RemoteFolderException,
@@ -22,12 +17,12 @@ from backend.remotes import (
     read_remote_file,
     sync_test_folders,
 )
-from backend.schemas import (
+from ttnn_visualizer.schemas import (
     OperationSchema,
     TensorSchema,
     BufferSchema,
 )
-from backend.utils import timer
+from ttnn_visualizer.utils import timer
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +91,7 @@ def get_config():
 @api.route("/tensors", methods=["GET"])
 def get_tensors():
     tensors = Tensor.query.all()
-    return TensorSchema(
-        exclude=["tensor_id"]
-    ).dump(tensors, many=True)
+    return TensorSchema(exclude=["tensor_id"]).dump(tensors, many=True)
 
 
 @api.route("/buffer", methods=["GET"])
@@ -109,15 +102,19 @@ def get_next_buffer():
     if not address or not operation_id:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
-    buffer = Buffer.query.filter(
-        Buffer.address == address,
-        Buffer.operation_id > operation_id
-    ).order_by(Buffer.operation_id.asc()).first()
+    buffer = (
+        Buffer.query.filter(
+            Buffer.address == address, Buffer.operation_id > operation_id
+        )
+        .order_by(Buffer.operation_id.asc())
+        .first()
+    )
 
     if not buffer:
         return Response(status=HTTPStatus.NOT_FOUND)
 
     return BufferSchema().dump(buffer)
+
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
 def get_tensor(tensor_id):
@@ -148,7 +145,7 @@ def create_upload_files():
             message="Invalid project directory.",
         ).model_dump()
 
-    report_name = files[0].filename.split('/')[0]
+    report_name = files[0].filename.split("/")[0]
     report_directory = Path(report_data_directory, report_name)
     logger.info(f"Writing report files to {report_directory}")
     for file in files:
@@ -156,12 +153,18 @@ def create_upload_files():
         destination_file = Path(report_data_directory, Path(file.filename))
         logger.info(f"Writing file to {destination_file}")
         if not destination_file.parent.exists():
-            logger.info(f"{destination_file.parent.name} does not exist. Creating directory")
+            logger.info(
+                f"{destination_file.parent.name} does not exist. Creating directory"
+            )
             destination_file.parent.mkdir(exist_ok=True, parents=True)
         file.save(destination_file)
 
-    logger.info(f"Copying file tree from f{report_directory} to {active_data_directory}")
+    logger.info(
+        f"Copying file tree from f{report_directory} to {active_data_directory}"
+    )
     shutil.copytree(report_directory, active_data_directory, dirs_exist_ok=True)
+    if current_app.config["MIGRATE_ON_COPY"]:
+        create_update_database(Path(active_data_directory / "db.sqlite"))
     return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
 
 
@@ -184,6 +187,7 @@ def test_remote_folder():
         return Response(status=e.status, response=e.message)
     return Response(status=HTTPStatus.OK)
 
+
 @api.route("/remote/read", methods=["POST"])
 def read_remote_folder():
     connection = request.json
@@ -192,6 +196,7 @@ def read_remote_folder():
     except RemoteFolderException as e:
         return Response(status=e.status, response=e.message)
     return Response(status=200, response=content)
+
 
 @api.route("/remote/sync", methods=["POST"])
 def sync_remote_folder():
@@ -222,5 +227,8 @@ def use_remote_folder():
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
             response=f"{connection_directory} does not exist.",
         )
+
     shutil.copytree(connection_directory, active_data_directory, dirs_exist_ok=True)
+    if current_app.config["MIGRATE_ON_COPY"]:
+        create_update_database(Path(active_data_directory / "db.sqlite"))
     return Response(status=HTTPStatus.OK)

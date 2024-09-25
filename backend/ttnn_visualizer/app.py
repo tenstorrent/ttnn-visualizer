@@ -3,18 +3,18 @@ import shutil
 from os import environ
 from pathlib import Path
 
-import flask
-from dotenv import load_dotenv
 from flask import Flask
-from flask_cors import CORS
+import flask
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
-
-from backend import settings
+from flask_cors import CORS
+from ttnn_visualizer import settings
+from dotenv import load_dotenv
+from ttnn_visualizer.database import create_update_database
 
 
 def create_app(settings_override=None):
-    from backend.views import api
+    from ttnn_visualizer.views import api
 
     """
     Create a Flask application using the app factory pattern.
@@ -23,7 +23,7 @@ def create_app(settings_override=None):
     :return: Flask app
     """
 
-    dotenv_path = Path(__file__).parent.parent.joinpath('.env')
+    dotenv_path = Path(__file__).parent.parent.joinpath(".env")
     if dotenv_path.exists():
         load_dotenv(str(dotenv_path))
 
@@ -31,10 +31,10 @@ def create_app(settings_override=None):
     flask_env = environ.get("FLASK_ENV", "development")
 
     app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
-   
+
     app.config.from_object(getattr(settings, flask_env))
 
-    logging.basicConfig(level=app.config.get('LOG_LEVEL', 'INFO'))
+    logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
 
     app.logger.info(f"Starting TTNN visualizer in {flask_env} mode")
 
@@ -51,14 +51,16 @@ def create_app(settings_override=None):
     ACTIVE_DATA_DIRECTORY = app.config["ACTIVE_DATA_DIRECTORY"]
 
     active_db_path = Path(ACTIVE_DATA_DIRECTORY, "db.sqlite")
+    active_db_path.parent.mkdir(exist_ok=True, parents=True)
     empty_db_path = Path(__file__).parent.resolve().joinpath("empty.sqlite")
+
     if not active_db_path.exists():
-        active_db_path.parent.mkdir(exist_ok=True, parents=True)
         shutil.copy(empty_db_path, active_db_path)
 
     extensions(app)
 
     if flask_env == "production":
+
         @app.route("/", defaults={"path": ""})
         @app.route("/<path:path>")
         def catch_all(path):
@@ -68,7 +70,7 @@ def create_app(settings_override=None):
 
 
 def extensions(app: flask.Flask):
-    from backend.extensions import flask_static_digest, db, ma
+    from ttnn_visualizer.extensions import flask_static_digest, db, ma
 
     """
     Register 0 or more extensions (mutates the app passed in).

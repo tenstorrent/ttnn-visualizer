@@ -123,12 +123,12 @@ const LocalFolderOptions: FC = () => {
                     View report
                 </Button>
 
-                {isUploading && uploadProgress?.progress && uploadProgress?.estimated && (
+                {isUploading && uploadProgress?.progress && uploadProgress?.estimated ? (
                     <ProgressBar
                         progress={uploadProgress.progress}
                         estimated={uploadProgress.estimated}
                     />
-                )}
+                ) : null}
 
                 {folderStatus && !isUploading && (
                     <div className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}>

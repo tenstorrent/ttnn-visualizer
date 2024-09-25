@@ -13,12 +13,11 @@ import SearchField from './SearchField';
 import Collapsible from './Collapsible';
 import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
-import 'styles/components/OperationsList.scss';
+import 'styles/components/ListView.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { expandedOperationsAtom, shouldCollapseAllOperationsAtom } from '../store/app';
 import { OperationDescription } from '../model/APIData';
-import DeviceOperations from './DeviceOperations';
 import ListItem from './ListItem';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
@@ -148,7 +147,8 @@ const OperationList = () => {
     }, [virtualizer, fetchedOperations, location, navigate]);
 
     return (
-        <fieldset className='operations-wrap'>
+        // TODO: Turn this into a generation ListView component used by OperationList and TensorList
+        <fieldset className='list-wrap'>
             <legend>Operations</legend>
 
             <div className='list-controls'>
@@ -256,7 +256,7 @@ const OperationList = () => {
                     }}
                 >
                     <ul
-                        className='operations-list'
+                        className='list-container'
                         style={{
                             // Tracks scroll position
                             transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
@@ -268,7 +268,7 @@ const OperationList = () => {
 
                                 return (
                                     <li
-                                        className='operation'
+                                        className='list-item-container'
                                         key={virtualRow.index}
                                         data-index={virtualRow.index}
                                         ref={virtualizer.measureElement}
@@ -308,9 +308,9 @@ const OperationList = () => {
                                                     />
                                                 )}
 
-                                                {operation?.device_operations && (
+                                                {/* {operation?.device_operations && (
                                                     <DeviceOperations deviceOperations={operation.device_operations} />
-                                                )}
+                                                )} */}
                                             </div>
                                         </Collapsible>
                                     </li>
