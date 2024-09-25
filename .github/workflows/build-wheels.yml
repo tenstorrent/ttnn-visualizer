@@ -1,8 +1,7 @@
 name: Build and Upload Python Wheel on Release
-
 on:
   release:
-    types: [created]  # Triggers when a release is created
+    types: [created, released, prereleased, edited ]
 
 env:
     CIBW_BUILD_VERBOSITY: 1
