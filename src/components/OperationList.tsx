@@ -18,7 +18,6 @@ import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { expandedOperationsAtom, shouldCollapseAllOperationsAtom } from '../store/app';
 import { OperationDescription } from '../model/APIData';
-import DeviceOperations from './DeviceOperations';
 import ListItem from './ListItem';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
@@ -309,9 +308,9 @@ const OperationList = () => {
                                                     />
                                                 )}
 
-                                                {operation?.device_operations && (
+                                                {/* {operation?.device_operations && (
                                                     <DeviceOperations deviceOperations={operation.device_operations} />
-                                                )}
+                                                )} */}
                                             </div>
                                         </Collapsible>
                                     </li>
