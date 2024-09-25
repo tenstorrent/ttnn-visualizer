@@ -448,12 +448,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                                     {dramMemoryReport.length > MAX_DRAM_MEMORY_REPORT_LENGTH ? (
                                         <Button
-                                            icon={IconNames.EXPAND_ALL}
+                                            icon={showFullDRAMLegend ? IconNames.CHEVRON_UP : IconNames.CHEVRON_DOWN}
                                             minimal
                                             onClick={() => setShowFullDRAMLegend(!showFullDRAMLegend)}
-                                        >
-                                            Toggle Full DRAM legend
-                                        </Button>
+                                            text={
+                                                showFullDRAMLegend ? 'Hide Full DRAM Legend' : 'Show Full DRAM Legend'
+                                            }
+                                        />
                                     ) : null}
                                 </div>
                             </>
