@@ -39,9 +39,8 @@ interface OperationDetailsProps {
     operationId: number;
 }
 
-const MEMORY_RANGE_OFFSET = 0.01;
-
-const MINIMAL_DRAM_MEMORY_RANGE_OFFSET = 0.9998;
+const MEMORY_ZOOM_PADDING_RATIO = 0.01;
+const DRAM_PADDING_RATIO = 0.9998;
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const { data: operations } = useOperationsList();
@@ -133,9 +132,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         .flat()
         .sort((a, b) => a - b)
         .reverse()[0];
-    const MINIMAL_MEMORY_RANGE_OFFSET_CB = (cbZoomEnd - cbZoomStart) * MEMORY_RANGE_OFFSET;
 
-    const MINIMAL_MEMORY_RANGE_OFFSET = (plotZoomRangeEnd - plotZoomRangeStart) * MEMORY_RANGE_OFFSET;
+    const MEMORY_PADDING_CB = (cbZoomEnd - cbZoomStart) * MEMORY_ZOOM_PADDING_RATIO;
+    const MEMORY_PADDING_L1 = (plotZoomRangeEnd - plotZoomRangeStart) * MEMORY_ZOOM_PADDING_RATIO;
 
     if (plotZoomRangeEnd < plotZoomRangeStart) {
         plotZoomRangeStart = 0;
@@ -144,7 +143,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     let dramPlotZoomRangeStart =
         Math.min(dramMemory[0]?.address || DRAM_MEMORY_SIZE, previousDramMemory[0]?.address || DRAM_MEMORY_SIZE) *
-        MINIMAL_DRAM_MEMORY_RANGE_OFFSET;
+        DRAM_PADDING_RATIO;
 
     let dramPlotZoomRangeEnd =
         Math.max(
@@ -156,7 +155,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                       previousDramMemory[previousDramMemory.length - 1].size
                 : 0,
         ) *
-        (1 / MINIMAL_DRAM_MEMORY_RANGE_OFFSET);
+        (1 / DRAM_PADDING_RATIO);
 
     if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
         dramPlotZoomRangeStart = 0;
@@ -327,8 +326,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         'empty-plot': previousChartData.length === 0,
                                     })}
                                     plotZoomRange={[
-                                        plotZoomRangeStart - MINIMAL_MEMORY_RANGE_OFFSET,
-                                        plotZoomRangeEnd + MINIMAL_MEMORY_RANGE_OFFSET,
+                                        plotZoomRangeStart - MEMORY_PADDING_L1,
+                                        plotZoomRangeEnd + MEMORY_PADDING_L1,
                                     ]}
                                     chartDataList={[previousChartData]}
                                     isZoomedIn={zoomedInViewMainMemory}
@@ -336,27 +335,24 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     configuration={L1RenderConfiguration}
                                     ref={(el) => assignRef(el, 0)}
                                 />
-                                {/* TODO: we shoudl provide plotZoomRangeStart and plotZoomRangeEnd as a toople */}
+
                                 <ForwardedMemoryPlotRenderer
                                     title='Current Summarized L1 Report'
                                     className={classNames('l1-memory-renderer', {
                                         'empty-plot': chartData.length === 0,
                                     })}
+                                    isZoomedIn={zoomedInViewMainMemory}
                                     plotZoomRange={[
-                                        plotZoomRangeStart - MINIMAL_MEMORY_RANGE_OFFSET,
-                                        plotZoomRangeEnd + MINIMAL_MEMORY_RANGE_OFFSET,
+                                        plotZoomRangeStart - MEMORY_PADDING_L1,
+                                        plotZoomRangeEnd + MEMORY_PADDING_L1,
                                     ]}
                                     isZoomedInCb={zoomedInViewCBMemory}
-                                    cbZoomRange={[
-                                        cbZoomStart - MINIMAL_MEMORY_RANGE_OFFSET_CB,
-                                        cbZoomEnd + MINIMAL_MEMORY_RANGE_OFFSET_CB,
-                                    ]}
+                                    cbZoomRange={[cbZoomStart - MEMORY_PADDING_CB, cbZoomEnd + MEMORY_PADDING_CB]}
                                     chartDataList={[
                                         cbChartData,
                                         chartData,
                                         l1Small.memory.length > 0 ? l1Small.condensedChart : [],
                                     ]}
-                                    isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={memorySizeL1}
                                     onBufferClick={onBufferClick}
                                     configuration={L1RenderConfiguration}
