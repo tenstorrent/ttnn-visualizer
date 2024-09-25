@@ -27,7 +27,7 @@ export const MemoryLegendElement: React.FC<{
             Empty space{' '}
             {chunk.largestEmpty && (
                 <Tooltip content='Largest empty memory space'>
-                    <Icon icon={IconNames.TICK} />
+                    <Icon icon={IconNames.SMALL_INFO_SIGN} />
                 </Tooltip>
             )}
         </>
