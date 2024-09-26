@@ -1,14 +1,12 @@
 import React from 'react';
 import classNames from 'classnames';
-import { Link } from 'react-router-dom';
-import { Icon, Intent, Tooltip } from '@blueprintjs/core';
+import { Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { getBufferColor } from '../../functions/colorGenerator';
 import { TensorData } from '../../model/APIData';
-import { prettyPrintAddress } from '../../functions/math';
+import { prettyPrintAddress, toHex } from '../../functions/math';
 import { BufferTypeLabel } from '../../model/BufferType';
 import { useNextBuffer, useOperationsList } from '../../hooks/useAPI';
-import ROUTES from '../../definitions/routes';
 import getDeallocationOperation from '../../functions/getDeallocationOperation';
 
 export interface TensorDetailsComponentProps {
@@ -55,6 +53,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 {deallocationOperationId && operations ? (
                     <Tooltip
                         content={`Deallocation in ${deallocationOperationId} ${operations.find((operation) => operation.id === deallocationOperationId)?.name}`}
+                        placement={PopoverPosition.TOP}
                     >
                         <Icon
                             icon={IconNames.TICK}
@@ -63,8 +62,8 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     </Tooltip>
                 ) : (
                     <Tooltip
-                        content='Missing deallocation operation
-'
+                        content='Missing deallocation operation'
+                        placement={PopoverPosition.TOP}
                     >
                         <Icon
                             icon={IconNames.WARNING_SIGN}
@@ -75,7 +74,8 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
                 {buffer?.next_usage && address && operations && !isLoading ? (
                     <Tooltip
-                        content={`Next allocation in ${buffer.operation_id} ${operations.find((operation) => operation.id === buffer.operation_id)?.name} (+${buffer.next_usage} operations)`}
+                        content={`Next allocation of ${toHex(address)} in ${buffer.operation_id} ${operations.find((operation) => operation.id === buffer.operation_id)?.name} (+${buffer.next_usage} operations)`}
+                        placement={PopoverPosition.TOP}
                     >
                         <Icon
                             icon={IconNames.FLOW_LINEAR}
@@ -90,18 +90,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 <p>Shape: {tensor.shape}</p>
                 <p>Dtype: {tensor.dtype}</p>
                 <p>Layout: {tensor.layout}</p>
-                {buffer?.next_usage && address && operations && !isLoading ? (
-                    <p>
-                        Next allocation:{' '}
-                        <span>
-                            <Link to={`${ROUTES.OPERATIONS}/${buffer.operation_id}`}>
-                                {buffer.operation_id}{' '}
-                                {operations.find((operation) => operation.id === buffer.operation_id)?.name}
-                            </Link>{' '}
-                            (+{buffer.next_usage} operations)
-                        </span>
-                    </p>
-                ) : null}
             </div>
         </div>
     );
