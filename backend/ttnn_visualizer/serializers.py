@@ -11,6 +11,7 @@ def serialize_operations(
     tensors,
     devices,
     producers_consumers,
+    device_operations,
 ):
     tensors_dict = dict()
     for t in tensors:

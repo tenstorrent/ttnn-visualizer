@@ -6,6 +6,7 @@ from pathlib import Path
 from timeit import default_timer
 from typing import Callable
 
+from ttnn_visualizer.models import device_operations
 from ttnn_visualizer.serializers import (
     serialize_operations,
     serialize_operation,
@@ -449,10 +450,8 @@ def query_producer_operation_id(report_path, tensor_id):
 
 
 # Function to check if a table exists
-def check_table_exists(report_path, table_name):
-
-    sqlite_connection = sqlite3.connect(report_path / SQLITE_DB_PATH)
-    cursor = sqlite_connection.cursor()
+def check_table_exists(conn, table_name):
+    cursor = conn.cursor()
     cursor.execute(
         """
         SELECT name
@@ -465,7 +464,6 @@ def check_table_exists(report_path, table_name):
     # Fetch the result (if the table exists, this will return the name, otherwise None)
     result = cursor.fetchone()
 
-    sqlite_connection.close()
     return bool(result)
 
 
@@ -473,9 +471,12 @@ def query_device_operations(report_path):
     sqlite_connection = sqlite3.connect(report_path / SQLITE_DB_PATH)
     cursor = sqlite_connection.cursor()
 
-    cursor.execute("SELECT * FROM captured_graph")
-    for row in cursor.fetchall():
-        yield DeviceOperation(*row)
+    if check_table_exists(sqlite_connection, "captured_graph"):
+        cursor.execute("SELECT * FROM captured_graph")
+        for row in cursor.fetchall():
+            yield DeviceOperation(*row)
+    else:
+        yield []
 
     sqlite_connection.close()
 
@@ -596,6 +597,7 @@ def get_tensor_list(report_path):
 def get_operations_list(report_path):
     operations = list(query_operations(report_path))
     operation_arguments = list(query_operation_arguments(report_path))
+    device_operations = list(query_device_operations(report_path))
     stack_traces = list(query_stack_traces(report_path))
     outputs = list(query_output_tensors(report_path))
     tensors = list(query_tensors(report_path))
@@ -612,4 +614,5 @@ def get_operations_list(report_path):
         tensors,
         devices,
         producers_consumers,
+        device_operations,
     )
