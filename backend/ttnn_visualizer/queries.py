@@ -4,6 +4,7 @@ import sqlite3
 from functools import wraps
 from pathlib import Path
 from timeit import default_timer
+from typing import Callable
 
 from ttnn_visualizer.serializers import (
     serialize_operations,
@@ -491,13 +492,13 @@ def perform_query(query, sqlite_db_path):
     sqlite3.connect(sqlite_db_path)
 
 
-def timer(f):
+def timer(f: Callable):
     @wraps(f)
     def wrapper(*args, **kwargs):
         start_time = default_timer()
         response = f(*args, **kwargs)
         total_elapsed_time = default_timer() - start_time
-        print(f"Elapsed time: {total_elapsed_time}")
+        print(f"{f.__name__}: Elapsed time: {total_elapsed_time}")
         return response
 
     return wrapper
