@@ -12,7 +12,7 @@ class Config(object):
     SEND_FILE_MAX_AGE_DEFAULT = 0
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     MIGRATE_ON_COPY = True
-    SQLALCHEMY_ECHO = False
+    SQLALCHEMY_ECHO = True
     SECRET_KEY = os.getenv("SECRET_KEY", "90909")
     DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))
     TESTING = False

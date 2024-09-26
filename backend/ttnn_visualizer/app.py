@@ -70,7 +70,7 @@ def create_app(settings_override=None):
 
 
 def extensions(app: flask.Flask):
-    from ttnn_visualizer.extensions import flask_static_digest, db, ma
+    from ttnn_visualizer.extensions import flask_static_digest
 
     """
     Register 0 or more extensions (mutates the app passed in).
@@ -79,8 +79,6 @@ def extensions(app: flask.Flask):
     :return: None
     """
 
-    db.init_app(app)
-    ma.init_app(app)
     flask_static_digest.init_app(app)
 
     # For automatically reflecting table data
