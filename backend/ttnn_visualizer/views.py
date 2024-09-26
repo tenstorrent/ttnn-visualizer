@@ -40,7 +40,7 @@ def health_check():
 @timer
 def operation_list():
     if request.args.get("no_orm", False):
-        return ttnn_visualizer.queries.operations_list(
+        return ttnn_visualizer.queries.get_operations_list(
             current_app.config["ACTIVE_DATA_DIRECTORY"],
         )
     operations = Operation.query.all()
@@ -56,7 +56,7 @@ def operation_list():
 @api.route("/operations/<operation_id>", methods=["GET"])
 def operation_detail(operation_id):
     if request.args.get("no_orm", False):
-        return ttnn_visualizer.queries.operation(
+        return ttnn_visualizer.queries.get_operation(
             current_app.config["ACTIVE_DATA_DIRECTORY"],
             operation_id,
         )

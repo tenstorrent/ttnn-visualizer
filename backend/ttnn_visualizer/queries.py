@@ -500,7 +500,7 @@ def timer(f):
 
 
 @timer
-def operation(report_path, operation_id):
+def get_operation(report_path, operation_id):
 
     operation = query_operation_by_id(report_path, operation_id)
 
@@ -550,7 +550,7 @@ def tensor_list(report_path):
 
 
 @timer
-def operations_list(report_path):
+def get_operations_list(report_path):
     operations = list(query_operations(report_path))
     operation_arguments = list(query_operation_arguments(report_path))
     stack_traces = list(query_stack_traces(report_path))
