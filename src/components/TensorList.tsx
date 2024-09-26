@@ -306,7 +306,6 @@ const TensorList = () => {
                                                 <BufferDetails
                                                     tensor={tensor}
                                                     operations={operations}
-                                                    queryKey={virtualRow.index.toString()}
                                                 />
                                             </div>
                                         </Collapsible>
