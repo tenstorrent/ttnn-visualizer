@@ -102,6 +102,10 @@ def get_config():
 
 @api.route("/tensors", methods=["GET"])
 def get_tensors():
+    if request.args.get("no_orm", True):
+        return ttnn_visualizer.queries.get_tensor_list(
+            current_app.config["ACTIVE_DATA_DIRECTORY"],
+        )
     tensors = Tensor.query.all()
     return TensorSchema(exclude=["tensor_id"]).dump(tensors, many=True)
 

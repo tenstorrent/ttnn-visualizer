@@ -167,11 +167,11 @@ def serialize_tensors(tensors, producers_consumers):
         tensor_id = tensor_data.pop("tensor_id")
         tensor_data.update(
             {
-                "consumers": producers_consumers[tensor_id],
-                "producers": producers_consumers[tensor_id],
+                "id": tensor_id,
+                "consumers": producers_consumers_dict[tensor_id].consumers,
+                "producers": producers_consumers_dict[tensor_id].producers,
             }
         )
 
-        tensor_data.update({"id": tensor_data.pop("tensor_id")})
         results.append(tensor_data)
     return results
