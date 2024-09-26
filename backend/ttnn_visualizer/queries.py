@@ -54,6 +54,12 @@ class Device:
 
 
 @dataclasses.dataclass
+class DeviceOperation:
+    operation_id: int
+    captured_graph: str
+
+
+@dataclasses.dataclass
 class Buffer:
     operation_id: int
     device_id: int
@@ -440,6 +446,42 @@ def query_producer_operation_id(report_path, tensor_id):
     sqlite_connection.close()
 
     return operation_id
+
+
+# Function to check if a table exists
+def check_table_exists(report_path, table_name):
+
+    sqlite_connection = sqlite3.connect(report_path / SQLITE_DB_PATH)
+    cursor = sqlite_connection.cursor()
+    cursor.execute(
+        """
+        SELECT name
+        FROM sqlite_master
+        WHERE type='table' AND name=?;
+    """,
+        (table_name,),
+    )
+
+    # Fetch the result (if the table exists, this will return the name, otherwise None)
+    result = cursor.fetchone()
+
+    sqlite_connection.close()
+    return bool(result)
+
+
+def query_device_operations(report_path):
+    sqlite_connection = sqlite3.connect(report_path / SQLITE_DB_PATH)
+    cursor = sqlite_connection.cursor()
+
+    cursor.execute("SELECT * FROM captured_graph")
+    for row in cursor.fetchall():
+        yield DeviceOperation(*row)
+
+    sqlite_connection.close()
+
+
+def query_device_operations_by_operation_id(report_path, operation_id):
+    pass
 
 
 def query_consumer_operation_ids(report_path, tensor_id):
