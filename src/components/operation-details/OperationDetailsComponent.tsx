@@ -5,7 +5,6 @@
 import React, { Fragment, forwardRef, useRef, useState } from 'react';
 import { Button, ButtonGroup, Icon, Intent, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
-import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
 import { toast } from 'react-toastify';
 import { useAtom } from 'jotai';
@@ -17,7 +16,6 @@ import { isEqual } from '../../functions/math';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
-import ROUTES from '../../definitions/routes';
 import { BufferType } from '../../model/BufferType';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 import {
@@ -33,6 +31,7 @@ import useOutsideClick from '../../hooks/useOutsideClick';
 import { getBufferColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
 import TensorDetailsComponent from './TensorDetailsComponent';
+import PlotTensorDetails from './PlotTensorDetails';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -59,7 +58,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [selectedTensorAddress, setSelectedTensorAddress] = useAtom(selectedTensorAddressAtom);
     const [selectedTensor, setSelectedTensor] = useState<number | null>(null);
     const [toastId, setToastId] = useState<number | null>(null);
-    const [showFullDRAMLegend, setShowFullDRAMLegend] = useState(false);
 
     const onClickOutside = () => {
         setSelectedTensorAddress(null);
@@ -375,6 +373,17 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             </>
                         )}
 
+                        {selectedTensorAddress &&
+                        selectedTensor &&
+                        (details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1 ||
+                            details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1_SMALL) ? (
+                            <PlotTensorDetails
+                                selectedTensor={selectedTensor}
+                                details={details}
+                                operationId={operationId}
+                            />
+                        ) : null}
+
                         {isDramActive && (
                             <>
                                 <h3>DRAM</h3>
@@ -440,78 +449,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             </>
                         )}
 
-                        <div className='plot-tensor-details'>
-                            <div
-                                ref={(el) => assignRef(el, 5)}
-                                className={classNames('producer-consumer', { hidden: selectedTensor === null })}
-                            >
-                                <div
-                                    className={classNames('title', {
-                                        hidden:
-                                            details.getTensorProducerConsumer(selectedTensor).producers.length === 0,
-                                    })}
-                                >
-                                    <Icon
-                                        size={14}
-                                        icon={IconNames.EXPORT}
-                                        className='producer-icon'
-                                    />
-                                    Producers
-                                </div>
-                                {details.getTensorProducerConsumer(selectedTensor).producers.map((op) => (
-                                    <div
-                                        key={op.id}
-                                        className='operation-link'
-                                    >
-                                        {operationId === op.id ? (
-                                            <span className='selected-tensor'>
-                                                {op.id} {op.name}
-                                            </span>
-                                        ) : (
-                                            <Link
-                                                to={`${ROUTES.OPERATIONS}/${op.id}`}
-                                                className={classNames('', { current: operationId === op.id })}
-                                            >
-                                                {op.id} {op.name}
-                                            </Link>
-                                        )}
-                                    </div>
-                                ))}
-
-                                <div
-                                    className={classNames('title', {
-                                        hidden:
-                                            details.getTensorProducerConsumer(selectedTensor).consumers.length === 0,
-                                    })}
-                                >
-                                    <Icon
-                                        size={14}
-                                        icon={IconNames.IMPORT}
-                                        className='consumer-icon'
-                                    />{' '}
-                                    Consumers
-                                </div>
-                                {details.getTensorProducerConsumer(selectedTensor).consumers.map((op) => (
-                                    <div
-                                        key={op.id}
-                                        className='operation-link'
-                                    >
-                                        {operationId === op.id ? (
-                                            <span className='selected-tensor'>
-                                                {op.id} {op.name}
-                                            </span>
-                                        ) : (
-                                            <Link
-                                                to={`${ROUTES.OPERATIONS}/${op.id}`}
-                                                className={classNames('', { current: operationId === op.id })}
-                                            >
-                                                {op.id} {op.name}
-                                            </Link>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                        {selectedTensorAddress &&
+                        selectedTensor &&
+                        details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.DRAM ? (
+                            <PlotTensorDetails
+                                selectedTensor={selectedTensor}
+                                details={details}
+                                operationId={operationId}
+                            />
+                        ) : null}
 
                         <hr />
 
