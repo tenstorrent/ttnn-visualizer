@@ -91,9 +91,12 @@
         margin-bottom: 20px;
         flex-direction: column;
         row-gap: 5px;
+        background-color: $tt-grey-3;
+        padding: 10px 20px;
 
-        &.lengthy-dram {
-            align-items: center;
+        &.lengthy-legend {
+            height: 420px;
+            overflow-y: scroll;
         }
 
         .legend-item {

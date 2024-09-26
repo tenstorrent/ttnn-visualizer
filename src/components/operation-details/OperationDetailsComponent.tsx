@@ -40,7 +40,7 @@ interface OperationDetailsProps {
 
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 const DRAM_PADDING_RATIO = 0.9998;
-const MAX_DRAM_MEMORY_REPORT_LENGTH = 20;
+const MAX_LEGEND_LENGTH = 20;
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const { data: operations } = useOperationsList();
@@ -98,7 +98,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { chartData: previousChartData, memory: previousMemory } = previousDetails.memoryData();
 
     const { chartData: dramData, memory: dramMemory } = details.memoryData(BufferType.DRAM);
-    const { chartData: previosDramData, memory: previousDramMemory } = previousDetails.memoryData(BufferType.DRAM);
+    const { chartData: previousDramData, memory: previousDramMemory } = previousDetails.memoryData(BufferType.DRAM);
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const dramMemoryReport: FragmentationEntry[] = [...dramMemory].sort((a, b) => a.address - b.address);
@@ -356,7 +356,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     ref={(el) => assignRef(el, 1)}
                                 />
 
-                                <div className='legend'>
+                                <div
+                                    className={classNames('legend', {
+                                        'lengthy-legend': memoryReport.length > MAX_LEGEND_LENGTH,
+                                    })}
+                                >
                                     {memoryReport.map((chunk) => (
                                         <MemoryLegendElement
                                             chunk={chunk}
@@ -378,11 +382,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 <ForwardedMemoryPlotRenderer
                                     title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
                                     className={classNames('dram-memory-renderer', {
-                                        'empty-plot': previosDramData.length === 0,
+                                        'empty-plot': previousDramData.length === 0,
                                         'identical-plot': dramHasntChanged,
                                     })}
                                     plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
-                                    chartDataList={[previosDramData]}
+                                    chartDataList={[previousDramData]}
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={DRAM_MEMORY_SIZE}
                                     configuration={DRAMRenderConfiguration}
@@ -419,11 +423,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                                 <div
                                     className={classNames('legend', {
-                                        'lengthy-dram': dramMemoryReport.length > MAX_DRAM_MEMORY_REPORT_LENGTH,
+                                        'lengthy-legend': dramMemoryReport.length > MAX_LEGEND_LENGTH,
                                     })}
                                 >
-                                    {/* // TODO: Refactor this because it looks weird when there are no tensors but there are DRAM buffers */}
-                                    {dramMemoryReport.slice(0, MAX_DRAM_MEMORY_REPORT_LENGTH).map((chunk) => (
+                                    {dramMemoryReport.map((chunk) => (
                                         <MemoryLegendElement
                                             chunk={chunk}
                                             key={chunk.address}
@@ -433,29 +436,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             onLegendClick={onLegendClick}
                                         />
                                     ))}
-
-                                    {showFullDRAMLegend &&
-                                        dramMemoryReport.slice(MAX_DRAM_MEMORY_REPORT_LENGTH).map((chunk) => (
-                                            <MemoryLegendElement
-                                                chunk={chunk}
-                                                key={chunk.address}
-                                                memSize={DRAM_MEMORY_SIZE}
-                                                selectedTensorAddress={selectedTensorAddress}
-                                                operationDetails={details}
-                                                onLegendClick={onLegendClick}
-                                            />
-                                        ))}
-
-                                    {dramMemoryReport.length > MAX_DRAM_MEMORY_REPORT_LENGTH ? (
-                                        <Button
-                                            icon={showFullDRAMLegend ? IconNames.CHEVRON_UP : IconNames.CHEVRON_DOWN}
-                                            minimal
-                                            onClick={() => setShowFullDRAMLegend(!showFullDRAMLegend)}
-                                            text={
-                                                showFullDRAMLegend ? 'Hide Full DRAM Legend' : 'Show Full DRAM Legend'
-                                            }
-                                        />
-                                    ) : null}
                                 </div>
                             </>
                         )}
@@ -583,8 +563,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                                         {deviceOperation.cbList.length > 0 && (
                                             <div
-                                                className='legend'
-                                                style={{ paddingLeft: `${deviceOperation.indentLevel * 2}em` }}
+                                                className={classNames('legend', {
+                                                    'lengthy-legend': deviceOperation.cbList.length > MAX_LEGEND_LENGTH,
+                                                })}
+                                                style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}
                                             >
                                                 {deviceOperation.cbList.map((cb) => (
                                                     <MemoryLegendElement
@@ -600,7 +582,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         )}
 
                                         {deviceOperation.deallocateAll && (
-                                            <p style={{ paddingLeft: `${deviceOperation.indentLevel * 2}em` }}>
+                                            <p style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}>
                                                 deallocate circular buffers
                                             </p>
                                         )}
