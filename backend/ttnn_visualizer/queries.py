@@ -494,6 +494,25 @@ def query_device_operations(report_path):
     sqlite_connection.close()
 
 
+def query_next_buffer(report_path, operation_id, address):
+
+    query = """
+    SELECT
+    buffers.operation_id AS buffers_operation_id,
+    buffers.device_id AS buffers_device_id,
+    buffers.address AS buffers_address,
+    buffers.max_size_per_bank AS buffers_max_size_per_bank,
+    buffers.buffer_type AS buffers_buffer_type
+FROM buffers
+WHERE buffers.address = ? AND buffers.operation_id > ? ORDER BY buffers.operation_id ASC
+    """
+    sqlite_connection = sqlite3.connect(report_path / SQLITE_DB_PATH)
+    cursor = sqlite_connection.cursor()
+    cursor.execute(query, (address, operation_id))
+    row = cursor.fetchone()
+    return Buffer(*row)
+
+
 def query_device_operations_by_operation_id(report_path, operation_id):
     sqlite_connection = sqlite3.connect(report_path / SQLITE_DB_PATH)
     cursor = sqlite_connection.cursor()
@@ -652,3 +671,11 @@ def get_operations_list(report_path):
         producers_consumers,
         device_operations,
     )
+
+
+@timer
+def get_next_buffer(report_path, operation_id, address):
+    buffer = query_next_buffer(report_path, operation_id, address)
+    if buffer:
+        return dataclasses.asdict(buffer)
+    return None

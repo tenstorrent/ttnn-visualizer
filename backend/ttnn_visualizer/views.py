@@ -7,6 +7,7 @@ from pathlib import Path
 import ttnn_visualizer.queries
 from ttnn_visualizer.database import create_update_database
 from flask import Blueprint, Response, current_app, request
+from ttnn_visualizer.queries import get_operation, get_operations_list, get_next_buffer
 
 from ttnn_visualizer.models import Device, Operation, Tensor, Buffer
 from ttnn_visualizer.remotes import (
@@ -40,7 +41,7 @@ def health_check():
 @timer
 def operation_list():
     if request.args.get("no_orm", True):
-        return ttnn_visualizer.queries.get_operations_list(
+        return get_operations_list(
             current_app.config["ACTIVE_DATA_DIRECTORY"],
         )
     operations = Operation.query.all()
@@ -79,7 +80,7 @@ def operation_detail(operation_id):
         "GET",
     ],
 )
-def get_operation_history():
+def operation_history():
     operation_history_filename = "operation_history.json"
     operation_history_file = Path(
         current_app.config["ACTIVE_DATA_DIRECTORY"], operation_history_filename
@@ -101,7 +102,7 @@ def get_config():
 
 
 @api.route("/tensors", methods=["GET"])
-def get_tensors():
+def tensors():
     if request.args.get("no_orm", True):
         return ttnn_visualizer.queries.get_tensor_list(
             current_app.config["ACTIVE_DATA_DIRECTORY"],
@@ -111,25 +112,23 @@ def get_tensors():
 
 
 @api.route("/buffer", methods=["GET"])
-def get_next_buffer():
+def buffer():
     address = request.args.get("address")
     operation_id = request.args.get("operation_id")
 
     if not address or not operation_id:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
-    buffer = (
-        Buffer.query.filter(
-            Buffer.address == address, Buffer.operation_id > operation_id
-        )
-        .order_by(Buffer.operation_id.asc())
-        .first()
+    buffer = get_next_buffer(
+        current_app.config["ACTIVE_DATA_DIRECTORY"],
+        operation_id,
+        address,
     )
 
     if not buffer:
         return Response(status=HTTPStatus.NOT_FOUND)
 
-    return BufferSchema().dump(buffer)
+    return buffer
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
