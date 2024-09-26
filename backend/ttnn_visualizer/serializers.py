@@ -46,9 +46,10 @@ def serialize_operations(
         ]
         operation_data = dataclasses.asdict(operation)
         operation_data.update({"id": operation.operation_id})
-        operation_device_operations = (
-            device_operations_dict.get(operation.operation_id, []),
+        operation_device_operations = device_operations_dict.get(
+            operation.operation_id, []
         )
+
         results.append(
             dict(
                 stack_trace=stack_traces_dict.get(operation.operation_id),
