@@ -541,17 +541,20 @@ def query_producers_consumers(report_path):
              LEFT JOIN
               output_tensors ot on t.tensor_id = ot.tensor_id
             GROUP BY
-              t.tensor_id;
+              t.tensor_id
+
     """
     )
     for row in cursor.fetchall():
         tensor_id, producers, consumers = row
         if producers:
-            producers = set(map(int, producers.split(",")))
+            producers = list(set(map(int, producers.split(","))))
+            producers.sort()
         if consumers:
-            consumers = set(map(int, consumers.split(",")))
+            consumers = list(set(map(int, consumers.split(","))))
+            consumers.sort()
         producer_consumers = ProducersConsumers(
-            tensor_id, list(producers or []), list(consumers or [])
+            tensor_id, producers or [], consumers or []
         )
         yield producer_consumers
 
