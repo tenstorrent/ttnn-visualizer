@@ -631,6 +631,7 @@ def get_tensor_list(report_path):
 @timer
 def get_operations_list(report_path):
     operations = list(query_operations(report_path))
+    operations.sort(key=lambda o: o.operation_id)
     operation_arguments = list(query_operation_arguments(report_path))
     device_operations = list(query_device_operations(report_path))
     stack_traces = list(query_stack_traces(report_path))
