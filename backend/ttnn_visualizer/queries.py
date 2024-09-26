@@ -1,12 +1,13 @@
 import dataclasses
 import enum
+import json
 import sqlite3
 from functools import wraps
+from json import JSONDecodeError
 from pathlib import Path
 from timeit import default_timer
 from typing import Callable
 
-from ttnn_visualizer.models import device_operations
 from ttnn_visualizer.serializers import (
     serialize_operations,
     serialize_operation,
@@ -58,6 +59,18 @@ class Device:
 class DeviceOperation:
     operation_id: int
     captured_graph: str
+
+    def __post_init__(self):
+        try:
+            captured_graph = json.loads(self.captured_graph)
+            for graph in captured_graph:
+                id = graph.pop("counter")
+                graph.update({"id": id})
+
+            self.captured_graph = captured_graph
+
+        except JSONDecodeError:
+            self.captured_graph = []
 
 
 @dataclasses.dataclass
@@ -482,7 +495,21 @@ def query_device_operations(report_path):
 
 
 def query_device_operations_by_operation_id(report_path, operation_id):
-    pass
+    sqlite_connection = sqlite3.connect(report_path / SQLITE_DB_PATH)
+    cursor = sqlite_connection.cursor()
+    device_operation = None
+    if check_table_exists(sqlite_connection, "captured_graph"):
+        cursor.execute(
+            "SELECT * FROM captured_graph where operation_id = ?", (operation_id,)
+        )
+        result = cursor.fetchone()
+        operation_id, captured_graph = result
+        device_operation = DeviceOperation(
+            operation_id=operation_id, captured_graph=captured_graph
+        )
+
+    sqlite_connection.close()
+    return device_operation
 
 
 def query_consumer_operation_ids(report_path, tensor_id):
@@ -505,8 +532,8 @@ def query_producers_consumers(report_path):
         """
             SELECT
               t.tensor_id,
-              GROUP_CONCAT(it.operation_id, ', ') AS consumers,
-              GROUP_CONCAT(ot.operation_id, ', ') AS producers
+              GROUP_CONCAT(ot.operation_id, ', ') AS consumers,
+              GROUP_CONCAT(it.operation_id, ', ') AS producers
             FROM
               tensors t
             LEFT JOIN
@@ -564,6 +591,10 @@ def get_operation(report_path, operation_id):
     output_tensor_ids = [o.tensor_id for o in outputs]
     tensor_ids = input_tensor_ids + output_tensor_ids
     tensors = list(query_tensors_by_tensor_ids(report_path, tensor_ids))
+    device_operations = query_device_operations_by_operation_id(
+        report_path, operation_id
+    )
+
     producers_consumers = list(
         filter(
             lambda pc: pc.tensor_id in tensor_ids,
@@ -583,6 +614,7 @@ def get_operation(report_path, operation_id):
         tensors,
         devices,
         producers_consumers,
+        device_operations,
     )
 
 

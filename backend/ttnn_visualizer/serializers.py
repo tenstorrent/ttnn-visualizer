@@ -17,6 +17,12 @@ def serialize_operations(
     for t in tensors:
         tensors_dict.update({t.tensor_id: t})
 
+    device_operations_dict = dict()
+    for device_operation in device_operations:
+        device_operations_dict.update(
+            {device_operation.operation_id: device_operation.captured_graph}
+        )
+
     stack_traces_dict = defaultdict(str)
     for stack_trace in stack_traces:
         stack_traces_dict.update({stack_trace.operation_id: stack_trace.stack_trace})
@@ -40,10 +46,14 @@ def serialize_operations(
         ]
         operation_data = dataclasses.asdict(operation)
         operation_data.update({"id": operation.operation_id})
+        operation_device_operations = (
+            device_operations_dict.get(operation.operation_id, []),
+        )
         results.append(
             dict(
                 stack_trace=stack_traces_dict.get(operation.operation_id),
                 **operation_data,
+                device_operations=operation_device_operations,
                 arguments=arguments,
                 inputs=inputs,
                 outputs=outputs,
@@ -62,15 +72,16 @@ def serialize_inputs_outputs(inputs, outputs, producers_consumers, tensors_dict)
     for input in inputs:
         input_tensor = dataclasses.asdict(tensors_dict[input.tensor_id])
         producers_consumers = producers_consumers_dict.get(input.tensor_id)
+
         input_tensor.update(
             {
+                "id": input_tensor.pop("tensor_id"),
                 "consumers": producers_consumers.consumers,
                 "producers": producers_consumers.producers,
             }
         )
 
         input_data = dataclasses.asdict(input)
-        input_data.pop("tensor_id")
         inputs_dict[input.operation_id].append(dict(**input_data, **input_tensor))
     # Serialize Outputs
     outputs_dict = defaultdict(list)
@@ -79,13 +90,13 @@ def serialize_inputs_outputs(inputs, outputs, producers_consumers, tensors_dict)
         producers_consumers = producers_consumers_dict.get(output.tensor_id)
         output_tensor.update(
             {
+                "id": output_tensor.pop("tensor_id"),
                 "consumers": producers_consumers.consumers,
                 "producers": producers_consumers.producers,
             }
         )
 
         output_data = dataclasses.asdict(output)
-        output_data.pop("tensor_id")
         outputs_dict[output.operation_id].append(dict(**output_data, **output_tensor))
     return inputs_dict, outputs_dict
 
@@ -100,6 +111,7 @@ def serialize_operation(
     tensors,
     devices,
     producers_consumers,
+    device_operations,
 ):
 
     tensors_dict = dict()
@@ -125,11 +137,17 @@ def serialize_operation(
     operation_data = operation.__dict__.copy()
     operation_data.update({"id": operation.operation_id})
 
-    inputs_data = list(inputs_dict.values())
-    outputs_data = list(outputs_dict.values())
+    inputs_data = [
+        list(inputs_dict.values())[0][0] if len(inputs_dict.values()) else []
+    ]
+    outputs_data = [
+        list(outputs_dict.values())[0][0] if len(outputs_dict.values()) else []
+    ]
+
     return dict(
         **operation_data,
         l1_sizes=l1_sizes,
+        device_operations=device_operations.captured_graph if device_operations else [],
         stack_trace=stack_trace or "",
         buffers=buffer_list,
         arguments=arguments_data,
