@@ -135,3 +135,23 @@ def serialize_operation(
         inputs=inputs_data,
         outputs=outputs_data,
     )
+
+
+def serialize_tensors(tensors, producers_consumers):
+    producers_consumers_dict = dict()
+    for pc in producers_consumers:
+        producers_consumers_dict.update({pc.tensor_id: pc})
+    results = []
+    for tensor in tensors:
+        tensor_data = dataclasses.asdict(tensor)
+        tensor_id = tensor_data.pop("tensor_id")
+        tensor_data.update(
+            {
+                "consumers": producers_consumers[tensor_id],
+                "producers": producers_consumers[tensor_id],
+            }
+        )
+
+        tensor_data.update({"id": tensor_data.pop("tensor_id")})
+        results.append(tensor_data)
+    return results

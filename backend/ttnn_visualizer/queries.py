@@ -5,7 +5,11 @@ from functools import wraps
 from pathlib import Path
 from timeit import default_timer
 
-from ttnn_visualizer.serializers import serialize_operations, serialize_operation
+from ttnn_visualizer.serializers import (
+    serialize_operations,
+    serialize_operation,
+    serialize_tensors,
+)
 
 
 @dataclasses.dataclass
@@ -538,15 +542,11 @@ def get_operation(report_path, operation_id):
     )
 
 
-def tensor_list(report_path):
-    tensors = query_tensors(report_path)
-    results = []
-    for tensor in tensors:
-        tensor_data = dataclasses.asdict(tensor)
-        tensor_data.update({"consumers": [], "producers": []})  # TODO
-        tensor_data.update({"id": tensor_data.pop("tensor_id")})
-        results.append(tensor_data)
-    return results
+@timer
+def get_tensor_list(report_path):
+    tensors = list(query_tensors(report_path))
+    producers_consumers = list(query_producers_consumers(report_path))
+    return serialize_tensors(tensors, producers_consumers)
 
 
 @timer
@@ -558,7 +558,7 @@ def get_operations_list(report_path):
     tensors = list(query_tensors(report_path))
     inputs = list(query_input_tensors(report_path))
     devices = list(query_devices(report_path))
-    producers_consumers = query_producers_consumers(report_path)
+    producers_consumers = list(query_producers_consumers(report_path))
 
     return serialize_operations(
         inputs,
