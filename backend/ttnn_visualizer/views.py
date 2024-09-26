@@ -3,6 +3,8 @@ import logging
 import shutil
 from http import HTTPStatus
 from pathlib import Path
+
+import ttnn_visualizer.queries
 from ttnn_visualizer.database import create_update_database
 from flask import Blueprint, Response, current_app, request
 
@@ -37,6 +39,10 @@ def health_check():
 @api.route("/operations", methods=["GET"])
 @timer
 def operation_list():
+    if request.args.get("no_orm", False):
+        return ttnn_visualizer.queries.operations_list(
+            current_app.config["ACTIVE_DATA_DIRECTORY"],
+        )
     operations = Operation.query.all()
     return OperationSchema(
         many=True,
@@ -49,6 +55,12 @@ def operation_list():
 
 @api.route("/operations/<operation_id>", methods=["GET"])
 def operation_detail(operation_id):
+    if request.args.get("no_orm", False):
+        return ttnn_visualizer.queries.operation(
+            current_app.config["ACTIVE_DATA_DIRECTORY"],
+            operation_id,
+        )
+
     operation = Operation.query.get(operation_id)
     if not operation:
         return Response(status=HTTPStatus.NOT_FOUND)
