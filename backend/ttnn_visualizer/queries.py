@@ -448,25 +448,60 @@ def query_consumer_operation_ids(report_path, tensor_id):
     sqlite_connection.close()
 
 
-def query_producers_consumers(report_path):
+def query_producers_consumers_by_tensor_ids(report_path, tensor_ids):
+    sqlite_connection = sqlite3.connect(report_path / SQLITE_DB_PATH)
+    cursor = sqlite_connection.cursor()
+    query = """
 
+    SELECT
+        t.tensor_id,
+        GROUP_CONCAT(it.operation_id, ', ') AS consumers,
+        GROUP_CONCAT(ot.operation_id, ', ') AS producers
+    FROM
+        tensors t
+    RIGHT JOIN
+        input_tensors it ON t.tensor_id = it.tensor_id AND t.tensor_id in ({})
+    RIGHT JOIN
+        output_tensors ot on t.tensor_id = ot.tensor_id AND t.tensor_id in ({})
+    GROUP BY
+        t.tensor_id
+    """.format(
+        ",".join("?" * len(tensor_ids)), ",".join("?" * len(tensor_ids))
+    )
+
+    print(query)
+
+    cursor.execute(query, tensor_ids * 2)
+    for row in cursor.fetchall():
+        tensor_id, producers, consumers = row
+        if producers:
+            producers = producers.split(",")
+        if consumers:
+            consumers = consumers.split(",")
+        producer_consumers = ProducersConsumers(
+            tensor_id, producers or [], consumers or []
+        )
+        yield producer_consumers
+
+
+def query_producers_consumers(report_path):
     sqlite_connection = sqlite3.connect(report_path / SQLITE_DB_PATH)
     cursor = sqlite_connection.cursor()
 
     cursor.execute(
         """
-    SELECT
-      t.tensor_id,
-      GROUP_CONCAT(it.operation_id, ', ') AS consumers,
-      GROUP_CONCAT(ot.operation_id, ', ') AS producers
-    FROM
-      tensors t
-    LEFT JOIN
-      input_tensors it ON t.tensor_id = it.tensor_id
-     LEFT JOIN
-      output_tensors ot on t.tensor_id = ot.tensor_id
-    GROUP BY
-      t.tensor_id;
+            SELECT
+              t.tensor_id,
+              GROUP_CONCAT(it.operation_id, ', ') AS consumers,
+              GROUP_CONCAT(ot.operation_id, ', ') AS producers
+            FROM
+              tensors t
+            LEFT JOIN
+              input_tensors it ON t.tensor_id = it.tensor_id
+             LEFT JOIN
+              output_tensors ot on t.tensor_id = ot.tensor_id
+            GROUP BY
+              t.tensor_id;
     """
     )
     for row in cursor.fetchall():
@@ -515,6 +550,10 @@ def operation(report_path, operation_id):
     output_tensor_ids = [o.tensor_id for o in outputs]
     tensor_ids = input_tensor_ids + output_tensor_ids
     tensors = list(query_tensors_by_tensor_ids(report_path, tensor_ids))
+    producers_consumers = list(
+        query_producers_consumers_by_tensor_ids(report_path, tensor_ids)
+    )
+
     devices = list(query_devices(report_path))
 
     return serialize_operation(
@@ -523,70 +562,10 @@ def operation(report_path, operation_id):
         operation,
         operation_arguments,
         outputs,
-        report_path,
         stack_trace,
         tensors,
         devices,
-    )
-
-
-def serialize_operation(
-    buffers,
-    inputs,
-    operation,
-    operation_arguments,
-    outputs,
-    report_path,
-    stack_trace,
-    tensors,
-    devices,
-):
-    tensors_dict = dict()
-    for t in tensors:
-        tensors_dict.update({t.tensor_id: t})
-
-    # Serialize Inputs
-    inputs_list = []
-    for input in inputs:
-        input_tensor = dataclasses.asdict(tensors_dict[input.tensor_id])
-        input_tensor.update(
-            {
-                "consumers": [],
-                "producers": [],
-            }
-        )
-
-        input_data = dataclasses.asdict(input)
-        input_data.pop("tensor_id")
-        inputs_list.append(dict(**input_data, **input_tensor))
-
-    # Serialize Outputs
-    outputs_list = []
-    for output in outputs:
-        output_tensor = dataclasses.asdict(tensors_dict[output.tensor_id])
-        output_tensor.update({"consumers": [], "producers": []})  # TODO
-        output_data = dataclasses.asdict(output)
-        output_data.pop("tensor_id")
-        outputs_list.append(dict(**output_data, **output_tensor))
-
-    # Serialize Buffers
-    buffer_list = []
-    for buffer in buffers:
-        buffer_data = dataclasses.asdict(buffer)
-        buffer_list.append(buffer_data)
-
-    l1_sizes = [d.worker_l1_size for d in devices]
-    arguments_data = [dataclasses.asdict(argument) for argument in operation_arguments]
-    operation_data = operation.__dict__.copy()
-    operation_data.update({"id": operation.operation_id})
-    return dict(
-        **operation_data,
-        l1_sizes=l1_sizes,
-        stack_trace=stack_trace or "",
-        buffers=buffer_list,
-        arguments=arguments_data,
-        inputs=inputs_list,
-        outputs=outputs_list,
+        producers_consumers,
     )
 
 
@@ -603,7 +582,6 @@ def tensor_list(report_path):
 
 @timer
 def operations_list(report_path):
-
     operations = list(query_operations(report_path))
     operation_arguments = list(query_operation_arguments(report_path))
     stack_traces = list(query_stack_traces(report_path))
@@ -611,9 +589,17 @@ def operations_list(report_path):
     tensors = list(query_tensors(report_path))
     inputs = list(query_input_tensors(report_path))
     devices = list(query_devices(report_path))
+    producers_consumers = query_producers_consumers(report_path)
 
     return serialize_operations(
-        inputs, operation_arguments, operations, outputs, stack_traces, tensors, devices
+        inputs,
+        operation_arguments,
+        operations,
+        outputs,
+        stack_traces,
+        tensors,
+        devices,
+        producers_consumers,
     )
 
 
@@ -625,6 +611,7 @@ def serialize_operations(
     stack_traces,
     tensors,
     devices,
+    producers_consumers,
 ):
     tensors_dict = dict()
     for t in tensors:
@@ -688,3 +675,63 @@ def serialize_operations(
             )
         )
     return results
+
+
+def serialize_operation(
+    buffers,
+    inputs,
+    operation,
+    operation_arguments,
+    outputs,
+    stack_trace,
+    tensors,
+    devices,
+    producers_consumers,
+):
+    tensors_dict = dict()
+    for t in tensors:
+        tensors_dict.update({t.tensor_id: t})
+
+    # Serialize Inputs
+    inputs_list = []
+    for input in inputs:
+        input_tensor = dataclasses.asdict(tensors_dict[input.tensor_id])
+        input_tensor.update(
+            {
+                "consumers": [],
+                "producers": [],
+            }
+        )
+
+        input_data = dataclasses.asdict(input)
+        input_data.pop("tensor_id")
+        inputs_list.append(dict(**input_data, **input_tensor))
+
+    # Serialize Outputs
+    outputs_list = []
+    for output in outputs:
+        output_tensor = dataclasses.asdict(tensors_dict[output.tensor_id])
+        output_tensor.update({"consumers": [], "producers": []})  # TODO
+        output_data = dataclasses.asdict(output)
+        output_data.pop("tensor_id")
+        outputs_list.append(dict(**output_data, **output_tensor))
+
+    # Serialize Buffers
+    buffer_list = []
+    for buffer in buffers:
+        buffer_data = dataclasses.asdict(buffer)
+        buffer_list.append(buffer_data)
+
+    l1_sizes = [d.worker_l1_size for d in devices]
+    arguments_data = [dataclasses.asdict(argument) for argument in operation_arguments]
+    operation_data = operation.__dict__.copy()
+    operation_data.update({"id": operation.operation_id})
+    return dict(
+        **operation_data,
+        l1_sizes=l1_sizes,
+        stack_trace=stack_trace or "",
+        buffers=buffer_list,
+        arguments=arguments_data,
+        inputs=inputs_list,
+        outputs=outputs_list,
+    )
