@@ -7,9 +7,13 @@ from pathlib import Path
 import ttnn_visualizer.queries
 from ttnn_visualizer.database import create_update_database
 from flask import Blueprint, Response, current_app, request
-from ttnn_visualizer.queries import get_operation, get_operations_list, get_next_buffer
+from ttnn_visualizer.queries import (
+    get_operation,
+    get_operations_list,
+    get_next_buffer,
+    get_tensor,
+)
 
-from ttnn_visualizer.models import Device, Operation, Tensor, Buffer
 from ttnn_visualizer.remotes import (
     RemoteConnection,
     RemoteFolder,
@@ -19,11 +23,6 @@ from ttnn_visualizer.remotes import (
     get_remote_test_folders,
     read_remote_file,
     sync_test_folders,
-)
-from ttnn_visualizer.schemas import (
-    OperationSchema,
-    TensorSchema,
-    BufferSchema,
 )
 from ttnn_visualizer.utils import timer
 
@@ -40,37 +39,16 @@ def health_check():
 @api.route("/operations", methods=["GET"])
 @timer
 def operation_list():
-    if request.args.get("no_orm", True):
-        return get_operations_list(
-            current_app.config["ACTIVE_DATA_DIRECTORY"],
-        )
-    operations = Operation.query.all()
-    return OperationSchema(
-        many=True,
-        exclude=[
-            "buffers",
-            "operation_id",
-        ],
-    ).dump(operations)
+    return get_operations_list(
+        current_app.config["ACTIVE_DATA_DIRECTORY"],
+    )
 
 
 @api.route("/operations/<operation_id>", methods=["GET"])
 def operation_detail(operation_id):
-    if request.args.get("no_orm", True):
-        return ttnn_visualizer.queries.get_operation(
-            current_app.config["ACTIVE_DATA_DIRECTORY"],
-            operation_id,
-        )
-
-    operation = Operation.query.get(operation_id)
-    if not operation:
-        return Response(status=HTTPStatus.NOT_FOUND)
-    devices = Device.query.order_by(Device.device_id.asc()).all()
-    l1_sizes = [d.worker_l1_size for d in devices]
-
-    return dict(
-        **OperationSchema().dump(operation),
-        l1_sizes=l1_sizes,
+    return get_operation(
+        current_app.config["ACTIVE_DATA_DIRECTORY"],
+        operation_id,
     )
 
 
@@ -102,17 +80,14 @@ def get_config():
 
 
 @api.route("/tensors", methods=["GET"])
-def tensors():
-    if request.args.get("no_orm", True):
-        return ttnn_visualizer.queries.get_tensor_list(
-            current_app.config["ACTIVE_DATA_DIRECTORY"],
-        )
-    tensors = Tensor.query.all()
-    return TensorSchema(exclude=["tensor_id"]).dump(tensors, many=True)
+def tensors_list():
+    return ttnn_visualizer.queries.get_tensor_list(
+        current_app.config["ACTIVE_DATA_DIRECTORY"],
+    )
 
 
 @api.route("/buffer", methods=["GET"])
-def buffer():
+def buffer_detail():
     address = request.args.get("address")
     operation_id = request.args.get("operation_id")
 
@@ -132,11 +107,11 @@ def buffer():
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
-def get_tensor(tensor_id):
-    tensor = Tensor.query.get(tensor_id)
-    if not tensor:
+def tensor_detail(tensor_id):
+    tensor_data = get_tensor(current_app.config["ACTIVE_DATA_DIRECTORY"], tensor_id)
+    if not tensor_data:
         return Response(status=HTTPStatus.NOT_FOUND)
-    return TensorSchema().dump(tensor)
+    return tensor_data
 
 
 @api.route(
