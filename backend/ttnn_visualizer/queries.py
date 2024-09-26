@@ -448,42 +448,6 @@ def query_consumer_operation_ids(report_path, tensor_id):
     sqlite_connection.close()
 
 
-def query_producers_consumers_by_tensor_ids(report_path, tensor_ids):
-    sqlite_connection = sqlite3.connect(report_path / SQLITE_DB_PATH)
-    cursor = sqlite_connection.cursor()
-    query = """
-
-    SELECT
-        t.tensor_id,
-        GROUP_CONCAT(it.operation_id, ', ') AS consumers,
-        GROUP_CONCAT(ot.operation_id, ', ') AS producers
-    FROM
-        tensors t
-    RIGHT JOIN
-        input_tensors it ON t.tensor_id = it.tensor_id AND t.tensor_id in ({})
-    RIGHT JOIN
-        output_tensors ot on t.tensor_id = ot.tensor_id AND t.tensor_id in ({})
-    GROUP BY
-        t.tensor_id
-    """.format(
-        ",".join("?" * len(tensor_ids)), ",".join("?" * len(tensor_ids))
-    )
-
-    print(query)
-
-    cursor.execute(query, tensor_ids * 2)
-    for row in cursor.fetchall():
-        tensor_id, producers, consumers = row
-        if producers:
-            producers = producers.split(",")
-        if consumers:
-            consumers = consumers.split(",")
-        producer_consumers = ProducersConsumers(
-            tensor_id, producers or [], consumers or []
-        )
-        yield producer_consumers
-
-
 def query_producers_consumers(report_path):
     sqlite_connection = sqlite3.connect(report_path / SQLITE_DB_PATH)
     cursor = sqlite_connection.cursor()
@@ -507,11 +471,11 @@ def query_producers_consumers(report_path):
     for row in cursor.fetchall():
         tensor_id, producers, consumers = row
         if producers:
-            producers = producers.split(",")
+            producers = set(map(int, producers.split(",")))
         if consumers:
-            consumers = consumers.split(",")
+            consumers = set(map(int, consumers.split(",")))
         producer_consumers = ProducersConsumers(
-            tensor_id, producers or [], consumers or []
+            tensor_id, list(producers or []), list(consumers or [])
         )
         yield producer_consumers
 
@@ -544,14 +508,17 @@ def operation(report_path, operation_id):
     )
     stack_trace = query_stack_trace(report_path, operation_id)
 
-    inputs = query_input_tensors_by_operation_id(report_path, operation_id)
-    outputs = query_output_tensors_by_operation_id(report_path, operation_id)
+    inputs = list(query_input_tensors_by_operation_id(report_path, operation_id))
+    outputs = list(query_output_tensors_by_operation_id(report_path, operation_id))
     input_tensor_ids = [i.tensor_id for i in inputs]
     output_tensor_ids = [o.tensor_id for o in outputs]
     tensor_ids = input_tensor_ids + output_tensor_ids
     tensors = list(query_tensors_by_tensor_ids(report_path, tensor_ids))
     producers_consumers = list(
-        query_producers_consumers_by_tensor_ids(report_path, tensor_ids)
+        filter(
+            lambda pc: pc.tensor_id in tensor_ids,
+            query_producers_consumers(report_path),
+        )
     )
 
     devices = list(query_devices(report_path))
@@ -616,6 +583,10 @@ def serialize_operations(
     tensors_dict = dict()
     for t in tensors:
         tensors_dict.update({t.tensor_id: t})
+    producers_consumers_dict = dict()
+    for pc in producers_consumers:
+        producers_consumers_dict.update({pc.tensor_id: pc})
+
     stack_traces_dict = defaultdict(str)
     for stack_trace in stack_traces:
         stack_traces_dict.update({stack_trace.operation_id: stack_trace.stack_trace})
@@ -629,10 +600,11 @@ def serialize_operations(
     inputs_dict = defaultdict(list)
     for input in inputs:
         input_tensor = dataclasses.asdict(tensors_dict[input.tensor_id])
+        producers_consumers = producers_consumers_dict.get(input.tensor_id)
         input_tensor.update(
             {
-                "consumers": [],
-                "producers": [],
+                "consumers": producers_consumers.consumers,
+                "producers": producers_consumers.producers,
             }
         )
 
@@ -644,10 +616,11 @@ def serialize_operations(
     outputs_dict = defaultdict(list)
     for output in outputs:
         output_tensor = dataclasses.asdict(tensors_dict[output.tensor_id])
+        producers_consumers = producers_consumers_dict.get(output.tensor_id)
         output_tensor.update(
             {
-                "consumers": [],
-                "producers": [],
+                "consumers": producers_consumers.consumers,
+                "producers": producers_consumers.producers,
             }
         )
 
@@ -688,21 +661,26 @@ def serialize_operation(
     devices,
     producers_consumers,
 ):
+
     tensors_dict = dict()
     for t in tensors:
         tensors_dict.update({t.tensor_id: t})
 
+    producers_consumers_dict = dict()
+    for pc in producers_consumers:
+        producers_consumers_dict.update({pc.tensor_id: pc})
+
     # Serialize Inputs
     inputs_list = []
     for input in inputs:
+        producers_consumers = producers_consumers_dict.get(input.tensor_id)
         input_tensor = dataclasses.asdict(tensors_dict[input.tensor_id])
         input_tensor.update(
             {
-                "consumers": [],
-                "producers": [],
+                "consumers": producers_consumers.consumers,
+                "producers": producers_consumers.producers,
             }
         )
-
         input_data = dataclasses.asdict(input)
         input_data.pop("tensor_id")
         inputs_list.append(dict(**input_data, **input_tensor))
@@ -711,7 +689,13 @@ def serialize_operation(
     outputs_list = []
     for output in outputs:
         output_tensor = dataclasses.asdict(tensors_dict[output.tensor_id])
-        output_tensor.update({"consumers": [], "producers": []})  # TODO
+        producers_consumers = producers_consumers_dict.get(output.tensor_id)
+        output_tensor.update(
+            {
+                "consumers": producers_consumers.consumers,
+                "producers": producers_consumers.producers,
+            }
+        )
         output_data = dataclasses.asdict(output)
         output_data.pop("tensor_id")
         outputs_list.append(dict(**output_data, **output_tensor))
