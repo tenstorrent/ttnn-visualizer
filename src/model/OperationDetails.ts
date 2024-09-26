@@ -264,10 +264,33 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
                 size: 0,
             },
         ].sort((a, b) => a.address - b.address);
-        totalMemory.forEach((chunk, index) => {
+
+        const continuousMemory: Chunk[] = [];
+        totalMemory.forEach((chunk) => {
+            if (continuousMemory.length === 0) {
+                continuousMemory.push({ ...chunk });
+            } else {
+                const lastChunk = continuousMemory[continuousMemory.length - 1];
+                if (lastChunk.address + lastChunk.size >= chunk.address) {
+                    lastChunk.size = Math.max(lastChunk.size, chunk.address + chunk.size - lastChunk.address);
+                } else {
+                    continuousMemory.push({ ...chunk });
+                }
+            }
+        });
+
+        continuousMemory.forEach((chunk, index) => {
             if (index > 0) {
-                const prevChunk = totalMemory[index - 1];
-                if (prevChunk.address + prevChunk.size !== chunk.address) {
+                let prevChunkIndex = index - 1;
+                let prevChunk = continuousMemory[prevChunkIndex];
+
+                while (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size > chunk.address) {
+                    prevChunkIndex--;
+                    if (prevChunkIndex >= 0) {
+                        prevChunk = continuousMemory[prevChunkIndex];
+                    }
+                }
+                if (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size < chunk.address) {
                     fragmentation.push({
                         address: prevChunk.address + prevChunk.size,
                         size: chunk.address - (prevChunk.address + prevChunk.size),
