@@ -52,8 +52,8 @@ def serialize_operations(
 
         results.append(
             dict(
-                stack_trace=stack_traces_dict.get(operation.operation_id),
                 **operation_data,
+                stack_trace=stack_traces_dict.get(operation.operation_id),
                 device_operations=operation_device_operations,
                 arguments=arguments,
                 inputs=inputs,
