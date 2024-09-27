@@ -17,7 +17,7 @@ def timer(f: Callable):
         start_time = default_timer()
         response = f(*args, **kwargs)
         total_elapsed_time = default_timer() - start_time
-        logger.info(f"{f.__name__}: Elapsed time: {total_elapsed_time}")
+        logger.info(f"{f.__name__}: Elapsed time: {total_elapsed_time:0.4f} seconds")
         return response
 
     return wrapper
