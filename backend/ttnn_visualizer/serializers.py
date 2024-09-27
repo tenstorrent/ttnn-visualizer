@@ -127,13 +127,13 @@ def serialize_operation(
     operation_data = operation.__dict__.copy()
     operation_data.update({"id": operation.operation_id})
 
-    inputs_data = [
-        list(inputs_dict.values())[0][0] if len(inputs_dict.values()) else []
-    ]
-    outputs_data = [
-        list(outputs_dict.values())[0][0] if len(outputs_dict.values()) else []
-    ]
+    inputs_data = inputs_dict.get(operation.operation_id)
+    if len(inputs_data):
+        inputs_data = inputs_data[0]
 
+    outputs_data = outputs_dict.get(operation.operation_id)
+    if len(outputs_data):
+        outputs_data = outputs_data[0]
     return dict(
         **operation_data,
         l1_sizes=l1_sizes,
@@ -141,8 +141,8 @@ def serialize_operation(
         stack_trace=stack_trace or "",
         buffers=buffer_list,
         arguments=arguments_data,
-        inputs=inputs_data,
-        outputs=outputs_data,
+        inputs=inputs_data or [],
+        outputs=outputs_data or [],
     )
 
 
