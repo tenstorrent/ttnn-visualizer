@@ -60,7 +60,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         <td>
                             {isLoading ? 'Loading...' : undefined}
 
-                            {buffer && !isLoading && deallocationOperationId ? (
+                            {buffer && !isLoading && Number.isFinite(deallocationOperationId) ? (
                                 <div>
                                     Deallocation found in{' '}
                                     <Link to={`${ROUTES.OPERATIONS}/${deallocationOperationId}`}>
