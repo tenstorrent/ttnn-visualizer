@@ -85,6 +85,7 @@ def get_db_path_from_request(request: None):
 
 
 @api.route("/operations/<operation_id>", methods=["GET"])
+@timer
 def operation_detail(operation_id):
     db_path = get_db_path_from_request(request)
 
@@ -167,6 +168,7 @@ def get_config():
 
 
 @api.route("/tensors", methods=["GET"])
+@timer
 def tensors_list():
     db_path = get_db_path_from_request(request)
 
@@ -181,6 +183,7 @@ def tensors_list():
 
 
 @api.route("/buffer", methods=["GET"])
+@timer
 def buffer_detail():
     address = request.args.get("address")
     operation_id = request.args.get("operation_id")
@@ -202,6 +205,7 @@ def buffer_detail():
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
+@timer
 def tensor_detail(tensor_id):
     db_path = get_db_path_from_request(request)
 
