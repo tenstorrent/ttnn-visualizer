@@ -50,7 +50,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
                 <span className='format-numbers monospace'>{prettyPrintAddress(tensor.address, memorySize)}</span>
 
-                {deallocationOperationId && operations ? (
+                {Number.isFinite(deallocationOperationId) && operations ? (
                     <Tooltip
                         content={`Deallocation in ${deallocationOperationId} ${operations.find((operation) => operation.id === deallocationOperationId)?.name}`}
                         placement={PopoverPosition.TOP}
@@ -78,7 +78,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         placement={PopoverPosition.TOP}
                     >
                         <Icon
-                            icon={IconNames.FLOW_LINEAR}
+                            icon={IconNames.INHERITANCE}
                             intent={Intent.PRIMARY}
                         />
                     </Tooltip>
