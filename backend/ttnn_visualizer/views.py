@@ -68,6 +68,13 @@ def operation_list():
 
 
 def get_db_path_from_request(request: None):
+    """
+    Parses the request to determine the path of the target database
+    TODO At the moment we simply use one database 'active'
+    In future will target databases on a per-request basis
+    :param request:
+    :return:
+    """
     report_path = current_app.config["ACTIVE_DATA_DIRECTORY"]
     db_path = current_app.config["SQLITE_DB_PATH"]
     return report_path / db_path
