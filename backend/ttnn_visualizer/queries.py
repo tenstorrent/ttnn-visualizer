@@ -245,14 +245,16 @@ def query_producers_consumers(cursor):
     """
     cursor.execute(query)
     for row in cursor.fetchall():
-        tensor_id, producers, consumers = row
-        if producers:
-            producers = list(set(map(int, producers.split(","))))
+        producers = []
+        consumers = []
+        tensor_id, producers_data, consumers_data = row
+        if producers_data:
+            unique_producers = set(map(int, producers_data.split(",")))
+            producers = list(unique_producers)
             producers.sort()
-        if consumers:
-            consumers = list(set(map(int, consumers.split(","))))
+        if consumers_data:
+            unique_consumers = set(map(int, consumers_data.split(",")))
+            consumers = list(unique_consumers)
             consumers.sort()
-        producer_consumers = ProducersConsumers(
-            tensor_id, producers or [], consumers or []
-        )
+        producer_consumers = ProducersConsumers(tensor_id, producers, consumers)
         yield producer_consumers
