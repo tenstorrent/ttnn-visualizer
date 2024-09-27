@@ -300,9 +300,11 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
             }
         });
 
-        const largestEmpty = fragmentation.reduce((prev, current) => {
-            return prev.size > current.size ? prev : current;
-        });
+        const largestEmpty = fragmentation.length
+            ? fragmentation.reduce((prev, current) => {
+                  return prev.size > current.size ? prev : current;
+              })
+            : { size: 0 };
 
         fragmentation.forEach((fragment) => {
             if (fragment.size === largestEmpty.size) {
