@@ -209,6 +209,8 @@ def query_device_operations_by_operation_id(cursor, operation_id):
     if check_table_exists(cursor, "captured_graph"):
         cursor.execute(query, (operation_id,))
         result = cursor.fetchone()
+        if not result:
+            return None
         operation_id, captured_graph = result
         device_operation = DeviceOperation(
             operation_id=operation_id, captured_graph=captured_graph
