@@ -23,6 +23,17 @@ export const DRAMRenderConfiguration = {
     title: 'DRAM Address Space',
 } as PlotConfiguration;
 
+export const CBRenderConfiguration = {
+    height: 80,
+    margin: {
+        l: 5,
+        r: 5,
+        b: 30,
+        t: 25,
+    },
+    title: 'L1 Address Space',
+} as PlotConfiguration;
+
 export interface PlotConfiguration {
     height: number;
     margin: {
@@ -50,4 +61,10 @@ export interface PlotDataCustom extends PlotData {
         size: number;
         tensor: HistoricalTensor | null;
     };
+}
+
+export interface PlotDataOverrides {
+    color?: string;
+    hovertemplate?: string;
+    colorVariance?: number;
 }
