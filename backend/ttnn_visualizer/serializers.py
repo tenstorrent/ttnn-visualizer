@@ -128,12 +128,7 @@ def serialize_operation(
     operation_data.update({"id": operation.operation_id})
 
     inputs_data = inputs_dict.get(operation.operation_id)
-    if len(inputs_data):
-        inputs_data = inputs_data[0]
-
     outputs_data = outputs_dict.get(operation.operation_id)
-    if len(outputs_data):
-        outputs_data = outputs_data[0]
 
     return dict(
         **operation_data,
