@@ -41,6 +41,10 @@ def health_check():
 @timer
 def operation_list():
     db_path = get_db_path_from_request(request)
+
+    if not Path(db_path).exists():
+        return Response(status=HTTPStatus.BAD_REQUEST)
+
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         operations = list(queries.query_operations(cursor))
@@ -85,7 +89,7 @@ def operation_detail(operation_id):
     db_path = get_db_path_from_request(request)
 
     if not Path(db_path).exists():
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return Response(status=HTTPStatus.BAD_REQUEST)
 
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
@@ -165,6 +169,10 @@ def get_config():
 @api.route("/tensors", methods=["GET"])
 def tensors_list():
     db_path = get_db_path_from_request(request)
+
+    if not Path(db_path).exists():
+        return Response(status=HTTPStatus.BAD_REQUEST)
+
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         tensors = list(queries.query_tensors(cursor))
@@ -184,10 +192,9 @@ def buffer_detail():
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         buffer = queries.query_next_buffer(cursor, operation_id, address)
-        if buffer:
-            return dataclasses.asdict(buffer)
-
-    return Response(status=HTTPStatus.NOT_FOUND)
+        if not buffer:
+            return Response(status=HTTPStatus.NOT_FOUND)
+        return dataclasses.asdict(buffer)
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
@@ -196,10 +203,10 @@ def tensor_detail(tensor_id):
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         tensor = queries.query_tensor_by_id(cursor, tensor_id)
-        if tensor:
-            return dataclasses.asdict(tensor)
+        if not tensor:
+            return Response(status=HTTPStatus.NOT_FOUND)
 
-    return Response(status=HTTPStatus.NOT_FOUND)
+        return dataclasses.asdict(tensor)
 
 
 @api.route(
