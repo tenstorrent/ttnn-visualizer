@@ -68,37 +68,26 @@ def serialize_inputs_outputs(inputs, outputs, producers_consumers, tensors_dict)
     producers_consumers_dict = dict()
     for pc in producers_consumers:
         producers_consumers_dict.update({pc.tensor_id: pc})
-    # Serialize Inputs
-    inputs_dict = defaultdict(list)
-    for input in inputs:
-        input_tensor = dataclasses.asdict(tensors_dict[input.tensor_id])
-        producers_consumers = producers_consumers_dict.get(input.tensor_id)
 
-        input_tensor.update(
-            {
-                "id": input_tensor.pop("tensor_id"),
-                "consumers": producers_consumers.consumers,
-                "producers": producers_consumers.producers,
-            }
-        )
+    def attach_producers_consumers(producers_consumers_dict, values):
+        values_dict = defaultdict(list)
+        for value in values:
+            value_dict = dataclasses.asdict(value)
+            tensor = tensors_dict.get(value.tensor_id)
+            tensor_dict = dataclasses.asdict(tensor)
+            producers_consumers = producers_consumers_dict.get(value.tensor_id)
+            value_dict.update(
+                {
+                    "id": tensor_dict.pop("tensor_id"),
+                    "consumers": producers_consumers.consumers,
+                    "producers": producers_consumers.producers,
+                }
+            )
+            values_dict[value.operation_id].append(dict(**value_dict, **tensor_dict))
+        return values_dict
 
-        input_data = dataclasses.asdict(input)
-        inputs_dict[input.operation_id].append(dict(**input_data, **input_tensor))
-    # Serialize Outputs
-    outputs_dict = defaultdict(list)
-    for output in outputs:
-        output_tensor = dataclasses.asdict(tensors_dict[output.tensor_id])
-        producers_consumers = producers_consumers_dict.get(output.tensor_id)
-        output_tensor.update(
-            {
-                "id": output_tensor.pop("tensor_id"),
-                "consumers": producers_consumers.consumers,
-                "producers": producers_consumers.producers,
-            }
-        )
-
-        output_data = dataclasses.asdict(output)
-        outputs_dict[output.operation_id].append(dict(**output_data, **output_tensor))
+    inputs_dict = attach_producers_consumers(producers_consumers_dict, inputs)
+    outputs_dict = attach_producers_consumers(producers_consumers_dict, outputs)
     return inputs_dict, outputs_dict
 
 

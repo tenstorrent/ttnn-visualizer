@@ -83,9 +83,16 @@ def get_db_path_from_request(request: None):
 @api.route("/operations/<operation_id>", methods=["GET"])
 def operation_detail(operation_id):
     db_path = get_db_path_from_request(request)
+
+    if not Path(db_path).exists():
+        return Response(status=HTTPStatus.NOT_FOUND)
+
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         operation = queries.query_operation_by_id(cursor, operation_id)
+
+        if not operation:
+            return Response(status=HTTPStatus.NOT_FOUND)
 
         buffers = queries.query_buffers(cursor, operation_id)
         operation_arguments = queries.query_operation_arguments_by_operation_id(
