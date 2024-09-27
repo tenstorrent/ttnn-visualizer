@@ -189,6 +189,10 @@ def buffer_detail():
         return Response(status=HTTPStatus.BAD_REQUEST)
 
     db_path = get_db_path_from_request(request)
+
+    if not Path(db_path).exists():
+        return Response(status=HTTPStatus.BAD_REQUEST)
+
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         buffer = queries.query_next_buffer(cursor, operation_id, address)
@@ -200,6 +204,10 @@ def buffer_detail():
 @api.route("/tensors/<tensor_id>", methods=["GET"])
 def tensor_detail(tensor_id):
     db_path = get_db_path_from_request(request)
+
+    if not Path(db_path).exists():
+        return Response(status=HTTPStatus.BAD_REQUEST)
+
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         tensor = queries.query_tensor_by_id(cursor, tensor_id)
