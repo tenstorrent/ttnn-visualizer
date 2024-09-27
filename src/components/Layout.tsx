@@ -4,6 +4,7 @@ import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
+import { IconNames } from '@blueprintjs/icons';
 import TenstorrentLogo from './TenstorrentLogo';
 import ROUTES from '../definitions/routes';
 import { reportMetaAtom } from '../store/app';
@@ -51,13 +52,14 @@ function Layout() {
                         </Tooltip>
                     )}
 
-                    <Navbar>
+                    <Navbar className='navbar'>
                         <Navbar.Group align={Alignment.RIGHT}>
                             <Button
                                 text='Home'
                                 onClick={() => handleNavigate(ROUTES.HOME)}
                                 active={hasMatchingPath(ROUTES.HOME)}
                                 intent={hasMatchingPath(ROUTES.HOME) ? Intent.PRIMARY : Intent.NONE}
+                                icon={IconNames.HOME}
                                 minimal
                                 large
                             />
@@ -67,6 +69,7 @@ function Layout() {
                                 onClick={() => handleNavigate(ROUTES.OPERATIONS)}
                                 active={hasMatchingPath(ROUTES.OPERATIONS)}
                                 intent={hasMatchingPath(ROUTES.OPERATIONS) ? Intent.PRIMARY : Intent.NONE}
+                                icon={IconNames.CUBE}
                                 minimal
                                 large
                             />
@@ -76,6 +79,7 @@ function Layout() {
                                 onClick={() => handleNavigate(ROUTES.TENSORS)}
                                 active={hasMatchingPath(ROUTES.TENSORS)}
                                 intent={hasMatchingPath(ROUTES.TENSORS) ? Intent.PRIMARY : Intent.NONE}
+                                icon={IconNames.FLOW_LINEAR}
                                 minimal
                                 large
                             />
