@@ -9,6 +9,7 @@ class Config(object):
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
     SEND_FILE_MAX_AGE_DEFAULT = 0
     MIGRATE_ON_COPY = True
+    SQLITE_DB_PATH = "db.sqlite"
     SECRET_KEY = os.getenv("SECRET_KEY", "90909")
     DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))
     TESTING = False
