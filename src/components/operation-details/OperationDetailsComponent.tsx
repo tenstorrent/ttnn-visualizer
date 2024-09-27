@@ -31,7 +31,7 @@ import useOutsideClick from '../../hooks/useOutsideClick';
 import { getBufferColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
 import TensorDetailsComponent from './TensorDetailsComponent';
-import ProducerConsumers from './ProducerConsumers';
+import ProducerConsumersData from './ProducerConsumersData';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -377,7 +377,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         selectedTensor &&
                         (details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1 ||
                             details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1_SMALL) ? (
-                            <ProducerConsumers
+                            <ProducerConsumersData
                                 selectedTensor={selectedTensor}
                                 details={details}
                                 operationId={operationId}
@@ -452,7 +452,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {selectedTensorAddress &&
                         selectedTensor &&
                         details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.DRAM ? (
-                            <ProducerConsumers
+                            <ProducerConsumersData
                                 selectedTensor={selectedTensor}
                                 details={details}
                                 operationId={operationId}

@@ -9,15 +9,15 @@ import { IconNames } from '@blueprintjs/icons';
 import { useRef } from 'react';
 import ROUTES from '../../definitions/routes';
 import { OperationDetails } from '../../model/OperationDetails';
-import 'styles/components/ProducerConsumers.scss';
+import 'styles/components/ProducerConsumersData.scss';
 
-interface ProducerConsumersProps {
+interface ProducerConsumersDataProps {
     selectedTensor: number;
     details: OperationDetails;
     operationId: number;
 }
 
-function ProducerConsumers({ selectedTensor, details, operationId }: ProducerConsumersProps) {
+function ProducerConsumersData({ selectedTensor, details, operationId }: ProducerConsumersDataProps) {
     const outsideRefs = useRef<HTMLElement[]>([]);
 
     function assignRef(el: HTMLElement | null, index: number) {
@@ -99,4 +99,4 @@ function ProducerConsumers({ selectedTensor, details, operationId }: ProducerCon
     );
 }
 
-export default ProducerConsumers;
+export default ProducerConsumersData;
