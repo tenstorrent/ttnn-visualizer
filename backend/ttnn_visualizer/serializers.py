@@ -134,6 +134,7 @@ def serialize_operation(
     outputs_data = outputs_dict.get(operation.operation_id)
     if len(outputs_data):
         outputs_data = outputs_data[0]
+
     return dict(
         **operation_data,
         l1_sizes=l1_sizes,
