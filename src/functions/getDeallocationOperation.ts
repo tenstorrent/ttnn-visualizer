@@ -8,7 +8,7 @@ function getDeallocationOperation(tensor: Tensor, operations: OperationDescripti
             operation.name.includes('deallocate') && operation.inputs.find((input) => input.id === tensor.id),
     );
 
-    return matchingInputs.map((x) => x.id)[0];
+    return matchingInputs.map((input) => input.id)[0];
 }
 
 export default getDeallocationOperation;
