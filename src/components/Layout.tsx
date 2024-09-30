@@ -58,7 +58,7 @@ function Layout() {
                                 text='Home'
                                 onClick={() => handleNavigate(ROUTES.HOME)}
                                 active={hasMatchingPath(ROUTES.HOME)}
-                                intent={hasMatchingPath(ROUTES.HOME) ? Intent.PRIMARY : Intent.NONE}
+                                intent={hasMatchingPath(ROUTES.HOME) ? Intent.PRIMARY : Intent.SUCCESS}
                                 icon={IconNames.HOME}
                                 minimal
                                 large
@@ -68,7 +68,7 @@ function Layout() {
                                 text='Operations'
                                 onClick={() => handleNavigate(ROUTES.OPERATIONS)}
                                 active={hasMatchingPath(ROUTES.OPERATIONS)}
-                                intent={hasMatchingPath(ROUTES.OPERATIONS) ? Intent.PRIMARY : Intent.NONE}
+                                intent={hasMatchingPath(ROUTES.OPERATIONS) ? Intent.PRIMARY : Intent.WARNING}
                                 icon={IconNames.CUBE}
                                 minimal
                                 large
@@ -78,7 +78,7 @@ function Layout() {
                                 text='Tensors'
                                 onClick={() => handleNavigate(ROUTES.TENSORS)}
                                 active={hasMatchingPath(ROUTES.TENSORS)}
-                                intent={hasMatchingPath(ROUTES.TENSORS) ? Intent.PRIMARY : Intent.NONE}
+                                intent={hasMatchingPath(ROUTES.TENSORS) ? Intent.PRIMARY : Intent.DANGER}
                                 icon={IconNames.FLOW_LINEAR}
                                 minimal
                                 large

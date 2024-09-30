@@ -18,4 +18,16 @@
             background-color: $tt-yellow;
         }
     }
+
+    &.operation-icon {
+        .bp5-icon:not([class*="bp5-intent-"]).styled-icon {
+            color: red;
+        }
+    }
+
+    &.tensor-icon {
+        .bp5-icon:not([class*="bp5-intent-"]).styled-icon {
+            color: red;
+        }
+    }
 }
