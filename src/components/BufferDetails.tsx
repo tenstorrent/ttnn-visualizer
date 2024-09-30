@@ -6,17 +6,16 @@ import { Icon, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
-import { Tensor } from '../model/Graph';
 import { OperationDescription, TensorData } from '../model/APIData';
 import { toHex } from '../functions/math';
 import ROUTES from '../definitions/routes';
 import { useNextBuffer } from '../hooks/useAPI';
 import 'styles/components/BufferDetails.scss';
+import getDeallocationOperation from '../functions/getDeallocationOperation';
 
 interface BufferDetailsProps {
     tensor: TensorData;
     operations: OperationDescription[];
-    queryKey: string;
     className?: string;
 }
 
@@ -36,11 +35,11 @@ const HEADER_LABELS = {
     halo: 'Halo',
 };
 
-function BufferDetails({ tensor, operations, queryKey, className }: BufferDetailsProps) {
+function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
     const { address, consumers, dtype, layout, shape } = tensor;
     const lastOperationId: number = tensor.consumers[tensor.consumers.length - 1];
     const deallocationOperationId = getDeallocationOperation(tensor, operations);
-    const { data: buffer, isLoading } = useNextBuffer(address, consumers, queryKey);
+    const { data: buffer, isLoading } = useNextBuffer(address, consumers, tensor.id.toString());
 
     return (
         <>
@@ -61,7 +60,7 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
                         <td>
                             {isLoading ? 'Loading...' : undefined}
 
-                            {buffer && !isLoading && deallocationOperationId ? (
+                            {buffer && !isLoading && Number.isFinite(deallocationOperationId) ? (
                                 <div>
                                     Deallocation found in{' '}
                                     <Link to={`${ROUTES.OPERATIONS}/${deallocationOperationId}`}>
@@ -165,16 +164,6 @@ function BufferDetails({ tensor, operations, queryKey, className }: BufferDetail
             </table>
         </>
     );
-}
-
-function getDeallocationOperation(tensor: Tensor, operations: OperationDescription[]): number | undefined {
-    // TODO: Maybe we can strengthen this logic to ensure we're looking at deallocations rather than just checking the name
-    const matchingInputs = operations.filter(
-        (operation) =>
-            operation.name.includes('deallocate') && operation.inputs.find((input) => input.id === tensor.id),
-    );
-
-    return matchingInputs.map((x) => x.id)[0];
 }
 
 function parseMemoryConfig(string: string) {
