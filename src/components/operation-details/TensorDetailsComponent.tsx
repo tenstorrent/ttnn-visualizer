@@ -6,14 +6,16 @@ import { getBufferColor } from '../../functions/colorGenerator';
 import { TensorData } from '../../model/APIData';
 import { prettyPrintAddress, toHex } from '../../functions/math';
 import { BufferTypeLabel } from '../../model/BufferType';
-import { useNextBuffer, useOperationsList } from '../../hooks/useAPI';
+import { useOperationsList } from '../../hooks/useAPI';
 import getDeallocationOperation from '../../functions/getDeallocationOperation';
+import getAllocationOperation from '../../functions/getAllocationOperation';
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
     selectedAddress: number | null;
     memorySize: number;
     onTensorClick: (tensorId: number | null) => void;
+    currentOperationId: number;
 }
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
@@ -21,11 +23,14 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     selectedAddress = null,
     memorySize,
     onTensorClick,
+    currentOperationId,
 }) => {
-    const { id, address, consumers } = tensor;
+    const { address } = tensor;
     const { data: operations } = useOperationsList();
-    const { data: buffer, isLoading } = useNextBuffer(address, consumers, id.toString());
+    const allocationOperationId = operations ? getAllocationOperation(tensor, operations) : null;
     const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations) : null;
+
+    console.log('allocationOperationId', allocationOperationId);
 
     return (
         <div
@@ -72,9 +77,11 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     </Tooltip>
                 )}
 
-                {buffer?.next_usage && address && operations && !isLoading ? (
+                {allocationOperationId && address && operations ? (
                     <Tooltip
-                        content={`Next allocation of ${toHex(address)} in ${buffer.operation_id} ${operations.find((operation) => operation.id === buffer.operation_id)?.name} (+${buffer.next_usage} operations)`}
+                        content={`Next allocation of ${toHex(address)} in ${allocationOperationId} ${operations.find((operation) => operation.id === allocationOperationId)?.name}
+                        (+${allocationOperationId - currentOperationId} operations)
+                        `}
                         placement={PopoverPosition.TOP}
                     >
                         <Icon
