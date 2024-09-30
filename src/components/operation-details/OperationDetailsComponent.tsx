@@ -290,7 +290,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 }}
                             />
                             <Switch
-                                label={!showCircularBuffer?'Show Circular Buffers Details':'Hide Circular Buffers Details'}
+                                label={
+                                    !showCircularBuffer
+                                        ? 'Show Circular Buffers Details'
+                                        : 'Hide Circular Buffers Details'
+                                }
                                 checked={showCircularBuffer}
                                 disabled={cbChartDataByOperation.size === 0}
                                 onChange={() => {
@@ -409,11 +413,16 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         selectedTensor &&
                         (details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1 ||
                             details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1_SMALL) ? (
-                            <ProducerConsumersData
-                                selectedTensor={selectedTensor}
-                                details={details}
-                                operationId={operationId}
-                            />
+                            <div
+                                style={{ display: 'inline-grid' }}
+                                ref={(el) => assignRef(el)}
+                            >
+                                <ProducerConsumersData
+                                    selectedTensor={selectedTensor}
+                                    details={details}
+                                    operationId={operationId}
+                                />
+                            </div>
                         ) : null}
 
                         {isDramActive && (
@@ -484,11 +493,16 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {selectedTensorAddress &&
                         selectedTensor &&
                         details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.DRAM ? (
-                            <ProducerConsumersData
-                                selectedTensor={selectedTensor}
-                                details={details}
-                                operationId={operationId}
-                            />
+                            <div
+                                style={{ display: 'inline-grid' }}
+                                ref={(el) => assignRef(el)}
+                            >
+                                <ProducerConsumersData
+                                    selectedTensor={selectedTensor}
+                                    details={details}
+                                    operationId={operationId}
+                                />
+                            </div>
                         ) : null}
 
                         <hr />
