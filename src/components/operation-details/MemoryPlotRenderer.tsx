@@ -9,18 +9,17 @@ import { selectedTensorAddressAtom } from '../../store/app';
 export interface MemoryPlotRendererProps {
     chartDataList: Partial<PlotData>[][];
     isZoomedIn: boolean;
-    isZoomedInCb?: boolean;
     memorySize: number;
     title: string;
     onBufferClick?: (event: Readonly<PlotMouseEventCustom>) => void;
     plotZoomRange?: [start: number, end: number];
-    cbZoomRange?: [start: number, end: number];
     className?: string;
     configuration: PlotConfiguration;
 }
 
 const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRendererProps> = (
     {
+        //
         chartDataList,
         isZoomedIn,
         memorySize,
@@ -28,8 +27,6 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
         title,
         onBufferClick,
         plotZoomRange,
-        isZoomedInCb = false,
-        cbZoomRange,
         configuration,
     },
     ref,
@@ -41,11 +38,7 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
 
     const [augmentedChart, setAugmentedChart] = useState<Partial<PlotData>[]>(structuredClone(chartData));
 
-    let range = isZoomedIn ? plotZoomRange : [0, memorySize];
-
-    if (isZoomedInCb && cbZoomRange) {
-        range = cbZoomRange;
-    }
+    const range = isZoomedIn ? plotZoomRange : [0, memorySize];
 
     const layout: Partial<Layout> = {
         height: configuration.height,
@@ -141,7 +134,7 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
                 data={augmentedChart}
                 layout={layout}
                 config={config}
-                // @ts-expect-error PlotMouseEventCustom extends PlotMouseEvent and should be fine
+                // @ts-expect-error PlotMouseEventCustom extends PlotMouseEvent and will be fine
                 onClick={onBufferClick}
                 onHover={(data) => setHoveredPoint(data.points[0].x as number)}
                 onUnhover={() => setHoveredPoint(null)}

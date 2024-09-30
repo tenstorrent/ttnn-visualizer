@@ -148,6 +148,7 @@ export interface DeviceOperation {
     cbList: CircularBuffer[];
     deallocateAll: boolean;
     indentLevel: number; // device ops nesting level indicator
+    colorVariance?: number | undefined;
 }
 
 export interface CircularBuffer extends Chunk {
