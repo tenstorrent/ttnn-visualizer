@@ -30,8 +30,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     const allocationOperationId = operations ? getAllocationOperation(tensor, operations) : null;
     const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations) : null;
 
-    console.log('allocationOperationId', allocationOperationId);
-
     return (
         <div
             className={classNames('tensor-item', {
