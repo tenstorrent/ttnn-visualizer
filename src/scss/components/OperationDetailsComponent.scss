@@ -5,16 +5,6 @@
 @use '../definitions/colours' as *;
 
 .operation-details-component {
-    .selected-tensor {
-        color: $tt-white;
-
-        &::before {
-            display: inline-block;
-            content: '\2714'; // checkmark
-            margin-right: 5px;
-        }
-    }
-
     .chart-controls {
         display: flex;
         gap: 10px;
@@ -102,13 +92,12 @@
         margin-bottom: 20px;
         flex-direction: column;
         row-gap: 5px;
+        background-color: $tt-grey-3;
+        padding: 10px 20px;
 
-        hr {
-            margin: 10px 0;
-        }
-
-        .full-dram-legend {
-            display: grid;
+        &.lengthy-legend {
+            height: 420px;
+            overflow-y: scroll;
         }
 
         .legend-item {
@@ -135,7 +124,7 @@
 
             .legend-details {
                 display: inline-grid;
-                grid-template-columns: 1fr 1fr 0.75fr 1fr;
+                grid-template-columns: 1fr 1.2fr 0.75fr 1fr;
                 gap: 15px;
                 text-align: left;
 

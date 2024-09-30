@@ -5,7 +5,6 @@
 import React, { Fragment, forwardRef, useRef, useState } from 'react';
 import { Button, ButtonGroup, Icon, Intent, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
-import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
 import { toast } from 'react-toastify';
 import { useAtom } from 'jotai';
@@ -17,7 +16,6 @@ import { isEqual } from '../../functions/math';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
-import ROUTES from '../../definitions/routes';
 import { BufferType } from '../../model/BufferType';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 import {
@@ -28,13 +26,13 @@ import {
     PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
 import { MemoryLegendElement } from './MemoryLegendElement';
-import Collapsible from '../Collapsible';
 import OperationArguments from '../OperationArguments';
 import { isDramActiveAtom, isL1ActiveAtom, selectedTensorAddressAtom } from '../../store/app';
 import useOutsideClick from '../../hooks/useOutsideClick';
 import { getBufferColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
 import TensorDetailsComponent from './TensorDetailsComponent';
+import ProducerConsumersData from './ProducerConsumersData';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -42,6 +40,7 @@ interface OperationDetailsProps {
 
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 const DRAM_PADDING_RATIO = 0.9998;
+const MAX_LEGEND_LENGTH = 20;
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const { data: operations } = useOperationsList();
@@ -98,7 +97,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { chartData: previousChartData, memory: previousMemory } = previousDetails.memoryData();
 
     const { chartData: dramData, memory: dramMemory } = details.memoryData(BufferType.DRAM);
-    const { chartData: previosDramData, memory: previousDramMemory } = previousDetails.memoryData(BufferType.DRAM);
+    const { chartData: previousDramData, memory: previousDramMemory } = previousDetails.memoryData(BufferType.DRAM);
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const dramMemoryReport: FragmentationEntry[] = [...dramMemory].sort((a, b) => a.address - b.address);
@@ -244,10 +243,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const dramDeltaObject = details.getMemoryDelta(dramDelta, reverseDramDelta);
 
-    const dramTensorsOnly = dramMemoryReport.filter(
-        (chunk) => !chunk.empty && details.getTensorForAddress(chunk.address),
-    );
-
     // TODO: Look at refactoring this to avoid forwarding refs
     const ForwardedMemoryPlotRenderer = forwardRef(MemoryPlotRenderer);
 
@@ -390,8 +385,36 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         )}
                                     </>
                                 )}
+
+                                <div
+                                    className={classNames('legend', {
+                                        'lengthy-legend': memoryReport.length > MAX_LEGEND_LENGTH,
+                                    })}
+                                >
+                                    {memoryReport.map((chunk) => (
+                                        <MemoryLegendElement
+                                            chunk={chunk}
+                                            key={chunk.address}
+                                            memSize={memorySizeL1}
+                                            selectedTensorAddress={selectedTensorAddress}
+                                            operationDetails={details}
+                                            onLegendClick={onLegendClick}
+                                        />
+                                    ))}
+                                </div>
                             </>
                         )}
+
+                        {selectedTensorAddress &&
+                        selectedTensor &&
+                        (details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1 ||
+                            details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1_SMALL) ? (
+                            <ProducerConsumersData
+                                selectedTensor={selectedTensor}
+                                details={details}
+                                operationId={operationId}
+                            />
+                        ) : null}
 
                         {isDramActive && (
                             <>
@@ -400,11 +423,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 <ForwardedMemoryPlotRenderer
                                     title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
                                     className={classNames('dram-memory-renderer', {
-                                        'empty-plot': previosDramData.length === 0,
+                                        'empty-plot': previousDramData.length === 0,
                                         'identical-plot': dramHasntChanged,
                                     })}
                                     plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
-                                    chartDataList={[previosDramData]}
+                                    chartDataList={[previousDramData]}
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={DRAM_MEMORY_SIZE}
                                     configuration={DRAMRenderConfiguration}
@@ -438,130 +461,35 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     configuration={DRAMRenderConfiguration}
                                     ref={(el) => assignRef(el)}
                                 />
-                            </>
-                        )}
 
-                        <div className='plot-tensor-details'>
-                            <div className='legend'>
-                                {isL1Active &&
-                                    memoryReport.map((chunk) => (
+                                <div
+                                    className={classNames('legend', {
+                                        'lengthy-legend': dramMemoryReport.length > MAX_LEGEND_LENGTH,
+                                    })}
+                                >
+                                    {dramMemoryReport.map((chunk) => (
                                         <MemoryLegendElement
                                             chunk={chunk}
                                             key={chunk.address}
-                                            memSize={memorySizeL1}
+                                            memSize={DRAM_MEMORY_SIZE}
                                             selectedTensorAddress={selectedTensorAddress}
                                             operationDetails={details}
                                             onLegendClick={onLegendClick}
                                         />
                                     ))}
-
-                                {isDramActive && isL1Active && <hr />}
-
-                                {isDramActive && (
-                                    <>
-                                        {/* // TODO: Refactor this because it looks weird when there are no tensors but there are DRAM buffers */}
-                                        {dramTensorsOnly.map((chunk) => (
-                                            <MemoryLegendElement
-                                                chunk={chunk}
-                                                key={chunk.address}
-                                                memSize={DRAM_MEMORY_SIZE}
-                                                selectedTensorAddress={selectedTensorAddress}
-                                                operationDetails={details}
-                                                onLegendClick={onLegendClick}
-                                            />
-                                        ))}
-
-                                        <Collapsible
-                                            label='Full DRAM Legend'
-                                            contentClassName='full-dram-legend'
-                                            isOpen={false}
-                                        >
-                                            {dramMemoryReport.map((chunk) => (
-                                                <MemoryLegendElement
-                                                    chunk={chunk}
-                                                    key={chunk.address}
-                                                    memSize={DRAM_MEMORY_SIZE}
-                                                    selectedTensorAddress={selectedTensorAddress}
-                                                    operationDetails={details}
-                                                    onLegendClick={onLegendClick}
-                                                />
-                                            ))}
-                                        </Collapsible>
-                                    </>
-                                )}
-                            </div>
-
-                            <div
-                                ref={(el) => assignRef(el)}
-                                className={classNames('producer-consumer', { hidden: selectedTensor === null })}
-                            >
-                                <div
-                                    className={classNames('title', {
-                                        hidden:
-                                            details.getTensorProducerConsumer(selectedTensor).producers.length === 0,
-                                    })}
-                                >
-                                    <Icon
-                                        size={14}
-                                        icon={IconNames.EXPORT}
-                                        className='producer-icon'
-                                    />
-                                    Producers
                                 </div>
-                                {details.getTensorProducerConsumer(selectedTensor).producers.map((op) => (
-                                    <div
-                                        key={op.id}
-                                        className='operation-link'
-                                    >
-                                        {operationId === op.id ? (
-                                            <span className='selected-tensor'>
-                                                {op.id} {op.name}
-                                            </span>
-                                        ) : (
-                                            <Link
-                                                to={`${ROUTES.OPERATIONS}/${op.id}`}
-                                                className={classNames('', { current: operationId === op.id })}
-                                            >
-                                                {op.id} {op.name}
-                                            </Link>
-                                        )}
-                                    </div>
-                                ))}
+                            </>
+                        )}
 
-                                <div
-                                    className={classNames('title', {
-                                        hidden:
-                                            details.getTensorProducerConsumer(selectedTensor).consumers.length === 0,
-                                    })}
-                                >
-                                    <Icon
-                                        size={14}
-                                        icon={IconNames.IMPORT}
-                                        className='consumer-icon'
-                                    />{' '}
-                                    Consumers
-                                </div>
-                                {details.getTensorProducerConsumer(selectedTensor).consumers.map((op) => (
-                                    <div
-                                        key={op.id}
-                                        className='operation-link'
-                                    >
-                                        {operationId === op.id ? (
-                                            <span className='selected-tensor'>
-                                                {op.id} {op.name}
-                                            </span>
-                                        ) : (
-                                            <Link
-                                                to={`${ROUTES.OPERATIONS}/${op.id}`}
-                                                className={classNames('', { current: operationId === op.id })}
-                                            >
-                                                {op.id} {op.name}
-                                            </Link>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                        {selectedTensorAddress &&
+                        selectedTensor &&
+                        details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.DRAM ? (
+                            <ProducerConsumersData
+                                selectedTensor={selectedTensor}
+                                details={details}
+                                operationId={operationId}
+                            />
+                        ) : null}
 
                         <hr />
 
@@ -613,8 +541,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                                         {deviceOperation.cbList.length > 0 && (
                                             <div
-                                                className='legend'
-                                                style={{ paddingLeft: `${deviceOperation.indentLevel * 2}em` }}
+                                                className={classNames('legend', {
+                                                    'lengthy-legend': deviceOperation.cbList.length > MAX_LEGEND_LENGTH,
+                                                })}
+                                                style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}
                                             >
                                                 {deviceOperation.cbList.map((cb) => (
                                                     <MemoryLegendElement
@@ -631,7 +561,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         )}
 
                                         {deviceOperation.deallocateAll && (
-                                            <p style={{ paddingLeft: `${deviceOperation.indentLevel * 2}em` }}>
+                                            <p style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}>
                                                 deallocate circular buffers
                                             </p>
                                         )}
