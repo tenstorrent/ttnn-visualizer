@@ -358,22 +358,34 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         />
                                         {[...cbChartDataByOperation.entries()].map(
                                             ([deviceOperationName, plotData]) => (
-                                                <ForwardedMemoryPlotRenderer
-                                                    title={`${deviceOperationName}`}
-                                                    className={classNames('l1-memory-renderer', {
-                                                        'empty-plot': plotData.length === 0,
-                                                    })}
-                                                    chartDataList={[plotData]}
-                                                    plotZoomRange={[
-                                                        cbZoomStart - MEMORY_PADDING_CB,
-                                                        cbZoomEnd + MEMORY_PADDING_CB,
-                                                    ]}
-                                                    isZoomedIn={zoomedInViewCBMemory}
-                                                    memorySize={memorySizeL1}
-                                                    configuration={CBRenderConfiguration}
-                                                    onBufferClick={onBufferClick}
-                                                    ref={(el) => assignRef(el)}
-                                                />
+                                                <>
+                                                    <h3 className='circular-buffers-plot-title'>
+                                                        <Icon
+                                                            className='operation-icon'
+                                                            size={13}
+                                                            intent={Intent.SUCCESS}
+                                                            icon={IconNames.CUBE_ADD}
+                                                        />{' '}
+                                                        <span>{deviceOperationName}</span>
+                                                    </h3>
+                                                    <ForwardedMemoryPlotRenderer
+                                                        // title={`${deviceOperationName}`}
+                                                        title=''
+                                                        className={classNames('l1-memory-renderer circular-buffers', {
+                                                            'empty-plot': plotData.length === 0,
+                                                        })}
+                                                        chartDataList={[plotData]}
+                                                        plotZoomRange={[
+                                                            cbZoomStart - MEMORY_PADDING_CB,
+                                                            cbZoomEnd + MEMORY_PADDING_CB,
+                                                        ]}
+                                                        isZoomedIn={zoomedInViewCBMemory}
+                                                        memorySize={memorySizeL1}
+                                                        configuration={CBRenderConfiguration}
+                                                        onBufferClick={onBufferClick}
+                                                        ref={(el) => assignRef(el)}
+                                                    />
+                                                </>
                                             ),
                                         )}
                                     </>
@@ -584,6 +596,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             <>
                                 <hr />
                                 <h3>Device operations</h3>
+
                                 {details.deviceOperations.map((deviceOperation, index) => (
                                     // eslint-disable-next-line react/no-array-index-key
                                     <Fragment key={deviceOperation.name + index}>
@@ -611,6 +624,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                                         selectedTensorAddress={selectedTensorAddress}
                                                         operationDetails={details}
                                                         onLegendClick={onLegendClick}
+                                                        colorVariance={deviceOperation.colorVariance}
                                                     />
                                                 ))}
                                             </div>

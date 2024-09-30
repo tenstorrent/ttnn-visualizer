@@ -31,7 +31,7 @@ export const CBRenderConfiguration = {
         b: 30,
         t: 25,
     },
-    title: 'L1 Address Space',
+    title: '',
 } as PlotConfiguration;
 
 export interface PlotConfiguration {

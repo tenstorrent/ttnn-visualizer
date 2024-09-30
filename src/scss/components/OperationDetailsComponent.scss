@@ -34,7 +34,10 @@
     .l1-memory-renderer {
         .memory-plot {
             width: 100%;
-            height: 110px;
+        }
+
+        &.circular-buffers {
+            margin-bottom: 5px;
         }
 
         &.identical-plot {
@@ -49,11 +52,19 @@
     }
 
     .dram-memory-renderer {
-        .memory-plot {
-            height: 80px;
-        }
-
         margin-bottom: 10px;
+    }
+
+    .circular-buffers-plot-title {
+        display: inline-flex;
+        align-items: center;
+        color: $tt-green;
+        margin-bottom: -5px;
+        font-weight: normal;
+
+        .bp5-icon {
+            margin-right: 5px;
+        }
     }
 
     .plot-tensor-details {
