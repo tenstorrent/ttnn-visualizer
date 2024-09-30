@@ -1,12 +1,14 @@
+import dataclasses
 import json
 import logging
 import shutil
+import sqlite3
 from http import HTTPStatus
 from pathlib import Path
+
 from ttnn_visualizer.database import create_update_database
 from flask import Blueprint, Response, current_app, request
 
-from ttnn_visualizer.models import Device, Operation, Tensor, Buffer
 from ttnn_visualizer.remotes import (
     RemoteConnection,
     RemoteFolder,
@@ -17,12 +19,13 @@ from ttnn_visualizer.remotes import (
     read_remote_file,
     sync_test_folders,
 )
-from ttnn_visualizer.schemas import (
-    OperationSchema,
-    TensorSchema,
-    BufferSchema,
+from ttnn_visualizer.serializers import (
+    serialize_operations,
+    serialize_tensors,
+    serialize_operation,
 )
 from ttnn_visualizer.utils import timer
+from ttnn_visualizer import queries
 
 logger = logging.getLogger(__name__)
 
@@ -37,28 +40,104 @@ def health_check():
 @api.route("/operations", methods=["GET"])
 @timer
 def operation_list():
-    operations = Operation.query.all()
-    return OperationSchema(
-        many=True,
-        exclude=[
-            "buffers",
-            "operation_id",
-        ],
-    ).dump(operations)
+    db_path = get_db_path_from_request(request)
+
+    if not Path(db_path).exists():
+        return Response(status=HTTPStatus.BAD_REQUEST)
+
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        operations = list(queries.query_operations(cursor))
+        operations.sort(key=lambda o: o.operation_id)
+        operation_arguments = list(queries.query_operation_arguments(cursor))
+        device_operations = list(queries.query_device_operations(cursor))
+        stack_traces = list(queries.query_stack_traces(cursor))
+        outputs = list(queries.query_output_tensors(cursor))
+        tensors = list(queries.query_tensors(cursor))
+        inputs = list(queries.query_input_tensors(cursor))
+        devices = list(queries.query_devices(cursor))
+        producers_consumers = list(queries.query_producers_consumers(cursor))
+
+        return serialize_operations(
+            inputs,
+            operation_arguments,
+            operations,
+            outputs,
+            stack_traces,
+            tensors,
+            devices,
+            producers_consumers,
+            device_operations,
+        )
+
+
+def get_db_path_from_request(request: None):
+    """
+    Parses the request to determine the path of the target database
+    TODO At the moment we simply use one database 'active'
+    In future will target databases on a per-request basis
+    :param request:
+    :return:
+    """
+    report_path = current_app.config["ACTIVE_DATA_DIRECTORY"]
+    db_path = current_app.config["SQLITE_DB_PATH"]
+    return report_path / db_path
 
 
 @api.route("/operations/<operation_id>", methods=["GET"])
+@timer
 def operation_detail(operation_id):
-    operation = Operation.query.get(operation_id)
-    if not operation:
-        return Response(status=HTTPStatus.NOT_FOUND)
-    devices = Device.query.order_by(Device.device_id.asc()).all()
-    l1_sizes = [d.worker_l1_size for d in devices]
+    db_path = get_db_path_from_request(request)
 
-    return dict(
-        **OperationSchema().dump(operation),
-        l1_sizes=l1_sizes,
-    )
+    if not Path(db_path).exists():
+        return Response(status=HTTPStatus.BAD_REQUEST)
+
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        operation = queries.query_operation_by_id(cursor, operation_id)
+
+        if not operation:
+            return Response(status=HTTPStatus.NOT_FOUND)
+
+        buffers = queries.query_buffers(cursor, operation_id)
+        operation_arguments = queries.query_operation_arguments_by_operation_id(
+            cursor, operation_id
+        )
+        stack_trace = queries.query_stack_trace(cursor, operation_id)
+
+        inputs = list(queries.query_input_tensors_by_operation_id(cursor, operation_id))
+        outputs = list(
+            queries.query_output_tensors_by_operation_id(cursor, operation_id)
+        )
+        input_tensor_ids = [i.tensor_id for i in inputs]
+        output_tensor_ids = [o.tensor_id for o in outputs]
+        tensor_ids = input_tensor_ids + output_tensor_ids
+        tensors = list(queries.query_tensors_by_tensor_ids(cursor, tensor_ids))
+        device_operations = queries.query_device_operations_by_operation_id(
+            cursor, operation_id
+        )
+
+        producers_consumers = list(
+            filter(
+                lambda pc: pc.tensor_id in tensor_ids,
+                queries.query_producers_consumers(cursor),
+            )
+        )
+
+        devices = list(queries.query_devices(cursor))
+
+        return serialize_operation(
+            buffers,
+            inputs,
+            operation,
+            operation_arguments,
+            outputs,
+            stack_trace,
+            tensors,
+            devices,
+            producers_consumers,
+            device_operations,
+        )
 
 
 @api.route(
@@ -67,7 +146,7 @@ def operation_detail(operation_id):
         "GET",
     ],
 )
-def get_operation_history():
+def operation_history():
     operation_history_filename = "operation_history.json"
     operation_history_file = Path(
         current_app.config["ACTIVE_DATA_DIRECTORY"], operation_history_filename
@@ -89,39 +168,57 @@ def get_config():
 
 
 @api.route("/tensors", methods=["GET"])
-def get_tensors():
-    tensors = Tensor.query.all()
-    return TensorSchema(exclude=["tensor_id"]).dump(tensors, many=True)
+@timer
+def tensors_list():
+    db_path = get_db_path_from_request(request)
+
+    if not Path(db_path).exists():
+        return Response(status=HTTPStatus.BAD_REQUEST)
+
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        tensors = list(queries.query_tensors(cursor))
+        producers_consumers = list(queries.query_producers_consumers(cursor))
+        return serialize_tensors(tensors, producers_consumers)
 
 
 @api.route("/buffer", methods=["GET"])
-def get_next_buffer():
+@timer
+def buffer_detail():
     address = request.args.get("address")
     operation_id = request.args.get("operation_id")
 
     if not address or not operation_id:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
-    buffer = (
-        Buffer.query.filter(
-            Buffer.address == address, Buffer.operation_id > operation_id
-        )
-        .order_by(Buffer.operation_id.asc())
-        .first()
-    )
+    db_path = get_db_path_from_request(request)
 
-    if not buffer:
-        return Response(status=HTTPStatus.NOT_FOUND)
+    if not Path(db_path).exists():
+        return Response(status=HTTPStatus.BAD_REQUEST)
 
-    return BufferSchema().dump(buffer)
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        buffer = queries.query_next_buffer(cursor, operation_id, address)
+        if not buffer:
+            return Response(status=HTTPStatus.NOT_FOUND)
+        return dataclasses.asdict(buffer)
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
-def get_tensor(tensor_id):
-    tensor = Tensor.query.get(tensor_id)
-    if not tensor:
-        return Response(status=HTTPStatus.NOT_FOUND)
-    return TensorSchema().dump(tensor)
+@timer
+def tensor_detail(tensor_id):
+    db_path = get_db_path_from_request(request)
+
+    if not Path(db_path).exists():
+        return Response(status=HTTPStatus.BAD_REQUEST)
+
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        tensor = queries.query_tensor_by_id(cursor, tensor_id)
+        if not tensor:
+            return Response(status=HTTPStatus.NOT_FOUND)
+
+        return dataclasses.asdict(tensor)
 
 
 @api.route(
