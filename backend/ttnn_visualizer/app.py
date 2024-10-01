@@ -10,7 +10,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_cors import CORS
 from ttnn_visualizer import settings
 from dotenv import load_dotenv
-from ttnn_visualizer.sessions import init_sessions, CustomRequest
+from ttnn_visualizer.sessions import init_sessions, CustomRequest, init_session_db
 
 
 def create_app(settings_override=None):
@@ -42,6 +42,7 @@ def create_app(settings_override=None):
     if settings_override:
         app.config.update(settings_override)
 
+    init_session_db()
     middleware(app)
 
     app.register_blueprint(api)
