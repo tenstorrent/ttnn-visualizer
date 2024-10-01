@@ -23,6 +23,7 @@ function Layout() {
     const meta = useAtomValue(reportMetaAtom);
     const { data: activeReport } = useQuery('active_report', {
         queryFn: fetchActiveReport,
+        initialData: null,
     })
 
     const handleNavigate = (path: string) => {
