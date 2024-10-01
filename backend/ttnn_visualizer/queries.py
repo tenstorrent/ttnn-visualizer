@@ -200,7 +200,8 @@ def query_next_buffer(cursor, operation_id, address):
     """
     cursor.execute(query, (address, operation_id))
     row = cursor.fetchone()
-    return Buffer(*row)
+    if row:
+        return Buffer(*row)
 
 
 def query_device_operations_by_operation_id(cursor, operation_id):
