@@ -6,6 +6,8 @@ from http import HTTPStatus
 from pathlib import Path
 
 from flask import Blueprint, Response, current_app, request
+from flask_cors import cross_origin
+
 from ttnn_visualizer.sessions import CustomRequest, ActiveReport
 
 from ttnn_visualizer.remotes import (
@@ -39,6 +41,7 @@ def health_check():
 
 @api.route("/operations", methods=["GET"])
 @timer
+@cross_origin()
 def operation_list():
     target_report_path = getattr(request, "report_path", None)
 
@@ -73,6 +76,7 @@ def operation_list():
 
 @api.route("/operations/<operation_id>", methods=["GET"])
 @timer
+@cross_origin()
 def operation_detail(
     operation_id,
 ):
@@ -135,6 +139,7 @@ def operation_detail(
         "GET",
     ],
 )
+@cross_origin()
 def operation_history():
 
     target_report_path = getattr(request, "report_path", None)
@@ -150,6 +155,7 @@ def operation_history():
 
 
 @api.route("/config")
+@cross_origin()
 def get_config():
 
     target_report_path = getattr(request, "report_path", None)
@@ -178,6 +184,7 @@ def tensors_list():
 
 
 @api.route("/buffer", methods=["GET"])
+@cross_origin()
 @timer
 def buffer_detail():
     address = request.args.get("address")
@@ -199,6 +206,7 @@ def buffer_detail():
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
+@cross_origin()
 @timer
 def tensor_detail(tensor_id):
     target_report_path = getattr(request, "report_path", None)
@@ -214,6 +222,7 @@ def tensor_detail(tensor_id):
         return dataclasses.asdict(tensor)
 
 
+@cross_origin()
 @api.route(
     "/local/upload",
     methods=[
