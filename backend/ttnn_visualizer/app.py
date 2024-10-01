@@ -70,7 +70,6 @@ def extensions(app: flask.Flask):
     """
 
     flask_static_digest.init_app(app)
-    init_sessions(app)
 
     # For automatically reflecting table data
     # with app.app_context():
@@ -95,6 +94,9 @@ def middleware(app: flask.Flask):
 
     # CORS configuration
     origins = ["http://localhost:5173"]
+
+    init_sessions(app)
+
     CORS(
         app,
         origins=origins,
