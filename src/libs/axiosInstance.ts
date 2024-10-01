@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // Create an Axios instance
 const axiosInstance = axios.create({
-    baseURL: '',  // Your API base URL
+    baseURL: '/',  // Your API base URL
 });
 
 const getOrCreateTabId = () => {
@@ -18,12 +18,15 @@ const getOrCreateTabId = () => {
 axiosInstance.interceptors.request.use((config) => {
     const tabId = getOrCreateTabId()
     if (tabId) {
+        // Add the tabId to the query params
         config.params = {
             ...config.params,
             tabId
         };
     }
     return config;
+}, (error) => {
+    return Promise.reject(error);
 });
 
 
