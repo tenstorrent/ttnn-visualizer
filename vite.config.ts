@@ -17,7 +17,9 @@ export default defineConfig({
         open: true,
         proxy: {
             '/api': 'http://localhost:8000',
+            allowedHeaders: "*",
         },
+
     },
     resolve: {
         alias: {
