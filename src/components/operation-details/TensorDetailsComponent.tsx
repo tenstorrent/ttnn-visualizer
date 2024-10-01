@@ -27,8 +27,8 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 }) => {
     const { address } = tensor;
     const { data: operations } = useOperationsList();
-    const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations) : null;
-    const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations) : null;
+    const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations)?.id : null;
+    const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations)?.id : null;
 
     return (
         <div
