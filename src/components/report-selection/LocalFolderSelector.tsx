@@ -41,8 +41,7 @@ const LocalFolderOptions: FC = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
 
-    const isLocalReportMounted =
-        (!isUploading && meta && reportLocation === 'local') || folderStatus?.status === ConnectionTestStates.OK;
+    const isLocalReportMounted = !isUploading && reportLocation === 'local';
 
     const handleDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) {
@@ -72,12 +71,11 @@ const LocalFolderOptions: FC = () => {
         setLocalUploadLabel(`${files.length} files uploaded`);
         setIsUploading(false);
         setFolderStatus(connectionStatus);
+        setReportLocation('local');
     };
 
     const viewOperation = () => {
         queryClient.clear();
-
-        setReportLocation('local');
 
         navigate(ROUTES.OPERATIONS);
     };
