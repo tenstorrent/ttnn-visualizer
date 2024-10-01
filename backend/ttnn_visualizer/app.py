@@ -10,7 +10,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_cors import CORS
 from ttnn_visualizer import settings
 from dotenv import load_dotenv
-from ttnn_visualizer.database import create_update_database
+from ttnn_visualizer.sessions import init_sessions, CustomRequest
 
 
 def create_app(settings_override=None):
@@ -31,6 +31,7 @@ def create_app(settings_override=None):
     flask_env = environ.get("FLASK_ENV", "development")
 
     app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
+    app.request_class = CustomRequest
 
     app.config.from_object(getattr(settings, flask_env))
 
@@ -44,18 +45,6 @@ def create_app(settings_override=None):
     middleware(app)
 
     app.register_blueprint(api)
-
-    # Ensure there is always a schema to reference
-    # In the future we can probabably re-init the DB or
-    # wait for initialization until the user has provided a DB
-    ACTIVE_DATA_DIRECTORY = app.config["ACTIVE_DATA_DIRECTORY"]
-
-    active_db_path = Path(ACTIVE_DATA_DIRECTORY, "db.sqlite")
-    active_db_path.parent.mkdir(exist_ok=True, parents=True)
-    empty_db_path = Path(__file__).parent.resolve().joinpath("empty.sqlite")
-
-    if not active_db_path.exists():
-        shutil.copy(empty_db_path, active_db_path)
 
     extensions(app)
 
@@ -80,6 +69,7 @@ def extensions(app: flask.Flask):
     """
 
     flask_static_digest.init_app(app)
+    init_sessions(app)
 
     # For automatically reflecting table data
     # with app.app_context():
