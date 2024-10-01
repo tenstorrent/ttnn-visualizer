@@ -321,7 +321,7 @@ def use_remote_folder():
     folder = RemoteFolder(**folder)
     report_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
     report_folder = Path(folder.remotePath).name
-    connection_directory = Path(report_data_directory, connection.name, report_folder)
+    connection_directory = Path(report_data_directory, connection.host, report_folder)
 
     current_app.logger.info(
         f"Setting active report for {request.tab_id} to {connection.host}/{connection_directory}"
