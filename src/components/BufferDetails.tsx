@@ -39,8 +39,8 @@ const HEADER_LABELS = {
 function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
     const { address, dtype, layout, shape } = tensor;
     const lastOperationId: number = tensor.consumers[tensor.consumers.length - 1];
-    const deallocationOperationId = getDeallocationOperation(tensor, operations);
-    const nextAllocationOperationId = getNextAllocationOperation(tensor, operations);
+    const deallocationOperationId = getDeallocationOperation(tensor, operations)?.id;
+    const nextAllocationOperationId = getNextAllocationOperation(tensor, operations)?.id;
 
     return (
         <>
