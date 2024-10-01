@@ -271,7 +271,10 @@ def sync_test_folders(
     with client.open_sftp() as sftp:
         report_folder = Path(remote_folder.remotePath).name
         destination_dir = Path(
-            REPORT_DATA_DIRECTORY, path_prefix, remote_connection.name, report_folder
+            REPORT_DATA_DIRECTORY,
+            path_prefix,
+            remote_connection.host,
+            report_folder,
         )
         if not Path(destination_dir).exists():
             Path(destination_dir).mkdir(parents=True, exist_ok=True)
