@@ -19,9 +19,10 @@ def serialize_operations(
 
     device_operations_dict = dict()
     for device_operation in device_operations:
-        device_operations_dict.update(
-            {device_operation.operation_id: device_operation.captured_graph}
-        )
+        if hasattr(device_operation, "operation_id"):
+            device_operations_dict.update(
+                {device_operation.operation_id: device_operation.captured_graph}
+            )
 
     stack_traces_dict = defaultdict(str)
     for stack_trace in stack_traces:
