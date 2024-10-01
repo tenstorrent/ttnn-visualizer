@@ -100,6 +100,7 @@ def middleware(app: flask.Flask):
 
     CORS(
         app,
+        resources={r"/*": {"origins": origins, "allow_headers": "*"}},
         origins=origins,
         allow_headers="*",
         methods="*",
