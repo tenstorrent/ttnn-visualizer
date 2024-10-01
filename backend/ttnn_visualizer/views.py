@@ -6,9 +6,8 @@ from http import HTTPStatus
 from pathlib import Path
 
 from flask import Blueprint, Response, current_app, request
-from flask_cors import cross_origin
 
-from ttnn_visualizer.sessions import CustomRequest, ActiveReport
+from ttnn_visualizer.sessions import ActiveReport
 
 from ttnn_visualizer.remotes import (
     RemoteConnection,
@@ -39,9 +38,18 @@ def health_check():
     return Response(status=HTTPStatus.OK)
 
 
+@api.route("/reports/active", methods=["GET"])
+def get_active_folder():
+    # Used to gate UI functions if no report is active
+    if hasattr(request, "tab_session_data"):
+        active_report = request.tab_session_data.get("active_report", None)
+        if active_report:
+            return active_report
+    return {"name": None, "host": None}
+
+
 @api.route("/operations", methods=["GET"])
 @timer
-@cross_origin()
 def operation_list():
     target_report_path = getattr(request, "report_path", None)
 
@@ -76,7 +84,6 @@ def operation_list():
 
 @api.route("/operations/<operation_id>", methods=["GET"])
 @timer
-@cross_origin()
 def operation_detail(
     operation_id,
 ):
@@ -139,7 +146,6 @@ def operation_detail(
         "GET",
     ],
 )
-@cross_origin()
 def operation_history():
 
     target_report_path = getattr(request, "report_path", None)
@@ -155,7 +161,6 @@ def operation_history():
 
 
 @api.route("/config")
-@cross_origin()
 def get_config():
 
     target_report_path = getattr(request, "report_path", None)
@@ -184,7 +189,6 @@ def tensors_list():
 
 
 @api.route("/buffer", methods=["GET"])
-@cross_origin()
 @timer
 def buffer_detail():
     address = request.args.get("address")
@@ -206,7 +210,6 @@ def buffer_detail():
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
-@cross_origin()
 @timer
 def tensor_detail(tensor_id):
     target_report_path = getattr(request, "report_path", None)
@@ -222,7 +225,6 @@ def tensor_detail(tensor_id):
         return dataclasses.asdict(tensor)
 
 
-@cross_origin()
 @api.route(
     "/local/upload",
     methods=[
@@ -257,7 +259,7 @@ def create_upload_files():
         file.save(destination_file)
 
     # Set Active Report on View
-    active_report = ActiveReport(local=True, name=report_name)
+    active_report = ActiveReport(hostname=None, name=report_name)
     update_tab_session({"active_report": active_report})
 
     return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
@@ -308,16 +310,6 @@ def sync_remote_folder():
     return Response(status=HTTPStatus.OK)
 
 
-@api.route("/reports/active", methods=["GET"])
-def get_active_folder():
-    # Used to gate UI functions if no report is active
-    if hasattr(request, "tab_session_data"):
-        active_report = request.tab_session_data.get("active_report", None)
-        if active_report:
-            return active_report
-    return Response(status=HTTPStatus.NOT_FOUND)
-
-
 @api.route("/remote/use", methods=["POST"])
 def use_remote_folder():
     connection = request.json.get("connection", None)
@@ -330,7 +322,7 @@ def use_remote_folder():
     report_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
     report_folder = Path(folder.remotePath).name
     connection_directory = Path(report_data_directory, connection.name, report_folder)
-    print(connection)
+
     current_app.logger.info(
         f"Setting active report for {request.tab_id} to {connection.host}/{connection_directory}"
     )
