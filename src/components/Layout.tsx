@@ -60,7 +60,7 @@ function Layout() {
 
                                 <Button
                                     text='Operations'
-                                    disabled={!Boolean(activeReport)}
+                                    disabled={!Boolean(activeReport?.name)}
                                     onClick={() => handleNavigate(ROUTES.OPERATIONS)}
                                     active={window.location.pathname === ROUTES.OPERATIONS}
                                     minimal
@@ -68,7 +68,7 @@ function Layout() {
 
                                 <Button
                                     text='Tensors'
-                                    disabled={!Boolean(activeReport)}
+                                    disabled={!Boolean(activeReport?.name)}
                                     onClick={() => handleNavigate(ROUTES.TENSORS)}
                                     active={window.location.pathname === ROUTES.TENSORS}
                                     minimal
