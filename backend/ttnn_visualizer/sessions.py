@@ -34,6 +34,10 @@ def get_report_path_from_request():
     """
     from flask import current_app, request as flask_request
 
+    database_file_name = current_app.config["SQLITE_DB_PATH"]
+    local_dir = current_app.config["LOCAL_DATA_DIRECTORY"]
+    remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
+
     # For type hinting
     request = cast(CustomRequest, flask_request)
 
@@ -41,18 +45,13 @@ def get_report_path_from_request():
         tab_session_data = request.tab_session_data
         active_report = tab_session_data.get("active_report", None)
         if active_report:
-            database_file_name = current_app.config["SQLITE_DB_PATH"]
-            local_dir = current_app.config["LOCAL_DATA_DIRECTORY"]
-            remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
-            report = active_report
-            hostname = report.get("hostname", None)
+            hostname = active_report.get("hostname", None)
             if hostname:
                 base_dir = str(Path(remote_dir).joinpath(hostname))
             else:
                 base_dir = local_dir
-            report_path = Path(base_dir).joinpath(report.get("name", ""))
+            report_path = Path(base_dir).joinpath(active_report.get("name", ""))
             target_path = str(Path(report_path).joinpath(database_file_name))
-
             request.report_path = target_path or ""
             current_app.logger.info(
                 f"Setting report path for tab id {request.tab_id} to {request.report_path}"
@@ -168,4 +167,4 @@ def init_sessions(app):
     app.before_request(get_report_path_from_request)
     app.teardown_appcontext(close_db_connection)
 
-    print("Sessions middleware initialized.")
+    app.logger.info("Sessions middleware initialized.")
