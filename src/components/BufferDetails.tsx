@@ -11,7 +11,7 @@ import { toHex } from '../functions/math';
 import ROUTES from '../definitions/routes';
 import 'styles/components/BufferDetails.scss';
 import getDeallocationOperation from '../functions/getDeallocationOperation';
-import getAllocationOperation from '../functions/getAllocationOperation';
+import getNextAllocationOperation from '../functions/getNextAllocationOperation';
 import { Operation, Tensor } from '../model/Graph';
 
 interface BufferDetailsProps {
@@ -40,7 +40,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
     const { address, dtype, layout, shape } = tensor;
     const lastOperationId: number = tensor.consumers[tensor.consumers.length - 1];
     const deallocationOperationId = getDeallocationOperation(tensor, operations);
-    const allocationOperationId = getAllocationOperation(tensor, operations);
+    const allocationOperationId = getNextAllocationOperation(tensor, operations);
 
     return (
         <>

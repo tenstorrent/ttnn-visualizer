@@ -8,7 +8,7 @@ import { prettyPrintAddress, toHex } from '../../functions/math';
 import { BufferTypeLabel } from '../../model/BufferType';
 import { useOperationsList } from '../../hooks/useAPI';
 import getDeallocationOperation from '../../functions/getDeallocationOperation';
-import getAllocationOperation from '../../functions/getAllocationOperation';
+import getNextAllocationOperation from '../../functions/getNextAllocationOperation';
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
@@ -27,7 +27,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 }) => {
     const { address } = tensor;
     const { data: operations } = useOperationsList();
-    const allocationOperationId = operations ? getAllocationOperation(tensor, operations) : null;
+    const allocationOperationId = operations ? getNextAllocationOperation(tensor, operations) : null;
     const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations) : null;
 
     console.log('allocationOperationId', allocationOperationId);
