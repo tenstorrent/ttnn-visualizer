@@ -15,7 +15,7 @@ export interface TensorDetailsComponentProps {
     selectedAddress: number | null;
     memorySize: number;
     onTensorClick: (tensorId: number | null) => void;
-    currentOperationId: number;
+    operationId: number;
 }
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
@@ -23,7 +23,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     selectedAddress = null,
     memorySize,
     onTensorClick,
-    currentOperationId,
+    operationId,
 }) => {
     const { address } = tensor;
     const { data: operations } = useOperationsList();
@@ -75,10 +75,15 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     </Tooltip>
                 )}
 
-                {nextAllocationOperationId && address && operations ? (
+                {/* For some reason doesn't like more concise checks like Number.isFinite */}
+                {nextAllocationOperationId !== undefined &&
+                nextAllocationOperationId !== null &&
+                address !== undefined &&
+                address !== null &&
+                operations ? (
                     <Tooltip
                         content={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}
-                        (+${nextAllocationOperationId - currentOperationId} operations)
+                        (+${nextAllocationOperationId - operationId} operations)
                         `}
                         placement={PopoverPosition.TOP}
                     >

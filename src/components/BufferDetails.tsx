@@ -49,7 +49,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                     <tr>
                         <th>Last used</th>
                         <td>
-                            {lastOperationId
+                            {Number.isFinite(lastOperationId)
                                 ? getLastOperation(lastOperationId, operations, tensor)
                                 : 'No consumers for this tensor'}
                         </td>
@@ -84,7 +84,13 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         </td>
                     </tr>
 
-                    {nextAllocationOperationId && deallocationOperationId && address ? (
+                    {/* This is stupid but Typescript is complaining otherwise */}
+                    {nextAllocationOperationId !== undefined &&
+                    Number.isFinite(nextAllocationOperationId) &&
+                    deallocationOperationId !== undefined &&
+                    Number.isFinite(deallocationOperationId) &&
+                    address !== null &&
+                    Number.isFinite(address) ? (
                         <tr>
                             <th>Next allocation</th>
                             <td>
