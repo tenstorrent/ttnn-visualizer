@@ -7,7 +7,7 @@ from typing import TypedDict, cast
 from flask import request, jsonify, g, Request
 
 # Path to the SQLite database for sessions
-DATABASE = "sessions.db"
+DATABASE = "file:sessiondb?mode=memory&cache=shared"
 
 
 # Define a TypedDict for the nested structure of the request data
@@ -62,9 +62,12 @@ def get_report_path_from_request():
 
 
 # Function to initialize the SQLite database and create the tab_sessions table if it doesn't exist
-def init_db():
+def init_session_db():
+    from flask import current_app
+
     with threading.Lock():
-        with sqlite3.connect(DATABASE) as conn:
+        current_app.logger.info("Initializing session database")
+        with sqlite3.connect(DATABASE, timeout=30) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -82,7 +85,7 @@ def get_db():
     with threading.Lock():
         db = getattr(g, "_session_database", None)
         if db is None:
-            db = g._database = sqlite3.connect(DATABASE)
+            db = g._database = sqlite3.connect(DATABASE, timeout=30)
         return db
 
 
@@ -149,16 +152,13 @@ def get_tab_session():
 
 # Middleware to close the SQLite database connection after each request
 def close_db_connection(exception):
-    with threading.Lock():
-        db = getattr(g, "_session_database", None)
-        if db is not None:
-            db.close()
+    db = getattr(g, "_session_database", None)
+    if db is not None:
+        db.close()
 
 
 # Function to initialize the session logic and middleware
 def init_sessions(app):
-    # Ensure the SQLite table exists
-    init_db()
 
     # Add the middleware to the Flask app
     app.before_request(get_tab_session)
