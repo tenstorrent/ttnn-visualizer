@@ -69,6 +69,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         }
     };
 
+    // TODO: Refs array continues to grow if you navigate between operations - look at refactoring this
     const outsideRefs = useRef<HTMLElement[]>([]);
 
     useOutsideClick(outsideRefs.current, onClickOutside);
@@ -244,10 +245,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     // TODO: Look at refactoring this to avoid forwarding refs
     const ForwardedMemoryPlotRenderer = forwardRef(MemoryPlotRenderer);
+    const ForwardedProducerConsumersData = forwardRef(ProducerConsumersData);
 
-    function assignRef(el: HTMLElement | null, index: number) {
-        if (el) {
-            outsideRefs.current[index] = el;
+    function assignRef(el: HTMLElement | null) {
+        if (el && !outsideRefs.current.includes(el)) {
+            outsideRefs.current.push(el);
         }
     }
 
@@ -328,7 +330,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={memorySizeL1}
                                     configuration={L1RenderConfiguration}
-                                    ref={(el) => assignRef(el, 0)}
+                                    ref={(el) => assignRef(el)}
                                 />
 
                                 <ForwardedMemoryPlotRenderer
@@ -351,7 +353,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     memorySize={memorySizeL1}
                                     onBufferClick={onBufferClick}
                                     configuration={L1RenderConfiguration}
-                                    ref={(el) => assignRef(el, 1)}
+                                    ref={(el) => assignRef(el)}
                                 />
 
                                 <div
@@ -377,10 +379,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         selectedTensor &&
                         (details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1 ||
                             details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1_SMALL) ? (
-                            <ProducerConsumersData
+                            <ForwardedProducerConsumersData
                                 selectedTensor={selectedTensor}
                                 details={details}
                                 operationId={operationId}
+                                ref={(el) => assignRef(el)}
                             />
                         ) : null}
 
@@ -399,7 +402,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={DRAM_MEMORY_SIZE}
                                     configuration={DRAMRenderConfiguration}
-                                    ref={(el) => assignRef(el, 2)}
+                                    ref={(el) => assignRef(el)}
                                 />
 
                                 <ForwardedMemoryPlotRenderer
@@ -413,7 +416,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     memorySize={DRAM_MEMORY_SIZE}
                                     onBufferClick={onDramBufferClick}
                                     configuration={DRAMRenderConfiguration}
-                                    ref={(el) => assignRef(el, 3)}
+                                    ref={(el) => assignRef(el)}
                                 />
 
                                 <ForwardedMemoryPlotRenderer
@@ -427,7 +430,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     memorySize={DRAM_MEMORY_SIZE}
                                     onBufferClick={onDramDeltaClick}
                                     configuration={DRAMRenderConfiguration}
-                                    ref={(el) => assignRef(el, 4)}
+                                    ref={(el) => assignRef(el)}
                                 />
 
                                 <div
@@ -452,10 +455,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {selectedTensorAddress &&
                         selectedTensor &&
                         details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.DRAM ? (
-                            <ProducerConsumersData
+                            <ForwardedProducerConsumersData
                                 selectedTensor={selectedTensor}
                                 details={details}
                                 operationId={operationId}
+                                ref={(el) => assignRef(el)}
                             />
                         ) : null}
 

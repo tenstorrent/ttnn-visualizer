@@ -2,11 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
+import { ForwardRefRenderFunction } from 'react';
 import { Icon } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
-import { useRef } from 'react';
 import ROUTES from '../../definitions/routes';
 import { OperationDetails } from '../../model/OperationDetails';
 import 'styles/components/ProducerConsumersData.scss';
@@ -17,21 +17,16 @@ interface ProducerConsumersDataProps {
     operationId: number;
 }
 
-function ProducerConsumersData({ selectedTensor, details, operationId }: ProducerConsumersDataProps) {
-    const outsideRefs = useRef<HTMLElement[]>([]);
-
-    function assignRef(el: HTMLElement | null, index: number) {
-        if (el) {
-            outsideRefs.current[index] = el;
-        }
-    }
-
+const ProducerConsumersData: ForwardRefRenderFunction<HTMLDivElement, ProducerConsumersDataProps> = (
+    { selectedTensor, details, operationId }: ProducerConsumersDataProps,
+    ref,
+) => {
     return (
-        <div className='plot-tensor-details'>
-            <div
-                ref={(el) => assignRef(el, 5)}
-                className={classNames('producer-consumer', { hidden: selectedTensor === null })}
-            >
+        <div
+            className='plot-tensor-details'
+            ref={ref}
+        >
+            <div className={classNames('producer-consumer', { hidden: selectedTensor === null })}>
                 <div
                     className={classNames('title', {
                         hidden: details.getTensorProducerConsumer(selectedTensor).producers.length === 0,
@@ -97,6 +92,6 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
             </div>
         </div>
     );
-}
+};
 
 export default ProducerConsumersData;
