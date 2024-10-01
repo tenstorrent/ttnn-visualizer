@@ -32,6 +32,11 @@ export interface OperationDetailsData extends Operation {
     device_operations: Node[];
 }
 
+export interface ActiveReport {
+    name: string
+    hostname: string
+}
+
 // TODO: we may want to revisit the 'default' portion for the variable name
 export const defaultOperationDetailsData: OperationDetailsData = {
     id: 0,
