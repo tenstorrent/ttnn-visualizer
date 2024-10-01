@@ -7,7 +7,7 @@ from typing import TypedDict, cast
 from flask import request, jsonify, g, Request
 
 # Path to the SQLite database for sessions
-DATABASE = "file:sessiondb?mode=memory&cache=shared"
+DATABASE = "sessions.db"
 
 
 # Define a TypedDict for the nested structure of the request data
@@ -66,7 +66,7 @@ def init_session_db():
 
     with threading.Lock():
         print("Initializing session database")
-        with sqlite3.connect(DATABASE, timeout=30) as conn:
+        with sqlite3.connect(DATABASE, timeout=30, isolation_level=None) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -84,7 +84,9 @@ def get_db():
     with threading.Lock():
         db = getattr(g, "_session_database", None)
         if db is None:
-            db = g._database = sqlite3.connect(DATABASE, timeout=30)
+            db = g._database = sqlite3.connect(
+                DATABASE, timeout=30, isolation_level=None
+            )
         return db
 
 
