@@ -23,7 +23,7 @@ axiosInstance.interceptors.request.use(
 
         // Attach the tab ID to the request headers
         if (tabId) {
-            config.headers['Tab-ID'] = tabId;
+            config.headers['tabid'] = tabId;
         }
 
         return config;
