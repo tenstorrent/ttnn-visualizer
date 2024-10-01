@@ -9,16 +9,16 @@ import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
 import ROUTES from '../../definitions/routes';
 import { OperationDetails } from '../../model/OperationDetails';
-import 'styles/components/ProducerConsumersData.scss';
+import 'styles/components/ProducersConsumersInfo.scss';
 
-interface ProducerConsumersDataProps {
+interface ProducersConsumersInfoProps {
     selectedTensor: number;
     details: OperationDetails;
     operationId: number;
 }
 
-const ProducerConsumersData: ForwardRefRenderFunction<HTMLDivElement, ProducerConsumersDataProps> = (
-    { selectedTensor, details, operationId }: ProducerConsumersDataProps,
+const ProducersConsumersInfo: ForwardRefRenderFunction<HTMLDivElement, ProducersConsumersInfoProps> = (
+    { selectedTensor, details, operationId }: ProducersConsumersInfoProps,
     ref,
 ) => {
     return (
@@ -94,4 +94,4 @@ const ProducerConsumersData: ForwardRefRenderFunction<HTMLDivElement, ProducerCo
     );
 };
 
-export default ProducerConsumersData;
+export default ProducersConsumersInfo;

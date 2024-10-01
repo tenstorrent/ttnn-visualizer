@@ -31,7 +31,7 @@ import useOutsideClick from '../../hooks/useOutsideClick';
 import { getBufferColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
 import TensorDetailsComponent from './TensorDetailsComponent';
-import ProducerConsumersData from './ProducerConsumersData';
+import ProducersConsumersInfo from './ProducersConsumersInfo';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -245,7 +245,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     // TODO: Look at refactoring this to avoid forwarding refs
     const ForwardedMemoryPlotRenderer = forwardRef(MemoryPlotRenderer);
-    const ForwardedProducerConsumersData = forwardRef(ProducerConsumersData);
+    const ForwardedProducersConsumersInfo = forwardRef(ProducersConsumersInfo);
 
     function assignRef(el: HTMLElement | null) {
         if (el && !outsideRefs.current.includes(el)) {
@@ -379,7 +379,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         selectedTensor &&
                         (details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1 ||
                             details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1_SMALL) ? (
-                            <ForwardedProducerConsumersData
+                            <ForwardedProducersConsumersInfo
                                 selectedTensor={selectedTensor}
                                 details={details}
                                 operationId={operationId}
@@ -455,7 +455,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {selectedTensorAddress &&
                         selectedTensor &&
                         details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.DRAM ? (
-                            <ForwardedProducerConsumersData
+                            <ForwardedProducersConsumersInfo
                                 selectedTensor={selectedTensor}
                                 details={details}
                                 operationId={operationId}
