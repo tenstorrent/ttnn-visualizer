@@ -3,7 +3,7 @@ import shutil
 from os import environ
 from pathlib import Path
 
-from flask import Flask, jsonify
+from flask import Flask
 import flask
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -94,29 +94,13 @@ def middleware(app: flask.Flask):
     app.wsgi_app = ProxyFix(app.wsgi_app)
 
     # CORS configuration
-    origins = ["http://localhost:5173"]
+    origins = ["http://localhost:5173", "http://localhost:8000"]
 
     init_sessions(app)
 
-    @app.before_request
-    def before_request():
-        from flask import request
-
-        headers = {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-        }
-        if request.method.lower() == "options":
-            return jsonify(headers), 200
-
     CORS(
         app,
-        resources={r"/*": {"origins": origins, "allow_headers": ""}},
         origins=origins,
-        allow_headers="*",
-        methods="*",
-        supports_credentials=True,
     )
 
     return None
