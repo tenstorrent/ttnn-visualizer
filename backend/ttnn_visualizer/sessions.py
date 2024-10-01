@@ -63,10 +63,9 @@ def get_report_path_from_request():
 
 # Function to initialize the SQLite database and create the tab_sessions table if it doesn't exist
 def init_session_db():
-    from flask import current_app
 
     with threading.Lock():
-        current_app.logger.info("Initializing session database")
+        print("Initializing session database")
         with sqlite3.connect(DATABASE, timeout=30) as conn:
             cursor = conn.cursor()
             cursor.execute(
