@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // Create an Axios instance
 const axiosInstance = axios.create({
-    baseURL: '/',  // Your API base URL
+    baseURL: '',  // Your API base URL
 });
 
 const getOrCreateTabId = () => {
@@ -15,13 +15,17 @@ const getOrCreateTabId = () => {
     return tabId;
 };
 
-axios.interceptors.request.use((config) => {
+axiosInstance.interceptors.request.use((config) => {
     const tabId = getOrCreateTabId()
-    if(tabId) {
-        config.url += `?tabId=${tabId}`;
+    if (tabId) {
+        config.params = {
+            ...config.params,
+            tabId
+        };
     }
     return config;
 });
+
 
 
 export default axiosInstance;
