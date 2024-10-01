@@ -15,23 +15,13 @@ const getOrCreateTabId = () => {
     return tabId;
 };
 
-// Add a request interceptor to include tab ID
-axiosInstance.interceptors.request.use(
-    (config) => {
-        // Get the tab ID from sessionStorage
-        const tabId = getOrCreateTabId()
-
-        // Attach the tab ID to the request headers
-        if (tabId) {
-            config.headers['Tab-ID'] = tabId;
-        }
-
-        return config;
-    },
-    (error) => {
-        // Handle request errors here
-        return Promise.reject(error);
+axios.interceptors.request.use((config) => {
+    const tabId = getOrCreateTabId()
+    if(tabId) {
+        config.url += `?tabId=${tabId}`;
     }
-);
+    return config;
+});
+
 
 export default axiosInstance;
