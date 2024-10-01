@@ -60,22 +60,24 @@ jobs:
       - name: get-npm-version
         id: package-version
         uses: martinbeentjes/npm-get-version-action@v1.3.1
-
-      -   name: Get wheel file name
-          id: get_wheel
-          run: |
+        
+      - name: Get wheel file name
+        id: get_wheel
+        run: |
               # Find the .whl file and store its name in a variable
               FILE=$(find /home/runner/work/ttnn-visualizer/ -name "*.whl" -type f)
+              WHEEL_FILE_NAME=$(basename $FILE)
               echo "Found wheel file: $FILE"
               # Set output to the found file name
               echo "wheel_name=$FILE" >> $GITHUB_ENV
+              echo "wheel_file_name=$WHEEL_FILE_NAME" >> $GITHUB_ENV
 
       - name: Upload Wheel to Release
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ env.wheel_name }}
-          asset_name: ttnn-visualizer-${{ github.event.release.tag_name }}.whl
-          asset_content_type: application/octet-stream
+              upload_url: ${{ github.event.release.upload_url }}
+              asset_path: ${{ env.wheel_name }}
+              asset_name: ${{env.wheel_file_name}}
+              asset_content_type: application/octet-stream
