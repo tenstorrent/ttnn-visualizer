@@ -116,7 +116,7 @@ def handle_tab_session(tab_id):
 
 # Function to update the session data for a given tab_id
 def update_tab_session(new_data):
-    tab_id = request.headers.get("tabid")
+    tab_id = request.headers.get("Tab-ID")
     db = get_db()
     cur = db.cursor()
 
@@ -145,7 +145,7 @@ def update_tab_session(new_data):
 
 # Middleware to fetch or create per-tab session data and attach it to the `request` object
 def get_tab_session():
-    tab_id = request.headers.get("tabid", None)
+    tab_id = request.headers.get("Tab-ID")
     if tab_id:
         request.tab_id = tab_id
         request.tab_session_data = handle_tab_session(tab_id)
