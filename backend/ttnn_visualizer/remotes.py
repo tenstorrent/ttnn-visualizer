@@ -60,32 +60,38 @@ def remote_exception_handler(func):
         try:
             return func(*args, **kwargs)
         except AuthenticationException as err:
+            logger.error(f"Unable to authenticate : {str(err)}")
             raise RemoteFolderException(
                 status=403, message=f"Unable to authenticate: {str(err)}"
             )
         except FileNotFoundError as err:
+            logger.error(f"Unable to open {connection.path}: {str(err)}")
             raise RemoteFolderException(
-                status=500, message=f"Unable to open path {connection.path}: {str(err)}"
+                status=400, message=f"Unable to open path {connection.path}"
             )
         except NoProjectsException as err:
+            logger.error(f"No projects at {connection.path}: {str(err)}")
             raise RemoteFolderException(
                 status=400,
-                message=f"No projects found at remote location: {connection.path}: {str(err)}",
+                message=f"No projects found at remote location: {connection.path}",
             )
         except NoValidConnectionsError as err:
+            logger.error(f"Unable to connect to host: {str(err)}")
             raise RemoteFolderException(
                 status=500,
-                message=f"Unable to connect to host {connection.host}: {str(err)}",
+                message=f"Unable to connect to host {connection.host}",
             )
 
         except IOError as err:
+            logger.error(f"Unable opening remote file: {str(err)}")
             raise RemoteFolderException(
                 status=400,
-                message=f"Error opening remote folder {connection.path}: {str(err)}",
+                message=f"Error opening remote folder {connection.path}",
             )
         except SSHException as err:
+            logger.error(f"Unable to connect to host: {str(err)}")
             raise RemoteFolderException(
-                status=500, message=f"Error connecting to host {connection.host}: {err}"
+                status=500, message=f"Error connecting to host {connection.host}"
             )
 
     return remote_handler
