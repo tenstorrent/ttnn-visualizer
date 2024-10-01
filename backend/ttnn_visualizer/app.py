@@ -43,6 +43,7 @@ def create_app(settings_override=None):
         app.config.update(settings_override)
 
     init_session_db()
+
     middleware(app)
 
     app.register_blueprint(api)
@@ -99,7 +100,6 @@ def middleware(app: flask.Flask):
 
     CORS(
         app,
-        resources={r"/*": {"origins": "*", "allow_headers": "tab-id"}},
         origins=origins,
         allow_headers="*",
         methods="*",
