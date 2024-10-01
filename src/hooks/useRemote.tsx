@@ -53,7 +53,6 @@ const useRemoteConnection = () => {
                     ];
                 }
                 if (error.response && error.response.status >= 500) {
-
                     connectionStatus = [
                         {
                             status: ConnectionTestStates.FAILED,
@@ -67,7 +66,6 @@ const useRemoteConnection = () => {
                 }
             }
         }
-
 
         return connectionStatus;
     };

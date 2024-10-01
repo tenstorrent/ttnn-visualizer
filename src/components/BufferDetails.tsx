@@ -40,7 +40,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
     const { address, dtype, layout, shape } = tensor;
     const lastOperationId: number = tensor.consumers[tensor.consumers.length - 1];
     const deallocationOperationId = getDeallocationOperation(tensor, operations);
-    const allocationOperationId = getNextAllocationOperation(tensor, operations);
+    const nextAllocationOperationId = getNextAllocationOperation(tensor, operations);
 
     return (
         <>
@@ -84,17 +84,20 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         </td>
                     </tr>
 
-                    {allocationOperationId && deallocationOperationId && address ? (
+                    {nextAllocationOperationId && deallocationOperationId && address ? (
                         <tr>
                             <th>Next allocation</th>
                             <td>
                                 <span>
                                     {toHex(address)} next allocated in{' '}
-                                    <Link to={`${ROUTES.OPERATIONS}/${allocationOperationId}`}>
-                                        {allocationOperationId}{' '}
-                                        {operations.find((operation) => operation.id === allocationOperationId)?.name}
+                                    <Link to={`${ROUTES.OPERATIONS}/${nextAllocationOperationId}`}>
+                                        {nextAllocationOperationId}{' '}
+                                        {
+                                            operations.find((operation) => operation.id === nextAllocationOperationId)
+                                                ?.name
+                                        }
                                     </Link>{' '}
-                                    (+{allocationOperationId - deallocationOperationId} operations)
+                                    (+{nextAllocationOperationId - deallocationOperationId} operations)
                                 </span>
                             </td>
                         </tr>

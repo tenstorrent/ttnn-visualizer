@@ -27,10 +27,8 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 }) => {
     const { address } = tensor;
     const { data: operations } = useOperationsList();
-    const allocationOperationId = operations ? getNextAllocationOperation(tensor, operations) : null;
+    const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations) : null;
     const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations) : null;
-
-    console.log('allocationOperationId', allocationOperationId);
 
     return (
         <div
@@ -77,10 +75,10 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     </Tooltip>
                 )}
 
-                {allocationOperationId && address && operations ? (
+                {nextAllocationOperationId && address && operations ? (
                     <Tooltip
-                        content={`Next allocation of ${toHex(address)} in ${allocationOperationId} ${operations.find((operation) => operation.id === allocationOperationId)?.name}
-                        (+${allocationOperationId - currentOperationId} operations)
+                        content={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}
+                        (+${nextAllocationOperationId - currentOperationId} operations)
                         `}
                         placement={PopoverPosition.TOP}
                     >
