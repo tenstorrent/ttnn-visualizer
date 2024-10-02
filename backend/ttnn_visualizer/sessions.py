@@ -47,15 +47,12 @@ def get_report_path_from_request():
         if active_report:
             hostname = active_report.get("hostname", None)
             if hostname:
-                base_dir = str(Path(remote_dir).joinpath(hostname))
+                base_dir = Path(remote_dir).joinpath(hostname)
             else:
                 base_dir = local_dir
             report_path = Path(base_dir).joinpath(active_report.get("name", ""))
             target_path = str(Path(report_path).joinpath(database_file_name))
             request.report_path = target_path or ""
-            current_app.logger.info(
-                f"Setting report path for tab id {request.tab_id} to {request.report_path}"
-            )
         else:
             request.report_path = ""
 
