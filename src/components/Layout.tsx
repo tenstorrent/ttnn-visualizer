@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { Alignment, Button, Classes, Navbar, Tooltip } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';

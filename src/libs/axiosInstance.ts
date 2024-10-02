@@ -1,4 +1,7 @@
-// axiosInstance.js
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import axios from 'axios';
 
 // Create an Axios instance
