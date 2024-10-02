@@ -260,6 +260,9 @@ def create_upload_files():
 
     # Set Active Report on View
     active_report = ActiveReport(hostname=None, name=report_name)
+    current_app.logger.info(
+        f"Setting active report for {request.tab_id} - {report_directory.name}/{report_name}"
+    )
     update_tab_session({"active_report": active_report})
 
     return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
@@ -323,9 +326,6 @@ def use_remote_folder():
     report_folder = Path(folder.remotePath).name
     connection_directory = Path(report_data_directory, connection.host, report_folder)
 
-    current_app.logger.info(
-        f"Setting active report for {request.tab_id} to {connection.host}/{connection_directory}"
-    )
     if not connection_directory.exists():
         return Response(
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
@@ -333,6 +333,10 @@ def use_remote_folder():
         )
 
     # Set Active Report on View
+    remote_path = f"{Path(report_data_directory).name}/{connection.host}/{connection_directory.name}"
+    current_app.logger.info(
+        f"Setting active report for {request.tab_id} - {remote_path}"
+    )
     active_report = ActiveReport(name=report_folder, hostname=connection.host)
 
     update_tab_session({"active_report": active_report})
