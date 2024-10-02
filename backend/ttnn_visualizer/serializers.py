@@ -143,6 +143,24 @@ def serialize_operation(
     )
 
 
+def serialize_operation_buffers(operations, buffers, buffer_type):
+    buffer_dict = dict()
+    for b in buffers:
+        buffer_dict.update({b.operation_id: b})
+
+    results = []
+    for operation in operations:
+        operation_buffers = buffer_dict.get(operation.operation_id)
+
+        buffer_data = [dataclasses.asdict(b) for b in operation_buffers]
+        if buffer_type is int:
+            buffer_data = filter(
+                lambda buffer: buffer.type == buffer_type, operation_buffers
+            )
+        results.append({"operation_id": operation.operation_id, "buffers": buffer_data})
+    return results
+
+
 def serialize_tensors(tensors, producers_consumers):
     producers_consumers_dict = dict()
     for pc in producers_consumers:

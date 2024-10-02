@@ -23,6 +23,7 @@ from ttnn_visualizer.serializers import (
     serialize_operations,
     serialize_tensors,
     serialize_operation,
+    serialize_operation_buffers,
 )
 from ttnn_visualizer.utils import timer
 from ttnn_visualizer import queries
@@ -223,7 +224,9 @@ def tensor_detail(tensor_id):
 
 @api.route("/operation-buffers", methods=["GET"])
 def get_operation_buffers():
-    """
+    db_path = get_db_path_from_request(request)
+    if not Path(db_path).exists():
+        return Response(status=HTTPStatus.BAD_REQUEST)
 
     buffer_type = request.args.get("buffer_type", "")
     if buffer_type and str.isdigit(buffer_type):
@@ -231,21 +234,11 @@ def get_operation_buffers():
     else:
         buffer_type = None
 
-    buffers = [
-        {"operation_id": o.operation_id, "buffers": o.buffers}
-        for o in Operation.query.all()
-    ]
-    for buffer in buffers:
-        buffer_data = buffer.get("buffers")
-        if buffer_type:
-            buffer_data = list(
-                filter(lambda b: b.buffer_type == int(buffer_type), buffer_data)
-            )
-        buffer.update({"buffers": BufferSchema().dump(buffer_data, many=True)})
-    return buffers
-    :return:
-    """
-    pass
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        buffers = list(queries.query_buffers(cursor))
+        operations = list(queries.query_operations(cursor))
+        return serialize_operation_buffers(operations, buffers, buffer_type)
 
 
 @api.route(

@@ -70,7 +70,14 @@ def query_stack_trace(cursor, operation_id):
     return stack_trace
 
 
-def query_buffers(cursor, operation_id):
+def query_buffers(cursor):
+    query = "SELECT * FROM buffers"
+    cursor.execute(query)
+    for row in cursor.fetchall():
+        yield Buffer(*row)
+
+
+def query_buffers_by_operation_id(cursor, operation_id):
     query = "SELECT * FROM buffers WHERE operation_id = ?"
     cursor.execute(query, (operation_id,))
     for row in cursor.fetchall():
