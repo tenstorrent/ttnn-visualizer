@@ -9,13 +9,13 @@ import { AnchorButton, Button, FormGroup, Tooltip } from '@blueprintjs/core';
 import { useNavigate } from 'react-router';
 import { IconNames } from '@blueprintjs/icons';
 import { useQueryClient } from 'react-query';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom } from 'jotai';
 import useRemote from '../../hooks/useRemote';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import ROUTES from '../../definitions/routes';
-import { reportLocationAtom, reportMetaAtom } from '../../store/app';
+import { reportLocationAtom } from '../../store/app';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 
@@ -26,7 +26,6 @@ const RemoteSyncConfigurator: FC = () => {
     const [remoteFolderList, setRemoteFolders] = useState<RemoteFolder[]>(
         remote.persistentState.getSavedRemoteFolders(remote.persistentState.selectedConnection),
     );
-    const meta = useAtomValue(reportMetaAtom);
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
 
     const [isSyncingRemoteFolder, setIsSyncingRemoteFolder] = useState(false);
@@ -89,11 +88,12 @@ const RemoteSyncConfigurator: FC = () => {
     };
 
     const isRemoteReportMounted =
-        !isSyncingRemoteFolder ||
-        !isLoadingFolderList ||
-        remoteFolderList?.length > 0 ||
-        (selectedRemoteFolder && !isRemoteFolderOutdated(selectedRemoteFolder)) ||
-        (!meta && reportLocation === 'remote');
+        !isSyncingRemoteFolder &&
+        !isLoadingFolderList &&
+        remoteFolderList?.length > 0 &&
+        selectedRemoteFolder &&
+        !isRemoteFolderOutdated(selectedRemoteFolder) &&
+        reportLocation === 'remote';
 
     useEffect(() => {
         (async () => {
@@ -253,6 +253,7 @@ const RemoteSyncConfigurator: FC = () => {
                                     alert('Unable to sync remote folder');
                                 } finally {
                                     setIsSyncingRemoteFolder(false);
+                                    setReportLocation('remote');
                                 }
                             }}
                         />

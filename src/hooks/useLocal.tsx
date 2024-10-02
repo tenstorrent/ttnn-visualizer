@@ -2,8 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import axios from 'axios';
 import { useState } from 'react';
+import axiosInstance from '../libs/axiosInstance';
 
 export interface UploadProgress {
     progress?: number;
@@ -19,7 +19,7 @@ const useLocalConnection = () => {
             formData.append('files', f);
         });
 
-        return axios
+        return axiosInstance
             .post(`${import.meta.env.VITE_API_ROOT}/local/upload`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',

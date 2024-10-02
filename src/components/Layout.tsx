@@ -1,13 +1,19 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { Alignment, Button, Classes, Intent, Navbar, Tooltip } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
+import { useQuery } from 'react-query';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
 import { IconNames } from '@blueprintjs/icons';
 import TenstorrentLogo from './TenstorrentLogo';
 import ROUTES from '../definitions/routes';
 import { reportMetaAtom } from '../store/app';
+import { fetchActiveReport } from '../hooks/useAPI';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -20,6 +26,10 @@ const BounceIn = cssTransition({
 function Layout() {
     const navigate = useNavigate();
     const meta = useAtomValue(reportMetaAtom);
+    const { data: activeReport } = useQuery('active_report', {
+        queryFn: fetchActiveReport,
+        initialData: null,
+    });
 
     const handleNavigate = (path: string) => {
         navigate(path);
@@ -70,6 +80,7 @@ function Layout() {
                                 active={hasMatchingPath(ROUTES.OPERATIONS)}
                                 intent={hasMatchingPath(ROUTES.OPERATIONS) ? Intent.PRIMARY : Intent.WARNING}
                                 icon={IconNames.CUBE}
+                                disabled={!activeReport?.name}
                                 minimal
                                 large
                             />
@@ -80,6 +91,7 @@ function Layout() {
                                 active={hasMatchingPath(ROUTES.TENSORS)}
                                 intent={hasMatchingPath(ROUTES.TENSORS) ? Intent.PRIMARY : Intent.DANGER}
                                 icon={IconNames.FLOW_LINEAR}
+                                disabled={!activeReport?.name}
                                 minimal
                                 large
                             />

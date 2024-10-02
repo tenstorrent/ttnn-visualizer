@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { Fragment, forwardRef, useRef, useState } from 'react';
+import React, { Fragment, useState } from 'react';
 import { Button, ButtonGroup, Icon, Intent, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { IconNames } from '@blueprintjs/icons';
@@ -19,6 +19,7 @@ import { OperationDetails } from '../../model/OperationDetails';
 import { BufferType } from '../../model/BufferType';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 import {
+    CBRenderConfiguration,
     CONDENSED_PLOT_CHUNK_COLOR,
     DRAMRenderConfiguration,
     L1RenderConfiguration,
@@ -27,7 +28,6 @@ import {
 import { MemoryLegendElement } from './MemoryLegendElement';
 import OperationArguments from '../OperationArguments';
 import { isDramActiveAtom, isL1ActiveAtom, selectedTensorAddressAtom } from '../../store/app';
-import useOutsideClick from '../../hooks/useOutsideClick';
 import { getBufferColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
 import TensorDetailsComponent from './TensorDetailsComponent';
@@ -45,7 +45,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { data: operations } = useOperationsList();
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
     const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
-
+    const [showCircularBuffer, setShowCircularBuffer] = useState(false);
     const {
         operationDetails: { data: operationDetails, isLoading, status },
     } = useOperationDetails(operationId);
@@ -69,10 +69,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         }
     };
 
-    const outsideRefs = useRef<HTMLElement[]>([]);
-
-    useOutsideClick(outsideRefs.current, onClickOutside);
-
     const operation = operations?.find((op) => op.id === operationId);
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails || !operations) {
@@ -92,7 +88,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const l1Small = details.memoryData(BufferType.L1_SMALL);
 
-    const { chartData, memory, fragmentation, cbChartData } = details.memoryData();
+    const { chartData, memory, fragmentation, cbChartData, cbChartDataByOperation } = details.memoryData();
     const { chartData: previousChartData, memory: previousMemory } = previousDetails.memoryData();
 
     const { chartData: dramData, memory: dramMemory } = details.memoryData(BufferType.DRAM);
@@ -242,15 +238,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const dramDeltaObject = details.getMemoryDelta(dramDelta, reverseDramDelta);
 
-    // TODO: Look at refactoring this to avoid forwarding refs
-    const ForwardedMemoryPlotRenderer = forwardRef(MemoryPlotRenderer);
-
-    function assignRef(el: HTMLElement | null, index: number) {
-        if (el) {
-            outsideRefs.current[index] = el;
-        }
-    }
-
     return (
         <>
             <OperationDetailsNavigation
@@ -259,6 +246,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
 
             <div className='operation-details-component'>
+                {selectedTensorAddress && (
+                    // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
+                    <div
+                        className='outside-click'
+                        onClick={onClickOutside}
+                    />
+                )}
                 {!isLoading && Number.isSafeInteger(operationDetails?.id) ? (
                     <>
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
@@ -285,25 +279,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 label='Buffer zoom'
                                 checked={zoomedInViewMainMemory}
                                 onChange={() => {
-                                    if (!zoomedInViewMainMemory) {
-                                        setZoomedInViewCBMemory(false);
-                                    }
                                     setZoomedInViewMainMemory(!zoomedInViewMainMemory);
                                 }}
                             />
-                            {/* TODO: there is a known issue if we come back to an op with no device operations this contrl will be disabled but set to zoom
-                              there is a workaround but it needs eventual fixing
-                              Also details.deviceOperations is an incorrect check, we should check if there are any CBs in the device operations
-                              */}
                             <Switch
-                                label='Circular Buffer zoom'
-                                checked={zoomedInViewCBMemory}
-                                disabled={details.deviceOperations.length === 0}
+                                label={
+                                    !showCircularBuffer
+                                        ? 'Show Circular Buffers Details'
+                                        : 'Hide Circular Buffers Details'
+                                }
+                                checked={showCircularBuffer}
+                                disabled={cbChartDataByOperation.size === 0}
                                 onChange={() => {
-                                    setZoomedInViewCBMemory(!zoomedInViewCBMemory);
-                                    if (!zoomedInViewCBMemory) {
-                                        setZoomedInViewMainMemory(false);
-                                    }
+                                    setShowCircularBuffer(!showCircularBuffer);
                                 }}
                             />
                         </div>
@@ -315,7 +303,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {isL1Active && (
                             <>
                                 <h3>L1 Memory</h3>
-                                <ForwardedMemoryPlotRenderer
+                                <MemoryPlotRenderer
                                     title='Previous Summarized L1 Report'
                                     className={classNames('l1-memory-renderer', {
                                         'empty-plot': previousChartData.length === 0,
@@ -328,10 +316,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={memorySizeL1}
                                     configuration={L1RenderConfiguration}
-                                    ref={(el) => assignRef(el, 0)}
                                 />
 
-                                <ForwardedMemoryPlotRenderer
+                                <MemoryPlotRenderer
                                     title='Current Summarized L1 Report'
                                     className={classNames('l1-memory-renderer', {
                                         'empty-plot': chartData.length === 0,
@@ -341,8 +328,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         plotZoomRangeStart - MEMORY_PADDING_L1,
                                         plotZoomRangeEnd + MEMORY_PADDING_L1,
                                     ]}
-                                    isZoomedInCb={zoomedInViewCBMemory}
-                                    cbZoomRange={[cbZoomStart - MEMORY_PADDING_CB, cbZoomEnd + MEMORY_PADDING_CB]}
                                     chartDataList={[
                                         cbChartData,
                                         chartData,
@@ -351,8 +336,49 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     memorySize={memorySizeL1}
                                     onBufferClick={onBufferClick}
                                     configuration={L1RenderConfiguration}
-                                    ref={(el) => assignRef(el, 1)}
                                 />
+                                {showCircularBuffer && cbChartDataByOperation.size > 0 && (
+                                    <>
+                                        <h3>Device Operations</h3>
+                                        <Switch
+                                            label='Circular Buffers zoom'
+                                            checked={zoomedInViewCBMemory}
+                                            onChange={() => {
+                                                setZoomedInViewCBMemory(!zoomedInViewCBMemory);
+                                            }}
+                                        />
+                                        {[...cbChartDataByOperation.entries()].map(
+                                            ([deviceOperationName, plotData]) => (
+                                                <>
+                                                    <h3 className='circular-buffers-plot-title'>
+                                                        <Icon
+                                                            className='operation-icon'
+                                                            size={13}
+                                                            intent={Intent.SUCCESS}
+                                                            icon={IconNames.CUBE_ADD}
+                                                        />{' '}
+                                                        <span>{deviceOperationName}</span>
+                                                    </h3>
+                                                    <MemoryPlotRenderer
+                                                        title=''
+                                                        className={classNames('l1-memory-renderer circular-buffers', {
+                                                            'empty-plot': plotData.length === 0,
+                                                        })}
+                                                        chartDataList={[plotData]}
+                                                        plotZoomRange={[
+                                                            cbZoomStart - MEMORY_PADDING_CB,
+                                                            cbZoomEnd + MEMORY_PADDING_CB,
+                                                        ]}
+                                                        isZoomedIn={zoomedInViewCBMemory}
+                                                        memorySize={memorySizeL1}
+                                                        configuration={CBRenderConfiguration}
+                                                        onBufferClick={onBufferClick}
+                                                    />
+                                                </>
+                                            ),
+                                        )}
+                                    </>
+                                )}
 
                                 <div
                                     className={classNames('legend', {
@@ -388,7 +414,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             <>
                                 <h3>DRAM</h3>
 
-                                <ForwardedMemoryPlotRenderer
+                                <MemoryPlotRenderer
                                     title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
                                     className={classNames('dram-memory-renderer', {
                                         'empty-plot': previousDramData.length === 0,
@@ -399,10 +425,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={DRAM_MEMORY_SIZE}
                                     configuration={DRAMRenderConfiguration}
-                                    ref={(el) => assignRef(el, 2)}
                                 />
 
-                                <ForwardedMemoryPlotRenderer
+                                <MemoryPlotRenderer
                                     title='Current Summarized DRAM Report'
                                     className={classNames('dram-memory-renderer', {
                                         'empty-plot': dramData.length === 0,
@@ -413,10 +438,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     memorySize={DRAM_MEMORY_SIZE}
                                     onBufferClick={onDramBufferClick}
                                     configuration={DRAMRenderConfiguration}
-                                    ref={(el) => assignRef(el, 3)}
                                 />
 
-                                <ForwardedMemoryPlotRenderer
+                                <MemoryPlotRenderer
                                     title='DRAM Delta (difference between current and previous operation)'
                                     className={classNames('dram-memory-renderer', {
                                         'empty-plot': dramDeltaObject.chartData.length === 0,
@@ -427,7 +451,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     memorySize={DRAM_MEMORY_SIZE}
                                     onBufferClick={onDramDeltaClick}
                                     configuration={DRAMRenderConfiguration}
-                                    ref={(el) => assignRef(el, 4)}
                                 />
 
                                 <div
@@ -471,6 +494,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         selectedAddress={selectedTensorAddress}
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
+                                        operationId={operationId}
                                     />
                                 ))}
                             </div>
@@ -484,6 +508,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         selectedAddress={selectedTensorAddress}
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
+                                        operationId={operationId}
                                     />
                                 ))}{' '}
                             </div>
@@ -522,6 +547,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                                         selectedTensorAddress={selectedTensorAddress}
                                                         operationDetails={details}
                                                         onLegendClick={onLegendClick}
+                                                        colorVariance={deviceOperation.colorVariance}
                                                     />
                                                 ))}
                                             </div>

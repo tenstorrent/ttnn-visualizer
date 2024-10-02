@@ -19,6 +19,7 @@ import {
 import { BufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { HistoricalTensor, Tensor } from './Graph';
+import { PlotDataOverrides } from '../definitions/PlotConfigurations';
 
 export class OperationDetails implements Partial<OperationDetailsData> {
     id: number;
@@ -143,10 +144,12 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         }
     }
 
-    private getChartData(memory: Chunk[]): Partial<PlotData>[] {
+    private getChartData(memory: Chunk[], overrides?: PlotDataOverrides): Partial<PlotData>[] {
         return memory.map((chunk) => {
             const { address, size } = chunk;
-            const color = getBufferColor(address);
+            const color = overrides?.color
+                ? overrides?.color
+                : getBufferColor(address + (overrides?.colorVariance || 0));
             const tensor = this.getTensorForAddress(address);
             return {
                 x: [address + size / 2],
@@ -167,7 +170,10 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                     tensor,
                 },
                 hoverinfo: 'none',
-                hovertemplate: `
+                hovertemplate:
+                    overrides?.hovertemplate !== undefined
+                        ? overrides?.hovertemplate
+                        : `
 <span style="color:${color};font-size:20px;">&#9632;</span>
 ${address} (${toHex(address)}) <br>Size: ${formatSize(size)}
 ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
@@ -239,6 +245,7 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
         condensed: Chunk;
         condensedChart: Partial<PlotData>[];
         cbChartData: Partial<PlotData>[];
+        cbChartDataByOperation: Map<string, Partial<PlotData>[]>;
         cbMemory: Chunk[];
     } {
         const fragmentation: FragmentationEntry[] = [];
@@ -312,14 +319,25 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
             }
         });
 
-        const condensed: Chunk = {
-            address: memory[0]?.address || 0,
-            // eslint-disable-next-line no-unsafe-optional-chaining
-            size: memory[memory.length - 1]?.address + memory[memory.length - 1]?.size || 0,
-        };
+        const condensed: Chunk = this.calculateCondensed(memory);
+        const cbCondensed: Chunk = this.calculateCondensed(cbMemory);
 
         const chartData = this.getChartData(memory);
-        const cbChartData = this.getChartData(cbMemory);
+        const cbColor = '#e2defc';
+        const cbHoverTemplate = `
+<span style="color:${cbColor};font-size:20px;">&#9632;</span>
+${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cbCondensed.size)}
+<br><br>CBs Summary
+<extra></extra>`;
+
+        const cbChartData = this.getChartData([cbCondensed], { color: cbColor, hovertemplate: cbHoverTemplate });
+        const cbChartDataByOperation: Map<string, Partial<PlotData>[]> = new Map();
+        this.deviceOperations.forEach((op, index) => {
+            if (op.cbList.length !== 0) {
+                op.colorVariance = index;
+                cbChartDataByOperation.set(op.name, this.getChartData(op.cbList, { colorVariance: op.colorVariance }));
+            }
+        });
 
         return {
             chartData,
@@ -328,6 +346,7 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
             condensed,
             condensedChart: this.getChartData([condensed]),
             cbChartData,
+            cbChartDataByOperation,
             cbMemory,
         };
     }
@@ -386,5 +405,23 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
         }
 
         return tensorsByBufferAddress;
+    }
+
+    // eslint-disable-next-line class-methods-use-this
+    private calculateCondensed(mem: Chunk[]): Chunk {
+        if (!mem || mem.length === 0) {
+            return {
+                address: 0,
+                size: 0,
+            };
+        }
+        let rangeEnd = 0;
+        mem.forEach((chunk) => {
+            rangeEnd = Math.max(rangeEnd, chunk.address + chunk.size);
+        });
+        return {
+            address: mem[0].address || 0,
+            size: rangeEnd - mem[0].address,
+        };
     }
 }

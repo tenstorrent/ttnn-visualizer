@@ -1,4 +1,4 @@
-import { ForwardRefRenderFunction, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import tinycolor from 'tinycolor2';
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData } from 'plotly.js';
@@ -9,31 +9,25 @@ import { selectedTensorAddressAtom } from '../../store/app';
 export interface MemoryPlotRendererProps {
     chartDataList: Partial<PlotData>[][];
     isZoomedIn: boolean;
-    isZoomedInCb?: boolean;
     memorySize: number;
     title: string;
     onBufferClick?: (event: Readonly<PlotMouseEventCustom>) => void;
     plotZoomRange?: [start: number, end: number];
-    cbZoomRange?: [start: number, end: number];
     className?: string;
     configuration: PlotConfiguration;
 }
 
-const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRendererProps> = (
-    {
-        chartDataList,
-        isZoomedIn,
-        memorySize,
-        className = '',
-        title,
-        onBufferClick,
-        plotZoomRange,
-        isZoomedInCb = false,
-        cbZoomRange,
-        configuration,
-    },
-    ref,
-) => {
+const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
+    //
+    chartDataList,
+    isZoomedIn,
+    memorySize,
+    className = '',
+    title,
+    onBufferClick,
+    plotZoomRange,
+    configuration,
+}) => {
     const chartData = useMemo(() => chartDataList.flat(), [chartDataList]);
 
     const selectedAddress = useAtomValue(selectedTensorAddressAtom);
@@ -41,11 +35,7 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
 
     const [augmentedChart, setAugmentedChart] = useState<Partial<PlotData>[]>(structuredClone(chartData));
 
-    let range = isZoomedIn ? plotZoomRange : [0, memorySize];
-
-    if (isZoomedInCb && cbZoomRange) {
-        range = cbZoomRange;
-    }
+    const range = isZoomedIn ? plotZoomRange : [0, memorySize];
 
     const layout: Partial<Layout> = {
         height: configuration.height,
@@ -131,17 +121,14 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
     }, [hoveredPoint, chartData, selectedAddress]);
 
     return (
-        <div
-            className={className}
-            ref={ref}
-        >
+        <div className={className}>
             <h3 className='plot-title'>{title}</h3>
             <Plot
                 className='memory-plot'
                 data={augmentedChart}
                 layout={layout}
                 config={config}
-                // @ts-expect-error PlotMouseEventCustom extends PlotMouseEvent and should be fine
+                // @ts-expect-error PlotMouseEventCustom extends PlotMouseEvent and will be fine
                 onClick={onBufferClick}
                 onHover={(data) => setHoveredPoint(data.points[0].x as number)}
                 onUnhover={() => setHoveredPoint(null)}
