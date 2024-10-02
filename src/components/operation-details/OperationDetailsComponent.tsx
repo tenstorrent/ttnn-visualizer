@@ -364,7 +364,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                                         <span>{deviceOperationName}</span>
                                                     </h3>
                                                     <ForwardedMemoryPlotRenderer
-                                                        // title={`${deviceOperationName}`}
                                                         title=''
                                                         className={classNames('l1-memory-renderer circular-buffers', {
                                                             'empty-plot': plotData.length === 0,
