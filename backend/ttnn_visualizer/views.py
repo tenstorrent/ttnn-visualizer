@@ -228,8 +228,8 @@ def tensor_detail(tensor_id):
 
 @api.route("/operation-buffers", methods=["GET"])
 def get_operation_buffers():
-    db_path = get_db_path_from_request(request)
-    if not Path(db_path).exists():
+    target_report_path = getattr(request, "report_path", None)
+    if not target_report_path or not Path(target_report_path).exists():
         return Response(status=HTTPStatus.BAD_REQUEST)
 
     buffer_type = request.args.get("buffer_type", "")
@@ -238,7 +238,7 @@ def get_operation_buffers():
     else:
         buffer_type = None
 
-    with sqlite3.connect(db_path) as conn:
+    with sqlite3.connect(target_report_path) as conn:
         cursor = conn.cursor()
         buffers = list(queries.query_buffers(cursor))
         operations = list(queries.query_operations(cursor))
