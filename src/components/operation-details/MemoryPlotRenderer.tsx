@@ -1,4 +1,4 @@
-import { ForwardRefRenderFunction, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import tinycolor from 'tinycolor2';
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData } from 'plotly.js';
@@ -17,20 +17,17 @@ export interface MemoryPlotRendererProps {
     configuration: PlotConfiguration;
 }
 
-const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRendererProps> = (
-    {
-        //
-        chartDataList,
-        isZoomedIn,
-        memorySize,
-        className = '',
-        title,
-        onBufferClick,
-        plotZoomRange,
-        configuration,
-    },
-    ref,
-) => {
+const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
+    //
+    chartDataList,
+    isZoomedIn,
+    memorySize,
+    className = '',
+    title,
+    onBufferClick,
+    plotZoomRange,
+    configuration,
+}) => {
     const chartData = useMemo(() => chartDataList.flat(), [chartDataList]);
 
     const selectedAddress = useAtomValue(selectedTensorAddressAtom);
@@ -124,10 +121,7 @@ const MemoryPlotRenderer: ForwardRefRenderFunction<HTMLDivElement, MemoryPlotRen
     }, [hoveredPoint, chartData, selectedAddress]);
 
     return (
-        <div
-            className={className}
-            ref={ref}
-        >
+        <div className={className}>
             <h3 className='plot-title'>{title}</h3>
             <Plot
                 className='memory-plot'
