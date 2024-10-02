@@ -41,8 +41,14 @@ const LocalFolderOptions: FC = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
 
-    const isLocalReportMounted =
-        (!isUploading && meta && reportLocation === 'local') || folderStatus?.status === ConnectionTestStates.OK;
+    const isLocalReportMounted = !isUploading && reportLocation === 'local';
+
+
+    /**
+     * This is a temporrary solution until we support Safari
+     */
+    const ua = navigator.userAgent.toLowerCase();
+    const isSafari = ua.includes('safari') && !ua.includes('chrome') && !ua.includes('android');
 
     const handleDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) {
@@ -72,12 +78,11 @@ const LocalFolderOptions: FC = () => {
         setLocalUploadLabel(`${files.length} files uploaded`);
         setIsUploading(false);
         setFolderStatus(connectionStatus);
+        setReportLocation('local');
     };
 
     const viewOperation = () => {
         queryClient.clear();
-
-        setReportLocation('local');
 
         navigate(ROUTES.OPERATIONS);
     };
@@ -92,58 +97,74 @@ const LocalFolderOptions: FC = () => {
     }, [isUploading]);
 
     return (
-        <FormGroup
-            label={<h3>Select local report</h3>}
-            labelFor='text-input'
-            subLabel='Select a local directory containing a report'
-        >
-            <div className='buttons-container'>
-                <label
-                    className='bp5-file-input'
-                    htmlFor='local-upload'
-                >
-                    <input
-                        id='local-upload'
-                        type='file'
-                        multiple
-                        /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
-                        // eslint-disable-next-line react/no-unknown-property
-                        directory=''
-                        webkitdirectory=''
-                        onChange={handleDirectoryOpen}
-                    />
-                    <span className='bp5-file-upload-input'>{localUploadLabel}</span>
-                </label>
-
-                <Button
-                    disabled={!isLocalReportMounted}
-                    onClick={viewOperation}
-                    icon={IconNames.EYE_OPEN}
-                >
-                    View report
-                </Button>
-
-                {isUploading && uploadProgress?.progress && uploadProgress?.estimated ? (
-                    <ProgressBar
-                        progress={uploadProgress.progress}
-                        estimated={uploadProgress.estimated}
-                    />
-                ) : null}
-
-                {folderStatus && !isUploading && (
-                    <div className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}>
+        <>
+            {isSafari && (
+                <>
+                    <h3>
                         <Icon
-                            className='connection-status-icon'
-                            icon={ICON_MAP[folderStatus.status]}
+                            icon={IconNames.WARNING_SIGN}
                             size={20}
-                            intent={INTENT_MAP[folderStatus.status]}
+                            intent={Intent.WARNING}
+                        />{' '}
+                        This functionality is not supported in safari browser
+                    </h3>
+                    <p>Please use Chrome or Firefox to upload a local report </p>
+                </>
+            )}
+            <FormGroup
+                label={<h3>Select local report</h3>}
+                labelFor='text-input'
+                subLabel='Select a local directory containing a report'
+            >
+                <div className='buttons-container'>
+                    <label
+                        className='bp5-file-input'
+                        htmlFor='local-upload'
+                    >
+                        <input
+                            id='local-upload'
+                            type='file'
+                            multiple
+                            /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
+                            // eslint-disable-next-line react/no-unknown-property
+                            directory=''
+                            webkitdirectory=''
+                            disabled={isSafari}
+                            onChange={handleDirectoryOpen}
                         />
+                        <span className='bp5-file-upload-input'>{localUploadLabel}</span>
+                    </label>
 
-                        <span className='connection-status-text'>{folderStatus.message}</span>
-                    </div>
-                )}
-            </div>
-        </FormGroup>
+                    <Button
+                        disabled={!isLocalReportMounted}
+                        onClick={viewOperation}
+                        icon={IconNames.EYE_OPEN}
+                    >
+                        View report
+                    </Button>
+
+                    {isUploading && uploadProgress?.progress && uploadProgress?.estimated ? (
+                        <ProgressBar
+                            progress={uploadProgress.progress}
+                            estimated={uploadProgress.estimated}
+                        />
+                    ) : null}
+
+                    {folderStatus && !isUploading && (
+                        <div className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}>
+                            <Icon
+                                className='connection-status-icon'
+                                icon={ICON_MAP[folderStatus.status]}
+                                size={20}
+                                intent={INTENT_MAP[folderStatus.status]}
+                            />
+
+                            <span className='connection-status-text'>{folderStatus.message}</span>
+                        </div>
+                    )}
+                </div>
+            </FormGroup>
+        </>
     );
 };
 

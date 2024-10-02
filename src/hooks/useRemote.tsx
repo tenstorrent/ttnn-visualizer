@@ -6,6 +6,7 @@ import axios from 'axios';
 import useAppConfig from './useAppConfig';
 import { MountRemoteFolder, RemoteConnection, RemoteFolder, SyncRemoteFolder } from '../definitions/RemoteConnection';
 import { ConnectionStatus, ConnectionTestStates } from '../definitions/ConnectionStatus';
+import axiosInstance from '../libs/axiosInstance';
 
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
@@ -26,9 +27,8 @@ const useRemoteConnection = () => {
             return connectionStatus;
         }
 
-        const response = await axios.post(`${import.meta.env.VITE_API_ROOT}/remote/test`, connection);
-
-        if (response.status === 200) {
+        try {
+            await axiosInstance.post(`${import.meta.env.VITE_API_ROOT}/remote/test`, connection);
             connectionStatus = [
                 {
                     status: ConnectionTestStates.OK,
@@ -39,19 +39,33 @@ const useRemoteConnection = () => {
                     message: 'Remote folder path exists',
                 },
             ];
-        }
-
-        if (response.status === 400) {
-            connectionStatus = [
-                {
-                    status: ConnectionTestStates.OK,
-                    message: 'Connection successful',
-                },
-                {
-                    status: ConnectionTestStates.FAILED,
-                    message: 'Remote folder path does not exist',
-                },
-            ];
+        } catch (error: unknown) {
+            if (axios.isAxiosError(error)) {
+                if (error.response && error.response.status >= 400 && error.response.status < 500) {
+                    connectionStatus = [
+                        {
+                            status: ConnectionTestStates.OK,
+                            message: 'Connection successful',
+                        },
+                        {
+                            status: ConnectionTestStates.FAILED,
+                            message: error.response?.data || 'Error connecting to remote folder',
+                        },
+                    ];
+                }
+                if (error.response && error.response.status >= 500) {
+                    connectionStatus = [
+                        {
+                            status: ConnectionTestStates.FAILED,
+                            message: 'Connection failed',
+                        },
+                        {
+                            status: ConnectionTestStates.FAILED,
+                            message: error.response?.data || 'Error connecting to remote folder',
+                        },
+                    ];
+                }
+            }
         }
 
         return connectionStatus;
@@ -62,7 +76,10 @@ const useRemoteConnection = () => {
             throw new Error('No connection provided');
         }
 
-        const response = await axios.post<RemoteFolder[]>(`${import.meta.env.VITE_API_ROOT}/remote/folder`, connection);
+        const response = await axiosInstance.post<RemoteFolder[]>(
+            `${import.meta.env.VITE_API_ROOT}/remote/folder`,
+            connection,
+        );
 
         return response.data;
     };
@@ -76,14 +93,14 @@ const useRemoteConnection = () => {
             throw new Error('No remote folder provided');
         }
 
-        return axios.post<SyncRemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
+        return axiosInstance.post<SyncRemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
             connection,
             folder: remoteFolder,
         });
     };
 
     const mountRemoteFolder = async (connection: RemoteConnection, remoteFolder: RemoteFolder) => {
-        return axios.post<MountRemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/use`, {
+        return axiosInstance.post<MountRemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/use`, {
             connection,
             folder: remoteFolder,
         });
@@ -98,7 +115,6 @@ const useRemoteConnection = () => {
         },
         get selectedConnection() {
             const savedSelectedConnection = JSON.parse(getAppConfig('selectedConnection') ?? 'null');
-
             return (savedSelectedConnection ?? this.savedConnectionList[0]) as RemoteConnection | undefined;
         },
         set selectedConnection(connection: RemoteConnection | undefined) {
@@ -123,7 +139,7 @@ const useRemoteConnection = () => {
 
     const readRemoteFile = async (connection?: RemoteConnection) => {
         try {
-            const response = await axios.post(`${import.meta.env.VITE_API_ROOT}/remote/read`, connection);
+            const response = await axiosInstance.post(`${import.meta.env.VITE_API_ROOT}/remote/read`, connection);
 
             return response.data;
         } catch (error) {

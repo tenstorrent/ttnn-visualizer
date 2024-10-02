@@ -13,6 +13,7 @@ export const MemoryLegendElement: React.FC<{
     selectedTensorAddress: number | null;
     operationDetails: OperationDetails;
     onLegendClick: (selectedTensorAddress: number) => void;
+    colorVariance?: number | undefined; // color uniqueness for the CB color
 }> = ({
     // no wrap eslint
     chunk,
@@ -20,6 +21,7 @@ export const MemoryLegendElement: React.FC<{
     selectedTensorAddress,
     operationDetails,
     onLegendClick,
+    colorVariance,
 }) => {
     const Component = !chunk.empty ? 'button' : 'div';
     const emptyChunkLabel = (
@@ -47,7 +49,7 @@ export const MemoryLegendElement: React.FC<{
                     empty: chunk.empty,
                 })}
                 style={{
-                    ...(chunk.empty ? {} : { backgroundColor: getBufferColor(chunk.address) }),
+                    ...(chunk.empty ? {} : { backgroundColor: getBufferColor(chunk.address + (colorVariance || 0)) }),
                 }}
             />
             <div className='legend-details'>

@@ -7,6 +7,8 @@ from ttnn_visualizer.utils import str_to_bool
 class Config(object):
     TEST_CONFIG_FILE = "config.json"
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
+    LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
+    REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
     SEND_FILE_MAX_AGE_DEFAULT = 0
     MIGRATE_ON_COPY = True
     SQLITE_DB_PATH = "db.sqlite"
@@ -14,9 +16,6 @@ class Config(object):
     DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))
     TESTING = False
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
-    ACTIVE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("active")
-    ACTIVE_DB_PATH = Path(ACTIVE_DATA_DIRECTORY, "db.sqlite")
-    DATABASE_FILE = ACTIVE_DB_PATH
 
 
 class DevelopmentConfig(Config):

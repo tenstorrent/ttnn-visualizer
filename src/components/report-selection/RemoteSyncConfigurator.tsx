@@ -89,11 +89,12 @@ const RemoteSyncConfigurator: FC = () => {
     };
 
     const isRemoteReportMounted =
-        !isSyncingRemoteFolder ||
-        !isLoadingFolderList ||
-        remoteFolderList?.length > 0 ||
-        (selectedRemoteFolder && !isRemoteFolderOutdated(selectedRemoteFolder)) ||
-        (!meta && reportLocation === 'remote');
+        !isSyncingRemoteFolder &&
+        !isLoadingFolderList &&
+        remoteFolderList?.length > 0 &&
+        selectedRemoteFolder &&
+        !isRemoteFolderOutdated(selectedRemoteFolder) &&
+        reportLocation === 'remote';
 
     useEffect(() => {
         (async () => {
@@ -253,6 +254,7 @@ const RemoteSyncConfigurator: FC = () => {
                                     alert('Unable to sync remote folder');
                                 } finally {
                                     setIsSyncingRemoteFolder(false);
+                                    setReportLocation('remote');
                                 }
                             }}
                         />
