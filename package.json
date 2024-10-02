@@ -84,6 +84,8 @@
     }
   },
   "lint-staged": {
-    "**/*.{js,jsx,ts,tsx}": ["eslint ./src --fix --ext js,jsx,ts,tsx --report-unused-disable-directives --max-warnings 0 --no-ignore", "npm run format"]
+    "**/*.{ts,tsx}": ["eslint ./src --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0 --no-ignore"],
+    "**/*.{js,jsx,ts,tsx,css,scss}": ["npm run format"]
+
   }
 }
