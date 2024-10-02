@@ -9,10 +9,10 @@ import { ChangeEvent, type FC, useEffect, useState } from 'react';
 import 'styles/components/FolderPicker.scss';
 import { useNavigate } from 'react-router';
 import { useQueryClient } from 'react-query';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom } from 'jotai';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
-import { reportLocationAtom, reportMetaAtom } from '../../store/app';
+import { reportLocationAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import ProgressBar from '../ProgressBar';
 
@@ -33,7 +33,6 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const meta = useAtomValue(reportMetaAtom);
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
 
     const { uploadLocalFolder, uploadProgress } = useLocalConnection();
@@ -42,7 +41,6 @@ const LocalFolderOptions: FC = () => {
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
 
     const isLocalReportMounted = !isUploading && reportLocation === 'local';
-
 
     /**
      * This is a temporrary solution until we support Safari

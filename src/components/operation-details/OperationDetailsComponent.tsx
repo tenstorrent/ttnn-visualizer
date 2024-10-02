@@ -283,7 +283,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 }}
                             />
                             <Switch
-                                label={!showCircularBuffer?'Show Circular Buffers Details':'Hide Circular Buffers Details'}
+                                label={
+                                    !showCircularBuffer
+                                        ? 'Show Circular Buffers Details'
+                                        : 'Hide Circular Buffers Details'
+                                }
                                 checked={showCircularBuffer}
                                 disabled={cbChartDataByOperation.size === 0}
                                 onChange={() => {
