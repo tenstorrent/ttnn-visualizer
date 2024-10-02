@@ -4,7 +4,9 @@
 
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
+import axiosInstance from '../libs/axiosInstance';
 import {
+    ActiveReport,
     BufferData,
     OperationDescription,
     OperationDetailsData,
@@ -15,12 +17,17 @@ import {
     defaultTensorData,
 } from '../model/APIData';
 
+export const fetchActiveReport = async (): Promise<ActiveReport | null> => {
+    const response = await axiosInstance.get<ActiveReport>('/api/reports/active').catch();
+    return response?.data;
+};
+
 const fetchOperationDetails = async (id: number | null): Promise<OperationDetailsData> => {
     if (id === null) {
         return defaultOperationDetailsData;
     }
     try {
-        const { data: operationDetails } = await axios.get<OperationDetailsData>(`/api/operations/${id}`, {
+        const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(`/api/operations/${id}`, {
             maxRedirects: 1,
         });
         return operationDetails;
@@ -38,7 +45,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
     return defaultOperationDetailsData;
 };
 const fetchOperations = async (): Promise<OperationDescription[]> => {
-    const { data: operationList } = await axios.get<OperationDescription[]>('/api/operations');
+    const { data: operationList } = await axiosInstance.get<OperationDescription[]>('/api/operations');
 
     return operationList;
 };
@@ -48,13 +55,13 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const fetchAllBuffers = async (): Promise<any> => {
-    const { data: buffers } = await axios.get('/api/get-operation-buffers');
+    const { data: buffers } = await axiosInstance.get('/api/get-operation-buffers');
 
     return buffers;
 };
 
 const fetchReportMeta = async (): Promise<ReportMetaData> => {
-    const { data: meta } = await axios.get<ReportMetaData>('/api/config');
+    const { data: meta } = await axiosInstance.get<ReportMetaData>('/api/config');
 
     return meta;
 };
@@ -124,7 +131,7 @@ export const useReportMeta = () => {
 
 export const fetchTensors = async (): Promise<TensorData[]> => {
     try {
-        const { data: tensorList } = await axios.get<TensorData[]>('/api/tensors', {
+        const { data: tensorList } = await axiosInstance.get<TensorData[]>('/api/tensors', {
             maxRedirects: 1,
         });
 
@@ -153,7 +160,7 @@ export const fetchNextUseOfBuffer = async (address: number | null, consumers: nu
         return defaultBuffer;
     }
 
-    const { data: buffer } = await axios.get(
+    const { data: buffer } = await axiosInstance.get(
         `/api/buffer?address=${address}&operation_id=${consumers[consumers.length - 1]}`,
     );
 

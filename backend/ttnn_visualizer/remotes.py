@@ -257,7 +257,9 @@ def sftp_walk(sftp, remote_path):
 
 
 @remote_exception_handler
-def sync_test_folders(remote_connection: RemoteConnection, remote_folder: RemoteFolder):
+def sync_test_folders(
+    remote_connection: RemoteConnection, remote_folder: RemoteFolder, path_prefix: str
+):
     """
     Synchronize remote test folders to local storage
     Remote folders will be synchronized to REPORT_DATA_DIR
@@ -269,14 +271,21 @@ def sync_test_folders(remote_connection: RemoteConnection, remote_folder: Remote
     with client.open_sftp() as sftp:
         report_folder = Path(remote_folder.remotePath).name
         destination_dir = Path(
-            REPORT_DATA_DIRECTORY, remote_connection.name, report_folder
+            REPORT_DATA_DIRECTORY,
+            path_prefix,
+            remote_connection.host,
+            report_folder,
         )
         if not Path(destination_dir).exists():
             Path(destination_dir).mkdir(parents=True, exist_ok=True)
         for directory, files in sftp_walk(sftp, remote_folder.remotePath):
             sftp.chdir(str(directory))
             for file in files:
-                sftp.get(file, str(Path(destination_dir, file)))
+                output_file = Path(destination_dir, file)
+                logger.info(
+                    f"Writing file: {str(output_file.parent.name)}/{str(output_file.name)}"
+                )
+                sftp.get(file, str(output_file))
 
 
 @remote_exception_handler
