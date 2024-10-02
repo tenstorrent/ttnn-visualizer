@@ -42,3 +42,6 @@ backend/ttnn_visualizer/static
 backend/*egg-info
 build
 .env
+
+
+sessions.db

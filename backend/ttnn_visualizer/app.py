@@ -10,7 +10,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_cors import CORS
 from ttnn_visualizer import settings
 from dotenv import load_dotenv
-from ttnn_visualizer.database import create_update_database
+from ttnn_visualizer.sessions import init_sessions, CustomRequest, init_session_db
 
 
 def create_app(settings_override=None):
@@ -31,6 +31,7 @@ def create_app(settings_override=None):
     flask_env = environ.get("FLASK_ENV", "development")
 
     app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
+    app.request_class = CustomRequest
 
     app.config.from_object(getattr(settings, flask_env))
 
@@ -41,21 +42,11 @@ def create_app(settings_override=None):
     if settings_override:
         app.config.update(settings_override)
 
+    init_session_db()
+
     middleware(app)
 
     app.register_blueprint(api)
-
-    # Ensure there is always a schema to reference
-    # In the future we can probabably re-init the DB or
-    # wait for initialization until the user has provided a DB
-    ACTIVE_DATA_DIRECTORY = app.config["ACTIVE_DATA_DIRECTORY"]
-
-    active_db_path = Path(ACTIVE_DATA_DIRECTORY, "db.sqlite")
-    active_db_path.parent.mkdir(exist_ok=True, parents=True)
-    empty_db_path = Path(__file__).parent.resolve().joinpath("empty.sqlite")
-
-    if not active_db_path.exists():
-        shutil.copy(empty_db_path, active_db_path)
 
     extensions(app)
 
@@ -103,13 +94,13 @@ def middleware(app: flask.Flask):
     app.wsgi_app = ProxyFix(app.wsgi_app)
 
     # CORS configuration
-    origins = ["http://localhost:5173"]
+    origins = ["http://localhost:5173", "http://localhost:8000"]
+
+    init_sessions(app)
+
     CORS(
         app,
         origins=origins,
-        allow_headers="*",
-        methods="*",
-        supports_credentials=True,
     )
 
     return None
