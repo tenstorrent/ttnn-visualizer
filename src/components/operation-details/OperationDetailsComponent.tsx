@@ -245,10 +245,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
 
             <div className='operation-details-component'>
-                <div
-                    className='outside-click'
-                    onClick={onClickOutside}
-                />
+                {selectedTensorAddress && (
+                    <div
+                        className='outside-click'
+                        onClick={onClickOutside}
+                    />
+                )}
                 {!isLoading && Number.isSafeInteger(operationDetails?.id) ? (
                     <>
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
