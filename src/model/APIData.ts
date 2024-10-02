@@ -75,6 +75,7 @@ export interface Chunk {
 
 export interface FragmentationEntry extends Chunk {
     empty?: boolean;
+    largestEmpty?: boolean;
 }
 
 export interface ReportMetaData {
@@ -114,13 +115,13 @@ export enum NodeType {
 }
 
 enum DeviceOperationLayoutTypes {
-    INTERLEAVED,
-    SINGLE_BANK,
+    INTERLEAVED = 'INTERLEAVED',
+    SINGLE_BANK = 'SINGLE_BANK',
 }
 
 enum DeviceOperationTypes {
-    L1,
-    DRAM,
+    L1 = 'L1',
+    DRAM = 'DRAM',
 }
 
 interface DeviceOperationParams {
@@ -147,6 +148,7 @@ export interface DeviceOperation {
     cbList: CircularBuffer[];
     deallocateAll: boolean;
     indentLevel: number; // device ops nesting level indicator
+    colorVariance?: number | undefined;
 }
 
 export interface CircularBuffer extends Chunk {

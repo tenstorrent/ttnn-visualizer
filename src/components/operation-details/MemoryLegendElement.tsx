@@ -1,5 +1,7 @@
 import React from 'react';
 import classNames from 'classnames';
+import { Icon, Tooltip } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import { FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor } from '../../functions/colorGenerator';
@@ -11,6 +13,7 @@ export const MemoryLegendElement: React.FC<{
     selectedTensorAddress: number | null;
     operationDetails: OperationDetails;
     onLegendClick: (selectedTensorAddress: number) => void;
+    colorVariance?: number | undefined; // color uniqueness for the CB color
 }> = ({
     // no wrap eslint
     chunk,
@@ -18,8 +21,19 @@ export const MemoryLegendElement: React.FC<{
     selectedTensorAddress,
     operationDetails,
     onLegendClick,
+    colorVariance,
 }) => {
     const Component = !chunk.empty ? 'button' : 'div';
+    const emptyChunkLabel = (
+        <>
+            Empty space{' '}
+            {chunk.largestEmpty && (
+                <Tooltip content='Largest empty memory space'>
+                    <Icon icon={IconNames.SMALL_INFO_SIGN} />
+                </Tooltip>
+            )}
+        </>
+    );
     return (
         <Component
             key={chunk.address}
@@ -35,7 +49,7 @@ export const MemoryLegendElement: React.FC<{
                     empty: chunk.empty,
                 })}
                 style={{
-                    ...(chunk.empty ? {} : { backgroundColor: getBufferColor(chunk.address) }),
+                    ...(chunk.empty ? {} : { backgroundColor: getBufferColor(chunk.address + (colorVariance || 0)) }),
                 }}
             />
             <div className='legend-details'>
@@ -46,7 +60,7 @@ export const MemoryLegendElement: React.FC<{
                     {!chunk.empty && operationDetails.getTensorForAddress(chunk.address) && (
                         <>Tensor {operationDetails.getTensorForAddress(chunk.address)?.id}</>
                     )}
-                    {chunk.empty && 'Empty space'}
+                    {chunk.empty && emptyChunkLabel}
                 </div>
             </div>
         </Component>

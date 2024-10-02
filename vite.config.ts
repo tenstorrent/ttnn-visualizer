@@ -8,9 +8,12 @@ import { legacySassSvgInlinerFactory } from './src/libs/blueprintjs/legacySassSv
 
 // https://vitejs.dev/config/
 export default defineConfig({
+    build: {
+        outDir: './backend/ttnn_visualizer/static/',
+        emptyOutDir: true,
+    },
     plugins: [react()],
     server: {
-        open: true,
         proxy: {
             '/api': 'http://localhost:8000',
         },

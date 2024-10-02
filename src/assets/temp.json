@@ -12,141 +12,131 @@
             3,
             5,
             6,
-            22
+            11
         ],
         "counter": 1,
         "node_type": "function_start",
         "params": {
-            "inputs": "10",
-            "name": "ttnn::matmul"
+            "inputs": "4",
+            "name": "ttnn::add_"
         }
     },
     {
         "connections": [
-            1
+            1,
+            6,
+            6
         ],
         "counter": 2,
         "node_type": "tensor",
         "params": {
-            "shape": "ttnn.Shape([2048, 2048])",
-            "tensor_id": "262"
+            "shape": "ttnn.Shape([1, 1, 784[896], 2048])",
+            "tensor_id": "1350"
+        }
+    },
+    {
+        "connections": [
+            2,
+            2,
+            2,
+            2,
+            2,
+            12
+        ],
+        "counter": 3,
+        "node_type": "buffer",
+        "params": {
+            "layout": "BLOCK_SHARDED",
+            "size": "1949696",
+            "type": "L1"
+        }
+    },
+    {
+        "connections": [
+            1,
+            6
+        ],
+        "counter": 4,
+        "node_type": "tensor",
+        "params": {
+            "shape": "ttnn.Shape([1, 1, 784[896], 2048])",
+            "tensor_id": "1297"
+        }
+    },
+    {
+        "connections": [
+            4,
+            4
+        ],
+        "counter": 5,
+        "node_type": "buffer",
+        "params": {
+            "layout": "BLOCK_SHARDED",
+            "size": "1949696",
+            "type": "L1"
+        }
+    },
+    {
+        "connections": [
+            7,
+            10
+        ],
+        "counter": 6,
+        "node_type": "function_start",
+        "params": {
+            "inputs": "9",
+            "name": "ttnn::prim::binary"
+        }
+    },
+    {
+        "connections": [
+            8,
+            9
+        ],
+        "counter": 7,
+        "node_type": "function_start",
+        "params": {
+            "inputs": "2",
+            "name": "BinaryDeviceOperation"
+        }
+    },
+    {
+        "connections": [
+            7
+        ],
+        "counter": 8,
+        "node_type": "circular_buffer_deallocate_all",
+        "params": {}
+    },
+    {
+        "connections": [
+            2
+        ],
+        "counter": 9,
+        "node_type": "function_end",
+        "params": {
+            "name": "BinaryDeviceOperation"
         }
     },
     {
         "connections": [
             2
         ],
-        "counter": 3,
-        "node_type": "buffer",
-        "params": {
-            "layout": "INTERLEAVED",
-            "size": "8388608",
-            "type": "DRAM"
-        }
-    },
-    {
-        "connections": [
-            1
-        ],
-        "counter": 4,
-        "node_type": "tensor",
-        "params": {
-            "shape": "ttnn.Shape([2048, 2048])",
-            "tensor_id": "78"
-        }
-    },
-    {
-        "connections": [
-            4
-        ],
-        "counter": 5,
-        "node_type": "buffer",
-        "params": {
-            "layout": "INTERLEAVED",
-            "size": "8388608",
-            "type": "DRAM"
-        }
-    },
-    {
-        "connections": [
-            7,
-            21
-        ],
-        "counter": 6,
-        "node_type": "function_start",
-        "params": {
-            "inputs": "5",
-            "name": "ttnn::prim::old_infra_device_operation"
-        }
-    },
-    {
-        "connections": [
-            8,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20
-        ],
-        "counter": 7,
-        "node_type": "function_start",
-        "params": {
-            "inputs": "2",
-            "name": "Matmul"
-        }
-    },
-    {
-        "connections": [
-            9,
-            10,
-            11
-        ],
-        "counter": 8,
-        "node_type": "function_start",
-        "params": {
-            "inputs": "5",
-            "name": "tt::tt_metal::create_device_tensor"
-        }
-    },
-    {
-        "connections": [
-            12,
-            12,
-            12,
-            23
-        ],
-        "counter": 9,
-        "node_type": "buffer",
-        "params": {
-            "layout": "INTERLEAVED",
-            "size": "8388608",
-            "type": "L1"
-        }
-    },
-    {
-        "connections": [
-            9
-        ],
         "counter": 10,
-        "node_type": "buffer_allocate",
+        "node_type": "function_end",
         "params": {
-            "address": "1347584",
-            "layout": "INTERLEAVED",
-            "size": "8388608",
-            "type": "L1"
+            "name": "ttnn::prim::binary"
         }
     },
     {
         "connections": [
-            12
+            12,
+            13
         ],
         "counter": 11,
         "node_type": "function_end",
         "params": {
-            "name": "tt::tt_metal::create_device_tensor"
+            "name": "ttnn::add_"
         }
     },
     {
@@ -154,126 +144,13 @@
         "counter": 12,
         "node_type": "tensor",
         "params": {
-            "shape": "ttnn.Shape([2048, 2048])",
-            "tensor_id": "264"
+            "shape": "ttnn.Shape([1, 1, 784[896], 2048])",
+            "tensor_id": "1353"
         }
     },
     {
-        "connections": [
-            7
-        ],
+        "connections": [],
         "counter": 13,
-        "node_type": "circular_buffer_deallocate_all",
-        "params": {}
-    },
-    {
-        "connections": [],
-        "counter": 14,
-        "node_type": "buffer",
-        "params": {
-            "layout": "INTERLEAVED",
-            "size": "30720",
-            "type": "DRAM"
-        }
-    },
-    {
-        "connections": [
-            14
-        ],
-        "counter": 15,
-        "node_type": "buffer_allocate",
-        "params": {
-            "address": "1073733632",
-            "layout": "INTERLEAVED",
-            "size": "30720",
-            "type": "DRAM"
-        }
-    },
-    {
-        "connections": [],
-        "counter": 16,
-        "node_type": "circular_buffer_allocate",
-        "params": {
-            "address": "107360",
-            "core_range_set": "{[(x=0,y=0) - (x=3,y=3)]}",
-            "size": "131072"
-        }
-    },
-    {
-        "connections": [],
-        "counter": 17,
-        "node_type": "circular_buffer_allocate",
-        "params": {
-            "address": "238432",
-            "core_range_set": "{[(x=0,y=0) - (x=3,y=3)]}",
-            "size": "131072"
-        }
-    },
-    {
-        "connections": [],
-        "counter": 18,
-        "node_type": "circular_buffer_allocate",
-        "params": {
-            "address": "369504",
-            "core_range_set": "{[(x=0,y=0) - (x=3,y=3)]}",
-            "size": "524288"
-        }
-    },
-    {
-        "connections": [
-            14
-        ],
-        "counter": 19,
-        "node_type": "buffer_deallocate",
-        "params": {
-            "layout": "INTERLEAVED",
-            "size": "0",
-            "type": "DRAM"
-        }
-    },
-    {
-        "connections": [
-            12
-        ],
-        "counter": 20,
-        "node_type": "function_end",
-        "params": {
-            "name": "Matmul"
-        }
-    },
-    {
-        "connections": [
-            12
-        ],
-        "counter": 21,
-        "node_type": "function_end",
-        "params": {
-            "name": "ttnn::prim::old_infra_device_operation"
-        }
-    },
-    {
-        "connections": [
-            23,
-            24
-        ],
-        "counter": 22,
-        "node_type": "function_end",
-        "params": {
-            "name": "ttnn::matmul"
-        }
-    },
-    {
-        "connections": [],
-        "counter": 23,
-        "node_type": "tensor",
-        "params": {
-            "shape": "ttnn.Shape([2048, 2048])",
-            "tensor_id": "265"
-        }
-    },
-    {
-        "connections": [],
-        "counter": 24,
         "node_type": "capture_end",
         "params": {}
     }

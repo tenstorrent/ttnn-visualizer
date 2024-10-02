@@ -26,9 +26,8 @@ const useRemoteConnection = () => {
             return connectionStatus;
         }
 
-        const response = await axios.post(`${import.meta.env.VITE_API_ROOT}/remote/test`, connection);
-
-        if (response.status === 200) {
+        try {
+            await axios.post(`${import.meta.env.VITE_API_ROOT}/remote/test`, connection);
             connectionStatus = [
                 {
                     status: ConnectionTestStates.OK,
@@ -39,19 +38,33 @@ const useRemoteConnection = () => {
                     message: 'Remote folder path exists',
                 },
             ];
-        }
-
-        if (response.status === 400) {
-            connectionStatus = [
-                {
-                    status: ConnectionTestStates.OK,
-                    message: 'Connection successful',
-                },
-                {
-                    status: ConnectionTestStates.FAILED,
-                    message: 'Remote folder path does not exist',
-                },
-            ];
+        } catch (error: unknown) {
+            if (axios.isAxiosError(error)) {
+                if (error.response && error.response.status >= 400 && error.response.status < 500) {
+                    connectionStatus = [
+                        {
+                            status: ConnectionTestStates.OK,
+                            message: 'Connection successful',
+                        },
+                        {
+                            status: ConnectionTestStates.FAILED,
+                            message: error.response?.data || 'Error connecting to remote folder',
+                        },
+                    ];
+                }
+                if (error.response && error.response.status >= 500) {
+                    connectionStatus = [
+                        {
+                            status: ConnectionTestStates.FAILED,
+                            message: 'Connection failed',
+                        },
+                        {
+                            status: ConnectionTestStates.FAILED,
+                            message: error.response?.data || 'Error connecting to remote folder',
+                        },
+                    ];
+                }
+            }
         }
 
         return connectionStatus;

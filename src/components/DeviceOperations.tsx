@@ -7,7 +7,7 @@ interface DeviceOperationsData {
 function DeviceOperations({ deviceOperations }: DeviceOperationsData) {
     return (
         <div>
-            <table className='arguments-table'>
+            <table className='ttnn-table two-tone-rows arguments-table'>
                 <caption>Device Operations</caption>
 
                 <tbody>

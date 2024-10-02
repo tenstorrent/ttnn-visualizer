@@ -19,6 +19,7 @@ import {
 import { BufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { HistoricalTensor, Tensor } from './Graph';
+import { PlotDataOverrides } from '../definitions/PlotConfigurations';
 
 export class OperationDetails implements Partial<OperationDetailsData> {
     id: number;
@@ -143,10 +144,12 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         }
     }
 
-    private getChartData(memory: Chunk[]): Partial<PlotData>[] {
+    private getChartData(memory: Chunk[], overrides?: PlotDataOverrides): Partial<PlotData>[] {
         return memory.map((chunk) => {
             const { address, size } = chunk;
-            const color = getBufferColor(address);
+            const color = overrides?.color
+                ? overrides?.color
+                : getBufferColor(address + (overrides?.colorVariance || 0));
             const tensor = this.getTensorForAddress(address);
             return {
                 x: [address + size / 2],
@@ -167,7 +170,10 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                     tensor,
                 },
                 hoverinfo: 'none',
-                hovertemplate: `
+                hovertemplate:
+                    overrides?.hovertemplate !== undefined
+                        ? overrides?.hovertemplate
+                        : `
 <span style="color:${color};font-size:20px;">&#9632;</span>
 ${address} (${toHex(address)}) <br>Size: ${formatSize(size)}
 ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
@@ -223,11 +229,11 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
         return {
             producers: tensor.producers.map((op, index) => ({
                 id: op,
-                name: tensor.producerNames[index],
+                name: tensor?.producerNames[index],
             })),
             consumers: tensor.consumers.map((op, index) => ({
                 id: op,
-                name: tensor.consumerNames[index],
+                name: tensor?.consumerNames[index],
             })),
         };
     }
@@ -239,6 +245,8 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
         condensed: Chunk;
         condensedChart: Partial<PlotData>[];
         cbChartData: Partial<PlotData>[];
+        cbChartDataByOperation: Map<string, Partial<PlotData>[]>;
+        cbMemory: Chunk[];
     } {
         const fragmentation: FragmentationEntry[] = [];
         const memory: Chunk[] =
@@ -252,10 +260,44 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
                 })
                 .sort((a, b) => a.address - b.address) || [];
 
-        memory.forEach((chunk, index) => {
+        const cbMemory = bufferType === BufferType.L1 ? this.deviceOperations.flatMap((op) => op.cbList) : [];
+
+        const totalMemory = [
+            { address: 0, size: 0 },
+            ...cbMemory,
+            ...memory,
+            {
+                address: this.memorySizeL1,
+                size: 0,
+            },
+        ].sort((a, b) => a.address - b.address);
+
+        const continuousMemory: Chunk[] = [];
+        totalMemory.forEach((chunk) => {
+            if (continuousMemory.length === 0) {
+                continuousMemory.push({ ...chunk });
+            } else {
+                const lastChunk = continuousMemory[continuousMemory.length - 1];
+                if (lastChunk.address + lastChunk.size >= chunk.address) {
+                    lastChunk.size = Math.max(lastChunk.size, chunk.address + chunk.size - lastChunk.address);
+                } else {
+                    continuousMemory.push({ ...chunk });
+                }
+            }
+        });
+
+        continuousMemory.forEach((chunk, index) => {
             if (index > 0) {
-                const prevChunk = memory[index - 1];
-                if (prevChunk.address + prevChunk.size !== chunk.address) {
+                let prevChunkIndex = index - 1;
+                let prevChunk = continuousMemory[prevChunkIndex];
+
+                while (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size > chunk.address) {
+                    prevChunkIndex--;
+                    if (prevChunkIndex >= 0) {
+                        prevChunk = continuousMemory[prevChunkIndex];
+                    }
+                }
+                if (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size < chunk.address) {
                     fragmentation.push({
                         address: prevChunk.address + prevChunk.size,
                         size: chunk.address - (prevChunk.address + prevChunk.size),
@@ -265,16 +307,37 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
             }
         });
 
-        const cbMemory = this.deviceOperations.flatMap((op) => op.cbList);
+        const largestEmpty = fragmentation.length
+            ? fragmentation.reduce((prev, current) => {
+                  return prev.size > current.size ? prev : current;
+              })
+            : { size: 0 };
 
-        const condensed: Chunk = {
-            address: memory[0]?.address || 0,
-            // eslint-disable-next-line no-unsafe-optional-chaining
-            size: memory[memory.length - 1]?.address + memory[memory.length - 1]?.size || 0,
-        };
+        fragmentation.forEach((fragment) => {
+            if (fragment.size === largestEmpty.size) {
+                fragment.largestEmpty = true;
+            }
+        });
+
+        const condensed: Chunk = this.calculateCondensed(memory);
+        const cbCondensed: Chunk = this.calculateCondensed(cbMemory);
 
         const chartData = this.getChartData(memory);
-        const cbChartData = this.getChartData(cbMemory);
+        const cbColor = '#e2defc';
+        const cbHoverTemplate = `
+<span style="color:${cbColor};font-size:20px;">&#9632;</span>
+${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cbCondensed.size)}
+<br><br>CBs Summary
+<extra></extra>`;
+
+        const cbChartData = this.getChartData([cbCondensed], { color: cbColor, hovertemplate: cbHoverTemplate });
+        const cbChartDataByOperation: Map<string, Partial<PlotData>[]> = new Map();
+        this.deviceOperations.forEach((op, index) => {
+            if (op.cbList.length !== 0) {
+                op.colorVariance = index;
+                cbChartDataByOperation.set(op.name, this.getChartData(op.cbList, { colorVariance: op.colorVariance }));
+            }
+        });
 
         return {
             chartData,
@@ -283,6 +346,8 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
             condensed,
             condensedChart: this.getChartData([condensed]),
             cbChartData,
+            cbChartDataByOperation,
+            cbMemory,
         };
     }
 
@@ -304,6 +369,7 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
 
         const currentOperation = this.operations.find((op) => op.id === this.id);
 
+        // eslint-disable-next-line no-restricted-syntax
         for (const buffer of this.buffers) {
             const bufferAddress = buffer.address;
             const bufferType = buffer.buffer_type;
@@ -339,5 +405,23 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
         }
 
         return tensorsByBufferAddress;
+    }
+
+    // eslint-disable-next-line class-methods-use-this
+    private calculateCondensed(mem: Chunk[]): Chunk {
+        if (!mem || mem.length === 0) {
+            return {
+                address: 0,
+                size: 0,
+            };
+        }
+        let rangeEnd = 0;
+        mem.forEach((chunk) => {
+            rangeEnd = Math.max(rangeEnd, chunk.address + chunk.size);
+        });
+        return {
+            address: mem[0].address || 0,
+            size: rangeEnd - mem[0].address,
+        };
     }
 }

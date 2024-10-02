@@ -1,0 +1,83 @@
+name: Build and Upload Python Wheel on Release
+on:
+  release:
+    types: [released, prereleased ]
+
+env:
+    CIBW_BUILD_VERBOSITY: 1
+    VITE_API_ROOT: api
+    NPM_CONFIG_PRODUCTION: false
+
+jobs:
+  build:
+    name: Build Python Wheel
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+           node-version: v22.1.0
+      - run: npm install
+      - run: npm run build
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12.3'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Build wheel
+        run: |
+          python -m build --wheel
+
+      - name: Upload wheel as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: python-wheel
+          path: dist/*.whl
+
+  release:
+    name: Upload Wheel to GitHub Release
+    runs-on: ubuntu-latest
+    needs: build  # Depends on the build job
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: python-wheel
+          path: /home/runner/work/ttnn-visualizer/
+      - name: get-npm-version
+        id: package-version
+        uses: martinbeentjes/npm-get-version-action@v1.3.1
+        
+      - name: Get wheel file name
+        id: get_wheel
+        run: |
+              # Find the .whl file and store its name in a variable
+              FILE=$(find /home/runner/work/ttnn-visualizer/ -name "*.whl" -type f)
+              WHEEL_FILE_NAME=$(basename $FILE)
+              echo "Found wheel file: $FILE"
+              # Set output to the found file name
+              echo "wheel_name=$FILE" >> $GITHUB_ENV
+              echo "wheel_file_name=$WHEEL_FILE_NAME" >> $GITHUB_ENV
+
+      - name: Upload Wheel to Release
+        uses: actions/upload-release-asset@v1
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+              upload_url: ${{ github.event.release.upload_url }}
+              asset_path: ${{ env.wheel_name }}
+              asset_name: ${{env.wheel_file_name}}
+              asset_content_type: application/octet-stream

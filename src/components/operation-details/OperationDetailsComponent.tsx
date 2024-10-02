@@ -2,10 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { Fragment, forwardRef, useRef, useState } from 'react';
+import React, { Fragment, useState } from 'react';
 import { Button, ButtonGroup, Icon, Intent, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
-import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
 import { toast } from 'react-toastify';
 import { useAtom } from 'jotai';
@@ -17,37 +16,36 @@ import { isEqual } from '../../functions/math';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
-import ROUTES from '../../definitions/routes';
 import { BufferType } from '../../model/BufferType';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 import {
+    CBRenderConfiguration,
     CONDENSED_PLOT_CHUNK_COLOR,
     DRAMRenderConfiguration,
     L1RenderConfiguration,
     PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
 import { MemoryLegendElement } from './MemoryLegendElement';
-import Collapsible from '../Collapsible';
 import OperationArguments from '../OperationArguments';
 import { isDramActiveAtom, isL1ActiveAtom, selectedTensorAddressAtom } from '../../store/app';
-import useOutsideClick from '../../hooks/useOutsideClick';
 import { getBufferColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
 import TensorDetailsComponent from './TensorDetailsComponent';
+import ProducerConsumersData from './ProducerConsumersData';
 
 interface OperationDetailsProps {
     operationId: number;
 }
 
-const MINIMAL_MEMORY_RANGE_OFFSET = 0.98;
-
-const MINIMAL_DRAM_MEMORY_RANGE_OFFSET = 0.9998;
+const MEMORY_ZOOM_PADDING_RATIO = 0.01;
+const DRAM_PADDING_RATIO = 0.9998;
+const MAX_LEGEND_LENGTH = 20;
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const { data: operations } = useOperationsList();
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
     const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
-
+    const [showCircularBuffer, setShowCircularBuffer] = useState(false);
     const {
         operationDetails: { data: operationDetails, isLoading, status },
     } = useOperationDetails(operationId);
@@ -71,10 +69,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         }
     };
 
-    const outsideRefs = useRef<HTMLElement[]>([]);
-
-    useOutsideClick(outsideRefs.current, onClickOutside);
-
     const operation = operations?.find((op) => op.id === operationId);
 
     if (isLoading || isPrevLoading || !operationDetails || !previousOperationDetails || !operations) {
@@ -94,11 +88,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const l1Small = details.memoryData(BufferType.L1_SMALL);
 
-    const { chartData, memory, fragmentation, cbChartData } = details.memoryData();
+    const { chartData, memory, fragmentation, cbChartData, cbChartDataByOperation } = details.memoryData();
     const { chartData: previousChartData, memory: previousMemory } = previousDetails.memoryData();
 
     const { chartData: dramData, memory: dramMemory } = details.memoryData(BufferType.DRAM);
-    const { chartData: previosDramData, memory: previousDramMemory } = previousDetails.memoryData(BufferType.DRAM);
+    const { chartData: previousDramData, memory: previousDramMemory } = previousDetails.memoryData(BufferType.DRAM);
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const dramMemoryReport: FragmentationEntry[] = [...dramMemory].sort((a, b) => a.address - b.address);
@@ -113,33 +107,29 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     }
 
     const { memorySizeL1 } = details;
-    const MINIMAL_MEMORY_RANGE_OFFSET_CB = memorySizeL1 * 0.001;
 
-    let plotZoomRangeStart =
-        Math.min(memory[0]?.address || memorySizeL1, previousMemory[0]?.address || memorySizeL1) *
-        MINIMAL_MEMORY_RANGE_OFFSET;
+    let plotZoomRangeStart = Math.min(memory[0]?.address || memorySizeL1, previousMemory[0]?.address || memorySizeL1);
 
-    let plotZoomRangeEnd =
-        Math.max(
-            memory.length > 0 ? memory[memory.length - 1].address + memory[memory.length - 1].size : 0,
-            previousMemory.length > 0
-                ? previousMemory[previousMemory.length - 1].address + previousMemory[previousMemory.length - 1].size
-                : 0,
-        ) *
-        (1 / MINIMAL_MEMORY_RANGE_OFFSET);
+    let plotZoomRangeEnd = Math.max(
+        memory.length > 0 ? memory[memory.length - 1].address + memory[memory.length - 1].size : 0,
+        previousMemory.length > 0
+            ? previousMemory[previousMemory.length - 1].address + previousMemory[previousMemory.length - 1].size
+            : 0,
+    );
 
-    const cbZoomStart =
-        details.deviceOperations
-            .map((op) => op.cbList.map((cb) => cb.address))
-            .flat()
-            .sort((a, b) => a - b)[0] - MINIMAL_MEMORY_RANGE_OFFSET_CB;
+    const cbZoomStart = details.deviceOperations
+        .map((op) => op.cbList.map((cb) => cb.address))
+        .flat()
+        .sort((a, b) => a - b)[0];
 
-    const cbZoomEnd =
-        details.deviceOperations
-            .map((op) => op.cbList.map((cd) => cd.address + cd.size))
-            .flat()
-            .sort((a, b) => a - b)
-            .reverse()[0] + MINIMAL_MEMORY_RANGE_OFFSET_CB;
+    const cbZoomEnd = details.deviceOperations
+        .map((op) => op.cbList.map((cd) => cd.address + cd.size))
+        .flat()
+        .sort((a, b) => a - b)
+        .reverse()[0];
+
+    const MEMORY_PADDING_CB = (cbZoomEnd - cbZoomStart) * MEMORY_ZOOM_PADDING_RATIO;
+    const MEMORY_PADDING_L1 = (plotZoomRangeEnd - plotZoomRangeStart) * MEMORY_ZOOM_PADDING_RATIO;
 
     if (plotZoomRangeEnd < plotZoomRangeStart) {
         plotZoomRangeStart = 0;
@@ -148,7 +138,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     let dramPlotZoomRangeStart =
         Math.min(dramMemory[0]?.address || DRAM_MEMORY_SIZE, previousDramMemory[0]?.address || DRAM_MEMORY_SIZE) *
-        MINIMAL_DRAM_MEMORY_RANGE_OFFSET;
+        DRAM_PADDING_RATIO;
 
     let dramPlotZoomRangeEnd =
         Math.max(
@@ -160,7 +150,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                       previousDramMemory[previousDramMemory.length - 1].size
                 : 0,
         ) *
-        (1 / MINIMAL_DRAM_MEMORY_RANGE_OFFSET);
+        (1 / DRAM_PADDING_RATIO);
 
     if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
         dramPlotZoomRangeStart = 0;
@@ -174,21 +164,18 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     };
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        // this may or may not work correctly. need to doublecheck tensor selection for DRAM and DRAM delta
         const { address } = event.points[0].data.memoryData;
         selectTensorByAddress(address);
-        setSelectedTensorAddress(address); // TODO: why is there a second setSelectedTensorAddress here?
     };
 
     const onDramBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        // this may or may not work correctly. need to doublecheck tensor selection for DRAM and DRAM delta
         const { address } = event.points[0].data.memoryData;
         selectTensorByAddress(address);
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address } = event.points[0].data.memoryData;
-        // TODO: we now have a tensor in event.points[0].data.memoryData.tensor Maybe we shoudl just use that?
+        // TODO: we now have a tensor in event.points[0].data.memoryData.tensor Maybe we should just use that?
         selectTensorByAddress(address);
     };
 
@@ -251,19 +238,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const dramDeltaObject = details.getMemoryDelta(dramDelta, reverseDramDelta);
 
-    const dramTensorsOnly = dramMemoryReport.filter(
-        (chunk) => !chunk.empty && details.getTensorForAddress(chunk.address),
-    );
-
-    // TODO: Look at refactoring this to avoid forwarding refs
-    const ForwardedMemoryPlotRenderer = forwardRef(MemoryPlotRenderer);
-
-    function assignRef(el: HTMLElement | null, index: number) {
-        if (el) {
-            outsideRefs.current[index] = el;
-        }
-    }
-
     return (
         <>
             <OperationDetailsNavigation
@@ -272,6 +246,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
 
             <div className='operation-details-component'>
+                {selectedTensorAddress && (
+                    // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
+                    <div
+                        className='outside-click'
+                        onClick={onClickOutside}
+                    />
+                )}
                 {!isLoading && Number.isSafeInteger(operationDetails?.id) ? (
                     <>
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
@@ -298,34 +279,18 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 label='Buffer zoom'
                                 checked={zoomedInViewMainMemory}
                                 onChange={() => {
-                                    if (!zoomedInViewMainMemory) {
-                                        setZoomedInViewCBMemory(false);
-                                    }
                                     setZoomedInViewMainMemory(!zoomedInViewMainMemory);
                                 }}
                             />
-                            {/* TODO: there is a known issue if we come back to an op with no device operations this contrl will be disabled but set to zoom
-                              there is a workaround but it needs eventual fixing
-                              Also details.deviceOperations is an incorrect check, we should check if there are any CBs in the device operations
-                              */}
                             <Switch
-                                label='Circular Buffer zoom'
-                                checked={zoomedInViewCBMemory}
-                                disabled={details.deviceOperations.length === 0}
+                                label={!showCircularBuffer?'Show Circular Buffers Details':'Hide Circular Buffers Details'}
+                                checked={showCircularBuffer}
+                                disabled={cbChartDataByOperation.size === 0}
                                 onChange={() => {
-                                    setZoomedInViewCBMemory(!zoomedInViewCBMemory);
-                                    if (!zoomedInViewCBMemory) {
-                                        setZoomedInViewMainMemory(false);
-                                    }
+                                    setShowCircularBuffer(!showCircularBuffer);
                                 }}
                             />
                         </div>
-                        {/* TODO: prep for next feature */}
-                        {/* <Switch */}
-                        {/*    label='CBs zoom' */}
-                        {/*    checked={zoomedInViewCBMemory} */}
-                        {/*    onChange={() => setZoomedInViewCBMemory(!zoomedInViewCBMemory)} */}
-                        {/* /> */}
 
                         {!isL1Active && !isDramActive && (
                             <p className='no-buffer-type-selected'>No buffer types selected.</p>
@@ -334,94 +299,89 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {isL1Active && (
                             <>
                                 <h3>L1 Memory</h3>
-                                <ForwardedMemoryPlotRenderer
+                                <MemoryPlotRenderer
                                     title='Previous Summarized L1 Report'
                                     className={classNames('l1-memory-renderer', {
                                         'empty-plot': previousChartData.length === 0,
                                     })}
-                                    plotZoomRangeStart={plotZoomRangeStart}
-                                    plotZoomRangeEnd={plotZoomRangeEnd}
+                                    plotZoomRange={[
+                                        plotZoomRangeStart - MEMORY_PADDING_L1,
+                                        plotZoomRangeEnd + MEMORY_PADDING_L1,
+                                    ]}
                                     chartDataList={[previousChartData]}
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={memorySizeL1}
                                     configuration={L1RenderConfiguration}
-                                    ref={(el) => assignRef(el, 0)}
                                 />
-                                {/* TODO: we shoudl provide plotZoomRangeStart and plotZoomRangeEnd as a toople */}
-                                <ForwardedMemoryPlotRenderer
+
+                                <MemoryPlotRenderer
                                     title='Current Summarized L1 Report'
                                     className={classNames('l1-memory-renderer', {
                                         'empty-plot': chartData.length === 0,
                                     })}
-                                    plotZoomRangeStart={plotZoomRangeStart}
-                                    plotZoomRangeEnd={plotZoomRangeEnd}
-                                    isZoomedInCb={zoomedInViewCBMemory}
-                                    cbZoomRange={[cbZoomStart, cbZoomEnd]}
-                                    chartDataList={[cbChartData, chartData, l1Small.condensedChart]}
                                     isZoomedIn={zoomedInViewMainMemory}
+                                    plotZoomRange={[
+                                        plotZoomRangeStart - MEMORY_PADDING_L1,
+                                        plotZoomRangeEnd + MEMORY_PADDING_L1,
+                                    ]}
+                                    chartDataList={[
+                                        cbChartData,
+                                        chartData,
+                                        l1Small.memory.length > 0 ? l1Small.condensedChart : [],
+                                    ]}
                                     memorySize={memorySizeL1}
                                     onBufferClick={onBufferClick}
                                     configuration={L1RenderConfiguration}
-                                    ref={(el) => assignRef(el, 1)}
                                 />
-                            </>
-                        )}
+                                {showCircularBuffer && cbChartDataByOperation.size > 0 && (
+                                    <>
+                                        <h3>Device Operations</h3>
+                                        <Switch
+                                            label='Circular Buffers zoom'
+                                            checked={zoomedInViewCBMemory}
+                                            onChange={() => {
+                                                setZoomedInViewCBMemory(!zoomedInViewCBMemory);
+                                            }}
+                                        />
+                                        {[...cbChartDataByOperation.entries()].map(
+                                            ([deviceOperationName, plotData]) => (
+                                                <>
+                                                    <h3 className='circular-buffers-plot-title'>
+                                                        <Icon
+                                                            className='operation-icon'
+                                                            size={13}
+                                                            intent={Intent.SUCCESS}
+                                                            icon={IconNames.CUBE_ADD}
+                                                        />{' '}
+                                                        <span>{deviceOperationName}</span>
+                                                    </h3>
+                                                    <MemoryPlotRenderer
+                                                        title=''
+                                                        className={classNames('l1-memory-renderer circular-buffers', {
+                                                            'empty-plot': plotData.length === 0,
+                                                        })}
+                                                        chartDataList={[plotData]}
+                                                        plotZoomRange={[
+                                                            cbZoomStart - MEMORY_PADDING_CB,
+                                                            cbZoomEnd + MEMORY_PADDING_CB,
+                                                        ]}
+                                                        isZoomedIn={zoomedInViewCBMemory}
+                                                        memorySize={memorySizeL1}
+                                                        configuration={CBRenderConfiguration}
+                                                        onBufferClick={onBufferClick}
+                                                    />
+                                                </>
+                                            ),
+                                        )}
+                                    </>
+                                )}
 
-                        {isDramActive && (
-                            <>
-                                <h3>DRAM</h3>
-
-                                <ForwardedMemoryPlotRenderer
-                                    title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
-                                    className={classNames('dram-memory-renderer', {
-                                        'empty-plot': previosDramData.length === 0,
-                                        'identical-plot': dramHasntChanged,
+                                <div
+                                    className={classNames('legend', {
+                                        'lengthy-legend': memoryReport.length > MAX_LEGEND_LENGTH,
                                     })}
-                                    plotZoomRangeStart={dramPlotZoomRangeStart}
-                                    plotZoomRangeEnd={dramPlotZoomRangeEnd}
-                                    chartDataList={[previosDramData]}
-                                    isZoomedIn={zoomedInViewMainMemory}
-                                    memorySize={DRAM_MEMORY_SIZE}
-                                    configuration={DRAMRenderConfiguration}
-                                    ref={(el) => assignRef(el, 2)}
-                                />
-
-                                <ForwardedMemoryPlotRenderer
-                                    title='Current Summarized DRAM Report'
-                                    className={classNames('dram-memory-renderer', {
-                                        'empty-plot': dramData.length === 0,
-                                    })}
-                                    plotZoomRangeStart={dramPlotZoomRangeStart}
-                                    plotZoomRangeEnd={dramPlotZoomRangeEnd}
-                                    chartDataList={[dramData]}
-                                    isZoomedIn={zoomedInViewMainMemory}
-                                    memorySize={DRAM_MEMORY_SIZE}
-                                    onBufferClick={onDramBufferClick}
-                                    configuration={DRAMRenderConfiguration}
-                                    ref={(el) => assignRef(el, 3)}
-                                />
-
-                                <ForwardedMemoryPlotRenderer
-                                    title='DRAM Delta (difference between current and previous operation)'
-                                    className={classNames('dram-memory-renderer', {
-                                        'empty-plot': dramDeltaObject.chartData.length === 0,
-                                    })}
-                                    plotZoomRangeStart={dramPlotZoomRangeStart}
-                                    plotZoomRangeEnd={dramPlotZoomRangeEnd}
-                                    chartDataList={[dramDeltaObject.chartData]}
-                                    isZoomedIn={zoomedInViewMainMemory}
-                                    memorySize={DRAM_MEMORY_SIZE}
-                                    onBufferClick={onDramDeltaClick}
-                                    configuration={DRAMRenderConfiguration}
-                                    ref={(el) => assignRef(el, 4)}
-                                />
-                            </>
-                        )}
-
-                        <div className='plot-tensor-details'>
-                            <div className='legend'>
-                                {isL1Active &&
-                                    memoryReport.map((chunk) => (
+                                >
+                                    {memoryReport.map((chunk) => (
                                         <MemoryLegendElement
                                             chunk={chunk}
                                             key={chunk.address}
@@ -431,114 +391,92 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             onLegendClick={onLegendClick}
                                         />
                                     ))}
-
-                                {isDramActive && isL1Active && <hr />}
-
-                                {isDramActive && (
-                                    <>
-                                        {/* // TODO: Refactor this because it looks weird when there are no tensors but there are DRAM buffers */}
-                                        {dramTensorsOnly.map((chunk) => (
-                                            <MemoryLegendElement
-                                                chunk={chunk}
-                                                key={chunk.address}
-                                                memSize={DRAM_MEMORY_SIZE}
-                                                selectedTensorAddress={selectedTensorAddress}
-                                                operationDetails={details}
-                                                onLegendClick={onLegendClick}
-                                            />
-                                        ))}
-
-                                        <Collapsible
-                                            label='Full DRAM Legend'
-                                            contentClassName='full-dram-legend'
-                                            isOpen={false}
-                                        >
-                                            {dramMemoryReport.map((chunk) => (
-                                                <MemoryLegendElement
-                                                    chunk={chunk}
-                                                    key={chunk.address}
-                                                    memSize={DRAM_MEMORY_SIZE}
-                                                    selectedTensorAddress={selectedTensorAddress}
-                                                    operationDetails={details}
-                                                    onLegendClick={onLegendClick}
-                                                />
-                                            ))}
-                                        </Collapsible>
-                                    </>
-                                )}
-                            </div>
-
-                            <div
-                                ref={(el) => assignRef(el, 5)}
-                                className={classNames('producer-consumer', { hidden: selectedTensor === null })}
-                            >
-                                <div
-                                    className={classNames('title', {
-                                        hidden:
-                                            details.getTensorProducerConsumer(selectedTensor).producers.length === 0,
-                                    })}
-                                >
-                                    <Icon
-                                        size={14}
-                                        icon={IconNames.EXPORT}
-                                        className='producer-icon'
-                                    />
-                                    Producers
                                 </div>
-                                {details.getTensorProducerConsumer(selectedTensor).producers.map((op) => (
-                                    <div
-                                        key={op.id}
-                                        className='operation-link'
-                                    >
-                                        {operationId === op.id ? (
-                                            <span className='selected-tensor'>
-                                                {op.id} {op.name}
-                                            </span>
-                                        ) : (
-                                            <Link
-                                                to={`${ROUTES.OPERATIONS}/${op.id}`}
-                                                className={classNames('', { current: operationId === op.id })}
-                                            >
-                                                {op.id} {op.name}
-                                            </Link>
-                                        )}
-                                    </div>
-                                ))}
+                            </>
+                        )}
+
+                        {selectedTensorAddress &&
+                        selectedTensor &&
+                        (details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1 ||
+                            details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1_SMALL) ? (
+                            <ProducerConsumersData
+                                selectedTensor={selectedTensor}
+                                details={details}
+                                operationId={operationId}
+                            />
+                        ) : null}
+
+                        {isDramActive && (
+                            <>
+                                <h3>DRAM</h3>
+
+                                <MemoryPlotRenderer
+                                    title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
+                                    className={classNames('dram-memory-renderer', {
+                                        'empty-plot': previousDramData.length === 0,
+                                        'identical-plot': dramHasntChanged,
+                                    })}
+                                    plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
+                                    chartDataList={[previousDramData]}
+                                    isZoomedIn={zoomedInViewMainMemory}
+                                    memorySize={DRAM_MEMORY_SIZE}
+                                    configuration={DRAMRenderConfiguration}
+                                />
+
+                                <MemoryPlotRenderer
+                                    title='Current Summarized DRAM Report'
+                                    className={classNames('dram-memory-renderer', {
+                                        'empty-plot': dramData.length === 0,
+                                    })}
+                                    plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
+                                    chartDataList={[dramData]}
+                                    isZoomedIn={zoomedInViewMainMemory}
+                                    memorySize={DRAM_MEMORY_SIZE}
+                                    onBufferClick={onDramBufferClick}
+                                    configuration={DRAMRenderConfiguration}
+                                />
+
+                                <MemoryPlotRenderer
+                                    title='DRAM Delta (difference between current and previous operation)'
+                                    className={classNames('dram-memory-renderer', {
+                                        'empty-plot': dramDeltaObject.chartData.length === 0,
+                                    })}
+                                    plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
+                                    chartDataList={[dramDeltaObject.chartData]}
+                                    isZoomedIn={zoomedInViewMainMemory}
+                                    memorySize={DRAM_MEMORY_SIZE}
+                                    onBufferClick={onDramDeltaClick}
+                                    configuration={DRAMRenderConfiguration}
+                                />
 
                                 <div
-                                    className={classNames('title', {
-                                        hidden:
-                                            details.getTensorProducerConsumer(selectedTensor).consumers.length === 0,
+                                    className={classNames('legend', {
+                                        'lengthy-legend': dramMemoryReport.length > MAX_LEGEND_LENGTH,
                                     })}
                                 >
-                                    <Icon
-                                        size={14}
-                                        icon={IconNames.IMPORT}
-                                        className='consumer-icon'
-                                    />{' '}
-                                    Consumers
+                                    {dramMemoryReport.map((chunk) => (
+                                        <MemoryLegendElement
+                                            chunk={chunk}
+                                            key={chunk.address}
+                                            memSize={DRAM_MEMORY_SIZE}
+                                            selectedTensorAddress={selectedTensorAddress}
+                                            operationDetails={details}
+                                            onLegendClick={onLegendClick}
+                                        />
+                                    ))}
                                 </div>
-                                {details.getTensorProducerConsumer(selectedTensor).consumers.map((op) => (
-                                    <div
-                                        key={op.id}
-                                        className='operation-link'
-                                    >
-                                        {operationId === op.id ? (
-                                            <span className='selected-tensor'>
-                                                {op.id} {op.name}
-                                            </span>
-                                        ) : (
-                                            <Link
-                                                to={`${ROUTES.OPERATIONS}/${op.id}`}
-                                                className={classNames('', { current: operationId === op.id })}
-                                            >
-                                                {op.id} {op.name}
-                                            </Link>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                            </>
+                        )}
+
+                        {selectedTensorAddress &&
+                        selectedTensor &&
+                        details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.DRAM ? (
+                            <ProducerConsumersData
+                                selectedTensor={selectedTensor}
+                                details={details}
+                                operationId={operationId}
+                            />
+                        ) : null}
 
                         <hr />
 
@@ -552,6 +490,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         selectedAddress={selectedTensorAddress}
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
+                                        operationId={operationId}
                                     />
                                 ))}
                             </div>
@@ -565,6 +504,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         selectedAddress={selectedTensorAddress}
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
+                                        operationId={operationId}
                                     />
                                 ))}{' '}
                             </div>
@@ -590,8 +530,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                                         {deviceOperation.cbList.length > 0 && (
                                             <div
-                                                className='legend'
-                                                style={{ paddingLeft: `${deviceOperation.indentLevel * 2}em` }}
+                                                className={classNames('legend', {
+                                                    'lengthy-legend': deviceOperation.cbList.length > MAX_LEGEND_LENGTH,
+                                                })}
+                                                style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}
                                             >
                                                 {deviceOperation.cbList.map((cb) => (
                                                     <MemoryLegendElement
@@ -601,13 +543,14 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                                         selectedTensorAddress={selectedTensorAddress}
                                                         operationDetails={details}
                                                         onLegendClick={onLegendClick}
+                                                        colorVariance={deviceOperation.colorVariance}
                                                     />
                                                 ))}
                                             </div>
                                         )}
 
                                         {deviceOperation.deallocateAll && (
-                                            <p style={{ paddingLeft: `${deviceOperation.indentLevel * 2}em` }}>
+                                            <p style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}>
                                                 deallocate circular buffers
                                             </p>
                                         )}

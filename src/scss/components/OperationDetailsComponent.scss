@@ -5,14 +5,14 @@
 @use '../definitions/colours' as *;
 
 .operation-details-component {
-    .selected-tensor {
-        color: $tt-white;
-
-        &::before {
-            display: inline-block;
-            content: '\2714'; // checkmark
-            margin-right: 5px;
-        }
+    .outside-click {
+        background-color: rgb(255 0 0 / 47%);
+        opacity: 0;
+        width: 100%;
+        height: 100%;
+        position: fixed;
+        top: 0;
+        z-index: 0;
     }
 
     .chart-controls {
@@ -34,7 +34,10 @@
     .l1-memory-renderer {
         .memory-plot {
             width: 100%;
-            height: 110px;
+        }
+
+        &.circular-buffers {
+            margin-bottom: 5px;
         }
 
         &.identical-plot {
@@ -49,11 +52,19 @@
     }
 
     .dram-memory-renderer {
-        .memory-plot {
-            height: 80px;
-        }
-
         margin-bottom: 10px;
+    }
+
+    .circular-buffers-plot-title {
+        display: inline-flex;
+        align-items: center;
+        color: $tt-green;
+        margin-bottom: -5px;
+        font-weight: normal;
+
+        .bp5-icon {
+            margin-right: 5px;
+        }
     }
 
     .plot-tensor-details {
@@ -91,13 +102,12 @@
         margin-bottom: 20px;
         flex-direction: column;
         row-gap: 5px;
+        background-color: $tt-grey-3;
+        padding: 10px 20px;
 
-        hr {
-            margin: 10px 0;
-        }
-
-        .full-dram-legend {
-            display: grid;
+        &.lengthy-legend {
+            height: 420px;
+            overflow-y: scroll;
         }
 
         .legend-item {
@@ -124,7 +134,7 @@
 
             .legend-details {
                 display: inline-grid;
-                grid-template-columns: 1fr 1fr 0.75fr 1fr;
+                grid-template-columns: 1fr 1.2fr 0.75fr 1fr;
                 gap: 15px;
                 text-align: left;
 
@@ -251,5 +261,9 @@
     .no-buffer-type-selected {
         margin-top: 20px;
         margin-bottom: 0;
+    }
+
+    .plot-tensor-details {
+        position: relative;
     }
 }
