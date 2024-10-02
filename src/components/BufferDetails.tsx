@@ -9,9 +9,10 @@ import { Link } from 'react-router-dom';
 import { OperationDescription, TensorData } from '../model/APIData';
 import { toHex } from '../functions/math';
 import ROUTES from '../definitions/routes';
-import { useNextBuffer } from '../hooks/useAPI';
 import 'styles/components/BufferDetails.scss';
 import getDeallocationOperation from '../functions/getDeallocationOperation';
+import getNextAllocationOperation from '../functions/getNextAllocationOperation';
+import { Operation, Tensor } from '../model/Graph';
 
 interface BufferDetailsProps {
     tensor: TensorData;
@@ -36,10 +37,10 @@ const HEADER_LABELS = {
 };
 
 function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
-    const { address, consumers, dtype, layout, shape } = tensor;
+    const { address, dtype, layout, shape } = tensor;
     const lastOperationId: number = tensor.consumers[tensor.consumers.length - 1];
-    const deallocationOperationId = getDeallocationOperation(tensor, operations);
-    const { data: buffer, isLoading } = useNextBuffer(address, consumers, tensor.id.toString());
+    const deallocationOperationId = getDeallocationOperation(tensor, operations)?.id;
+    const nextAllocationOperationId = getNextAllocationOperation(tensor, operations)?.id;
 
     return (
         <>
@@ -48,19 +49,16 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                     <tr>
                         <th>Last used</th>
                         <td>
-                            <Link to={`${ROUTES.OPERATIONS}/${lastOperationId}`}>
-                                {lastOperationId}{' '}
-                                {operations.find((operation) => operation.id === lastOperationId)?.name}
-                            </Link>
+                            {Number.isFinite(lastOperationId)
+                                ? getLastOperation(lastOperationId, operations, tensor)
+                                : 'No consumers for this tensor'}
                         </td>
                     </tr>
 
                     <tr>
                         <th>Deallocation</th>
                         <td>
-                            {isLoading ? 'Loading...' : undefined}
-
-                            {buffer && !isLoading && Number.isFinite(deallocationOperationId) ? (
+                            {Number.isFinite(deallocationOperationId) ? (
                                 <div>
                                     Deallocation found in{' '}
                                     <Link to={`${ROUTES.OPERATIONS}/${deallocationOperationId}`}>
@@ -86,17 +84,26 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         </td>
                     </tr>
 
-                    {buffer?.next_usage && address && !isLoading ? (
+                    {/* This is stupid but Typescript is complaining otherwise */}
+                    {nextAllocationOperationId !== undefined &&
+                    Number.isFinite(nextAllocationOperationId) &&
+                    deallocationOperationId !== undefined &&
+                    Number.isFinite(deallocationOperationId) &&
+                    address !== null &&
+                    Number.isFinite(address) ? (
                         <tr>
                             <th>Next allocation</th>
                             <td>
                                 <span>
                                     {toHex(address)} next allocated in{' '}
-                                    <Link to={`${ROUTES.OPERATIONS}/${buffer.operation_id}`}>
-                                        {buffer.operation_id}{' '}
-                                        {operations.find((operation) => operation.id === buffer.operation_id)?.name}
+                                    <Link to={`${ROUTES.OPERATIONS}/${nextAllocationOperationId}`}>
+                                        {nextAllocationOperationId}{' '}
+                                        {
+                                            operations.find((operation) => operation.id === nextAllocationOperationId)
+                                                ?.name
+                                        }
                                     </Link>{' '}
-                                    (+{buffer.next_usage} operations)
+                                    (+{nextAllocationOperationId - deallocationOperationId} operations)
                                 </span>
                             </td>
                         </tr>
@@ -201,6 +208,20 @@ function parseMemoryConfig(string: string) {
 
 function getHeaderLabel(key: keyof typeof HEADER_LABELS) {
     return HEADER_LABELS[key];
+}
+
+function getLastOperation(lastOperationId: number, operations: Operation[], tensor: Tensor) {
+    let lastOperation = operations.find((operation) => operation.id === lastOperationId);
+
+    if (lastOperation?.name.includes('deallocate') && tensor.consumers.length > 1) {
+        lastOperation = operations.find((operation) => operation.id === tensor.consumers[tensor.consumers.length - 2]);
+    }
+
+    return lastOperation ? (
+        <Link to={`${ROUTES.OPERATIONS}/${lastOperation.id}`}>
+            {lastOperation?.id} {lastOperation.name}
+        </Link>
+    ) : null;
 }
 
 export default BufferDetails;

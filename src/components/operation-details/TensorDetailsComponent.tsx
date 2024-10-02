@@ -6,14 +6,16 @@ import { getBufferColor } from '../../functions/colorGenerator';
 import { TensorData } from '../../model/APIData';
 import { prettyPrintAddress, toHex } from '../../functions/math';
 import { BufferTypeLabel } from '../../model/BufferType';
-import { useNextBuffer, useOperationsList } from '../../hooks/useAPI';
+import { useOperationsList } from '../../hooks/useAPI';
 import getDeallocationOperation from '../../functions/getDeallocationOperation';
+import getNextAllocationOperation from '../../functions/getNextAllocationOperation';
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
     selectedAddress: number | null;
     memorySize: number;
     onTensorClick: (tensorId: number | null) => void;
+    operationId: number;
 }
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
@@ -21,11 +23,12 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     selectedAddress = null,
     memorySize,
     onTensorClick,
+    operationId,
 }) => {
-    const { id, address, consumers } = tensor;
+    const { address } = tensor;
     const { data: operations } = useOperationsList();
-    const { data: buffer, isLoading } = useNextBuffer(address, consumers, id.toString());
-    const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations) : null;
+    const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations)?.id : null;
+    const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations)?.id : null;
 
     return (
         <div
@@ -72,9 +75,16 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     </Tooltip>
                 )}
 
-                {buffer?.next_usage && address && operations && !isLoading ? (
+                {/* For some reason doesn't like more concise checks like Number.isFinite */}
+                {nextAllocationOperationId !== undefined &&
+                nextAllocationOperationId !== null &&
+                address !== undefined &&
+                address !== null &&
+                operations ? (
                     <Tooltip
-                        content={`Next allocation of ${toHex(address)} in ${buffer.operation_id} ${operations.find((operation) => operation.id === buffer.operation_id)?.name} (+${buffer.next_usage} operations)`}
+                        content={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}
+                        (+${nextAllocationOperationId - operationId} operations)
+                        `}
                         placement={PopoverPosition.TOP}
                     >
                         <Icon

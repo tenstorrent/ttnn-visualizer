@@ -502,6 +502,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         selectedAddress={selectedTensorAddress}
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
+                                        currentOperationId={operationId}
                                     />
                                 ))}
                             </div>
@@ -515,6 +516,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         selectedAddress={selectedTensorAddress}
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
+                                        currentOperationId={operationId}
                                     />
                                 ))}{' '}
                             </div>
