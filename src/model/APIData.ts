@@ -33,8 +33,8 @@ export interface OperationDetailsData extends Operation {
 }
 
 export interface ActiveReport {
-    name: string
-    hostname: string
+    name: string;
+    hostname: string;
 }
 
 // TODO: we may want to revisit the 'default' portion for the variable name

@@ -2,11 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import axios from 'axios';
 import useAppConfig from './useAppConfig';
 import { MountRemoteFolder, RemoteConnection, RemoteFolder, SyncRemoteFolder } from '../definitions/RemoteConnection';
 import { ConnectionStatus, ConnectionTestStates } from '../definitions/ConnectionStatus';
 import axiosInstance from '../libs/axiosInstance';
-import axios from 'axios';
 
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
@@ -54,7 +54,6 @@ const useRemoteConnection = () => {
                     ];
                 }
                 if (error.response && error.response.status >= 500) {
-
                     connectionStatus = [
                         {
                             status: ConnectionTestStates.FAILED,
@@ -69,7 +68,6 @@ const useRemoteConnection = () => {
             }
         }
 
-
         return connectionStatus;
     };
 
@@ -78,7 +76,10 @@ const useRemoteConnection = () => {
             throw new Error('No connection provided');
         }
 
-        const response = await axiosInstance.post<RemoteFolder[]>(`${import.meta.env.VITE_API_ROOT}/remote/folder`, connection);
+        const response = await axiosInstance.post<RemoteFolder[]>(
+            `${import.meta.env.VITE_API_ROOT}/remote/folder`,
+            connection,
+        );
 
         return response.data;
     };

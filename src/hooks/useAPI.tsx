@@ -3,9 +3,10 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import axios, { AxiosError } from 'axios';
-import axiosInstance from '../libs/axiosInstance';
 import { useQuery } from 'react-query';
+import axiosInstance from '../libs/axiosInstance';
 import {
+    ActiveReport,
     BufferData,
     OperationDescription,
     OperationDetailsData,
@@ -14,14 +15,12 @@ import {
     defaultBuffer,
     defaultOperationDetailsData,
     defaultTensorData,
-    ActiveReport,
 } from '../model/APIData';
 
-
-export const fetchActiveReport = async(): Promise<ActiveReport | null > => {
-    const response = await axiosInstance.get<ActiveReport>('/api/reports/active').catch()
-    return response?.data
-}
+export const fetchActiveReport = async (): Promise<ActiveReport | null> => {
+    const response = await axiosInstance.get<ActiveReport>('/api/reports/active').catch();
+    return response?.data;
+};
 
 const fetchOperationDetails = async (id: number | null): Promise<OperationDetailsData> => {
     if (id === null) {
