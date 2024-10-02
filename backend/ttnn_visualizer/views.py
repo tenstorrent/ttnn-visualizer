@@ -100,7 +100,7 @@ def operation_detail(
         if not operation:
             return Response(status=HTTPStatus.NOT_FOUND)
 
-        buffers = queries.query_buffers(cursor, operation_id)
+        buffers = queries.query_buffers_by_operation_id(cursor, operation_id)
         operation_arguments = queries.query_operation_arguments_by_operation_id(
             cursor, operation_id
         )
