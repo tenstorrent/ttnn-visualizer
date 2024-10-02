@@ -2,7 +2,32 @@
 
 A tool for visualizing the Tenstorrent Neural Network (TTNN) model.
 
+- [Running Application](#running-application)
+  + [Installing as Wheel](#installing-as-wheel)
+  + [Downloading Docker Image](#downloading-docker-image)
+  - [Running Image](#running-image)
+  + [SSH](#ssh)
+  
+- [Contributing](#contributing)
+    * [React + TypeScript + Vite](#react-typescript-vite)
+    * [Expanding the ESLint configuration](#expanding-the-eslint-configuration)
+    * [Environment ](#environment)
+    * [Frontend](#frontend)
+    * [Backend](#backend)
+    * [Development](#development)
+        + [Fix for python random errors not finding modules:](#fix-for-python-random-errors-not-finding-modules)
+        + [Fix for missing distutils package](#fix-for-missing-distutils-package)
+    * [Docker](#docker)
+        + [Running project](#running-project)
+
 ## Running Application
+
+
+### Installing as Wheel
+
+Download the wheel file from the [releases page](https://github.com/tenstorrent/ttnn-visualizer/releases) and install using `pip install release_name.whl`. After installation
+simply run `ttnn-visualizer` to start the application.
+
 
 ### Downloading Docker Image
 
@@ -57,12 +82,6 @@ services:
       - /run/host-services/ssh-auth.sock:/ssh-agent
 
 ```
-
-### Installing as Wheel
-
-Download the wheel file from the [releases page](https://github.com/tenstorrent/ttnn-visualizer/releases) and install using `pip install release_name.whl`. After installation
-simply run `ttnn-visualizer` to start the application.
-
 
 ### SSH
 
