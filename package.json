@@ -64,6 +64,7 @@
     "highlight.js": "^11.9.0",
     "htmlparser2": "^9.1.0",
     "husky": "^9.1.6",
+    "lint-staged": "^15.2.10",
     "prettier": "^3.3.2",
     "sass": "^1.77.4",
     "stylelint": "^16.6.1",
@@ -79,13 +80,13 @@
   ],
   "husky": {
     "hooks": {
-        "pre-commit": "lint-staged"
+      "pre-commit": "lint-staged"
     }
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx,json,css,scss,md}": [
-        "eslint --fix",
-        "prettier --write"
+    "src/**/*.{js,jsx,ts,tsx,json,css,scss,md}": [
+      "npm run lint",
+      "npm run format"
     ]
   }
 }
