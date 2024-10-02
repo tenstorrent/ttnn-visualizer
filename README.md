@@ -142,7 +142,7 @@ source myenv/bin/activate
 install requirements
 
 ```shell
-pip install -r backend/requirements.txt
+pip install -r backend/ttnn_visualizer/requirements.txt
 ```
 
 Starting the server
@@ -192,6 +192,6 @@ To connect to this container through the remote connection manager you use the n
 
 ### Installing as Wheel
 
-Download the wheel file from the [releases page]() and install using `pip install release_name.whl`. After installation
+Download the wheel file from the [releases page](https://github.com/tenstorrent/ttnn-visualizer/releases) and install using `pip install release_name.whl`. After installation
 simply run `ttnn-visualizer` to start the application.
 
