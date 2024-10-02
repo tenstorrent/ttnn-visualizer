@@ -158,7 +158,7 @@ def serialize_operation_buffers(operations, buffers, buffer_type):
             buffer_data = filter(
                 lambda buffer: buffer.type == buffer_type, operation_buffers
             )
-        results.append({"operation_id": operation.operation_id, "buffers": buffer_data})
+        results.append({"id": operation.operation_id, "buffers": buffer_data})
     return results
 
 
