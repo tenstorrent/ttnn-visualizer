@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { Fragment, forwardRef, useRef, useState } from 'react';
+import React, { Fragment, useState } from 'react';
 import { Button, ButtonGroup, Icon, Intent, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { IconNames } from '@blueprintjs/icons';
@@ -27,7 +27,6 @@ import {
 import { MemoryLegendElement } from './MemoryLegendElement';
 import OperationArguments from '../OperationArguments';
 import { isDramActiveAtom, isL1ActiveAtom, selectedTensorAddressAtom } from '../../store/app';
-import useOutsideClick from '../../hooks/useOutsideClick';
 import { getBufferColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
 import TensorDetailsComponent from './TensorDetailsComponent';
@@ -68,10 +67,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             setToastId(null);
         }
     };
-
-    const outsideRefs = useRef<HTMLElement[]>([]);
-
-    useOutsideClick(outsideRefs.current, onClickOutside);
 
     const operation = operations?.find((op) => op.id === operationId);
 
@@ -242,15 +237,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const dramDeltaObject = details.getMemoryDelta(dramDelta, reverseDramDelta);
 
-    // TODO: Look at refactoring this to avoid forwarding refs
-    const ForwardedMemoryPlotRenderer = forwardRef(MemoryPlotRenderer);
-
-    function assignRef(el: HTMLElement | null, index: number) {
-        if (el) {
-            outsideRefs.current[index] = el;
-        }
-    }
-
     return (
         <>
             <OperationDetailsNavigation
@@ -259,6 +245,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
 
             <div className='operation-details-component'>
+                <div
+                    className='outside-click'
+                    onClick={onClickOutside}
+                />
                 {!isLoading && Number.isSafeInteger(operationDetails?.id) ? (
                     <>
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
@@ -315,7 +305,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {isL1Active && (
                             <>
                                 <h3>L1 Memory</h3>
-                                <ForwardedMemoryPlotRenderer
+                                <MemoryPlotRenderer
                                     title='Previous Summarized L1 Report'
                                     className={classNames('l1-memory-renderer', {
                                         'empty-plot': previousChartData.length === 0,
@@ -328,10 +318,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={memorySizeL1}
                                     configuration={L1RenderConfiguration}
-                                    ref={(el) => assignRef(el, 0)}
                                 />
 
-                                <ForwardedMemoryPlotRenderer
+                                <MemoryPlotRenderer
                                     title='Current Summarized L1 Report'
                                     className={classNames('l1-memory-renderer', {
                                         'empty-plot': chartData.length === 0,
@@ -351,7 +340,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     memorySize={memorySizeL1}
                                     onBufferClick={onBufferClick}
                                     configuration={L1RenderConfiguration}
-                                    ref={(el) => assignRef(el, 1)}
                                 />
 
                                 <div
@@ -388,7 +376,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             <>
                                 <h3>DRAM</h3>
 
-                                <ForwardedMemoryPlotRenderer
+                                <MemoryPlotRenderer
                                     title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
                                     className={classNames('dram-memory-renderer', {
                                         'empty-plot': previousDramData.length === 0,
@@ -399,10 +387,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     isZoomedIn={zoomedInViewMainMemory}
                                     memorySize={DRAM_MEMORY_SIZE}
                                     configuration={DRAMRenderConfiguration}
-                                    ref={(el) => assignRef(el, 2)}
                                 />
 
-                                <ForwardedMemoryPlotRenderer
+                                <MemoryPlotRenderer
                                     title='Current Summarized DRAM Report'
                                     className={classNames('dram-memory-renderer', {
                                         'empty-plot': dramData.length === 0,
@@ -413,10 +400,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     memorySize={DRAM_MEMORY_SIZE}
                                     onBufferClick={onDramBufferClick}
                                     configuration={DRAMRenderConfiguration}
-                                    ref={(el) => assignRef(el, 3)}
                                 />
 
-                                <ForwardedMemoryPlotRenderer
+                                <MemoryPlotRenderer
                                     title='DRAM Delta (difference between current and previous operation)'
                                     className={classNames('dram-memory-renderer', {
                                         'empty-plot': dramDeltaObject.chartData.length === 0,
@@ -427,7 +413,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     memorySize={DRAM_MEMORY_SIZE}
                                     onBufferClick={onDramDeltaClick}
                                     configuration={DRAMRenderConfiguration}
-                                    ref={(el) => assignRef(el, 4)}
                                 />
 
                                 <div
