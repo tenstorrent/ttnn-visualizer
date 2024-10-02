@@ -247,6 +247,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
             <div className='operation-details-component'>
                 {selectedTensorAddress && (
+                    // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
                     <div
                         className='outside-click'
                         onClick={onClickOutside}
@@ -354,7 +355,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                                         />{' '}
                                                         <span>{deviceOperationName}</span>
                                                     </h3>
-                                                    <ForwardedMemoryPlotRenderer
+                                                    <MemoryPlotRenderer
                                                         title=''
                                                         className={classNames('l1-memory-renderer circular-buffers', {
                                                             'empty-plot': plotData.length === 0,
@@ -368,7 +369,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                                         memorySize={memorySizeL1}
                                                         configuration={CBRenderConfiguration}
                                                         onBufferClick={onBufferClick}
-                                                        ref={(el) => assignRef(el)}
                                                     />
                                                 </>
                                             ),
@@ -490,7 +490,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         selectedAddress={selectedTensorAddress}
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
-                                        currentOperationId={operationId}
+                                        operationId={operationId}
                                     />
                                 ))}
                             </div>
@@ -504,7 +504,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         selectedAddress={selectedTensorAddress}
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
-                                        currentOperationId={operationId}
+                                        operationId={operationId}
                                     />
                                 ))}{' '}
                             </div>
