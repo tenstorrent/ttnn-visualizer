@@ -151,6 +151,8 @@ def serialize_operation_buffers(operations, buffers, buffer_type):
     results = []
     for operation in operations:
         operation_buffers = buffer_dict.get(operation.operation_id)
+        if operation_buffers is not list:
+            operation_buffers = [operation_buffers]
 
         buffer_data = [dataclasses.asdict(b) for b in operation_buffers]
         if buffer_type is int:
