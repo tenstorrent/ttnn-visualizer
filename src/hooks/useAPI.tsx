@@ -55,7 +55,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const fetchAllBuffers = async (): Promise<any> => {
-    const { data: buffers } = await axiosInstance.get('/api/get-operation-buffers');
+    const { data: buffers } = await axiosInstance.get('/api/operation-buffers');
 
     return buffers;
 };
