@@ -72,6 +72,7 @@
         grid-template-columns: 1fr auto;
         align-items: start;
         gap: 25px;
+        position: relative;
     }
 
     .producer-consumer {
@@ -261,9 +262,5 @@
     .no-buffer-type-selected {
         margin-top: 20px;
         margin-bottom: 0;
-    }
-
-    .plot-tensor-details {
-        position: relative;
     }
 }
