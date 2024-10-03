@@ -9,148 +9,665 @@
     },
     {
         "connections": [
-            3,
-            5,
-            6,
-            11
+            2,
+            22,
+            41,
+            54,
+            55,
+            56
         ],
         "counter": 1,
         "node_type": "function_start",
         "params": {
-            "inputs": "4",
-            "name": "ttnn::add_"
-        }
-    },
-    {
-        "connections": [
-            1,
-            6,
-            6
-        ],
-        "counter": 2,
-        "node_type": "tensor",
-        "params": {
-            "shape": "ttnn.Shape([1, 1, 784[896], 2048])",
-            "tensor_id": "1350"
-        }
-    },
-    {
-        "connections": [
-            2,
-            2,
-            2,
-            2,
-            2,
-            12
-        ],
-        "counter": 3,
-        "node_type": "buffer",
-        "params": {
-            "layout": "BLOCK_SHARDED",
-            "size": "1949696",
-            "type": "L1"
-        }
-    },
-    {
-        "connections": [
-            1,
-            6
-        ],
-        "counter": 4,
-        "node_type": "tensor",
-        "params": {
-            "shape": "ttnn.Shape([1, 1, 784[896], 2048])",
-            "tensor_id": "1297"
+            "inputs": "5",
+            "name": "ttnn::concat"
         }
     },
     {
         "connections": [
             4,
-            4
+            5,
+            20
         ],
-        "counter": 5,
+        "counter": 2,
+        "node_type": "function_start",
+        "params": {
+            "inputs": "2",
+            "name": "ttnn::tilize"
+        }
+    },
+    {
+        "connections": [
+            2
+        ],
+        "counter": 3,
+        "node_type": "tensor",
+        "params": {
+            "shape": "ttnn.Shape([1, 128, 128, 256])",
+            "tensor_id": "88"
+        }
+    },
+    {
+        "connections": [
+            3
+        ],
+        "counter": 4,
         "node_type": "buffer",
         "params": {
-            "layout": "BLOCK_SHARDED",
-            "size": "1949696",
+            "layout": "INTERLEAVED",
+            "size": "8388608",
             "type": "L1"
         }
     },
     {
         "connections": [
+            6,
+            19
+        ],
+        "counter": 5,
+        "node_type": "function_start",
+        "params": {
+            "inputs": "5",
+            "name": "ttnn::prim::old_infra_device_operation"
+        }
+    },
+    {
+        "connections": [
             7,
-            10
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18
         ],
         "counter": 6,
         "node_type": "function_start",
         "params": {
-            "inputs": "9",
-            "name": "ttnn::prim::binary"
+            "inputs": "2",
+            "name": "Tilize"
         }
     },
     {
         "connections": [
             8,
-            9
+            9,
+            10
         ],
         "counter": 7,
         "node_type": "function_start",
         "params": {
-            "inputs": "2",
-            "name": "BinaryDeviceOperation"
+            "inputs": "5",
+            "name": "tt::tt_metal::create_device_tensor"
         }
     },
     {
         "connections": [
-            7
+            11,
+            11,
+            11,
+            21
         ],
         "counter": 8,
+        "node_type": "buffer",
+        "params": {
+            "layout": "INTERLEAVED",
+            "size": "8388608",
+            "type": "L1"
+        }
+    },
+    {
+        "connections": [
+            8
+        ],
+        "counter": 9,
+        "node_type": "buffer_allocate",
+        "params": {
+            "address": "1048576",
+            "layout": "INTERLEAVED",
+            "size": "8388608",
+            "type": "L1"
+        }
+    },
+    {
+        "connections": [
+            11
+        ],
+        "counter": 10,
+        "node_type": "function_end",
+        "params": {
+            "name": "tt::tt_metal::create_device_tensor"
+        }
+    },
+    {
+        "connections": [],
+        "counter": 11,
+        "node_type": "tensor",
+        "params": {
+            "shape": "ttnn.Shape([1, 128, 128, 256])",
+            "tensor_id": "149"
+        }
+    },
+    {
+        "connections": [
+            6
+        ],
+        "counter": 12,
         "node_type": "circular_buffer_deallocate_all",
         "params": {}
     },
     {
         "connections": [
-            2
+            30,
+            30,
+            30,
+            40
         ],
-        "counter": 9,
-        "node_type": "function_end",
+        "counter": 13,
+        "node_type": "buffer",
         "params": {
-            "name": "BinaryDeviceOperation"
+            "layout": "INTERLEAVED",
+            "size": "16384",
+            "type": "DRAM"
         }
     },
     {
         "connections": [
-            2
-        ],
-        "counter": 10,
-        "node_type": "function_end",
-        "params": {
-            "name": "ttnn::prim::binary"
-        }
-    },
-    {
-        "connections": [
-            12,
             13
         ],
-        "counter": 11,
+        "counter": 14,
+        "node_type": "buffer_allocate",
+        "params": {
+            "address": "1073735680",
+            "layout": "INTERLEAVED",
+            "size": "16384",
+            "type": "DRAM"
+        }
+    },
+    {
+        "connections": [],
+        "counter": 15,
+        "node_type": "circular_buffer_allocate",
+        "params": {
+            "address": "107616",
+            "core_range_set": "{[(x=0,y=0) - (x=0,y=0)]}",
+            "size": "16384"
+        }
+    },
+    {
+        "connections": [],
+        "counter": 16,
+        "node_type": "circular_buffer_allocate",
+        "params": {
+            "address": "124000",
+            "core_range_set": "{[(x=0,y=0) - (x=0,y=0)]}",
+            "size": "16384"
+        }
+    },
+    {
+        "connections": [
+            13
+        ],
+        "counter": 17,
+        "node_type": "buffer_deallocate",
+        "params": {
+            "layout": "INTERLEAVED",
+            "size": "0",
+            "type": "DRAM"
+        }
+    },
+    {
+        "connections": [
+            11
+        ],
+        "counter": 18,
         "node_type": "function_end",
         "params": {
-            "name": "ttnn::add_"
+            "name": "Tilize"
+        }
+    },
+    {
+        "connections": [
+            11
+        ],
+        "counter": 19,
+        "node_type": "function_end",
+        "params": {
+            "name": "ttnn::prim::old_infra_device_operation"
+        }
+    },
+    {
+        "connections": [
+            21,
+            22
+        ],
+        "counter": 20,
+        "node_type": "function_end",
+        "params": {
+            "name": "ttnn::tilize"
         }
     },
     {
         "connections": [],
-        "counter": 12,
+        "counter": 21,
         "node_type": "tensor",
         "params": {
-            "shape": "ttnn.Shape([1, 1, 784[896], 2048])",
-            "tensor_id": "1353"
+            "shape": "ttnn.Shape([1, 128, 128, 256])",
+            "tensor_id": "150"
+        }
+    },
+    {
+        "connections": [
+            24,
+            25,
+            39
+        ],
+        "counter": 22,
+        "node_type": "function_start",
+        "params": {
+            "inputs": "2",
+            "name": "ttnn::tilize"
+        }
+    },
+    {
+        "connections": [
+            22
+        ],
+        "counter": 23,
+        "node_type": "tensor",
+        "params": {
+            "shape": "ttnn.Shape([1, 128, 128, 256])",
+            "tensor_id": "148"
+        }
+    },
+    {
+        "connections": [
+            23
+        ],
+        "counter": 24,
+        "node_type": "buffer",
+        "params": {
+            "layout": "INTERLEAVED",
+            "size": "8388608",
+            "type": "L1"
+        }
+    },
+    {
+        "connections": [
+            26,
+            38
+        ],
+        "counter": 25,
+        "node_type": "function_start",
+        "params": {
+            "inputs": "5",
+            "name": "ttnn::prim::old_infra_device_operation"
+        }
+    },
+    {
+        "connections": [
+            27,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37
+        ],
+        "counter": 26,
+        "node_type": "function_start",
+        "params": {
+            "inputs": "2",
+            "name": "Tilize"
+        }
+    },
+    {
+        "connections": [
+            28,
+            29
+        ],
+        "counter": 27,
+        "node_type": "function_start",
+        "params": {
+            "inputs": "5",
+            "name": "tt::tt_metal::create_device_tensor"
+        }
+    },
+    {
+        "connections": [
+            13
+        ],
+        "counter": 28,
+        "node_type": "buffer_allocate",
+        "params": {
+            "address": "917504",
+            "layout": "INTERLEAVED",
+            "size": "8388608",
+            "type": "L1"
+        }
+    },
+    {
+        "connections": [
+            30
+        ],
+        "counter": 29,
+        "node_type": "function_end",
+        "params": {
+            "name": "tt::tt_metal::create_device_tensor"
         }
     },
     {
         "connections": [],
-        "counter": 13,
+        "counter": 30,
+        "node_type": "tensor",
+        "params": {
+            "shape": "ttnn.Shape([1, 128, 128, 256])",
+            "tensor_id": "151"
+        }
+    },
+    {
+        "connections": [
+            26
+        ],
+        "counter": 31,
+        "node_type": "circular_buffer_deallocate_all",
+        "params": {}
+    },
+    {
+        "connections": [
+            46,
+            46,
+            46,
+            57
+        ],
+        "counter": 32,
+        "node_type": "buffer",
+        "params": {
+            "layout": "INTERLEAVED",
+            "size": "16384",
+            "type": "DRAM"
+        }
+    },
+    {
+        "connections": [
+            32
+        ],
+        "counter": 33,
+        "node_type": "buffer_allocate",
+        "params": {
+            "address": "1073735680",
+            "layout": "INTERLEAVED",
+            "size": "16384",
+            "type": "DRAM"
+        }
+    },
+    {
+        "connections": [],
+        "counter": 34,
+        "node_type": "circular_buffer_allocate",
+        "params": {
+            "address": "107616",
+            "core_range_set": "{[(x=0,y=0) - (x=0,y=0)]}",
+            "size": "16384"
+        }
+    },
+    {
+        "connections": [],
+        "counter": 35,
+        "node_type": "circular_buffer_allocate",
+        "params": {
+            "address": "124000",
+            "core_range_set": "{[(x=0,y=0) - (x=0,y=0)]}",
+            "size": "16384"
+        }
+    },
+    {
+        "connections": [
+            32
+        ],
+        "counter": 36,
+        "node_type": "buffer_deallocate",
+        "params": {
+            "layout": "INTERLEAVED",
+            "size": "0",
+            "type": "DRAM"
+        }
+    },
+    {
+        "connections": [
+            30
+        ],
+        "counter": 37,
+        "node_type": "function_end",
+        "params": {
+            "name": "Tilize"
+        }
+    },
+    {
+        "connections": [
+            30
+        ],
+        "counter": 38,
+        "node_type": "function_end",
+        "params": {
+            "name": "ttnn::prim::old_infra_device_operation"
+        }
+    },
+    {
+        "connections": [
+            40,
+            41
+        ],
+        "counter": 39,
+        "node_type": "function_end",
+        "params": {
+            "name": "ttnn::tilize"
+        }
+    },
+    {
+        "connections": [],
+        "counter": 40,
+        "node_type": "tensor",
+        "params": {
+            "shape": "ttnn.Shape([1, 128, 128, 256])",
+            "tensor_id": "152"
+        }
+    },
+    {
+        "connections": [
+            42,
+            53
+        ],
+        "counter": 41,
+        "node_type": "function_start",
+        "params": {
+            "inputs": "5",
+            "name": "ttnn::prim::old_infra_device_operation"
+        }
+    },
+    {
+        "connections": [
+            43,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52
+        ],
+        "counter": 42,
+        "node_type": "function_start",
+        "params": {
+            "inputs": "2",
+            "name": "ConcatDeviceOperation"
+        }
+    },
+    {
+        "connections": [
+            44,
+            45
+        ],
+        "counter": 43,
+        "node_type": "function_start",
+        "params": {
+            "inputs": "5",
+            "name": "tt::tt_metal::create_device_tensor"
+        }
+    },
+    {
+        "connections": [
+            32
+        ],
+        "counter": 44,
+        "node_type": "buffer_allocate",
+        "params": {
+            "address": "655360",
+            "layout": "INTERLEAVED",
+            "size": "16777216",
+            "type": "L1"
+        }
+    },
+    {
+        "connections": [
+            46
+        ],
+        "counter": 45,
+        "node_type": "function_end",
+        "params": {
+            "name": "tt::tt_metal::create_device_tensor"
+        }
+    },
+    {
+        "connections": [],
+        "counter": 46,
+        "node_type": "tensor",
+        "params": {
+            "shape": "ttnn.Shape([1, 128, 128, 512])",
+            "tensor_id": "153"
+        }
+    },
+    {
+        "connections": [
+            42
+        ],
+        "counter": 47,
+        "node_type": "circular_buffer_deallocate_all",
+        "params": {}
+    },
+    {
+        "connections": [],
+        "counter": 48,
+        "node_type": "buffer",
+        "params": {
+            "layout": "INTERLEAVED",
+            "size": "6144",
+            "type": "DRAM"
+        }
+    },
+    {
+        "connections": [
+            48
+        ],
+        "counter": 49,
+        "node_type": "buffer_allocate",
+        "params": {
+            "address": "1073735680",
+            "layout": "INTERLEAVED",
+            "size": "6144",
+            "type": "DRAM"
+        }
+    },
+    {
+        "connections": [],
+        "counter": 50,
+        "node_type": "circular_buffer_allocate",
+        "params": {
+            "address": "107616",
+            "core_range_set": "{[(x=0,y=0) - (x=7,y=7)]}",
+            "size": "4096"
+        }
+    },
+    {
+        "connections": [
+            48
+        ],
+        "counter": 51,
+        "node_type": "buffer_deallocate",
+        "params": {
+            "layout": "INTERLEAVED",
+            "size": "0",
+            "type": "DRAM"
+        }
+    },
+    {
+        "connections": [
+            46
+        ],
+        "counter": 52,
+        "node_type": "function_end",
+        "params": {
+            "name": "ConcatDeviceOperation"
+        }
+    },
+    {
+        "connections": [
+            46
+        ],
+        "counter": 53,
+        "node_type": "function_end",
+        "params": {
+            "name": "ttnn::prim::old_infra_device_operation"
+        }
+    },
+    {
+        "connections": [
+            13
+        ],
+        "counter": 54,
+        "node_type": "buffer_deallocate",
+        "params": {
+            "layout": "INTERLEAVED",
+            "size": "0",
+            "type": "L1"
+        }
+    },
+    {
+        "connections": [
+            8
+        ],
+        "counter": 55,
+        "node_type": "buffer_deallocate",
+        "params": {
+            "layout": "INTERLEAVED",
+            "size": "0",
+            "type": "L1"
+        }
+    },
+    {
+        "connections": [
+            57,
+            58
+        ],
+        "counter": 56,
+        "node_type": "function_end",
+        "params": {
+            "name": "ttnn::concat"
+        }
+    },
+    {
+        "connections": [],
+        "counter": 57,
+        "node_type": "tensor",
+        "params": {
+            "shape": "ttnn.Shape([1, 128, 128, 512])",
+            "tensor_id": "154"
+        }
+    },
+    {
+        "connections": [],
+        "counter": 58,
         "node_type": "capture_end",
         "params": {}
     }
