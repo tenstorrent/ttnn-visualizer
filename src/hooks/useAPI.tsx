@@ -7,8 +7,8 @@ import { useQuery } from 'react-query';
 import axiosInstance from '../libs/axiosInstance';
 import {
     ActiveReport,
+    Buffer,
     BufferData,
-    BufferDataAPI,
     OperationDescription,
     OperationDetailsData,
     ReportMetaData,
@@ -52,18 +52,18 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     return operationList;
 };
 
-interface BuffersByOperation {
-    buffers: BufferDataAPI[];
+interface BuffersByOperationData {
+    buffers: Buffer[];
     id: number;
 }
 
 /** @description
  * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
  */
-const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersByOperation[]> => {
+const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
     const params = { buffer_type: bufferType };
 
-    const { data: buffers } = await axiosInstance.get<BuffersByOperation[]>('/api/operation-buffers', { params });
+    const { data: buffers } = await axiosInstance.get<BuffersByOperationData[]>('/api/operation-buffers', { params });
 
     return buffers;
 };

@@ -22,7 +22,7 @@ export interface BufferData {
     next_usage?: number;
 }
 
-export interface BufferDataAPI {
+export interface Buffer {
     address: number;
     buffer_type: number;
     device_id: number;
