@@ -8,6 +8,7 @@ import axiosInstance from '../libs/axiosInstance';
 import {
     ActiveReport,
     BufferData,
+    BufferDataAPI,
     OperationDescription,
     OperationDetailsData,
     ReportMetaData,
@@ -16,6 +17,7 @@ import {
     defaultOperationDetailsData,
     defaultTensorData,
 } from '../model/APIData';
+import { BufferType } from '../model/BufferType';
 
 export const fetchActiveReport = async (): Promise<ActiveReport | null> => {
     const response = await axiosInstance.get<ActiveReport>('/api/reports/active').catch();
@@ -50,12 +52,18 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     return operationList;
 };
 
+interface BuffersByOperation {
+    buffers: BufferDataAPI[];
+    id: number;
+}
+
 /** @description
  * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const fetchAllBuffers = async (): Promise<any> => {
-    const { data: buffers } = await axiosInstance.get('/api/operation-buffers');
+const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersByOperation[]> => {
+    const params = { buffer_type: bufferType };
+
+    const { data: buffers } = await axiosInstance.get<BuffersByOperation[]>('/api/operation-buffers', { params });
 
     return buffers;
 };
@@ -68,10 +76,6 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
 
 export const useOperationsList = () => {
     return useQuery<OperationDescription[], AxiosError>('get-operations', fetchOperations);
-};
-
-export const useAllBuffers = () => {
-    return useQuery<{ operation_id: number; buffers: [] }[], AxiosError>('get-operation-buffers', fetchAllBuffers);
 };
 
 export const useOperationDetails = (operationId: number | null) => {
@@ -173,5 +177,11 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
     return useQuery<BufferData, AxiosError>(queryKey, {
         queryFn: () => fetchNextUseOfBuffer(address, consumers),
         retry: false,
+    });
+};
+
+export const useBuffers = (bufferType: BufferType) => {
+    return useQuery('get-buffers', {
+        queryFn: () => fetchAllBuffers(bufferType),
     });
 };
