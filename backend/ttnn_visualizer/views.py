@@ -241,9 +241,9 @@ def get_operations_buffers():
 
     with sqlite3.connect(target_report_path) as conn:
         cursor = conn.cursor()
-        buffers = list(queries.query_buffers(cursor))
+        buffers = list(queries.query_buffers(cursor, buffer_type=buffer_type))
         operations = list(queries.query_operations(cursor))
-        return serialize_operations_buffers(operations, buffers, buffer_type)
+        return serialize_operations_buffers(operations, buffers)
 
 
 @api.route("/operation-buffers/<operation_id>", methods=["GET"])
@@ -265,7 +265,7 @@ def get_operation_buffers(operation_id):
         buffers = list(queries.query_buffers_by_operation_id(cursor, operation_id))
         if not operation:
             return Response(status=HTTPStatus.NOT_FOUND)
-        return serialize_operation_buffers(operation, buffers, buffer_type)
+        return serialize_operation_buffers(operation, buffers)
 
 
 @api.route(

@@ -1,5 +1,6 @@
 import dataclasses
 from collections import defaultdict
+from email.policy import default
 
 
 def serialize_operations(
@@ -143,27 +144,24 @@ def serialize_operation(
     )
 
 
-def serialize_operation_buffers(operation, operation_buffers, buffer_type):
+def serialize_operation_buffers(operation, operation_buffers):
     buffer_data = [dataclasses.asdict(b) for b in operation_buffers]
     for b in buffer_data:
         b.pop("operation_id")
         b.update({"size": b.pop("max_size_per_bank")})
-    if buffer_type is int:
-        buffer_data = filter(
-            lambda buffer: buffer.type == buffer_type, operation_buffers
-        )
     return {"id": operation.operation_id, "buffers": list(buffer_data)}
 
 
-def serialize_operations_buffers(operations, buffers, buffer_type):
+def serialize_operations_buffers(operations, buffers):
+
+    buffer_dict = defaultdict(list)
+    for b in buffers:
+        buffer_dict[b.operation_id].append(b)
+
     results = []
     for operation in operations:
-        operation_buffers = filter(
-            lambda buffer: buffer.operation_id == operation.operation_id, buffers
-        )
-        results.append(
-            serialize_operation_buffers(operation, operation_buffers, buffer_type)
-        )
+        operation_buffers = buffer_dict.get(operation.operation_id)
+        results.append(serialize_operation_buffers(operation, operation_buffers))
     return results
 
 
