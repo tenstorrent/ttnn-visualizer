@@ -68,6 +68,11 @@ const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersBy
     return buffers;
 };
 
+export const fetchOperationBuffers = async (operationId: number | null) => {
+    const { data: buffers } = await axiosInstance.get(`/api/operation-buffers/${operationId}`);
+    return buffers;
+};
+
 const fetchReportMeta = async (): Promise<ReportMetaData> => {
     const { data: meta } = await axiosInstance.get<ReportMetaData>('/api/config');
 
