@@ -86,9 +86,9 @@ def query_buffers_by_operation_id(cursor, operation_id, buffer_type=None):
     query = "SELECT * FROM buffers WHERE operation_id = ?"
     if buffer_type is not None:
         query += " AND buffer_type = ?"
-        cursor.execute(query, (operation_id,))
+        cursor.execute(query, (operation_id, buffer_type))
     else:
-        cursor.execute(query)
+        cursor.execute(query, (operation_id,))
     for row in cursor.fetchall():
         yield Buffer(*row)
 
