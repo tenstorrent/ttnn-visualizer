@@ -42,7 +42,7 @@ export const BufferSummaryConfiguration = {
         b: 30,
         t: 25,
     },
-    title: 'Buffer Summary',
+    title: '',
 } as PlotConfiguration;
 
 export interface PlotConfiguration {
