@@ -34,6 +34,17 @@ export const CBRenderConfiguration = {
     title: '',
 } as PlotConfiguration;
 
+export const BufferSummaryConfiguration = {
+    height: 80,
+    margin: {
+        l: 5,
+        r: 5,
+        b: 30,
+        t: 25,
+    },
+    title: 'Buffer Summary',
+} as PlotConfiguration;
+
 export interface PlotConfiguration {
     height: number;
     margin: {
