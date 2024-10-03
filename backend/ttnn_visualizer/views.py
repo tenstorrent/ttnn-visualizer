@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flask import Blueprint, Response, current_app, request
 
+from ttnn_visualizer.decorators import with_report_path
 from ttnn_visualizer.sessions import ActiveReport
 
 from ttnn_visualizer.remotes import (
@@ -33,30 +34,11 @@ logger = logging.getLogger(__name__)
 api = Blueprint("api", __name__, url_prefix="/api")
 
 
-@api.route("/up", methods=["GET", "POST"])
-def health_check():
-    return Response(status=HTTPStatus.OK)
-
-
-@api.route("/reports/active", methods=["GET"])
-def get_active_folder():
-    # Used to gate UI functions if no report is active
-    if hasattr(request, "tab_session_data"):
-        active_report = request.tab_session_data.get("active_report", None)
-        if active_report:
-            return active_report
-    return {"name": None, "host": None}
-
-
 @api.route("/operations", methods=["GET"])
+@with_report_path
 @timer
-def operation_list():
-    target_report_path = getattr(request, "report_path", None)
-
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
-
-    with sqlite3.connect(target_report_path) as conn:
+def operation_list(report_path):
+    with sqlite3.connect(report_path) as conn:
         cursor = conn.cursor()
         operations = list(queries.query_operations(cursor))
         operations.sort(key=lambda o: o.operation_id)
@@ -83,16 +65,10 @@ def operation_list():
 
 
 @api.route("/operations/<operation_id>", methods=["GET"])
+@with_report_path
 @timer
-def operation_detail(
-    operation_id,
-):
-    target_report_path = getattr(request, "report_path", None)
-
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
-
-    with sqlite3.connect(target_report_path) as conn:
+def operation_detail(operation_id, report_path):
+    with sqlite3.connect(report_path) as conn:
         cursor = conn.cursor()
         operation = queries.query_operation_by_id(cursor, operation_id)
 
@@ -146,14 +122,12 @@ def operation_detail(
         "GET",
     ],
 )
-def operation_history():
-
-    target_report_path = getattr(request, "report_path", None)
+@with_report_path
+@timer
+def operation_history(report_path):
 
     operation_history_filename = "operation_history.json"
-    operation_history_file = (
-        Path(target_report_path).parent / operation_history_filename
-    )
+    operation_history_file = Path(report_path).parent / operation_history_filename
     if not operation_history_file.exists():
         return []
     with open(operation_history_file, "r") as file:
@@ -161,13 +135,10 @@ def operation_history():
 
 
 @api.route("/config")
-def get_config():
-
-    target_report_path = getattr(request, "report_path", None)
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
-
-    config_file = Path(target_report_path).parent.joinpath("config.json")
+@with_report_path
+@timer
+def get_config(report_path):
+    config_file = Path(report_path).parent.joinpath("config.json")
     if not config_file.exists():
         return {}
     with open(config_file, "r") as file:
@@ -175,13 +146,10 @@ def get_config():
 
 
 @api.route("/tensors", methods=["GET"])
+@with_report_path
 @timer
-def tensors_list():
-    target_report_path = getattr(request, "report_path", None)
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
-
-    with sqlite3.connect(target_report_path) as conn:
+def tensors_list(report_path):
+    with sqlite3.connect(report_path) as conn:
         cursor = conn.cursor()
         tensors = list(queries.query_tensors(cursor))
         producers_consumers = list(queries.query_producers_consumers(cursor))
@@ -189,19 +157,16 @@ def tensors_list():
 
 
 @api.route("/buffer", methods=["GET"])
+@with_report_path
 @timer
-def buffer_detail():
+def buffer_detail(report_path):
     address = request.args.get("address")
     operation_id = request.args.get("operation_id")
 
     if not address or not operation_id:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
-    target_report_path = getattr(request, "report_path", None)
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
-
-    with sqlite3.connect(target_report_path) as conn:
+    with sqlite3.connect(report_path) as conn:
         cursor = conn.cursor()
         buffer = queries.query_next_buffer(cursor, operation_id, address)
         if not buffer:
@@ -210,13 +175,10 @@ def buffer_detail():
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
+@with_report_path
 @timer
-def tensor_detail(tensor_id):
-    target_report_path = getattr(request, "report_path", None)
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
-
-    with sqlite3.connect(target_report_path) as conn:
+def tensor_detail(tensor_id, report_path):
+    with sqlite3.connect(report_path) as conn:
         cursor = conn.cursor()
         tensor = queries.query_tensor_by_id(cursor, tensor_id)
         if not tensor:
@@ -341,3 +303,18 @@ def use_remote_folder():
 
     update_tab_session({"active_report": active_report})
     return Response(status=HTTPStatus.OK)
+
+
+@api.route("/up", methods=["GET", "POST"])
+def health_check():
+    return Response(status=HTTPStatus.OK)
+
+
+@api.route("/reports/active", methods=["GET"])
+def get_active_folder():
+    # Used to gate UI functions if no report is active
+    if hasattr(request, "tab_session_data"):
+        active_report = request.tab_session_data.get("active_report", None)
+        if active_report:
+            return active_report
+    return {"name": None, "host": None}
