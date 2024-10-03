@@ -24,6 +24,7 @@ from ttnn_visualizer.serializers import (
     serialize_tensors,
     serialize_operation,
     serialize_operation_buffers,
+    serialize_operations_buffers,
 )
 from ttnn_visualizer.sessions import update_tab_session
 from ttnn_visualizer.utils import timer
@@ -227,7 +228,7 @@ def tensor_detail(tensor_id):
 
 
 @api.route("/operation-buffers", methods=["GET"])
-def get_operation_buffers():
+def get_operations_buffers():
     target_report_path = getattr(request, "report_path", None)
     if not target_report_path or not Path(target_report_path).exists():
         return Response(status=HTTPStatus.BAD_REQUEST)
@@ -242,7 +243,29 @@ def get_operation_buffers():
         cursor = conn.cursor()
         buffers = list(queries.query_buffers(cursor))
         operations = list(queries.query_operations(cursor))
-        return serialize_operation_buffers(operations, buffers, buffer_type)
+        return serialize_operations_buffers(operations, buffers, buffer_type)
+
+
+@api.route("/operation-buffers/<operation_id>", methods=["GET"])
+def get_operation_buffers(operation_id):
+
+    target_report_path = getattr(request, "report_path", None)
+    if not target_report_path or not Path(target_report_path).exists():
+        return Response(status=HTTPStatus.BAD_REQUEST)
+
+    buffer_type = request.args.get("buffer_type", "")
+    if buffer_type and str.isdigit(buffer_type):
+        buffer_type = int(buffer_type)
+    else:
+        buffer_type = None
+
+    with sqlite3.connect(target_report_path) as conn:
+        cursor = conn.cursor()
+        operation = queries.query_operation_by_id(cursor, operation_id)
+        buffers = list(queries.query_buffers_by_operation_id(cursor, operation_id))
+        if not operation:
+            return Response(status=HTTPStatus.NOT_FOUND)
+        return serialize_operation_buffers(operation, buffers, buffer_type)
 
 
 @api.route(

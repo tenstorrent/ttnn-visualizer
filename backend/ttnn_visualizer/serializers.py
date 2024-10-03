@@ -143,27 +143,27 @@ def serialize_operation(
     )
 
 
-def serialize_operation_buffers(operations, buffers, buffer_type):
-    buffer_dict = defaultdict(list)
-    for b in buffers:
+def serialize_operation_buffers(operation, operation_buffers, buffer_type):
+    buffer_data = [dataclasses.asdict(b) for b in operation_buffers]
+    for b in buffer_data:
+        b.pop("operation_id")
+        b.update({"size": b.pop("max_size_per_bank")})
+    if buffer_type is int:
+        buffer_data = filter(
+            lambda buffer: buffer.type == buffer_type, operation_buffers
+        )
+    return {"id": operation.operation_id, "buffers": list(buffer_data)}
 
-        buffer_list = buffer_dict.get(b.operation_id, [])
-        buffer_list.append(b)
-        buffer_dict.update({b.operation_id: buffer_list})
 
+def serialize_operations_buffers(operations, buffers, buffer_type):
     results = []
     for operation in operations:
-        operation_buffers = buffer_dict.get(operation.operation_id)
-        buffer_data = [dataclasses.asdict(b) for b in operation_buffers]
-        for b in buffer_data:
-            b.pop("operation_id")
-            b.update({"size": b.pop("max_size_per_bank")})
-
-        if buffer_type is int:
-            buffer_data = filter(
-                lambda buffer: buffer.type == buffer_type, operation_buffers
-            )
-        results.append({"id": operation.operation_id, "buffers": buffer_data})
+        operation_buffers = filter(
+            lambda buffer: buffer.operation_id == operation.operation_id, buffers
+        )
+        results.append(
+            serialize_operation_buffers(operation, operation_buffers, buffer_type)
+        )
     return results
 
 
