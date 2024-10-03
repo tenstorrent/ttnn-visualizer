@@ -251,7 +251,7 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
         condensed: Chunk;
         condensedChart: Partial<PlotData>[];
         cbChartData: Partial<PlotData>[];
-        cbChartDataByOperation: Map<{ name: string; index: number }, Partial<PlotData>[]>
+        cbChartDataByOperation: Map<{ name: string; index: number }, Partial<PlotData>[]>;
         cbMemory: Chunk[];
     } {
         const fragmentation: FragmentationEntry[] = [];
