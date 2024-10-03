@@ -348,7 +348,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             }}
                                         />
                                         {[...cbChartDataByOperation.entries()].map(
-                                            ([deviceOperationName, plotData]) => (
+                                            ([{ name: deviceOperationName }, plotData]) => (
                                                 <>
                                                     <h3 className='circular-buffers-plot-title'>
                                                         <Icon
@@ -525,7 +525,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             <Icon
                                                 className='operation-icon'
                                                 size={13}
-                                                intent={Intent.SUCCESS}
+                                                intent={
+                                                    Intent.SUCCESS
+                                                }
                                                 icon={IconNames.CUBE_ADD}
                                             />
                                             &nbsp;
@@ -555,7 +557,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                                         {deviceOperation.deallocateAll && (
                                             <p style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}>
-                                                deallocate circular buffers
+                                                <Icon
+                                                    className='operation-icon'
+                                                    size={13}
+                                                    intent={Intent.NONE}
+                                                    icon={IconNames.CUBE_REMOVE}
+                                                />
+                                                &nbsp; Deallocate circular buffers
                                             </p>
                                         )}
                                     </Fragment>
