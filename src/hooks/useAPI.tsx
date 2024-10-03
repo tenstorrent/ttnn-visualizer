@@ -50,13 +50,13 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     return operationList;
 };
 
-/** @description
- * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const fetchAllBuffers = async (): Promise<any> => {
+const fetchAllBuffers = async () => {
     const { data: buffers } = await axiosInstance.get('/api/operation-buffers');
+    return buffers;
+};
 
+export const fetchOperationBuffers = async (operationId: number | null) => {
+    const { data: buffers } = await axiosInstance.get(`/api/operation-buffers/${operationId}`);
     return buffers;
 };
 
@@ -71,8 +71,9 @@ export const useOperationsList = () => {
 };
 
 export const useAllBuffers = () => {
-    return useQuery<{ operation_id: number; buffers: [] }[], AxiosError>('get-operation-buffers', fetchAllBuffers);
+    return useQuery<{ id: number; buffers: [] }[], AxiosError>('get-operations-buffers', fetchAllBuffers);
 };
+
 
 export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
