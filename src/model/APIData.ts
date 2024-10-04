@@ -119,12 +119,12 @@ export enum NodeType {
     tensor = 'tensor',
 }
 
-enum DeviceOperationLayoutTypes {
+export enum DeviceOperationLayoutTypes {
     INTERLEAVED = 'INTERLEAVED',
     SINGLE_BANK = 'SINGLE_BANK',
 }
 
-enum DeviceOperationTypes {
+export enum DeviceOperationTypes {
     L1 = 'L1',
     DRAM = 'DRAM',
 }
@@ -151,11 +151,18 @@ export interface Node {
 export interface DeviceOperation {
     name: string;
     cbList: CircularBuffer[];
-    deallocateAll: boolean;
+    bufferList: TensorBuffer[];
+    deallocateCBs: boolean;
+    deallocateBuffers: boolean;
     indentLevel: number; // device ops nesting level indicator
     colorVariance?: number | undefined;
 }
 
 export interface CircularBuffer extends Chunk {
     core_range_set: string;
+}
+
+export interface TensorBuffer extends Chunk {
+    layout: DeviceOperationLayoutTypes;
+    type: DeviceOperationTypes;
 }
