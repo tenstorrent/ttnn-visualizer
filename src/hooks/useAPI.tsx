@@ -20,6 +20,7 @@ import {
 import { BufferType } from '../model/BufferType';
 
 export const fetchActiveReport = async (): Promise<ActiveReport | null> => {
+    // eslint-disable-next-line promise/valid-params
     const response = await axiosInstance.get<ActiveReport>('/api/reports/active').catch();
     return response?.data;
 };
