@@ -48,19 +48,19 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             zeroline: false,
             tickformat: 'd',
             color: 'white',
-            gridcolor: '#999',
+            gridcolor: configuration.gridColour || '#999',
+            side: configuration.xAxis?.side || 'bottom',
         },
         yaxis: {
             range: [0, 1],
             fixedrange: true,
             showgrid: false,
             zeroline: false,
-            showticklabels: false,
         },
         margin: configuration.margin,
 
         paper_bgcolor: 'transparent',
-        plot_bgcolor: 'white',
+        plot_bgcolor: configuration.bgColour || 'white',
         shapes: [
             {
                 type: 'rect',
