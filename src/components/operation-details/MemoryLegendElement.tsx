@@ -76,10 +76,10 @@ export const MemoryLegendElement: React.FC<{
                 {(bufferType || layout) && (
                     <div className='extra-info-slot'>
                         {bufferType && (
-                            <span className='format-numbers monospace'>{DeviceOperationTypes[bufferType]} </span>
+                            <span className='monospace'>{DeviceOperationTypes[bufferType]} </span>
                         )}
                         {layout && (
-                            <span className='format-numbers monospace'>{DeviceOperationLayoutTypes[layout]}</span>
+                            <span className='monospace'>{DeviceOperationLayoutTypes[layout]}</span>
                         )}
                     </div>
                 )}

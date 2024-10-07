@@ -514,7 +514,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             </div>
                         </div>
                         {details.deviceOperations.length > 0 && (
-                            <>
+                            <div className='device-operations'>
                                 <hr />
                                 <h3>Device operations</h3>
 
@@ -602,7 +602,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         )}
                                     </Fragment>
                                 ))}
-                            </>
+                            </div>
                         )}
                         {operation?.arguments && (
                             <>
