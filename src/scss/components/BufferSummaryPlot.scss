@@ -3,20 +3,20 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 @use '../definitions/colours' as *;
 
-$label-width: 40px;
+$label-width: 50px;
 $label-margin: 10px;
-$width-offset: $label-width + $label-margin;
+$width-offset: $label-width;
 
 .buffer-summary-chart {
+    position: relative;
+
     .buffer-summary-plot-container {
         display: flex;
         flex-wrap: nowrap;
         align-items: center;
+        margin-bottom: 10px;
 
         .buffer-summary-plot {
-            width: calc(100% - $width-offset);
-            flex-shrink: 1;
-
             > .memory-plot.js-plotly-plot {
                 vertical-align: top;
                 width: 100%;
@@ -24,23 +24,19 @@ $width-offset: $label-width + $label-margin;
         }
 
         .y-axis-tick {
-            flex-grow: 1;
             width: $label-width;
-            margin-left: $label-margin;
+            padding-right: $label-margin;
             margin-bottom: 0;
+            text-align: right;
+            flex-shrink: 0;
         }
     }
 
-    .buffer-summary-plot-x-axis-container {
+    .buffer-summary-flex-container {
         display: flex;
         flex-direction: column;
-        position: sticky;
-        top: 0;
-        left: 0;
-        z-index: 1;
-        background-color: $tt-background;
 
-        .buffer-summary-plot-x-axis {
+        .buffer-summary-plot {
             width: calc(100% - $width-offset);
 
             > .memory-plot.js-plotly-plot {
@@ -58,7 +54,8 @@ $width-offset: $label-width + $label-margin;
         height: 600px;
         width: 100%;
         overflow-y: auto;
-        position: relative;
+        position: absolute;
+        top: 43px;
 
         &::before,
         &::after {

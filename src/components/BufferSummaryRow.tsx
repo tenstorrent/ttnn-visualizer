@@ -2,9 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import tinycolor from 'tinycolor2';
 import { BufferType } from '../model/BufferType';
 import 'styles/components/BufferSummaryRow.scss';
+import { getBufferColor } from '../functions/colorGenerator';
 
 interface BufferSummaryRowProps {
     buffers: Buffer[];
@@ -35,7 +35,7 @@ function BufferSummaryRow({ buffers, operationId, memorySize }: BufferSummaryRow
                         style={{
                             width: `${size}%`,
                             left: `${position}%`,
-                            backgroundColor: tinycolor.random().toHexString(),
+                            backgroundColor: getBufferColor(buffer.address),
                         }}
                         // Dev debug data
                         data-address={buffer.address}

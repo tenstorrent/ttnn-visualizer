@@ -525,9 +525,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             <Icon
                                                 className='operation-icon'
                                                 size={13}
-                                                intent={
-                                                    Intent.SUCCESS
-                                                }
+                                                intent={Intent.SUCCESS}
                                                 icon={IconNames.CUBE_ADD}
                                             />
                                             &nbsp;

@@ -53,7 +53,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     return operationList;
 };
 
-interface BuffersByOperationData {
+export interface BuffersByOperationData {
     buffers: Buffer[];
     id: number;
 }
