@@ -1,7 +1,6 @@
 import dataclasses
 import json
 import logging
-import sqlite3
 from http import HTTPStatus
 from pathlib import Path
 
@@ -9,7 +8,8 @@ from flask import Blueprint, Response, current_app, request
 
 from ttnn_visualizer.decorators import with_report_path
 from ttnn_visualizer.exceptions import RemoteFolderException
-from ttnn_visualizer.models import StatusMessage, RemoteFolder, RemoteConnection
+from ttnn_visualizer.models import RemoteFolder, RemoteConnection, StatusMessage
+from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.sessions import ActiveReport
 
 from ttnn_visualizer.serializers import (
@@ -25,7 +25,6 @@ from ttnn_visualizer.sftp_operations import (
     get_remote_test_folders,
 )
 from ttnn_visualizer.utils import timer
-from ttnn_visualizer import queries
 
 logger = logging.getLogger(__name__)
 
@@ -36,18 +35,17 @@ api = Blueprint("api", __name__, url_prefix="/api")
 @with_report_path
 @timer
 def operation_list(report_path):
-    with sqlite3.connect(report_path) as conn:
-        cursor = conn.cursor()
-        operations = list(queries.query_operations(cursor))
+    with DatabaseQueries(report_path) as db:
+        operations = list(db.query_operations())
         operations.sort(key=lambda o: o.operation_id)
-        operation_arguments = list(queries.query_operation_arguments(cursor))
-        device_operations = list(queries.query_device_operations(cursor))
-        stack_traces = list(queries.query_stack_traces(cursor))
-        outputs = list(queries.query_output_tensors(cursor))
-        tensors = list(queries.query_tensors(cursor))
-        inputs = list(queries.query_input_tensors(cursor))
-        devices = list(queries.query_devices(cursor))
-        producers_consumers = list(queries.query_producers_consumers(cursor))
+        operation_arguments = list(db.query_operation_arguments())
+        device_operations = list(db.query_device_operations())
+        stack_traces = list(db.query_stack_traces())
+        outputs = list(db.query_output_tensors())
+        tensors = list(db.query_tensors())
+        inputs = list(db.query_input_tensors())
+        devices = list(db.query_devices())
+        producers_consumers = list(db.query_producers_consumers())
 
         return serialize_operations(
             inputs,
@@ -66,39 +64,33 @@ def operation_list(report_path):
 @with_report_path
 @timer
 def operation_detail(operation_id, report_path):
-    with sqlite3.connect(report_path) as conn:
-        cursor = conn.cursor()
-        operation = queries.query_operation_by_id(cursor, operation_id)
+    with DatabaseQueries(report_path) as db:
+        operation = db.query_operation_by_id(operation_id)
 
         if not operation:
             return Response(status=HTTPStatus.NOT_FOUND)
 
-        buffers = queries.query_buffers(cursor, operation_id)
-        operation_arguments = queries.query_operation_arguments_by_operation_id(
-            cursor, operation_id
+        buffers = list(db.query_buffers(operation_id))
+        operation_arguments = list(
+            db.query_operation_arguments_by_operation_id(operation_id)
         )
-        stack_trace = queries.query_stack_trace(cursor, operation_id)
+        stack_trace = db.query_stack_trace(operation_id)
 
-        inputs = list(queries.query_input_tensors_by_operation_id(cursor, operation_id))
-        outputs = list(
-            queries.query_output_tensors_by_operation_id(cursor, operation_id)
-        )
+        inputs = list(db.query_input_tensors_by_operation_id(operation_id))
+        outputs = list(db.query_output_tensors_by_operation_id(operation_id))
         input_tensor_ids = [i.tensor_id for i in inputs]
         output_tensor_ids = [o.tensor_id for o in outputs]
         tensor_ids = input_tensor_ids + output_tensor_ids
-        tensors = list(queries.query_tensors_by_tensor_ids(cursor, tensor_ids))
-        device_operations = queries.query_device_operations_by_operation_id(
-            cursor, operation_id
-        )
+        tensors = list(db.query_tensors_by_tensor_ids(tensor_ids))
+        device_operations = db.query_device_operations_by_operation_id(operation_id)
 
         producers_consumers = list(
             filter(
-                lambda pc: pc.tensor_id in tensor_ids,
-                queries.query_producers_consumers(cursor),
+                lambda pc: pc.tensor_id in tensor_ids, db.query_producers_consumers()
             )
         )
 
-        devices = list(queries.query_devices(cursor))
+        devices = list(db.query_devices())
 
         return serialize_operation(
             buffers,
@@ -147,10 +139,9 @@ def get_config(report_path):
 @with_report_path
 @timer
 def tensors_list(report_path):
-    with sqlite3.connect(report_path) as conn:
-        cursor = conn.cursor()
-        tensors = list(queries.query_tensors(cursor))
-        producers_consumers = list(queries.query_producers_consumers(cursor))
+    with DatabaseQueries(report_path) as db:
+        tensors = list(db.query_tensors())
+        producers_consumers = list(db.query_producers_consumers())
         return serialize_tensors(tensors, producers_consumers)
 
 
@@ -164,9 +155,8 @@ def buffer_detail(report_path):
     if not address or not operation_id:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
-    with sqlite3.connect(report_path) as conn:
-        cursor = conn.cursor()
-        buffer = queries.query_next_buffer(cursor, operation_id, address)
+    with DatabaseQueries(report_path) as db:
+        buffer = db.query_next_buffer(operation_id, address)
         if not buffer:
             return Response(status=HTTPStatus.NOT_FOUND)
         return dataclasses.asdict(buffer)
@@ -176,9 +166,9 @@ def buffer_detail(report_path):
 @with_report_path
 @timer
 def tensor_detail(tensor_id, report_path):
-    with sqlite3.connect(report_path) as conn:
-        cursor = conn.cursor()
-        tensor = queries.query_tensor_by_id(cursor, tensor_id)
+
+    with DatabaseQueries(report_path) as db:
+        tensor = db.query_tensor_by_id(tensor_id)
         if not tensor:
             return Response(status=HTTPStatus.NOT_FOUND)
 

@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
     "flask:start": "PYTHONPATH=backend flask --app ttnn_visualizer.app run -h localhost -p 8000",
+    "flask:test": "PYTHONPATH=backend pytest backend/ttnn_visualizer/tests",
     "flask:start-threaded": "PYTHONPATH=backend flask --app ttnn_visualizer.app run --with-threads -h localhost -p 8000",
     "flask:start-debug": "PYTHONPATH=backend flask --app ttnn_visualizer.app --debug run -h localhost -p 8000",
     "build:wheel": "npm run build && python -m build --wheel",
