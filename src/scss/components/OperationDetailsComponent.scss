@@ -100,6 +100,7 @@
     .device-operations {
         display: inline-flex;
         flex-direction: column;
+        align-items: flex-start;
     }
 
     .device-operation-name {
