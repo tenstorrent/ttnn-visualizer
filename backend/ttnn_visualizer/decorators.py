@@ -2,10 +2,6 @@ from functools import wraps
 from flask import request, abort
 from pathlib import Path
 
-from paramiko import AuthenticationException, SSHException
-from paramiko.ssh_exception import NoValidConnectionsError
-from ttnn_visualizer.remotes import logger, RemoteFolderException, NoProjectsException
-
 
 def with_report_path(func):
     @wraps(func)
@@ -20,3 +16,38 @@ def with_report_path(func):
         return func(*args, **kwargs)
 
     return wrapper
+
+
+from ttnn_visualizer.exceptions import RemoteFolderException, NoProjectsException
+
+
+def remote_exception_handler(func):
+    def remote_handler(*args, **kwargs):
+        from flask import current_app
+
+        from paramiko.ssh_exception import AuthenticationException
+        from paramiko.ssh_exception import NoValidConnectionsError
+        from paramiko.ssh_exception import SSHException
+
+        connection = args[0]
+
+        try:
+            return func(*args, **kwargs)
+        except (AuthenticationException, NoValidConnectionsError, SSHException) as err:
+            error_type = type(err).__name__
+            current_app.logger.error(
+                f"{error_type} while connecting to {connection.host}: {str(err)}"
+            )
+            raise RemoteFolderException(status=500, message=f"{error_type}: {str(err)}")
+        except (FileNotFoundError, IOError) as err:
+            current_app.logger.error(
+                f"Error accessing remote file at {connection.path}: {str(err)}"
+            )
+            raise RemoteFolderException(status=400, message=f"File error: {str(err)}")
+        except NoProjectsException as err:
+            current_app.logger.error(
+                f"No projects found at {connection.path}: {str(err)}"
+            )
+            raise RemoteFolderException(status=400, message=f"No projects: {str(err)}")
+
+    return remote_handler
