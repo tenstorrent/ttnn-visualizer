@@ -37,6 +37,7 @@ function BufferSummaryRow({ buffers, operationId, memorySize }: BufferSummaryRow
                             left: `${position}%`,
                             backgroundColor: tinycolor.random().toHexString(),
                         }}
+                        // Dev debug data
                         data-address={buffer.address}
                         data-size={buffer.size}
                     />

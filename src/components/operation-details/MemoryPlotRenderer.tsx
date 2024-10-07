@@ -47,6 +47,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             fixedrange: true,
             zeroline: false,
             tickformat: 'd',
+            ticks: configuration.xAxis?.ticks || '',
             color: 'white',
             gridcolor: configuration.gridColour || '#999',
             side: configuration.xAxis?.side || 'bottom',

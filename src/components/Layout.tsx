@@ -77,6 +77,14 @@ function Layout() {
                                     active={window.location.pathname === ROUTES.TENSORS}
                                     minimal
                                 />
+
+                                <Button
+                                    text='Buffers'
+                                    disabled={!activeReport?.name}
+                                    onClick={() => handleNavigate(ROUTES.BUFFERS)}
+                                    active={window.location.pathname === ROUTES.BUFFERS}
+                                    minimal
+                                />
                             </Navbar.Group>
 
                             {meta?.report_name && (

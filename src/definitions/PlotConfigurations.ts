@@ -35,7 +35,7 @@ export const CBRenderConfiguration = {
 } as PlotConfiguration;
 
 export const BufferSummaryAxisConfiguration = {
-    height: 15,
+    height: 20,
     margin: {
         l: 0,
         r: 0,
@@ -44,21 +44,10 @@ export const BufferSummaryAxisConfiguration = {
     },
     xAxis: {
         side: 'top',
+        ticks: 'inside',
     },
-    title: '',
     gridColour: '#343434', // $tt-background
     bgColour: '#343434', // $tt-background
-} as PlotConfiguration;
-
-export const BufferSummaryConfiguration = {
-    height: 30,
-    margin: {
-        l: 0,
-        r: 0,
-        b: 0,
-        t: 0,
-    },
-    title: '',
 } as PlotConfiguration;
 
 export interface PlotConfiguration {
@@ -74,6 +63,7 @@ export interface PlotConfiguration {
     bgColour?: string;
     xAxis?: {
         side: 'top' | 'bottom';
+        ticks: 'outside' | 'inside' | '';
     };
 }
 
