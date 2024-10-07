@@ -6,10 +6,10 @@ from pathlib import Path
 
 from flask import Blueprint, Response, current_app, request
 
-from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.decorators import with_report_path
 from ttnn_visualizer.exceptions import RemoteFolderException
-from ttnn_visualizer.models import StatusMessage, RemoteFolder, RemoteConnection
+from ttnn_visualizer.models import RemoteFolder, RemoteConnection, StatusMessage
+from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.sessions import ActiveReport
 
 from ttnn_visualizer.serializers import (

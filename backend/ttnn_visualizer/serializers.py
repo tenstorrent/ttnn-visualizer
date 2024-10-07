@@ -20,7 +20,6 @@ def serialize_operations(
         if hasattr(do, "operation_id")
     }
 
-    producers_consumers_dict = {pc.tensor_id: pc for pc in producers_consumers}
     stack_traces_dict = {st.operation_id: st.stack_trace for st in stack_traces}
 
     arguments_dict = defaultdict(list)
@@ -33,6 +32,7 @@ def serialize_operations(
 
     results = []
     for operation in operations:
+
         inputs = inputs_dict[operation.operation_id]
         outputs = outputs_dict[operation.operation_id]
         arguments = [
@@ -43,18 +43,17 @@ def serialize_operations(
         operation_device_operations = device_operations_dict.get(
             operation.operation_id, []
         )
+        id = operation_data.pop("operation_id", None)
 
         results.append(
             {
                 **operation_data,
+                "id": id,
                 "stack_trace": stack_traces_dict.get(operation.operation_id),
                 "device_operations": operation_device_operations,
                 "arguments": arguments,
                 "inputs": inputs,
                 "outputs": outputs,
-                "producers_consumers": producers_consumers_dict.get(
-                    operation.operation_id, []
-                ),
             }
         )
     return results
@@ -70,6 +69,7 @@ def serialize_inputs_outputs(inputs, outputs, producers_consumers, tensors_dict)
             tensor_dict = dataclasses.asdict(tensor)
             pc = producers_consumers_dict.get(value.tensor_id)
             value_dict = dataclasses.asdict(value)
+            value_dict.pop("tensor_id", None)
             value_dict.update(
                 {
                     "id": tensor_dict.pop("tensor_id"),
@@ -98,7 +98,6 @@ def serialize_operation(
     device_operations,
 ):
     tensors_dict = {t.tensor_id: t for t in tensors}
-    producers_consumers_dict = {pc.tensor_id: pc for pc in producers_consumers}
 
     inputs_dict, outputs_dict = serialize_inputs_outputs(
         inputs, outputs, producers_consumers, tensors_dict
@@ -113,19 +112,18 @@ def serialize_operation(
 
     inputs_data = inputs_dict.get(operation.operation_id)
     outputs_data = outputs_dict.get(operation.operation_id)
+    id = operation_data.pop("operation_id", None)
 
     return {
         **operation_data,
+        "id": id,
         "l1_sizes": l1_sizes,
-        "device_operations": (
-            device_operations.captured_graph if device_operations else []
-        ),
+        "device_operations": device_operations.captured_graph or [],
         "stack_trace": stack_trace.stack_trace if stack_trace else "",
         "buffers": buffer_list,
         "arguments": arguments_data,
         "inputs": inputs_data or [],
         "outputs": outputs_data or [],
-        "producers_consumers": producers_consumers_dict.get(operation.operation_id, []),
     }
 
 
