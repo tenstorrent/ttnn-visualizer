@@ -18,7 +18,6 @@ def with_report_path(func):
     return wrapper
 
 
-from ttnn_visualizer.exceptions import RemoteFolderException, NoProjectsException
 
 
 def remote_exception_handler(func):
@@ -28,7 +27,8 @@ def remote_exception_handler(func):
         from paramiko.ssh_exception import AuthenticationException
         from paramiko.ssh_exception import NoValidConnectionsError
         from paramiko.ssh_exception import SSHException
-
+        from ttnn_visualizer.exceptions import RemoteFolderException, NoProjectsException
+        
         connection = args[0]
 
         try:
