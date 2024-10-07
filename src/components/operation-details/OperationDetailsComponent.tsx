@@ -514,20 +514,18 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             </div>
                         </div>
                         {details.deviceOperations.length > 0 && (
-                            <>
+                            <div className='device-operations'>
                                 <hr />
                                 <h3>Device operations</h3>
 
                                 {details.deviceOperations.map((deviceOperation, index) => (
                                     // eslint-disable-next-line react/no-array-index-key
                                     <Fragment key={deviceOperation.name + index}>
-                                        <h4 style={{ paddingLeft: `${deviceOperation.indentLevel * 2}em` }}>
+                                        <h4 className='device-operation-name' style={{ paddingLeft: `${deviceOperation.indentLevel * 20}px` }}>
                                             <Icon
                                                 className='operation-icon'
                                                 size={13}
-                                                intent={
-                                                    Intent.SUCCESS
-                                                }
+                                                intent={Intent.SUCCESS}
                                                 icon={IconNames.CUBE_ADD}
                                             />
                                             &nbsp;
@@ -536,11 +534,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                                         {deviceOperation.cbList.length > 0 && (
                                             <div
-                                                className={classNames('legend', {
+                                                className={classNames('legend nested-legend', {
                                                     'lengthy-legend': deviceOperation.cbList.length > MAX_LEGEND_LENGTH,
                                                 })}
-                                                style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}
+                                                style={{ marginLeft: `${deviceOperation.indentLevel * 20}px` }}
                                             >
+                                                <h4>CBs</h4>
                                                 {deviceOperation.cbList.map((cb) => (
                                                     <MemoryLegendElement
                                                         chunk={cb}
@@ -555,8 +554,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             </div>
                                         )}
 
-                                        {deviceOperation.deallocateAll && (
-                                            <p style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}>
+                                        {deviceOperation.deallocateCBs && (
+                                            <p className='deallocate-msg' style={{ marginLeft: `${deviceOperation.indentLevel * 20}px` }}>
                                                 <Icon
                                                     className='operation-icon'
                                                     size={13}
@@ -566,9 +565,44 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                                 &nbsp; Deallocate circular buffers
                                             </p>
                                         )}
+
+                                        {deviceOperation.bufferList.length > 0 && (
+                                            <div
+                                                className={classNames('legend nested-legend', {
+                                                    'lengthy-legend':
+                                                        deviceOperation.bufferList.length > MAX_LEGEND_LENGTH,
+                                                })}
+                                                style={{ marginLeft: `${deviceOperation.indentLevel * 20}px` }}
+                                            >
+                                                <h4>Buffer</h4>
+                                                {deviceOperation.bufferList.map((buffer) => (
+                                                    <MemoryLegendElement
+                                                        chunk={buffer}
+                                                        key={buffer.address}
+                                                        memSize={memorySizeL1}
+                                                        selectedTensorAddress={selectedTensorAddress}
+                                                        operationDetails={details}
+                                                        onLegendClick={onLegendClick}
+                                                        bufferType={buffer.type}
+                                                        layout={buffer.layout}
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                        {deviceOperation.deallocateBuffers && (
+                                            <p className='deallocate-msg' style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}>
+                                                <Icon
+                                                    className='operation-icon'
+                                                    size={13}
+                                                    intent={Intent.NONE}
+                                                    icon={IconNames.CUBE_REMOVE}
+                                                />
+                                                &nbsp; Deallocate buffer
+                                            </p>
+                                        )}
                                     </Fragment>
                                 ))}
-                            </>
+                            </div>
                         )}
                         {operation?.arguments && (
                             <>
