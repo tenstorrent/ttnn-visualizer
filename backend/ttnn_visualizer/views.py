@@ -8,24 +8,22 @@ from pathlib import Path
 from flask import Blueprint, Response, current_app, request
 
 from ttnn_visualizer.decorators import with_report_path
+from ttnn_visualizer.exceptions import RemoteFolderException
+from ttnn_visualizer.models import StatusMessage, RemoteFolder, RemoteConnection
 from ttnn_visualizer.sessions import ActiveReport
 
-from ttnn_visualizer.remotes import (
-    RemoteConnection,
-    RemoteFolder,
-    RemoteFolderException,
-    StatusMessage,
-    check_remote_path,
-    get_remote_test_folders,
-    read_remote_file,
-    sync_test_folders,
-)
 from ttnn_visualizer.serializers import (
     serialize_operations,
     serialize_tensors,
     serialize_operation,
 )
 from ttnn_visualizer.sessions import update_tab_session
+from ttnn_visualizer.sftp_operations import (
+    sync_test_folders,
+    read_remote_file,
+    check_remote_path,
+    get_remote_test_folders,
+)
 from ttnn_visualizer.utils import timer
 from ttnn_visualizer import queries
 
