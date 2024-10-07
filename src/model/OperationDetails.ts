@@ -135,19 +135,20 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                         }
                     }
                 }
-                if (node.node_type === NodeType.circular_buffer_deallocate_all) {
-                    const deviceOpNode = deviceOpList.at(-1);
-                    if (deviceOpNode) {
-                        const deviceOp = this.deviceOperations
-                            .slice()
-                            .reverse()
-                            .find((op) => op.name === deviceOpNode.params.name);
-
-                        if (deviceOp) {
-                            deviceOp.deallocateCBs = true;
-                        }
-                    }
-                }
+                // TODO: removing this since it is brittle logic and causes layout issues
+                // if (node.node_type === NodeType.circular_buffer_deallocate_all) {
+                //     const deviceOpNode = deviceOpList.at(-1);
+                //     if (deviceOpNode) {
+                //         const deviceOp = this.deviceOperations
+                //             .slice()
+                //             .reverse()
+                //             .find((op) => op.name === deviceOpNode.params.name);
+                //
+                //         if (deviceOp) {
+                //             deviceOp.deallocateCBs = true;
+                //         }
+                //     }
+                // }
                 if (node.node_type === NodeType.buffer_allocate) {
                     const deviceOpNode = deviceOpList.at(-1);
                     if (deviceOpNode) {
