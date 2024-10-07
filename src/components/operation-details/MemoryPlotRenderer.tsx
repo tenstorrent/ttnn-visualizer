@@ -123,6 +123,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     return (
         <div className={className}>
             {title ? <h3 className='plot-title'>{title}</h3> : null}
+
             <Plot
                 className='memory-plot'
                 data={augmentedChart}

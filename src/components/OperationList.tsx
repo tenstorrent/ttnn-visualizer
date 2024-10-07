@@ -269,7 +269,7 @@ const OperationList = () => {
                                 return (
                                     <li
                                         className='list-item-container'
-                                        key={virtualRow.index}
+                                        key={virtualRow.key}
                                         data-index={virtualRow.index}
                                         ref={virtualizer.measureElement}
                                     >
