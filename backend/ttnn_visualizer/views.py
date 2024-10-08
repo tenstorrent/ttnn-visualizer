@@ -18,6 +18,7 @@ from ttnn_visualizer.serializers import (
     serialize_operation,
     serialize_operation_buffers,
     serialize_operations_buffers,
+    serialize_devices,
 )
 from ttnn_visualizer.sessions import update_tab_session
 from ttnn_visualizer.sftp_operations import (
@@ -211,6 +212,14 @@ def get_operation_buffers(operation_id, report_path):
         if not operation:
             return Response(status=HTTPStatus.NOT_FOUND)
         return serialize_operation_buffers(operation, buffers)
+
+
+@api.route("/devices", methods=["GET"])
+@with_report_path
+def get_devices(report_path):
+    with DatabaseQueries(report_path) as db:
+        devices = list(db.query_devices())
+        return serialize_devices(devices)
 
 
 @api.route(
