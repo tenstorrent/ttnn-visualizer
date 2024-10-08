@@ -197,10 +197,6 @@ def get_operations_buffers(report_path):
 @with_report_path
 def get_operation_buffers(operation_id, report_path):
 
-    target_report_path = getattr(request, "report_path", None)
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
-
     buffer_type = request.args.get("buffer_type", "")
     if buffer_type and str.isdigit(buffer_type):
         buffer_type = int(buffer_type)
