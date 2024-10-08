@@ -88,6 +88,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
 
     useMemo(() => {
         setAugmentedChart(
+            // creating a deep clone of the chart data to avoid mutating the original data
             (JSON.parse(JSON.stringify(chartData)) as Partial<PlotData>[]).map((data, index) => {
                 if (!data?.marker?.color || !data?.x || !chartData?.[index]?.marker) {
                     return data;
