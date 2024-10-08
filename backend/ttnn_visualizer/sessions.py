@@ -1,10 +1,10 @@
-import sqlite3
 import json
+import sqlite3
 import threading
 from pathlib import Path
 from typing import TypedDict, cast
 
-from flask import request, jsonify, g, Request
+from flask import request, g, Request
 
 # Path to the SQLite database for sessions
 DATABASE = "sessions.db"

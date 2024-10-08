@@ -1,5 +1,6 @@
-import unittest
 import sqlite3
+import unittest
+
 from ttnn_visualizer.models import (
     Operation,
     Device,
@@ -10,7 +11,6 @@ from ttnn_visualizer.models import (
     OutputTensor,
     OperationArgument,
     StackTrace,
-    ProducersConsumers,
     BufferPage,
     BufferType,
 )

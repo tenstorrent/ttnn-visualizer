@@ -1,5 +1,5 @@
 import unittest
-from collections import defaultdict
+
 from ttnn_visualizer.models import (
     Operation,
     OperationArgument,

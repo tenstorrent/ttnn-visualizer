@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 
-import multiprocessing
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
+
 from ttnn_visualizer.utils import str_to_bool
 
 # Load dotenv from root directory
