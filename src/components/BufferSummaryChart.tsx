@@ -14,8 +14,8 @@ import BufferSummaryRow from './BufferSummaryRow';
 import { HistoricalTensor, Operation, Tensor } from '../model/Graph';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
-const OPERATION_EL_HEIGHT = 30; // Height in px of each list item
-const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
+const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
+const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
 
 function BufferSummaryChart() {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
@@ -47,6 +47,7 @@ function BufferSummaryChart() {
         count: buffersByOperation?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => scrollElementRef.current,
         estimateSize: () => OPERATION_EL_HEIGHT,
+        overscan: 20,
     });
     const virtualItems = virtualizer.getVirtualItems();
 
