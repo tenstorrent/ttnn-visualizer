@@ -2,18 +2,16 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Link, Outlet, useNavigate } from 'react-router-dom';
-import { Alignment, Button, Classes, Intent, Navbar, Tooltip } from '@blueprintjs/core';
+import { Link, Outlet } from 'react-router-dom';
+import { Classes, Tooltip } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
-import { useQuery } from 'react-query';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
-import { IconNames } from '@blueprintjs/icons';
 import TenstorrentLogo from './TenstorrentLogo';
 import ROUTES from '../definitions/routes';
 import { reportMetaAtom } from '../store/app';
-import { fetchActiveReport } from '../hooks/useAPI';
+import MainNavigation from './MainNavigation';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -24,16 +22,7 @@ const BounceIn = cssTransition({
 });
 
 function Layout() {
-    const navigate = useNavigate();
     const meta = useAtomValue(reportMetaAtom);
-    const { data: activeReport } = useQuery('active_report', {
-        queryFn: fetchActiveReport,
-        initialData: null,
-    });
-
-    const handleNavigate = (path: string) => {
-        navigate(path);
-    };
 
     return (
         <div className={Classes.DARK}>
@@ -62,41 +51,7 @@ function Layout() {
                         </Tooltip>
                     )}
 
-                    <Navbar className='navbar'>
-                        <Navbar.Group align={Alignment.RIGHT}>
-                            <Button
-                                text='Home'
-                                onClick={() => handleNavigate(ROUTES.HOME)}
-                                active={hasMatchingPath(ROUTES.HOME)}
-                                intent={hasMatchingPath(ROUTES.HOME) ? Intent.PRIMARY : Intent.SUCCESS}
-                                icon={IconNames.HOME}
-                                minimal
-                                large
-                            />
-
-                            <Button
-                                text='Operations'
-                                onClick={() => handleNavigate(ROUTES.OPERATIONS)}
-                                active={hasMatchingPath(ROUTES.OPERATIONS)}
-                                intent={hasMatchingPath(ROUTES.OPERATIONS) ? Intent.PRIMARY : Intent.WARNING}
-                                icon={IconNames.CUBE}
-                                disabled={!activeReport?.name}
-                                minimal
-                                large
-                            />
-
-                            <Button
-                                text='Tensors'
-                                onClick={() => handleNavigate(ROUTES.TENSORS)}
-                                active={hasMatchingPath(ROUTES.TENSORS)}
-                                intent={hasMatchingPath(ROUTES.TENSORS) ? Intent.PRIMARY : Intent.DANGER}
-                                icon={IconNames.FLOW_LINEAR}
-                                disabled={!activeReport?.name}
-                                minimal
-                                large
-                            />
-                        </Navbar.Group>
-                    </Navbar>
+                    <MainNavigation />
                 </nav>
             </header>
 
@@ -115,10 +70,6 @@ function Layout() {
             </main>
         </div>
     );
-}
-
-function hasMatchingPath(path: string) {
-    return window.location.pathname === path;
 }
 
 export default Layout;

@@ -12,7 +12,7 @@ interface ListItemProps {
     filterName: string;
     filterQuery: string;
     icon: IconName;
-    iconColour?: string;
+    iconColour?: keyof typeof ICON_COLOURS;
     intent?: Intent;
 }
 

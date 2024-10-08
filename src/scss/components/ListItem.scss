@@ -21,13 +21,13 @@
 
     &.operation-icon {
         .bp5-icon:not([class*="bp5-intent-"]).styled-icon {
-            color: goldenrod;
+            color: $tt-operations;
         }
     }
 
     &.tensor-icon {
         .bp5-icon:not([class*="bp5-intent-"]).styled-icon {
-            color: red;
+            color: $tt-tensors;
         }
     }
 }

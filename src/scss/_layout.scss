@@ -7,43 +7,23 @@
 .app-header {
     padding: 15px;
 
-    // background-color: $tt-grey-3;
-}
+    .nav-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
 
-.nav-container {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+        .tt-logo {
+            // TODO: Sort logo viewbox so we don't have to do this
+            margin: -30px;
+        }
 
-    .tt-logo {
-        // TODO: Sort logo viewbox so we don't have to do this
-        margin: -30px;
+        .report-title {
+            font-size: 12px;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
+            max-width: 300px;
+        }
     }
-
-    .navbar {
-        width: auto;
-        padding-left: 0;
-        padding-right: 0;
-    }
-
-    // .bp5-button {
-    //     &:not([class*="bp5-intent-"]) {
-    //         background-color: transparent;
-    //     }
-
-    //     &.bp5-minimal {
-    //         &:hover {
-    //             background-color: transparent;
-    //             text-decoration: underline;
-    //         }
-    //     }
-    // }
 }
 
-.report-title {
-    font-size: 12px;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
-    max-width: 300px;
-}
