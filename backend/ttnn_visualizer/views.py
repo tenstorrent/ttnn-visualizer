@@ -176,9 +176,6 @@ def buffer_pages(report_path):
     else:
         buffer_type = None
 
-    if not address or not operation_id:
-        return Response(status=HTTPStatus.BAD_REQUEST)
-
     with DatabaseQueries(report_path) as db:
         buffers = list(db.query_buffer_pages(operation_id, address, buffer_type))
         return serialize_buffer_pages(buffers)
