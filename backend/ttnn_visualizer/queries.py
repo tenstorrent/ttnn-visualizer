@@ -157,10 +157,6 @@ class DatabaseQueries:
     ) -> Generator[BufferPage, None, None]:
         cursor = self._get_cursor()
         try:
-            # Check if the buffer_pages table exists
-            if not self._check_table_exists(cursor, "buffer_pages"):
-                return
-
             # noinspection SqlConstantExpression
             query = "SELECT * FROM buffer_pages WHERE 1=1"
             params = []
