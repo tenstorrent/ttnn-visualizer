@@ -58,6 +58,27 @@ export interface BuffersByOperationData {
     id: number;
 }
 
+export interface DeviceData {
+    address_at_first_l1_bank: number;
+    address_at_first_l1_cb_buffer: number;
+    cb_limit: number;
+    device_id: number;
+    l1_bank_size: number;
+    l1_num_banks: number;
+    num_banks_per_storage_core: number;
+    num_compute_cores: number;
+    num_storage_cores: number;
+    num_x_compute_cores: number;
+    num_x_cores: number;
+    num_y_compute_cores: number;
+    num_y_cores: number;
+    total_l1_for_interleaved_buffers: number;
+    total_l1_for_sharded_buffers: number;
+    total_l1_for_tensors: number;
+    total_l1_memory: number;
+    worker_l1_size: number;
+}
+
 /** @description
  * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
  */
@@ -71,11 +92,18 @@ const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersBy
 
 export const fetchOperationBuffers = async (operationId: number | null) => {
     const { data: buffers } = await axiosInstance.get(`/api/operation-buffers/${operationId}`);
+
     return buffers;
 };
 
 const fetchReportMeta = async (): Promise<ReportMetaData> => {
     const { data: meta } = await axiosInstance.get<ReportMetaData>('/api/config');
+
+    return meta;
+};
+
+const fetchDevices = async () => {
+    const { data: meta } = await axiosInstance.get<DeviceData[]>('/api/devices');
 
     return meta;
 };
@@ -163,6 +191,10 @@ export const fetchTensors = async (): Promise<TensorData[]> => {
 
 export const useTensors = () => {
     return useQuery<TensorData[], AxiosError>('get-tensors', fetchTensors);
+};
+
+export const useDevices = () => {
+    return useQuery<DeviceData[], AxiosError>('get-devices', fetchDevices);
 };
 
 export const fetchNextUseOfBuffer = async (address: number | null, consumers: number[]): Promise<BufferData> => {

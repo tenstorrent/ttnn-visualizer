@@ -6,7 +6,7 @@ import { UIEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { BufferSummaryAxisConfiguration } from '../definitions/PlotConfigurations';
-import { BuffersByOperationData, useBuffers, useOperationsList } from '../hooks/useAPI';
+import { BuffersByOperationData, useBuffers, useDevices, useOperationsList } from '../hooks/useAPI';
 import { BufferType } from '../model/BufferType';
 import MemoryPlotRenderer from './operation-details/MemoryPlotRenderer';
 import LoadingSpinner from './LoadingSpinner';
@@ -22,21 +22,14 @@ function BufferSummaryChart() {
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const { data: buffersByOperation, isLoading: isLoadingBuffers } = useBuffers(BufferType.L1);
     const { data: operationsList, isLoading: isLoadingOperations } = useOperationsList();
+    const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const scrollElementRef = useRef(null);
 
     const numberOfOperations =
         buffersByOperation && buffersByOperation.length >= 0 ? buffersByOperation.length : PLACEHOLDER_ARRAY_SIZE;
 
-    const memorySize = useMemo(
-        () =>
-            buffersByOperation
-                ? buffersByOperation
-                      .map((operations) => operations.buffers.map((buffer) => buffer.address + buffer.size))
-                      .flat()
-                      .sort((a, b) => b - a)[0]
-                : 0,
-        [buffersByOperation],
-    );
+    // Will need refactoring to handle multiple devices
+    const memorySize = !isLoadingDevices && devices ? devices[0].worker_l1_size : 0;
 
     const tensorList = useMemo(
         () => createHistoricalTensorList(operationsList, buffersByOperation),
@@ -58,7 +51,7 @@ function BufferSummaryChart() {
         setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
     };
 
-    return buffersByOperation && !isLoadingBuffers && !isLoadingOperations && tensorList ? (
+    return buffersByOperation && !isLoadingBuffers && !isLoadingOperations && !isLoadingDevices && tensorList ? (
         <div className='buffer-summary-chart'>
             <p className='x-axis-label'>Memory Address</p>
 
