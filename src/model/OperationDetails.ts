@@ -109,7 +109,9 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                         indentLevel: deviceOpList.length,
                         name: node.params.name,
                         cbList: [],
-                        deallocateAll: false,
+                        bufferList: [],
+                        deallocateCBs: false,
+                        deallocateBuffers: false,
                     });
                     deviceOpList.push(node);
                 }
@@ -119,7 +121,10 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 if (node.node_type === NodeType.circular_buffer_allocate) {
                     const deviceOpNode = deviceOpList.at(-1);
                     if (deviceOpNode) {
-                        const deviceOp = this.deviceOperations.find((op) => op.name === deviceOpNode.params.name);
+                        const deviceOp = this.deviceOperations
+                            .slice()
+                            .reverse()
+                            .find((op) => op.name === deviceOpNode.params.name);
 
                         if (deviceOp) {
                             deviceOp.cbList.push({
@@ -130,16 +135,52 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                         }
                     }
                 }
-                if (node.node_type === NodeType.circular_buffer_deallocate_all) {
+                // TODO: removing this since it is brittle logic and causes layout issues
+                // if (node.node_type === NodeType.circular_buffer_deallocate_all) {
+                //     const deviceOpNode = deviceOpList.at(-1);
+                //     if (deviceOpNode) {
+                //         const deviceOp = this.deviceOperations
+                //             .slice()
+                //             .reverse()
+                //             .find((op) => op.name === deviceOpNode.params.name);
+                //
+                //         if (deviceOp) {
+                //             deviceOp.deallocateCBs = true;
+                //         }
+                //     }
+                // }
+                if (node.node_type === NodeType.buffer_allocate) {
                     const deviceOpNode = deviceOpList.at(-1);
                     if (deviceOpNode) {
-                        const deviceOp = this.deviceOperations.find((op) => op.name === deviceOpNode.params.name);
+                        const deviceOp = this.deviceOperations
+                            .slice()
+                            .reverse()
+                            .find((op) => op.name === deviceOpNode.params.name);
 
                         if (deviceOp) {
-                            deviceOp.deallocateAll = true;
+                            deviceOp.bufferList.push({
+                                address: parseInt(node.params.address, 10),
+                                size: parseInt(node.params.size, 10),
+                                layout: node.params.layout,
+                                type: node.params.type,
+                            });
                         }
                     }
                 }
+                // TODO: this is incorrect so we wont do it this way, but keeping this for now
+                // if (node.node_type === NodeType.buffer_deallocate) {
+                //     const deviceOpNode = deviceOpList.at(-1);
+                //     if (deviceOpNode) {
+                //         const deviceOp = this.deviceOperations
+                //             .slice()
+                //             .reverse()
+                //             .find((op) => op.name === deviceOpNode.params.name);
+                //
+                //         if (deviceOp) {
+                //             deviceOp.deallocateBuffers = true;
+                //         }
+                //     }
+                // }
             });
         }
     }
@@ -245,7 +286,7 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
         condensed: Chunk;
         condensedChart: Partial<PlotData>[];
         cbChartData: Partial<PlotData>[];
-        cbChartDataByOperation: Map<string, Partial<PlotData>[]>;
+        cbChartDataByOperation: Map<{ name: string; index: number }, Partial<PlotData>[]>;
         cbMemory: Chunk[];
     } {
         const fragmentation: FragmentationEntry[] = [];
@@ -331,11 +372,17 @@ ${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cb
 <extra></extra>`;
 
         const cbChartData = this.getChartData([cbCondensed], { color: cbColor, hovertemplate: cbHoverTemplate });
-        const cbChartDataByOperation: Map<string, Partial<PlotData>[]> = new Map();
+        const cbChartDataByOperation: Map<{ name: string; index: number }, Partial<PlotData>[]> = new Map();
         this.deviceOperations.forEach((op, index) => {
             if (op.cbList.length !== 0) {
                 op.colorVariance = index;
-                cbChartDataByOperation.set(op.name, this.getChartData(op.cbList, { colorVariance: op.colorVariance }));
+                cbChartDataByOperation.set(
+                    {
+                        name: op.name,
+                        index,
+                    },
+                    this.getChartData(op.cbList, { colorVariance: op.colorVariance }),
+                );
             }
         });
 

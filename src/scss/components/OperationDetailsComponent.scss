@@ -97,24 +97,47 @@
         }
     }
 
+    .device-operations {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .device-operation-name {
+        margin-bottom: 4px;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+    }
+
     .legend {
         display: inline-flex;
-        justify-content: space-between;
+        place-content: center space-between;
         margin-bottom: 20px;
         flex-direction: column;
-        row-gap: 5px;
-        background-color: $tt-grey-3;
-        padding: 10px 20px;
+        row-gap: 3px;
+
+        &.nested-legend {
+            padding-left: 18px;
+        }
 
         &.lengthy-legend {
             height: 420px;
             overflow-y: scroll;
         }
 
+        h4 {
+            margin: 0;
+        }
+
         .legend-item {
             display: inline-grid;
             gap: 5px;
             grid-template-columns: 20px 1fr;
+            height: 18px;
+            align-content: center;
+            align-items: center;
+            padding: 0;
 
             &.button {
                 font-size: inherit;
@@ -135,9 +158,13 @@
 
             .legend-details {
                 display: inline-grid;
-                grid-template-columns: 1fr 1.2fr 0.75fr 1fr;
+                grid-template-columns: 0.7fr 1.2fr 0.75fr 1fr;
                 gap: 15px;
                 text-align: left;
+
+                &.extra-info {
+                    grid-template-columns: 0.7fr 1.2fr 0.75fr 1fr 2fr;
+                }
 
                 .format-numbers {
                     text-align: right;
@@ -262,5 +289,10 @@
     .no-buffer-type-selected {
         margin-top: 20px;
         margin-bottom: 0;
+    }
+
+    .deallocate-msg {
+        margin-top: -18px;
+        padding-left: 18px;
     }
 }

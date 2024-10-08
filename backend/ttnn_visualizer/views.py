@@ -1,73 +1,51 @@
 import dataclasses
 import json
 import logging
-import sqlite3
 from http import HTTPStatus
 from pathlib import Path
 
 from flask import Blueprint, Response, current_app, request
 
+from ttnn_visualizer.decorators import with_report_path
+from ttnn_visualizer.exceptions import RemoteFolderException
+from ttnn_visualizer.models import RemoteFolder, RemoteConnection, StatusMessage
+from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.sessions import ActiveReport
 
-from ttnn_visualizer.remotes import (
-    RemoteConnection,
-    RemoteFolder,
-    RemoteFolderException,
-    StatusMessage,
-    check_remote_path,
-    get_remote_test_folders,
-    read_remote_file,
-    sync_test_folders,
-)
 from ttnn_visualizer.serializers import (
     serialize_operations,
     serialize_tensors,
     serialize_operation,
 )
 from ttnn_visualizer.sessions import update_tab_session
+from ttnn_visualizer.sftp_operations import (
+    sync_test_folders,
+    read_remote_file,
+    check_remote_path,
+    get_remote_test_folders,
+)
 from ttnn_visualizer.utils import timer
-from ttnn_visualizer import queries
 
 logger = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
 
-@api.route("/up", methods=["GET", "POST"])
-def health_check():
-    return Response(status=HTTPStatus.OK)
-
-
-@api.route("/reports/active", methods=["GET"])
-def get_active_folder():
-    # Used to gate UI functions if no report is active
-    if hasattr(request, "tab_session_data"):
-        active_report = request.tab_session_data.get("active_report", None)
-        if active_report:
-            return active_report
-    return {"name": None, "host": None}
-
-
 @api.route("/operations", methods=["GET"])
+@with_report_path
 @timer
-def operation_list():
-    target_report_path = getattr(request, "report_path", None)
-
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
-
-    with sqlite3.connect(target_report_path) as conn:
-        cursor = conn.cursor()
-        operations = list(queries.query_operations(cursor))
+def operation_list(report_path):
+    with DatabaseQueries(report_path) as db:
+        operations = list(db.query_operations())
         operations.sort(key=lambda o: o.operation_id)
-        operation_arguments = list(queries.query_operation_arguments(cursor))
-        device_operations = list(queries.query_device_operations(cursor))
-        stack_traces = list(queries.query_stack_traces(cursor))
-        outputs = list(queries.query_output_tensors(cursor))
-        tensors = list(queries.query_tensors(cursor))
-        inputs = list(queries.query_input_tensors(cursor))
-        devices = list(queries.query_devices(cursor))
-        producers_consumers = list(queries.query_producers_consumers(cursor))
+        operation_arguments = list(db.query_operation_arguments())
+        device_operations = list(db.query_device_operations())
+        stack_traces = list(db.query_stack_traces())
+        outputs = list(db.query_output_tensors())
+        tensors = list(db.query_tensors())
+        inputs = list(db.query_input_tensors())
+        devices = list(db.query_devices())
+        producers_consumers = list(db.query_producers_consumers())
 
         return serialize_operations(
             inputs,
@@ -83,48 +61,36 @@ def operation_list():
 
 
 @api.route("/operations/<operation_id>", methods=["GET"])
+@with_report_path
 @timer
-def operation_detail(
-    operation_id,
-):
-    target_report_path = getattr(request, "report_path", None)
-
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
-
-    with sqlite3.connect(target_report_path) as conn:
-        cursor = conn.cursor()
-        operation = queries.query_operation_by_id(cursor, operation_id)
+def operation_detail(operation_id, report_path):
+    with DatabaseQueries(report_path) as db:
+        operation = db.query_operation_by_id(operation_id)
 
         if not operation:
             return Response(status=HTTPStatus.NOT_FOUND)
 
-        buffers = queries.query_buffers(cursor, operation_id)
-        operation_arguments = queries.query_operation_arguments_by_operation_id(
-            cursor, operation_id
+        buffers = list(db.query_buffers(operation_id))
+        operation_arguments = list(
+            db.query_operation_arguments_by_operation_id(operation_id)
         )
-        stack_trace = queries.query_stack_trace(cursor, operation_id)
+        stack_trace = db.query_stack_trace(operation_id)
 
-        inputs = list(queries.query_input_tensors_by_operation_id(cursor, operation_id))
-        outputs = list(
-            queries.query_output_tensors_by_operation_id(cursor, operation_id)
-        )
+        inputs = list(db.query_input_tensors_by_operation_id(operation_id))
+        outputs = list(db.query_output_tensors_by_operation_id(operation_id))
         input_tensor_ids = [i.tensor_id for i in inputs]
         output_tensor_ids = [o.tensor_id for o in outputs]
         tensor_ids = input_tensor_ids + output_tensor_ids
-        tensors = list(queries.query_tensors_by_tensor_ids(cursor, tensor_ids))
-        device_operations = queries.query_device_operations_by_operation_id(
-            cursor, operation_id
-        )
+        tensors = list(db.query_tensors_by_tensor_ids(tensor_ids))
+        device_operations = db.query_device_operations_by_operation_id(operation_id)
 
         producers_consumers = list(
             filter(
-                lambda pc: pc.tensor_id in tensor_ids,
-                queries.query_producers_consumers(cursor),
+                lambda pc: pc.tensor_id in tensor_ids, db.query_producers_consumers()
             )
         )
 
-        devices = list(queries.query_devices(cursor))
+        devices = list(db.query_devices())
 
         return serialize_operation(
             buffers,
@@ -146,14 +112,12 @@ def operation_detail(
         "GET",
     ],
 )
-def operation_history():
-
-    target_report_path = getattr(request, "report_path", None)
+@with_report_path
+@timer
+def operation_history(report_path):
 
     operation_history_filename = "operation_history.json"
-    operation_history_file = (
-        Path(target_report_path).parent / operation_history_filename
-    )
+    operation_history_file = Path(report_path).parent / operation_history_filename
     if not operation_history_file.exists():
         return []
     with open(operation_history_file, "r") as file:
@@ -161,13 +125,10 @@ def operation_history():
 
 
 @api.route("/config")
-def get_config():
-
-    target_report_path = getattr(request, "report_path", None)
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
-
-    config_file = Path(target_report_path).parent.joinpath("config.json")
+@with_report_path
+@timer
+def get_config(report_path):
+    config_file = Path(report_path).parent.joinpath("config.json")
     if not config_file.exists():
         return {}
     with open(config_file, "r") as file:
@@ -175,50 +136,39 @@ def get_config():
 
 
 @api.route("/tensors", methods=["GET"])
+@with_report_path
 @timer
-def tensors_list():
-    target_report_path = getattr(request, "report_path", None)
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
-
-    with sqlite3.connect(target_report_path) as conn:
-        cursor = conn.cursor()
-        tensors = list(queries.query_tensors(cursor))
-        producers_consumers = list(queries.query_producers_consumers(cursor))
+def tensors_list(report_path):
+    with DatabaseQueries(report_path) as db:
+        tensors = list(db.query_tensors())
+        producers_consumers = list(db.query_producers_consumers())
         return serialize_tensors(tensors, producers_consumers)
 
 
 @api.route("/buffer", methods=["GET"])
+@with_report_path
 @timer
-def buffer_detail():
+def buffer_detail(report_path):
     address = request.args.get("address")
     operation_id = request.args.get("operation_id")
 
     if not address or not operation_id:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
-    target_report_path = getattr(request, "report_path", None)
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
-
-    with sqlite3.connect(target_report_path) as conn:
-        cursor = conn.cursor()
-        buffer = queries.query_next_buffer(cursor, operation_id, address)
+    with DatabaseQueries(report_path) as db:
+        buffer = db.query_next_buffer(operation_id, address)
         if not buffer:
             return Response(status=HTTPStatus.NOT_FOUND)
         return dataclasses.asdict(buffer)
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
+@with_report_path
 @timer
-def tensor_detail(tensor_id):
-    target_report_path = getattr(request, "report_path", None)
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
+def tensor_detail(tensor_id, report_path):
 
-    with sqlite3.connect(target_report_path) as conn:
-        cursor = conn.cursor()
-        tensor = queries.query_tensor_by_id(cursor, tensor_id)
+    with DatabaseQueries(report_path) as db:
+        tensor = db.query_tensor_by_id(tensor_id)
         if not tensor:
             return Response(status=HTTPStatus.NOT_FOUND)
 
@@ -341,3 +291,18 @@ def use_remote_folder():
 
     update_tab_session({"active_report": active_report})
     return Response(status=HTTPStatus.OK)
+
+
+@api.route("/up", methods=["GET", "POST"])
+def health_check():
+    return Response(status=HTTPStatus.OK)
+
+
+@api.route("/reports/active", methods=["GET"])
+def get_active_folder():
+    # Used to gate UI functions if no report is active
+    if hasattr(request, "tab_session_data"):
+        active_report = request.tab_session_data.get("active_report", None)
+        if active_report:
+            return active_report
+    return {"name": None, "host": None}
