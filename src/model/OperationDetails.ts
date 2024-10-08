@@ -109,7 +109,9 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                         indentLevel: deviceOpList.length,
                         name: node.params.name,
                         cbList: [],
-                        deallocateAll: false,
+                        bufferList: [],
+                        deallocateCBs: false,
+                        deallocateBuffers: false,
                     });
                     deviceOpList.push(node);
                 }
@@ -133,7 +135,21 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                         }
                     }
                 }
-                if (node.node_type === NodeType.circular_buffer_deallocate_all) {
+                // TODO: removing this since it is brittle logic and causes layout issues
+                // if (node.node_type === NodeType.circular_buffer_deallocate_all) {
+                //     const deviceOpNode = deviceOpList.at(-1);
+                //     if (deviceOpNode) {
+                //         const deviceOp = this.deviceOperations
+                //             .slice()
+                //             .reverse()
+                //             .find((op) => op.name === deviceOpNode.params.name);
+                //
+                //         if (deviceOp) {
+                //             deviceOp.deallocateCBs = true;
+                //         }
+                //     }
+                // }
+                if (node.node_type === NodeType.buffer_allocate) {
                     const deviceOpNode = deviceOpList.at(-1);
                     if (deviceOpNode) {
                         const deviceOp = this.deviceOperations
@@ -142,10 +158,29 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                             .find((op) => op.name === deviceOpNode.params.name);
 
                         if (deviceOp) {
-                            deviceOp.deallocateAll = true;
+                            deviceOp.bufferList.push({
+                                address: parseInt(node.params.address, 10),
+                                size: parseInt(node.params.size, 10),
+                                layout: node.params.layout,
+                                type: node.params.type,
+                            });
                         }
                     }
                 }
+                // TODO: this is incorrect so we wont do it this way, but keeping this for now
+                // if (node.node_type === NodeType.buffer_deallocate) {
+                //     const deviceOpNode = deviceOpList.at(-1);
+                //     if (deviceOpNode) {
+                //         const deviceOp = this.deviceOperations
+                //             .slice()
+                //             .reverse()
+                //             .find((op) => op.name === deviceOpNode.params.name);
+                //
+                //         if (deviceOp) {
+                //             deviceOp.deallocateBuffers = true;
+                //         }
+                //     }
+                // }
             });
         }
     }
