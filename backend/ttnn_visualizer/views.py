@@ -180,9 +180,6 @@ def tensor_detail(tensor_id, report_path):
 @api.route("/operation-buffers", methods=["GET"])
 @with_report_path
 def get_operations_buffers(report_path):
-    target_report_path = getattr(request, "report_path", None)
-    if not target_report_path or not Path(target_report_path).exists():
-        return Response(status=HTTPStatus.BAD_REQUEST)
 
     buffer_type = request.args.get("buffer_type", "")
     if buffer_type and str.isdigit(buffer_type):
