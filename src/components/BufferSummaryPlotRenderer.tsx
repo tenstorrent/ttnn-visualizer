@@ -128,6 +128,7 @@ function BufferSummaryPlotRenderer() {
 }
 
 // Modified from 'createHitoricalTensorList' function in OperationDetails.ts
+// TODO: Refactor to optimise historical tensor lookup
 function createHistoricalTensorList(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
     const tensorsByBufferAddress: Map<number, HistoricalTensor> = new Map();
 
