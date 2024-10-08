@@ -23,6 +23,7 @@ const BounceIn = cssTransition({
 });
 
 function Layout() {
+    const appVersion = import.meta.env.APP_VERSION; // Access the version from Vite
     const navigate = useNavigate();
     const meta = useAtomValue(reportMetaAtom);
     const { data: activeReport } = useQuery('active_report', {
@@ -44,13 +45,14 @@ function Layout() {
             </Helmet>
 
             <header className='app-header'>
-                <nav className='nav-container'>
+                <nav className="nav-container">
                     <Link
-                        className='tt-logo'
+                        className="tt-logo"
                         to={ROUTES.HOME}
                     >
                         <TenstorrentLogo />
                     </Link>
+                    <p>{appVersion}</p>
 
                     <Navbar>
                         <>
