@@ -144,7 +144,7 @@ def serialize_operations_buffers(operations, buffers):
 
     results = []
     for operation in operations:
-        operation_buffers = buffer_dict.get(operation.operation_id)
+        operation_buffers = buffer_dict.get(operation.operation_id, [])
         results.append(serialize_operation_buffers(operation, operation_buffers))
     return results
 
