@@ -14,8 +14,8 @@ import BufferSummaryRow from './BufferSummaryRow';
 import { HistoricalTensor, Operation, Tensor } from '../model/Graph';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
-const OPERATION_EL_HEIGHT = 30;
-const TOTAL_SHADE_HEIGHT = 0;
+const OPERATION_EL_HEIGHT = 30; // Height in px of each list item
+const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
 
 function BufferSummaryChart() {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
@@ -24,11 +24,8 @@ function BufferSummaryChart() {
     const { data: operationsList, isLoading: isLoadingOperations } = useOperationsList();
     const scrollElementRef = useRef(null);
 
-    const numberOfOperations = useMemo(
-        () =>
-            buffersByOperation && buffersByOperation.length >= 0 ? buffersByOperation.length : PLACEHOLDER_ARRAY_SIZE,
-        [buffersByOperation],
-    );
+    const numberOfOperations =
+        buffersByOperation && buffersByOperation.length >= 0 ? buffersByOperation.length : PLACEHOLDER_ARRAY_SIZE;
 
     const memorySize = useMemo(
         () =>
@@ -50,7 +47,6 @@ function BufferSummaryChart() {
         count: buffersByOperation?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => scrollElementRef.current,
         estimateSize: () => OPERATION_EL_HEIGHT,
-        overscan: 20,
     });
     const virtualItems = virtualizer.getVirtualItems();
 
@@ -63,9 +59,9 @@ function BufferSummaryChart() {
 
     return buffersByOperation && !isLoadingBuffers && !isLoadingOperations && tensorList ? (
         <div className='buffer-summary-chart'>
-            <div className='buffer-summary-flex-container'>
-                <p className='x-axis-label'>Memory Address</p>
+            <p className='x-axis-label'>Memory Address</p>
 
+            <div className='chart-position'>
                 <MemoryPlotRenderer
                     className='buffer-summary-plot'
                     chartDataList={[
@@ -85,49 +81,49 @@ function BufferSummaryChart() {
                     memorySize={memorySize}
                     configuration={BufferSummaryAxisConfiguration}
                 />
+            </div>
 
+            <div
+                className={classNames('scrollable-element', {
+                    'scroll-shade-top': hasScrolledFromTop,
+                    'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
+                })}
+                onScroll={(event) => handleUserScrolling(event)}
+                ref={scrollElementRef}
+            >
                 <div
-                    className={classNames('scrollable-element', {
-                        'scroll-shade-top': hasScrolledFromTop,
-                        'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
-                    })}
-                    onScroll={(event) => handleUserScrolling(event)}
-                    ref={scrollElementRef}
+                    style={{
+                        // Div is sized to the maximum required to render all list items minus our shade element heights
+                        height: virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT,
+                    }}
                 >
                     <div
+                        className='list-container'
                         style={{
-                            // Div is sized to the maximum required to render all list items minus our shade element heights
-                            height: virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT,
+                            // Tracks scroll position
+                            transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
                         }}
                     >
-                        <div
-                            className='list-container'
-                            style={{
-                                // Tracks scroll position
-                                transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
-                            }}
-                        >
-                            {virtualItems.map((virtualRow) => {
-                                const operation = buffersByOperation[virtualRow.index];
+                        {virtualItems.map((virtualRow) => {
+                            const operation = buffersByOperation[virtualRow.index];
 
-                                return (
-                                    <div
-                                        className='buffer-summary-plot-container'
-                                        key={virtualRow.key}
-                                        data-index={virtualRow.index}
-                                        ref={virtualizer.measureElement}
-                                    >
-                                        <BufferSummaryRow
-                                            buffers={operation.buffers}
-                                            operationId={operation.id}
-                                            memorySize={memorySize}
-                                        />
+                            return (
+                                <div
+                                    className='buffer-summary-plot-container'
+                                    key={virtualRow.key}
+                                    data-index={virtualRow.index}
+                                    ref={virtualizer.measureElement}
+                                >
+                                    <BufferSummaryRow
+                                        buffers={operation.buffers}
+                                        operationId={operation.id}
+                                        memorySize={memorySize}
+                                    />
 
-                                        <p className='y-axis-tick'>{operation.id}</p>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                                    <p className='y-axis-tick'>{operation.id}</p>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
@@ -137,6 +133,7 @@ function BufferSummaryChart() {
     );
 }
 
+// Modified from 'createHitoricalTensorList' function in OperationDetails.ts
 function createHistoricalTensorList(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
     const tensorsByBufferAddress: Map<number, HistoricalTensor> = new Map();
 

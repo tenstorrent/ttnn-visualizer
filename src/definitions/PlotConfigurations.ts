@@ -35,7 +35,7 @@ export const CBRenderConfiguration = {
 } as PlotConfiguration;
 
 export const BufferSummaryAxisConfiguration = {
-    height: 600,
+    height: 615,
     margin: {
         l: 0,
         r: 0,

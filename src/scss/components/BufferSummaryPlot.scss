@@ -6,22 +6,37 @@
 $label-width: 50px;
 $label-margin: 10px;
 $width-offset: $label-width;
+$height-offset: 15px;
 
 .buffer-summary-chart {
-    position: relative;
+    margin-bottom: $height-offset * 2;
+
+    .chart-position {
+        position: relative;
+    }
+
+    .buffer-summary-plot {
+        width: calc(100% - $width-offset);
+        position: absolute;
+        top: 0;
+        left: 0;
+
+        > .memory-plot.js-plotly-plot {
+            vertical-align: top;
+            width: 100%;
+        }
+    }
+
+    .x-axis-label {
+        width: calc(100% - $width-offset);
+        text-align: center;
+    }
 
     .buffer-summary-plot-container {
         display: flex;
         flex-wrap: nowrap;
         align-items: center;
-        margin-bottom: 10px;
-
-        .buffer-summary-plot {
-            > .memory-plot.js-plotly-plot {
-                vertical-align: top;
-                width: 100%;
-            }
-        }
+        padding-bottom: 10px;
 
         .y-axis-tick {
             width: $label-width;
@@ -32,30 +47,12 @@ $width-offset: $label-width;
         }
     }
 
-    .buffer-summary-flex-container {
-        display: flex;
-        flex-direction: column;
-
-        .buffer-summary-plot {
-            width: calc(100% - $width-offset);
-
-            > .memory-plot.js-plotly-plot {
-                vertical-align: top;
-                width: 100%;
-            }
-        }
-
-        .x-axis-label {
-            text-align: center;
-        }
-    }
-
     .scrollable-element {
         height: 600px;
         width: 100%;
         overflow-y: auto;
-        position: absolute;
-        top: 43px;
+        position: relative;
+        top: $height-offset;
 
         &::before,
         &::after {
