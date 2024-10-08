@@ -8,7 +8,7 @@ import { useEffect } from 'react';
 import { useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom } from '../store/app';
 import 'styles/components/BufferSummaryPlot.scss';
-import BufferSummaryChart from '../components/BufferSummaryChart';
+import BufferSummaryPlotRenderer from '../components/BufferSummaryPlotRenderer';
 
 export default function BufferSummary() {
     const report = useReportMeta();
@@ -25,7 +25,7 @@ export default function BufferSummary() {
         <>
             <Helmet title='Buffer summary' />
 
-            <BufferSummaryChart />
+            <BufferSummaryPlotRenderer />
             {/*
             <table>
                 <tbody>

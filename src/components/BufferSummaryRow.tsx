@@ -37,9 +37,6 @@ function BufferSummaryRow({ buffers, operationId, memorySize }: BufferSummaryRow
                             left: `${position}%`,
                             backgroundColor: getBufferColor(buffer.address),
                         }}
-                        // Dev debug data
-                        data-address={buffer.address}
-                        data-size={buffer.size}
                     />
                 );
             })}

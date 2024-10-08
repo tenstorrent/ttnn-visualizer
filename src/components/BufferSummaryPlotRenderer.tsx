@@ -17,7 +17,7 @@ const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
 
-function BufferSummaryChart() {
+function BufferSummaryPlotRenderer() {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const { data: buffersByOperation, isLoading: isLoadingBuffers } = useBuffers(BufferType.L1);
@@ -177,4 +177,4 @@ function createHistoricalTensorList(operations?: Operation[], buffersByOperation
     return tensorsByBufferAddress;
 }
 
-export default BufferSummaryChart;
+export default BufferSummaryPlotRenderer;

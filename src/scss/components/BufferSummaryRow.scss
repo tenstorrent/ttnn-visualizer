@@ -8,6 +8,7 @@
     height: 20px;
     position: relative;
     flex-shrink: 1;
+    overflow: hidden; // Prevents the buffer data from overflowing the row when a buffer is questionably large
 
     .buffer-data {
         height: 100%;
