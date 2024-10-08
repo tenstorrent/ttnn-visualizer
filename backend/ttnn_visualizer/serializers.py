@@ -136,6 +136,10 @@ def serialize_operation_buffers(operation, operation_buffers):
     return {"id": operation.operation_id, "buffers": list(buffer_data)}
 
 
+def serialize_devices(devices):
+    return [dataclasses.asdict(d) for d in devices]
+
+
 def serialize_operations_buffers(operations, buffers):
 
     buffer_dict = defaultdict(list)
