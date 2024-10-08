@@ -1,0 +1,59 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
+@use 'styles/definitions/colours' as *;
+
+@mixin button-styles($color, $colorActive, $icon) {
+    color: $color;
+
+    .bp5-icon.bp5-icon-#{$icon} {
+        color: $color;
+    }
+
+    &.bp5-minimal {
+        &:hover {
+            background-color: rgba($color, 0.2);
+            color: $color;
+        }
+
+        &.bp5-active {
+            color: $colorActive;
+            background-color: rgba($color, 0.3);
+
+            .bp5-icon.bp5-icon-#{$icon} {
+                color: $colorActive;
+            }
+        }
+    }
+}
+
+.navbar {
+    width: auto;
+    padding-left: 0;
+    padding-right: 0;
+
+    .bp5-navbar-group {
+        gap: 3px; // avoids focus ring overlap
+    }
+
+    .bp5-button {
+        &.home-button {
+            @include button-styles($tt-home, $tt-home-active, 'home');
+        }
+
+        &.operations-button {
+            @include button-styles($tt-operations, $tt-operations-active, 'cube');
+        }
+
+        &.tensors-button {
+            @include button-styles($tt-tensors, $tt-tensors-active, 'flow-linear');
+        }
+
+        &.buffers-button {
+            @include button-styles($tt-tensors, $tt-tensors-active, 'flow-linear');
+        }
+    }
+}
+
+

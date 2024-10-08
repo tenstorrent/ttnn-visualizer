@@ -75,12 +75,8 @@ export const MemoryLegendElement: React.FC<{
                 </div>
                 {(bufferType || layout) && (
                     <div className='extra-info-slot'>
-                        {bufferType && (
-                            <span className='monospace'>{DeviceOperationTypes[bufferType]} </span>
-                        )}
-                        {layout && (
-                            <span className='monospace'>{DeviceOperationLayoutTypes[layout]}</span>
-                        )}
+                        {bufferType && <span className='monospace'>{DeviceOperationTypes[bufferType]} </span>}
+                        {layout && <span className='monospace'>{DeviceOperationLayoutTypes[layout]}</span>}
                     </div>
                 )}
             </div>
