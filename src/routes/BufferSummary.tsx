@@ -26,14 +26,14 @@ export default function BufferSummary() {
             <Helmet title='Buffer summary' />
 
             <BufferSummaryChart />
-
+            {/*
             <table>
                 <tbody>
                     <tr>
                         <th>BufferSummaryTable goes here</th>
                     </tr>
                 </tbody>
-            </table>
+            </table> */}
         </>
     );
 }
