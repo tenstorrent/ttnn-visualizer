@@ -12,12 +12,14 @@ from ttnn_visualizer.models import (
     DeviceOperation,
     Buffer,
     BufferType,
+    BufferPage,
 )
 from ttnn_visualizer.serializers import (
     serialize_operations,
     serialize_inputs_outputs,
     serialize_operation,
     serialize_tensors,
+    serialize_buffer_pages,
 )
 
 
@@ -268,6 +270,69 @@ class TestSerializers(unittest.TestCase):
                 }
             ],
             "stack_trace": "trace1",
+        }
+
+        self.assertEqual(result, expected)
+
+    def test_serialize_buffer_pages(self):
+        buffer_pages = [
+            BufferPage(
+                operation_id=1,
+                device_id=1,
+                address=1234,
+                core_y=0,
+                core_x=0,
+                bank_id=1,
+                page_index=0,
+                page_address=1000,
+                page_size=4096,
+                buffer_type=BufferType.DRAM,
+            ),
+            BufferPage(
+                operation_id=2,
+                device_id=2,
+                address=5678,
+                core_y=1,
+                core_x=1,
+                bank_id=2,
+                page_index=1,
+                page_address=2000,
+                page_size=8192,
+                buffer_type=BufferType.L1,
+            ),
+        ]
+
+        result = serialize_buffer_pages(buffer_pages)
+
+        expected = {
+            "buffer_pages": [
+                {
+                    "operation_id": 1,
+                    "device_id": 1,
+                    "address": 1234,
+                    "core_y": 0,
+                    "core_x": 0,
+                    "bank_id": 1,
+                    "page_index": 0,
+                    "page_address": 1000,
+                    "page_size": 4096,
+                    "buffer_type": 0,
+                    "id": "1_0",
+                },
+                {
+                    "operation_id": 2,
+                    "device_id": 2,
+                    "address": 5678,
+                    "core_y": 1,
+                    "core_x": 1,
+                    "bank_id": 2,
+                    "page_index": 1,
+                    "page_address": 2000,
+                    "page_size": 8192,
+                    "buffer_type": 1,
+                    "id": "2_1",
+                },
+            ]
         }
 
         self.assertEqual(result, expected)

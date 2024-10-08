@@ -87,9 +87,8 @@ def serialize_inputs_outputs(inputs, outputs, producers_consumers, tensors_dict)
     return inputs_dict, outputs_dict
 
 
-def serialize_buffer_pages(buffer_pages, devices):
+def serialize_buffer_pages(buffer_pages):
     # Collect device-specific data if needed
-    l1_sizes = [d.worker_l1_size for d in devices]
 
     # Serialize each buffer page to a dictionary using dataclasses.asdict
     buffer_pages_list = [dataclasses.asdict(page) for page in buffer_pages]
@@ -107,7 +106,6 @@ def serialize_buffer_pages(buffer_pages, devices):
 
     return {
         "buffer_pages": buffer_pages_list,
-        "l1_sizes": l1_sizes,
     }
 
 

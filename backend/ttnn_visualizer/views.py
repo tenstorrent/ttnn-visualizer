@@ -181,8 +181,7 @@ def buffer_pages(report_path):
 
     with DatabaseQueries(report_path) as db:
         buffers = list(db.query_buffer_pages(operation_id, address, buffer_type))
-        devices = list(db.query_devices())
-        return serialize_buffer_pages(buffers, devices)
+        return serialize_buffer_pages(buffers)
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
