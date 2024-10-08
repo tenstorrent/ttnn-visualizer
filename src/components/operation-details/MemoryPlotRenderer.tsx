@@ -10,7 +10,7 @@ export interface MemoryPlotRendererProps {
     chartDataList: Partial<PlotData>[][];
     isZoomedIn: boolean;
     memorySize: number;
-    title: string;
+    title?: string;
     onBufferClick?: (event: Readonly<PlotMouseEventCustom>) => void;
     plotZoomRange?: [start: number, end: number];
     className?: string;
@@ -48,19 +48,19 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             zeroline: false,
             tickformat: 'd',
             color: 'white',
-            gridcolor: '#999',
+            gridcolor: configuration.gridColour || '#999',
+            side: configuration.xAxis?.side || 'bottom',
         },
         yaxis: {
             range: [0, 1],
             fixedrange: true,
             showgrid: false,
             zeroline: false,
-            showticklabels: false,
         },
         margin: configuration.margin,
 
         paper_bgcolor: 'transparent',
-        plot_bgcolor: 'white',
+        plot_bgcolor: configuration.bgColour || 'white',
         shapes: [
             {
                 type: 'rect',
@@ -84,6 +84,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
         displayModeBar: false,
         displaylogo: false,
         staticPlot: onBufferClick === undefined,
+        responsive: true,
     };
 
     useMemo(() => {
@@ -122,7 +123,8 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
 
     return (
         <div className={className}>
-            <h3 className='plot-title'>{title}</h3>
+            {title ? <h3 className='plot-title'>{title}</h3> : null}
+
             <Plot
                 className='memory-plot'
                 data={augmentedChart}

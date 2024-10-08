@@ -51,7 +51,7 @@
         }
 
         &.buffers-button {
-            @include button-styles($tt-tensors, $tt-tensors-active, 'flow-linear');
+            @include button-styles($tt-buffers, $tt-buffers-active, 'small-square');
         }
     }
 }

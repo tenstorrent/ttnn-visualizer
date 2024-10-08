@@ -22,6 +22,13 @@ export interface BufferData {
     next_usage?: number;
 }
 
+export interface Buffer {
+    address: number;
+    buffer_type: number;
+    device_id: number;
+    size: number;
+}
+
 export interface OperationDetailsData extends Operation {
     id: number;
     inputs: TensorData[];

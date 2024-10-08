@@ -56,16 +56,16 @@ function MainNavigation() {
                     className='tensors-button'
                 />
 
-                {/* <Button
+                <Button
                     text='Buffers'
-                    // onClick={() => handleNavigate(ROUTES.BUFFERS)}
-                    // active={window.location.pathname === ROUTES.BUFFERS}
-                    icon={IconNames.FLOW_LINEAR}
+                    onClick={() => handleNavigate(ROUTES.BUFFERS)}
+                    active={window.location.pathname === ROUTES.BUFFERS}
+                    icon={IconNames.SMALL_SQUARE}
                     disabled={!activeReport?.name}
                     minimal
                     large
                     className='buffers-button'
-                /> */}
+                />
             </Navbar.Group>
         </Navbar>
     );
