@@ -11,6 +11,8 @@ from ttnn_visualizer.models import (
     OperationArgument,
     StackTrace,
     ProducersConsumers,
+    BufferPage,
+    BufferType,
 )
 from ttnn_visualizer.queries import DatabaseQueries
 
@@ -92,6 +94,18 @@ class TestDatabaseQueries(unittest.TestCase):
             name text,
             duration float
         );
+        CREATE TABLE buffer_pages (
+            operation_id INT,
+            device_id INT,
+            address INT,
+            core_y INT,
+            core_x INT,
+            bank_id INT,
+            page_index INT,
+            page_address INT,
+            page_size INT,
+            buffer_type INT
+        );
         """
         self.connection.executescript(schema)
 
@@ -125,6 +139,42 @@ class TestDatabaseQueries(unittest.TestCase):
 
         no_operation = self.db_queries.query_device_operations_by_operation_id(999)
         self.assertIsNone(no_operation)
+
+    def test_query_buffer_pages(self):
+        # Insert sample data into buffer_pages table
+        self.connection.execute(
+            "INSERT INTO buffer_pages (operation_id, device_id, address, core_y, core_x, bank_id, page_index, page_address, page_size, buffer_type) "
+            "VALUES (1, 1, 1234, 0, 0, 1, 0, 1000, 4096, 0)"
+        )
+
+        # Query without any filters
+        buffer_pages = list(self.db_queries.query_buffer_pages())
+        self.assertEqual(len(buffer_pages), 1)
+
+        # Validate the returned buffer page
+        buffer_page = buffer_pages[0]
+        self.assertIsInstance(buffer_page, BufferPage)
+        self.assertEqual(buffer_page.operation_id, 1)
+        self.assertEqual(buffer_page.address, 1234)
+        self.assertEqual(buffer_page.buffer_type, BufferType(0).value)
+
+        # Query with filter by operation_id
+        buffer_pages = list(self.db_queries.query_buffer_pages(operation_id=1))
+        self.assertEqual(len(buffer_pages), 1)
+
+        # Query with filter by address
+        buffer_pages = list(self.db_queries.query_buffer_pages(address=1234))
+        self.assertEqual(len(buffer_pages), 1)
+
+        # Query with filter by buffer_type
+        buffer_pages = list(
+            self.db_queries.query_buffer_pages(buffer_type=BufferType(0).value)
+        )
+        self.assertEqual(len(buffer_pages), 1)
+
+        # Query with a non-matching filter
+        buffer_pages = list(self.db_queries.query_buffer_pages(operation_id=9999))
+        self.assertEqual(len(buffer_pages), 0)
 
     def test_query_buffers(self):
         self.connection.execute("INSERT INTO buffers VALUES (1, 1, 0, 1024, 0)")
