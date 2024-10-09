@@ -13,6 +13,7 @@ import {
     Switch,
     Tooltip,
 } from '@blueprintjs/core';
+import { useState } from 'react';
 import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
 import ConnectionTestMessage from '../components/report-selection/ConnectionTestMessage';
@@ -21,6 +22,7 @@ import ProgressBar from '../components/ProgressBar';
 import SearchField from '../components/SearchField';
 import 'styles/routes/Styleguide.scss';
 import LoadingSpinner from '../components/LoadingSpinner';
+import FileStatusOverlay from '../components/FileStatusOverlay';
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -28,6 +30,8 @@ const FORM_GROUP = {
 };
 
 export default function Operations() {
+    const [showProgressOverlay, setShowProgressOverlay] = useState(false);
+
     return (
         <>
             <Helmet title='Styleguide' />
@@ -403,6 +407,20 @@ export default function Operations() {
                 <ProgressBar
                     progress={0.95}
                     estimated={1}
+                />
+            </div>
+
+            <div className='container'>
+                <Button
+                    onClick={() => setShowProgressOverlay(true)}
+                    intent={Intent.PRIMARY}
+                >
+                    Overlay
+                </Button>
+
+                <FileStatusOverlay
+                    isOpen={showProgressOverlay}
+                    onClose={() => setShowProgressOverlay(false)}
                 />
             </div>
 
