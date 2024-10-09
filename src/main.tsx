@@ -17,6 +17,7 @@ import OperationDetails from './routes/OperationDetails';
 import Styleguide from './routes/Styleguide';
 import ROUTES from './definitions/routes';
 import Tensors from './routes/Tensors';
+import BufferSummary from './routes/BufferSummary';
 
 const router = createBrowserRouter([
     {
@@ -39,6 +40,10 @@ const router = createBrowserRouter([
             {
                 path: 'tensors',
                 element: <Tensors />,
+            },
+            {
+                path: 'buffer-summary',
+                element: <BufferSummary />,
             },
             {
                 path: 'styleguide',

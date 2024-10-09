@@ -33,6 +33,12 @@ $dark-danger-background-base: $tt-red-accent;
         "warning": ($dark-warning-background-base, color.adjust($dark-warning-background-base, $lightness: -5%), $dark-warning-background-base),
         "danger": ($dark-danger-background-base, color.adjust($dark-danger-background-base, $lightness: -5%), $tt-red-shade)
     ),
+    $pt-intent-colors: (
+        "primary": $dark-primary-intent-color,
+        "success": $tt-green,
+        "warning": $dark-warning-background-base,
+        "danger" : $tt-red,
+    ),
     $pt-dark-intent-text-colors: (
         "primary": $dark-primary-intent-color,
         "success": $tt-green,
@@ -47,4 +53,19 @@ $dark-danger-background-base: $tt-red-accent;
     .bp5-navbar {
         box-shadow: none;
     }
+
+    .bp5-button {
+        &.bp5-minimal {
+            &.bp5-intent-primary {
+                &:hover {
+                    color: $tt-purple-tint-2;
+                }
+
+                &.bp5-active {
+                    color: $tt-purple-tint-2;
+                }
+            }
+        }
+    }
+
 }

@@ -7,6 +7,7 @@ import { useQuery } from 'react-query';
 import axiosInstance from '../libs/axiosInstance';
 import {
     ActiveReport,
+    Buffer,
     BufferData,
     OperationDescription,
     OperationDetailsData,
@@ -16,6 +17,7 @@ import {
     defaultOperationDetailsData,
     defaultTensorData,
 } from '../model/APIData';
+import { BufferType } from '../model/BufferType';
 
 export const fetchActiveReport = async (): Promise<ActiveReport | null> => {
     // eslint-disable-next-line promise/valid-params
@@ -51,12 +53,45 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     return operationList;
 };
 
+export interface BuffersByOperationData {
+    buffers: Buffer[];
+    id: number;
+}
+
+export interface DeviceData {
+    address_at_first_l1_bank: number;
+    address_at_first_l1_cb_buffer: number;
+    cb_limit: number;
+    device_id: number;
+    l1_bank_size: number;
+    l1_num_banks: number;
+    num_banks_per_storage_core: number;
+    num_compute_cores: number;
+    num_storage_cores: number;
+    num_x_compute_cores: number;
+    num_x_cores: number;
+    num_y_compute_cores: number;
+    num_y_cores: number;
+    total_l1_for_interleaved_buffers: number;
+    total_l1_for_sharded_buffers: number;
+    total_l1_for_tensors: number;
+    total_l1_memory: number;
+    worker_l1_size: number;
+}
+
 /** @description
  * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const fetchAllBuffers = async (): Promise<any> => {
-    const { data: buffers } = await axiosInstance.get('/api/get-operation-buffers');
+const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
+    const params = { buffer_type: bufferType };
+
+    const { data: buffers } = await axiosInstance.get<BuffersByOperationData[]>('/api/operation-buffers', { params });
+
+    return buffers;
+};
+
+export const fetchOperationBuffers = async (operationId: number | null) => {
+    const { data: buffers } = await axiosInstance.get(`/api/operation-buffers/${operationId}`);
 
     return buffers;
 };
@@ -67,12 +102,14 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
     return meta;
 };
 
-export const useOperationsList = () => {
-    return useQuery<OperationDescription[], AxiosError>('get-operations', fetchOperations);
+const fetchDevices = async () => {
+    const { data: meta } = await axiosInstance.get<DeviceData[]>('/api/devices');
+
+    return meta;
 };
 
-export const useAllBuffers = () => {
-    return useQuery<{ operation_id: number; buffers: [] }[], AxiosError>('get-operation-buffers', fetchAllBuffers);
+export const useOperationsList = () => {
+    return useQuery<OperationDescription[], AxiosError>('get-operations', fetchOperations);
 };
 
 export const useOperationDetails = (operationId: number | null) => {
@@ -156,6 +193,10 @@ export const useTensors = () => {
     return useQuery<TensorData[], AxiosError>('get-tensors', fetchTensors);
 };
 
+export const useDevices = () => {
+    return useQuery<DeviceData[], AxiosError>('get-devices', fetchDevices);
+};
+
 export const fetchNextUseOfBuffer = async (address: number | null, consumers: number[]): Promise<BufferData> => {
     if (!address || !consumers.length) {
         return defaultBuffer;
@@ -174,5 +215,11 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
     return useQuery<BufferData, AxiosError>(queryKey, {
         queryFn: () => fetchNextUseOfBuffer(address, consumers),
         retry: false,
+    });
+};
+
+export const useBuffers = (bufferType: BufferType) => {
+    return useQuery('get-buffers', {
+        queryFn: () => fetchAllBuffers(bufferType),
     });
 };

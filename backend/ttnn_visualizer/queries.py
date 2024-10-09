@@ -138,14 +138,45 @@ class DatabaseQueries:
         finally:
             cursor.close()
 
-    def query_buffers(self, operation_id: int) -> Generator[Buffer, None, None]:
+    def query_buffers(
+        self, buffer_type: Optional[str] = None
+    ) -> Generator[Buffer, None, None]:
         cursor = self._get_cursor()
         try:
-            cursor.execute(
-                "SELECT * FROM buffers WHERE operation_id = ?", (operation_id,)
-            )
+            # noinspection SqlConstantExpression
+            query = "SELECT * FROM buffers WHERE 1=1"
+            params = []
+
+            if buffer_type is not None:
+                query += " AND buffer_type = ?"
+                params.append(buffer_type)
+
+            # Execute the query
+            cursor.execute(query, params)
+
             for row in cursor.fetchall():
                 yield Buffer(*row)
+
+        finally:
+            cursor.close()
+
+    def query_buffers_by_operation_id(
+        self, operation_id: int, buffer_type: Optional[str] = None
+    ) -> Generator[Buffer, None, None]:
+        cursor = self._get_cursor()
+        try:
+            query = "SELECT * FROM buffers WHERE operation_id = ?"
+            params = [operation_id]
+
+            if buffer_type is not None:
+                query += " AND buffer_type = ?"
+                params.append(buffer_type)
+
+            cursor.execute(query, params)
+
+            for row in cursor.fetchall():
+                yield Buffer(*row)
+
         finally:
             cursor.close()
 

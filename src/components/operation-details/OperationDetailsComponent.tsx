@@ -521,7 +521,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 {details.deviceOperations.map((deviceOperation, index) => (
                                     // eslint-disable-next-line react/no-array-index-key
                                     <Fragment key={deviceOperation.name + index}>
-                                        <h4 className='device-operation-name' style={{ paddingLeft: `${deviceOperation.indentLevel * 20}px` }}>
+                                        <h4
+                                            className='device-operation-name'
+                                            style={{ paddingLeft: `${deviceOperation.indentLevel * 20}px` }}
+                                        >
                                             <Icon
                                                 className='operation-icon'
                                                 size={13}
@@ -555,7 +558,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         )}
 
                                         {deviceOperation.deallocateCBs && (
-                                            <p className='deallocate-msg' style={{ marginLeft: `${deviceOperation.indentLevel * 20}px` }}>
+                                            <p
+                                                className='deallocate-msg'
+                                                style={{ marginLeft: `${deviceOperation.indentLevel * 20}px` }}
+                                            >
                                                 <Icon
                                                     className='operation-icon'
                                                     size={13}
@@ -590,7 +596,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             </div>
                                         )}
                                         {deviceOperation.deallocateBuffers && (
-                                            <p className='deallocate-msg' style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}>
+                                            <p
+                                                className='deallocate-msg'
+                                                style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}
+                                            >
                                                 <Icon
                                                     className='operation-icon'
                                                     size={13}
