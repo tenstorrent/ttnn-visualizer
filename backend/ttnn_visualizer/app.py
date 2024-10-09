@@ -1,5 +1,4 @@
 import logging
-import shutil
 from os import environ
 from pathlib import Path
 
@@ -10,7 +9,6 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_cors import CORS
 from ttnn_visualizer import settings
 from dotenv import load_dotenv
-from ttnn_visualizer.sessions import init_sessions, CustomRequest, init_session_db
 
 
 def create_app(settings_override=None):
@@ -31,7 +29,6 @@ def create_app(settings_override=None):
     flask_env = environ.get("FLASK_ENV", "development")
 
     app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
-    app.request_class = CustomRequest
 
     app.config.from_object(getattr(settings, flask_env))
 
@@ -41,8 +38,6 @@ def create_app(settings_override=None):
 
     if settings_override:
         app.config.update(settings_override)
-
-    init_session_db()
 
     middleware(app)
 
@@ -61,7 +56,7 @@ def create_app(settings_override=None):
 
 
 def extensions(app: flask.Flask):
-    from ttnn_visualizer.extensions import flask_static_digest
+    from ttnn_visualizer.extensions import flask_static_digest, db, session
 
     """
     Register 0 or more extensions (mutates the app passed in).
@@ -71,6 +66,17 @@ def extensions(app: flask.Flask):
     """
 
     flask_static_digest.init_app(app)
+    db.init_app(app)
+
+    app.config["SESSION_TYPE"] = "sqlalchemy"
+    app.config["SESSION_SQLALCHEMY"] = db
+
+    session.init_app(app)
+
+    # Create the tables within the application context
+    with app.app_context():
+        db.drop_all()
+        db.create_all()
 
     # For automatically reflecting table data
     # with app.app_context():
@@ -95,8 +101,6 @@ def middleware(app: flask.Flask):
 
     # CORS configuration
     origins = ["http://localhost:5173", "http://localhost:8000"]
-
-    init_sessions(app)
 
     CORS(
         app,
