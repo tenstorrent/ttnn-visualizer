@@ -34,6 +34,21 @@ export const CBRenderConfiguration = {
     title: '',
 } as PlotConfiguration;
 
+export const BufferSummaryAxisConfiguration = {
+    height: 615,
+    margin: {
+        l: 0,
+        r: 0,
+        b: 0,
+        t: 15,
+    },
+    xAxis: {
+        side: 'top',
+    },
+    gridColour: '#343434', // $tt-background
+    bgColour: '#fff',
+} as PlotConfiguration;
+
 export interface PlotConfiguration {
     height: number;
     margin: {
@@ -43,6 +58,11 @@ export interface PlotConfiguration {
         t: number;
     };
     title?: string;
+    gridColour?: string;
+    bgColour?: string;
+    xAxis?: {
+        side: 'top' | 'bottom';
+    };
 }
 
 export const CONDENSED_PLOT_CHUNK_COLOR = '#9c9e9f';

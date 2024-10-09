@@ -16,6 +16,9 @@ from ttnn_visualizer.serializers import (
     serialize_operations,
     serialize_tensors,
     serialize_operation,
+    serialize_operation_buffers,
+    serialize_operations_buffers,
+    serialize_devices,
 )
 from ttnn_visualizer.sessions import update_tab_session
 from ttnn_visualizer.sftp_operations import (
@@ -70,7 +73,7 @@ def operation_detail(operation_id, report_path):
         if not operation:
             return Response(status=HTTPStatus.NOT_FOUND)
 
-        buffers = list(db.query_buffers(operation_id))
+        buffers = list(db.query_buffers_by_operation_id(operation_id))
         operation_arguments = list(
             db.query_operation_arguments_by_operation_id(operation_id)
         )
@@ -173,6 +176,50 @@ def tensor_detail(tensor_id, report_path):
             return Response(status=HTTPStatus.NOT_FOUND)
 
         return dataclasses.asdict(tensor)
+
+
+@api.route("/operation-buffers", methods=["GET"])
+@with_report_path
+def get_operations_buffers(report_path):
+
+    buffer_type = request.args.get("buffer_type", "")
+    if buffer_type and str.isdigit(buffer_type):
+        buffer_type = int(buffer_type)
+    else:
+        buffer_type = None
+
+    with DatabaseQueries(report_path) as db:
+        buffers = list(db.query_buffers(buffer_type=buffer_type))
+        operations = list(db.query_operations())
+        return serialize_operations_buffers(operations, buffers)
+
+
+@api.route("/operation-buffers/<operation_id>", methods=["GET"])
+@with_report_path
+def get_operation_buffers(operation_id, report_path):
+
+    buffer_type = request.args.get("buffer_type", "")
+    if buffer_type and str.isdigit(buffer_type):
+        buffer_type = int(buffer_type)
+    else:
+        buffer_type = None
+
+    with DatabaseQueries(report_path) as db:
+        operation = db.query_operation_by_id(operation_id)
+        buffers = list(
+            db.query_buffers_by_operation_id(operation_id, buffer_type=buffer_type)
+        )
+        if not operation:
+            return Response(status=HTTPStatus.NOT_FOUND)
+        return serialize_operation_buffers(operation, buffers)
+
+
+@api.route("/devices", methods=["GET"])
+@with_report_path
+def get_devices(report_path):
+    with DatabaseQueries(report_path) as db:
+        devices = list(db.query_devices())
+        return serialize_devices(devices)
 
 
 @api.route(

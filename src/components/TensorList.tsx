@@ -290,7 +290,7 @@ const TensorList = () => {
                                                     filterName={getTensorFilterName(tensor)}
                                                     filterQuery={filterQuery}
                                                     icon={IconNames.FLOW_LINEAR}
-                                                    intent={Intent.PRIMARY}
+                                                    iconColour='tensor'
                                                 />
                                             }
                                             additionalElements={

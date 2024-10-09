@@ -6,46 +6,29 @@
 
 .app-header {
     padding: 15px;
-    padding-bottom: 0;
-    margin-bottom: 1rem;
-}
 
-.nav-container {
-    display: flex;
-    align-items: center;
-    place-content: center space-around;
+    .nav-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
 
-    p {
-        margin: 0;
-        margin-left: 10px;
-    }
+        p {
+            margin: 0;
+            margin-left: 10px;
+        }
 
-    .tt-logo {
-        // TODO: Sort logo viewbox so we don't have to do this
-        margin: -30px;
-    }
-}
+        .tt-logo {
+            // TODO: Sort logo viewbox so we don't have to do this
+            margin: -30px;
+        }
 
-.report-title {
-    font-size: 12px;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
-    max-width: 300px;
-    margin-top: 17px;
-    float: right;
-    margin-right: 15px;
-    padding-right: 15px;
-    position: relative;
-
-    &::after {
-        content: '';
-        display: inline-block;
-        width: 1px;
-        background-color: $tt-grey-5;
-        height: 100%;
-        position: absolute;
-        right: 0;
-        top: 0;
+        .report-title {
+            font-size: 12px;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
+            max-width: 300px;
+        }
     }
 }
+
