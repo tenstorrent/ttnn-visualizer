@@ -3,6 +3,7 @@ import json
 import logging
 from http import HTTPStatus
 from pathlib import Path
+from typing import cast
 
 from flask import Blueprint, Response, current_app, request
 
@@ -10,7 +11,6 @@ from ttnn_visualizer.decorators import with_report_path
 from ttnn_visualizer.exceptions import RemoteFolderException
 from ttnn_visualizer.models import RemoteFolder, RemoteConnection, StatusMessage
 from ttnn_visualizer.queries import DatabaseQueries
-from ttnn_visualizer.sessions import ActiveReport
 
 from ttnn_visualizer.serializers import (
     serialize_operations,
@@ -20,7 +20,10 @@ from ttnn_visualizer.serializers import (
     serialize_operations_buffers,
     serialize_devices,
 )
-from ttnn_visualizer.sessions import update_tab_session
+from ttnn_visualizer.sessions import (
+    update_tab_session,
+    get_or_create_tab_session,
+)
 from ttnn_visualizer.sftp_operations import (
     sync_test_folders,
     read_remote_file,
@@ -255,12 +258,9 @@ def create_upload_files():
             destination_file.parent.mkdir(exist_ok=True, parents=True)
         file.save(destination_file)
 
-    # Set Active Report on View
-    active_report = ActiveReport(hostname=None, name=report_name)
-    current_app.logger.info(
-        f"Setting active report for {request.tab_id} - {report_directory.name}/{report_name}"
+    update_tab_session(
+        tab_id=request.args.get("tabId"), active_report_data={"name": report_name}
     )
-    update_tab_session({"active_report": active_report})
 
     return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
 
@@ -331,12 +331,16 @@ def use_remote_folder():
 
     # Set Active Report on View
     remote_path = f"{Path(report_data_directory).name}/{connection.host}/{connection_directory.name}"
-    current_app.logger.info(
-        f"Setting active report for {request.tab_id} - {remote_path}"
-    )
-    active_report = ActiveReport(name=report_folder, hostname=connection.host)
 
-    update_tab_session({"active_report": active_report})
+    tab_id = request.args.get("tabId")
+    current_app.logger.info(f"Setting active report for {tab_id} - {remote_path}")
+
+    update_tab_session(
+        tab_id=tab_id,
+        active_report_data={"name": report_folder},
+        remote_connection_data=connection.dict(),
+    )
+
     return Response(status=HTTPStatus.OK)
 
 
@@ -348,8 +352,19 @@ def health_check():
 @api.route("/reports/active", methods=["GET"])
 def get_active_folder():
     # Used to gate UI functions if no report is active
-    if hasattr(request, "tab_session_data"):
-        active_report = request.tab_session_data.get("active_report", None)
-        if active_report:
-            return active_report
+
+    tab_id = request.args.get("tabId", None)
+    current_app.logger.info(f"TabID: {tab_id}")
+    if tab_id:
+        session, created = get_or_create_tab_session(
+            tab_id=tab_id
+        )  # Capture both the session and created flag
+        current_app.logger.info(f"Session: {session}")
+        if session and session.get("active_report", None):
+            active_report = session.get("active_report")
+            return {
+                "name": active_report.get("name"),
+                "remote_connection": active_report.get("remote_connection", None),
+            }
+
     return {"name": None, "host": None}
