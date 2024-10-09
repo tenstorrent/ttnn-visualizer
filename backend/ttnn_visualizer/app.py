@@ -1,15 +1,15 @@
 import logging
-import shutil
 from os import environ
 from pathlib import Path
 
-from flask import Flask
 import flask
+from dotenv import load_dotenv
+from flask import Flask
+from flask_cors import CORS
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
-from flask_cors import CORS
+
 from ttnn_visualizer import settings
-from dotenv import load_dotenv
 from ttnn_visualizer.sessions import init_sessions, CustomRequest, init_session_db
 
 

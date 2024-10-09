@@ -16,6 +16,7 @@ from ttnn_visualizer.serializers import (
     serialize_operations,
     serialize_tensors,
     serialize_operation,
+    serialize_buffer_pages,
     serialize_operation_buffers,
     serialize_operations_buffers,
     serialize_devices,
@@ -163,6 +164,24 @@ def buffer_detail(report_path):
         if not buffer:
             return Response(status=HTTPStatus.NOT_FOUND)
         return dataclasses.asdict(buffer)
+
+
+@api.route("/buffer-pages", methods=["GET"])
+@with_report_path
+@timer
+def buffer_pages(report_path):
+    address = request.args.get("address")
+    operation_id = request.args.get("operation_id")
+    buffer_type = request.args.get("buffer_type", "")
+
+    if buffer_type and str.isdigit(buffer_type):
+        buffer_type = int(buffer_type)
+    else:
+        buffer_type = None
+
+    with DatabaseQueries(report_path) as db:
+        buffers = list(db.query_buffer_pages(operation_id, address, buffer_type))
+        return serialize_buffer_pages(buffers)
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
