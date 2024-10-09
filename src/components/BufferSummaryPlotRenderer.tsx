@@ -17,6 +17,7 @@ import { HistoricalTensor, Operation, Tensor } from '../model/Graph';
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
+const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
 function BufferSummaryPlotRenderer() {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
@@ -46,6 +47,7 @@ function BufferSummaryPlotRenderer() {
 
     const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
     const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
+    const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
 
     const tensorList = useMemo(
         () => createHistoricalTensorList(operationsList, buffersByOperation),
@@ -97,7 +99,11 @@ function BufferSummaryPlotRenderer() {
                     ]}
                     isZoomedIn={isZoomedIn}
                     memorySize={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
-                    plotZoomRange={isZoomedIn ? [zoomedMemorySizeStart, zoomedMemorySizeEnd] : [0, memorySize]}
+                    plotZoomRange={
+                        isZoomedIn
+                            ? [zoomedMemorySizeStart + memoryPadding, zoomedMemorySizeEnd + memoryPadding]
+                            : [0, memorySize]
+                    }
                     configuration={BufferSummaryAxisConfiguration}
                 />
             </div>
@@ -138,6 +144,7 @@ function BufferSummaryPlotRenderer() {
                                         operationId={operation.id}
                                         memorySize={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
+                                        memoryPadding={memoryPadding}
                                     />
 
                                     <p className='y-axis-tick'>{operation.id}</p>
