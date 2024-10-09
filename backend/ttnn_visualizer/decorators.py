@@ -2,22 +2,36 @@ from functools import wraps
 from flask import request, abort
 from pathlib import Path
 
+from ttnn_visualizer.sessions import get_or_create_tab_session
+from ttnn_visualizer.utils import get_report_path
+
 
 def with_report_path(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        target_report_path = getattr(request, "report_path", None)
-        if not target_report_path or not Path(target_report_path).exists():
+        from flask import current_app
+
+        tab_id = request.args.get("tabId")
+
+        if not tab_id:
+            abort(404)
+
+        session, created = get_or_create_tab_session(tab_id=tab_id)
+        active_report = session.get("active_report", None)
+
+        if not active_report:
             # Raise 404 if report_path is missing or does not exist
             abort(404)
 
+        report_path = get_report_path(active_report, current_app)
+        if not Path(report_path).exists():
+            abort(404)
+
         # Add the report path to the view's arguments
-        kwargs["report_path"] = target_report_path
+        kwargs["report_path"] = report_path
         return func(*args, **kwargs)
 
     return wrapper
-
-
 
 
 def remote_exception_handler(func):
@@ -27,8 +41,11 @@ def remote_exception_handler(func):
         from paramiko.ssh_exception import AuthenticationException
         from paramiko.ssh_exception import NoValidConnectionsError
         from paramiko.ssh_exception import SSHException
-        from ttnn_visualizer.exceptions import RemoteFolderException, NoProjectsException
-        
+        from ttnn_visualizer.exceptions import (
+            RemoteFolderException,
+            NoProjectsException,
+        )
+
         connection = args[0]
 
         try:

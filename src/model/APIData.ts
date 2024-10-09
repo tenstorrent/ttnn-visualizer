@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Operation, Tensor } from './Graph';
+import { RemoteConnection } from '../definitions/RemoteConnection';
 
 export interface TensorData extends Tensor {
     shape: string;
@@ -41,7 +42,7 @@ export interface OperationDetailsData extends Operation {
 
 export interface ActiveReport {
     name: string;
-    hostname: string;
+    remote_connection?: RemoteConnection,
 }
 
 // TODO: we may want to revisit the 'default' portion for the variable name

@@ -1,167 +1,74 @@
-import json
-import sqlite3
-import threading
+from flask import request, jsonify, session, current_app, Request
 from pathlib import Path
-from typing import TypedDict, cast
-
-from flask import request, g, Request
-
-# Path to the SQLite database for sessions
-DATABASE = "sessions.db"
 
 
-# Define a TypedDict for the nested structure of the request data
-class ActiveReport(TypedDict, total=False):
-    name: str
-    hostname: str
-
-
-class TabSessionData(TypedDict):
-    active_report: ActiveReport
-
-
-# Custom request class with session data
-class CustomRequest(Request):
-    tab_session_data: TabSessionData
-    tab_id: str
-    report_path: str
-
-
-def get_report_path_from_request():
+def update_tab_session(tab_id, active_report_data, remote_connection_data=None):
     """
-    Gets the currently active report path from the request
-    :return:
+    Overwrite the active report for a given tab session or create a new session if one doesn't exist.
+    Store everything in Flask-Session using tab_id as the key.
     """
-    from flask import current_app, request as flask_request
+    # Create or update the active report
+    active_report = {"name": active_report_data.get("name")}
 
-    database_file_name = current_app.config["SQLITE_DB_PATH"]
-    local_dir = current_app.config["LOCAL_DATA_DIRECTORY"]
-    remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
+    # Check if remote connection data is provided and add it to the active report
+    if remote_connection_data:
+        remote_connection = {
+            "name": remote_connection_data.get("name"),
+            "username": remote_connection_data.get("username"),
+            "host": remote_connection_data.get("host"),
+            "port": remote_connection_data.get("port"),
+            "path": remote_connection_data.get("path"),
+        }
+        active_report["remote_connection"] = remote_connection
 
-    # For type hinting
-    request = cast(CustomRequest, flask_request)
-
-    if hasattr(request, "tab_session_data"):
-        tab_session_data = request.tab_session_data
-        active_report = tab_session_data.get("active_report", None)
-        if active_report:
-            hostname = active_report.get("hostname", None)
-            if hostname:
-                base_dir = Path(remote_dir).joinpath(hostname)
-            else:
-                base_dir = local_dir
-            report_path = Path(base_dir).joinpath(active_report.get("name", ""))
-            target_path = str(Path(report_path).joinpath(database_file_name))
-            request.report_path = target_path or ""
-        else:
-            request.report_path = ""
+    # Store the active report in the session using the tab_id as the key
+    session[tab_id] = {"active_report": active_report}
+    return jsonify({"message": "Tab session updated with new active report"}), 200
 
 
-# Function to initialize the SQLite database and create the tab_sessions table if it doesn't exist
-def init_session_db():
+def get_or_create_tab_session(
+    tab_id, active_report_data=None, remote_connection_data=None
+):
+    """
+    Retrieve an existing tab session or create a new one if it doesn't exist.
+    Uses Flask-Session for session management with tab_id as the key.
+    Initializes session data as an empty dictionary if it doesn't exist.
+    """
+    # Check if the session exists for the given tab_id
+    session_data = session.get(tab_id)
 
-    with threading.Lock():
-        print("Initializing session database")
-        with sqlite3.connect(DATABASE, timeout=30, isolation_level=None) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS tab_sessions (
-                    tab_id TEXT PRIMARY KEY,
-                    session_data TEXT
-                )
-            """
-            )
-            conn.commit()
+    # If session doesn't exist, initialize it as an empty dictionary
+    if not session_data:
+        session[tab_id] = {}  # Initialize empty session data
+        session_data = session.get(tab_id)
 
+    # If active_report_data is provided, update the session with the new report
+    if active_report_data:
+        update_tab_session(tab_id, active_report_data, remote_connection_data)
 
-# Function to get a database connection from the Flask `g` object
-def get_db():
-    with threading.Lock():
-        db = getattr(g, "_session_database", None)
-        if db is None:
-            db = g._database = sqlite3.connect(
-                DATABASE, timeout=30, isolation_level=None
-            )
-        return db
+    return session.get(tab_id), not bool(session_data)
 
 
-# Function to handle session data retrieval and creation
-def handle_tab_session(tab_id):
-    db = get_db()
-    cur = db.cursor()
-    cur.execute("SELECT session_data FROM tab_sessions WHERE tab_id = ?", (tab_id,))
-    row = cur.fetchone()
-
-    if row is None:
-        # No session data found, create a new session for this tab as a dictionary
-        session_data = {"tab_id": tab_id}
-        cur.execute(
-            "INSERT INTO tab_sessions (tab_id, session_data) VALUES (?, ?)",
-            (tab_id, json.dumps(session_data)),
-        )
-        db.commit()
-    else:
-        # Session data exists, load it and convert back to a dictionary
-        session_data = json.loads(
-            row[0]
-        )  # Deserialize the JSON string back to a Python dictionary
-
-    return session_data
-
-
-# Function to update the session data for a given tab_id
-def update_tab_session(new_data):
-    tab_id = request.args.get("tabId", None)
-    if not tab_id:
-        return
-    db = get_db()
-    cur = db.cursor()
-
-    # Retrieve existing session data
-    cur.execute("SELECT session_data FROM tab_sessions WHERE tab_id = ?", (tab_id,))
-    row = cur.fetchone()
-
-    if row:
-        # Update the session data by merging the existing data with new data
-        existing_data = json.loads(row[0])  # Deserialize the existing JSON string
-        existing_data.update(new_data)  # Update the dictionary with new data
-        cur.execute(
-            "UPDATE tab_sessions SET session_data = ? WHERE tab_id = ?",
-            (json.dumps(existing_data), tab_id),
-        )
-    else:
-        # If no existing session, create a new session with the new data
-        session_data = new_data
-        cur.execute(
-            "INSERT INTO tab_sessions (tab_id, session_data) VALUES (?, ?)",
-            (tab_id, json.dumps(session_data)),
-        )
-
-    db.commit()
-
-
-# Middleware to fetch or create per-tab session data and attach it to the `request` object
 def get_tab_session():
+    """
+    Middleware to retrieve or create a tab session based on the tab_id.
+    """
     tab_id = request.args.get("tabId", None)
-    if tab_id:
-        request.tab_id = tab_id
-        request.tab_session_data = handle_tab_session(tab_id)
 
+    current_app.logger.info(f"get_tab_session: Received tab_id: {tab_id}")
+    if not tab_id:
+        current_app.logger.error("get_tab_session: No tab_id found")
+        return jsonify({"error": "tabId is required"}), 400
 
-# Middleware to close the SQLite database connection after each request
-def close_db_connection(exception):
-    db = getattr(g, "_session_database", None)
-    if db is not None:
-        db.close()
+    active_report, created = get_or_create_tab_session(tab_id)
+    current_app.logger.info(f"get_tab_session: Session retrieved: {active_report}")
 
 
 # Function to initialize the session logic and middleware
 def init_sessions(app):
-
-    # Add the middleware to the Flask app
+    """
+    Initializes session middleware and hooks it into Flask.
+    """
     app.before_request(get_tab_session)
-    app.before_request(get_report_path_from_request)
-    app.teardown_appcontext(close_db_connection)
 
     app.logger.info("Sessions middleware initialized.")
