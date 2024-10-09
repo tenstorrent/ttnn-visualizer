@@ -40,8 +40,6 @@ function BufferSummaryRow({ buffers, operationId, memorySize, memoryStart = 0 }:
                             left: `${position}%`,
                             backgroundColor: getBufferColor(buffer.address),
                         }}
-                        data-address={buffer.address}
-                        data-size={buffer.size}
                     />
                 );
             })}
