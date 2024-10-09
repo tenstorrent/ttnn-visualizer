@@ -45,9 +45,9 @@ function Layout() {
             </Helmet>
 
             <header className='app-header'>
-                <nav className="nav-container">
+                <nav className='nav-container'>
                     <Link
-                        className="tt-logo"
+                        className='tt-logo'
                         to={ROUTES.HOME}
                     >
                         <TenstorrentLogo />

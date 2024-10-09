@@ -13,7 +13,12 @@
 .nav-container {
     display: flex;
     align-items: center;
-    justify-content: space-around;
+    place-content: center space-around;
+
+    p {
+        margin: 0;
+        margin-left: 10px;
+    }
 
     .tt-logo {
         // TODO: Sort logo viewbox so we don't have to do this
