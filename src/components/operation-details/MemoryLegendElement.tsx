@@ -2,7 +2,7 @@ import React from 'react';
 import classNames from 'classnames';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { FragmentationEntry } from '../../model/APIData';
+import { DeviceOperationLayoutTypes, DeviceOperationTypes, FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor } from '../../functions/colorGenerator';
 import { formatSize, prettyPrintAddress, toHex } from '../../functions/math';
@@ -14,6 +14,8 @@ export const MemoryLegendElement: React.FC<{
     operationDetails: OperationDetails;
     onLegendClick: (selectedTensorAddress: number) => void;
     colorVariance?: number | undefined; // color uniqueness for the CB color
+    bufferType?: DeviceOperationTypes;
+    layout?: DeviceOperationLayoutTypes;
 }> = ({
     // no wrap eslint
     chunk,
@@ -22,14 +24,19 @@ export const MemoryLegendElement: React.FC<{
     operationDetails,
     onLegendClick,
     colorVariance,
+    bufferType,
+    layout,
 }) => {
-    const Component = !chunk.empty ? 'button' : 'div';
+    const Component = chunk.empty ? 'div' : 'button';
     const emptyChunkLabel = (
         <>
             Empty space{' '}
             {chunk.largestEmpty && (
                 <Tooltip content='Largest empty memory space'>
-                    <Icon icon={IconNames.SMALL_INFO_SIGN} />
+                    <Icon
+                        size={14}
+                        icon={IconNames.SMALL_INFO_SIGN}
+                    />
                 </Tooltip>
             )}
         </>
@@ -52,7 +59,11 @@ export const MemoryLegendElement: React.FC<{
                     ...(chunk.empty ? {} : { backgroundColor: getBufferColor(chunk.address + (colorVariance || 0)) }),
                 }}
             />
-            <div className='legend-details'>
+            <div
+                className={classNames('legend-details', {
+                    'extra-info': bufferType || layout,
+                })}
+            >
                 <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize)}</div>
                 <div className='format-numbers monospace keep-left'>({toHex(chunk.address)})</div>
                 <div className='format-numbers monospace'>{formatSize(chunk.size)} </div>
@@ -62,6 +73,12 @@ export const MemoryLegendElement: React.FC<{
                     )}
                     {chunk.empty && emptyChunkLabel}
                 </div>
+                {(bufferType || layout) && (
+                    <div className='extra-info-slot'>
+                        {bufferType && <span className='monospace'>{DeviceOperationTypes[bufferType]} </span>}
+                        {layout && <span className='monospace'>{DeviceOperationLayoutTypes[layout]}</span>}
+                    </div>
+                )}
             </div>
         </Component>
     );

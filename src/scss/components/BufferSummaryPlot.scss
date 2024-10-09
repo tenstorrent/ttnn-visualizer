@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+@use '../definitions/colours' as *;
+
+$label-width: 50px;
+$label-margin: 10px;
+$width-offset: $label-width;
+$height-offset: 15px;
+
+.buffer-summary-chart {
+    margin-bottom: $height-offset * 2;
+
+    .chart-position {
+        position: relative;
+    }
+
+    .buffer-summary-plot {
+        width: calc(100% - $width-offset);
+        position: absolute;
+        top: 0;
+        left: 0;
+
+        > .memory-plot.js-plotly-plot {
+            vertical-align: top;
+            width: 100%;
+        }
+    }
+
+    .x-axis-label {
+        width: calc(100% - $width-offset);
+        text-align: center;
+    }
+
+    .buffer-summary-plot-container {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        padding-bottom: 5px;
+
+        .y-axis-tick {
+            width: $label-width;
+            padding-right: $label-margin;
+            margin-bottom: 0;
+            text-align: right;
+            flex-shrink: 0;
+        }
+    }
+
+    .scrollable-element {
+        height: 600px;
+        width: 100%;
+        overflow-y: auto;
+        position: relative;
+        top: $height-offset;
+
+        &::before,
+        &::after {
+            content: '';
+            display: block;
+            width: 100%;
+            height: 10px;
+            z-index: 1;
+            position: sticky;
+            left: 0;
+            pointer-events: none;
+        }
+
+        &.scroll-shade-top {
+            &::before {
+                top: 0;
+                background-image: linear-gradient(180deg, rgba($tt-background, 100%) 0%, rgba($tt-background, 0%) 100%);
+            }
+        }
+
+        &.scroll-shade-bottom {
+            &::after {
+                bottom: 0;
+                background-image: linear-gradient(0deg, rgba($tt-background, 100%) 0%, rgba($tt-background, 0%) 100%);
+            }
+        }
+    }
+
+    .list-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        list-style: none;
+        padding-left: 0;
+        margin-top: 0;
+        margin-bottom: 0;
+    }
+
+    .list-item-container {
+        padding-bottom: 15px;
+
+        // Style added to avoid possible infinite scroll loops
+        // https://github.com/TanStack/virtual/issues/540#issuecomment-1720745734
+        overflow-anchor: none;
+    }
+}

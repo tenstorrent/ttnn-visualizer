@@ -3,6 +3,8 @@ import enum
 import json
 from json import JSONDecodeError
 
+from pydantic import BaseModel, Field
+
 
 class BufferType(enum.Enum):
     DRAM = 0
@@ -150,3 +152,25 @@ class OperationArgument:
 class StackTrace:
     operation_id: int
     stack_trace: str
+
+
+# Non Data Models
+
+
+class RemoteConnection(BaseModel):
+    name: str
+    username: str
+    host: str
+    port: int = Field(ge=1, le=65535)
+    path: str
+
+
+class StatusMessage(BaseModel):
+    status: int
+    message: str
+
+
+class RemoteFolder(BaseModel):
+    testName: str
+    remotePath: str
+    lastModified: int
