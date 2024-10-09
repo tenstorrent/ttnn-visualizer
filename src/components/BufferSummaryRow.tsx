@@ -30,14 +30,14 @@ function BufferSummaryRow({
     memoryStart = 0,
     memoryPadding = 0,
 }: BufferSummaryRowProps) {
-    const computedMemorySize = memorySize - memoryStart;
-    const paddingOffset = (memoryPadding / 2 / computedMemorySize) * SCALE;
+    const computedMemorySize = memorySize - memoryStart + memoryPadding * 2;
+    const positionOffset = memoryStart - memoryPadding * 2;
 
     return (
         <div className='buffer-summary-row'>
             {buffers.map((buffer: Buffer) => {
                 const size = (buffer.size / computedMemorySize) * SCALE;
-                const position = ((buffer.address - memoryStart) / computedMemorySize) * SCALE + paddingOffset;
+                const position = ((buffer.address - positionOffset) / computedMemorySize) * SCALE;
 
                 return (
                     <div
@@ -45,7 +45,7 @@ function BufferSummaryRow({
                         className='buffer-data'
                         style={{
                             width: `${size}%`,
-                            left: `${position + paddingOffset}%`,
+                            left: `${position}%`,
                             backgroundColor: getBufferColor(buffer.address),
                         }}
                         data-address={buffer.address}
