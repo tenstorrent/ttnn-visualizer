@@ -44,4 +44,4 @@ build
 .env
 
 
-sessions.db
+*.db
