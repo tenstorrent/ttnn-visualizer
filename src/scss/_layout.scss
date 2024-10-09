@@ -12,14 +12,20 @@
         align-items: center;
         justify-content: space-between;
 
-        p {
-            margin: 0;
-            margin-left: 10px;
-        }
-
         .tt-logo {
             // TODO: Sort logo viewbox so we don't have to do this
             margin: -30px;
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+
+            p {
+                margin: 0;
+                color: $tt-white;
+                text-decoration: none;
+                margin-left: -15px;
+                margin-top: 10px;
+            }
         }
 
         .report-title {
@@ -31,4 +37,3 @@
         }
     }
 }
-

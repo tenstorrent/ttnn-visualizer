@@ -22,7 +22,8 @@ const BounceIn = cssTransition({
 });
 
 function Layout() {
-    const appVersion = import.meta.env.APP_VERSION; // Access the version from Vite
+    // @ts-expect-error Vite will replace this with the actual version
+    const appVersion = import.meta.env.APP_VERSION;
     const meta = useAtomValue(reportMetaAtom);
 
     return (
@@ -41,8 +42,8 @@ function Layout() {
                         to={ROUTES.HOME}
                     >
                         <TenstorrentLogo />
+                        <p className='version'>v{appVersion}</p>
                     </Link>
-                    <p>{appVersion}</p>
 
                     {meta?.report_name && (
                         <Tooltip
