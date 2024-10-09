@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import Overlay from './Overlay';
 import ProgressBar from './ProgressBar';
 import 'styles/components/FileStatusOverlay.scss';
@@ -24,7 +28,7 @@ function FileStatusOverlay({ isOpen, onClose, fileStatus, canEscapeKeyClose = fa
             canEscapeKeyClose={canEscapeKeyClose}
             canOutsideClickClose={false}
         >
-            <div className='flex'>
+            <div className='heading'>
                 <p>
                     Downloading <strong>{fileStatus.currentFileName}</strong>
                 </p>
