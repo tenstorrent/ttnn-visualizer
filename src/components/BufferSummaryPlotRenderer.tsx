@@ -5,6 +5,7 @@
 import { UIEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
+import { Switch } from '@blueprintjs/core';
 import { BufferSummaryAxisConfiguration } from '../definitions/PlotConfigurations';
 import { BuffersByOperationData, useBuffers, useDevices, useOperationsList } from '../hooks/useAPI';
 import { BufferType } from '../model/BufferType';
@@ -20,6 +21,7 @@ const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
 function BufferSummaryPlotRenderer() {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const [isZoomedIn, setIsZoomedIn] = useState(false);
     const { data: buffersByOperation, isLoading: isLoadingBuffers } = useBuffers(BufferType.L1);
     const { data: operationsList, isLoading: isLoadingOperations } = useOperationsList();
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
@@ -30,6 +32,20 @@ function BufferSummaryPlotRenderer() {
 
     // Will need refactoring to handle multiple devices
     const memorySize = !isLoadingDevices && devices ? devices[0].worker_l1_size : 0;
+
+    const zoomedMemorySize = useMemo(() => {
+        const sortedBufferSizes = buffersByOperation
+            ?.map((operation) => operation.buffers.map((b) => ({ ...b, operationId: operation.id })))
+            .flat()
+            .sort((a, b) => b.address - a.address);
+
+        return sortedBufferSizes && sortedBufferSizes.length > 1
+            ? [sortedBufferSizes.at(-1)?.address, sortedBufferSizes[0].address + sortedBufferSizes[0].size]
+            : [0, memorySize];
+    }, [buffersByOperation, memorySize]);
+
+    const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
+    const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
 
     const tensorList = useMemo(
         () => createHistoricalTensorList(operationsList, buffersByOperation),
@@ -53,6 +69,14 @@ function BufferSummaryPlotRenderer() {
 
     return buffersByOperation && !isLoadingBuffers && !isLoadingOperations && !isLoadingDevices && tensorList ? (
         <div className='buffer-summary-chart'>
+            <Switch
+                label='Buffer zoom'
+                checked={isZoomedIn}
+                onChange={() => {
+                    setIsZoomedIn(!isZoomedIn);
+                }}
+            />
+
             <p className='x-axis-label'>Memory Address</p>
 
             <div className='chart-position'>
@@ -71,8 +95,9 @@ function BufferSummaryPlotRenderer() {
                             },
                         ],
                     ]}
-                    isZoomedIn={false}
-                    memorySize={memorySize}
+                    isZoomedIn={isZoomedIn}
+                    memorySize={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
+                    plotZoomRange={isZoomedIn ? [zoomedMemorySizeStart, zoomedMemorySizeEnd] : [0, memorySize]}
                     configuration={BufferSummaryAxisConfiguration}
                 />
             </div>
@@ -111,7 +136,8 @@ function BufferSummaryPlotRenderer() {
                                     <BufferSummaryRow
                                         buffers={operation.buffers}
                                         operationId={operation.id}
-                                        memorySize={memorySize}
+                                        memorySize={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
+                                        memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                     />
 
                                     <p className='y-axis-tick'>{operation.id}</p>

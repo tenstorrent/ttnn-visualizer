@@ -10,6 +10,7 @@ interface BufferSummaryRowProps {
     buffers: Buffer[];
     operationId: number;
     memorySize: number;
+    memoryStart?: number;
 }
 
 interface Buffer {
@@ -21,12 +22,14 @@ interface Buffer {
 
 const SCALE = 100;
 
-function BufferSummaryRow({ buffers, operationId, memorySize }: BufferSummaryRowProps) {
+function BufferSummaryRow({ buffers, operationId, memorySize, memoryStart = 0 }: BufferSummaryRowProps) {
+    const computedMemorySize = memorySize - memoryStart;
+
     return (
         <div className='buffer-summary-row'>
             {buffers.map((buffer: Buffer) => {
-                const size = (buffer.size / memorySize) * SCALE;
-                const position = (buffer.address / memorySize) * SCALE;
+                const size = (buffer.size / computedMemorySize) * SCALE;
+                const position = ((buffer.address - memoryStart) / computedMemorySize) * SCALE;
 
                 return (
                     <div
