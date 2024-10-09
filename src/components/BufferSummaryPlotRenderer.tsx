@@ -144,6 +144,7 @@ function BufferSummaryPlotRenderer() {
                                         operationId={operation.id}
                                         memorySize={isZoomedIn ? zoomedMemorySizeEnd + memoryPadding : memorySize}
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart + memoryPadding : 0}
+                                        memoryPadding={memoryPadding}
                                     />
 
                                     <p className='y-axis-tick'>{operation.id}</p>
