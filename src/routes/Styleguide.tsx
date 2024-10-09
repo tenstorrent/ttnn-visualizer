@@ -29,6 +29,13 @@ const FORM_GROUP = {
     subLabel: 'Sub label here',
 };
 
+const FILE_DOWNLOAD_STATUS = {
+    currentFileName: 'foo.tar.gz',
+    numberOfFiles: 12,
+    percentOfCurrent: 49,
+    finishedFiles: 6,
+};
+
 export default function Operations() {
     const [showProgressOverlay, setShowProgressOverlay] = useState(false);
 
@@ -415,12 +422,14 @@ export default function Operations() {
                     onClick={() => setShowProgressOverlay(true)}
                     intent={Intent.PRIMARY}
                 >
-                    Overlay
+                    File status overlay
                 </Button>
 
                 <FileStatusOverlay
                     isOpen={showProgressOverlay}
                     onClose={() => setShowProgressOverlay(false)}
+                    fileStatus={FILE_DOWNLOAD_STATUS}
+                    canEscapeKeyClose
                 />
             </div>
 

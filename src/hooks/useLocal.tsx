@@ -26,7 +26,9 @@ const useLocalConnection = () => {
                 },
                 onUploadProgress(uploadStatus) {
                     setUploadProgress({
-                        progress: uploadStatus.progress,
+                        // uploadStatus.total could be zero with certain requests, but it's not a problem at the moment for us
+                        // https://github.com/axios/axios/issues/1591
+                        progress: (uploadStatus.loaded * 100) / uploadStatus.total!,
                         estimated: uploadStatus.estimated,
                     });
                 },

@@ -4,36 +4,37 @@ import 'styles/components/FileStatusOverlay.scss';
 
 interface FileStatusOverlayProps {
     isOpen: boolean;
-    onClose: () => void;
+    onClose?: () => void;
+    fileStatus: {
+        currentFileName: string;
+        numberOfFiles: number;
+        percentOfCurrent: number;
+        finishedFiles: number;
+        estimatedDuration?: number;
+    };
+    canEscapeKeyClose?: boolean;
 }
 
-const FILE_DOWNLOAD_STATUS = {
-    currentFileName: 'foo.tar.gz',
-    numberOfFiles: 12,
-    percentOfCurrent: 49,
-    finishedFiles: 6,
-};
-
-function FileStatusOverlay({ isOpen, onClose }: FileStatusOverlayProps) {
+function FileStatusOverlay({ isOpen, onClose, fileStatus, canEscapeKeyClose = false }: FileStatusOverlayProps) {
     return (
         <Overlay
             isOpen={isOpen}
             onClose={onClose}
             hideCloseButton
-            canEscapeKeyClose={false}
+            canEscapeKeyClose={canEscapeKeyClose}
             canOutsideClickClose={false}
         >
             <div className='flex'>
                 <p>
-                    Downloading <strong>{FILE_DOWNLOAD_STATUS.currentFileName}</strong>
+                    Downloading <strong>{fileStatus.currentFileName}</strong>
                 </p>
 
-                <p>{`File ${FILE_DOWNLOAD_STATUS.numberOfFiles - FILE_DOWNLOAD_STATUS.finishedFiles} of ${FILE_DOWNLOAD_STATUS.numberOfFiles}`}</p>
+                <p>{`File ${fileStatus.numberOfFiles - fileStatus.finishedFiles} of ${fileStatus.numberOfFiles}`}</p>
             </div>
 
             <ProgressBar
-                progress={FILE_DOWNLOAD_STATUS.percentOfCurrent / 100}
-                estimated={1}
+                progress={fileStatus.percentOfCurrent / 100}
+                estimated={fileStatus?.estimatedDuration}
             />
         </Overlay>
     );

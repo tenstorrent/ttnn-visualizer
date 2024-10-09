@@ -42,7 +42,7 @@ export interface OperationDetailsData extends Operation {
 
 export interface ActiveReport {
     name: string;
-    remote_connection?: RemoteConnection,
+    remote_connection?: RemoteConnection;
 }
 
 // TODO: we may want to revisit the 'default' portion for the variable name

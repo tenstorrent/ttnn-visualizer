@@ -5,7 +5,7 @@ import 'styles/components/Overlay.scss';
 
 interface OverlayProps {
     isOpen: boolean;
-    onClose: () => void;
+    onClose?: () => void;
     children: ReactNode;
     hideCloseButton?: boolean;
     canEscapeKeyClose?: boolean;
