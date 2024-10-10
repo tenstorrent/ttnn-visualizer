@@ -35,14 +35,21 @@ function BufferSummaryPlotRenderer() {
     const memorySize = !isLoadingDevices && devices ? devices[0].worker_l1_size : 0;
 
     const zoomedMemorySize = useMemo(() => {
-        const sortedBufferSizes = buffersByOperation
-            ?.map((operation) => operation.buffers.map((b) => ({ ...b, operationId: operation.id })))
-            .flat()
-            .sort((a, b) => b.address - a.address);
+        let firstBuffer: undefined | number;
+        let lastBuffer: undefined | number;
 
-        return sortedBufferSizes && sortedBufferSizes.length > 1
-            ? [sortedBufferSizes.at(-1)?.address, sortedBufferSizes[0].address + sortedBufferSizes[0].size]
-            : [0, memorySize];
+        buffersByOperation?.forEach((operation) =>
+            operation.buffers.forEach((buffer) => {
+                firstBuffer =
+                    firstBuffer && !Number.isNaN(firstBuffer) ? Math.min(firstBuffer, buffer.address) : buffer.address;
+                lastBuffer =
+                    lastBuffer && !Number.isNaN(lastBuffer)
+                        ? Math.max(lastBuffer, buffer.address + buffer.size)
+                        : buffer.address + buffer.size;
+            }),
+        );
+
+        return firstBuffer && lastBuffer ? [firstBuffer, lastBuffer] : [0, memorySize];
     }, [buffersByOperation, memorySize]);
 
     const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
