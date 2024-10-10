@@ -6,13 +6,13 @@ import { UIEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch } from '@blueprintjs/core';
-import { BufferSummaryAxisConfiguration } from '../definitions/PlotConfigurations';
-import { BuffersByOperationData, useBuffers, useDevices, useOperationsList } from '../hooks/useAPI';
-import { BufferType } from '../model/BufferType';
-import MemoryPlotRenderer from './operation-details/MemoryPlotRenderer';
-import LoadingSpinner from './LoadingSpinner';
+import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
+import { BuffersByOperationData, useBuffers, useDevices, useOperationsList } from '../../hooks/useAPI';
+import { BufferType } from '../../model/BufferType';
+import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
+import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
-import { HistoricalTensor, Operation, Tensor } from '../model/Graph';
+import { HistoricalTensor, Operation, Tensor } from '../../model/Graph';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
