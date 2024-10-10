@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualzer",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -86,7 +86,7 @@
   },
   "lint-staged": {
     "**/*.{ts,tsx}": ["eslint ./src --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0 --no-ignore"],
-     "**/*.{scss}": "npx stylelint --fix",
+     "**/*.scss": "npx stylelint --fix",
     "**/*.{js,jsx,ts,tsx,css,scss}": "npm run format"
 
   }

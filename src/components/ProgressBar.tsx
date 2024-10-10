@@ -1,10 +1,16 @@
 import { ProgressBar as BlueprintProgressBar } from '@blueprintjs/core';
 import 'styles/components/ProgressBar.scss';
-import { UploadProgress } from '../hooks/useLocal';
 
-function ProgressBar({ progress, estimated }: UploadProgress) {
+interface ProgressBarProps {
+    progress?: number;
+    estimated?: number;
+}
+
+function ProgressBar({ progress, estimated }: ProgressBarProps) {
     return (
         <div className='progress-bar'>
+            <BlueprintProgressBar value={progress} />
+
             {progress && estimated ? (
                 <span className='status'>
                     {progress > 0 ? `${Math.round(progress * 100)}%` : `100%`}
@@ -12,8 +18,6 @@ function ProgressBar({ progress, estimated }: UploadProgress) {
                     {estimated > 0 ? `${Math.round(estimated)}s left` : '0s left'}
                 </span>
             ) : null}
-
-            <BlueprintProgressBar value={progress} />
         </div>
     );
 }

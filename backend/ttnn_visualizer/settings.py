@@ -16,6 +16,20 @@ class Config(object):
     DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))
     TESTING = False
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
+    # Base directory where the SQLite database will be stored
+
+    # SQLite database URL
+    SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(APPLICATION_DIR, 'ttnn.db')}"
+
+    # Enable connection pooling (default for SQLite is disabled)
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_size": 10,  # Adjust pool size as needed (default is 5)
+        "max_overflow": 20,  # Allow overflow of the pool size if necessary
+        "pool_timeout": 30,  # Timeout in seconds before giving up on getting a connection
+    }
+
+    # Disable modification tracking to improve performance
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 
 class DevelopmentConfig(Config):
