@@ -14,7 +14,7 @@ import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
 import { reportLocationAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import ProgressBar from '../ProgressBar';
+import FileStatusOverlay from '../FileStatusOverlay';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -142,9 +142,15 @@ const LocalFolderOptions: FC = () => {
                     </Button>
 
                     {isUploading && uploadProgress?.progress && uploadProgress?.estimated ? (
-                        <ProgressBar
-                            progress={uploadProgress.progress}
-                            estimated={uploadProgress.estimated}
+                        <FileStatusOverlay
+                            isOpen
+                            fileStatus={{
+                                currentFileName: 'Local report',
+                                numberOfFiles: 1,
+                                percentOfCurrent: uploadProgress.progress,
+                                estimatedDuration: uploadProgress.estimated,
+                                finishedFiles: 0,
+                            }}
                         />
                     ) : null}
 
