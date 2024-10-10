@@ -5,6 +5,7 @@
 import { UIEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
+import { Switch } from '@blueprintjs/core';
 import { BufferSummaryAxisConfiguration } from '../definitions/PlotConfigurations';
 import { BuffersByOperationData, useBuffers, useDevices, useOperationsList } from '../hooks/useAPI';
 import { BufferType } from '../model/BufferType';
@@ -16,10 +17,12 @@ import { HistoricalTensor, Operation, Tensor } from '../model/Graph';
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
+const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
 function BufferSummaryPlotRenderer() {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const [isZoomedIn, setIsZoomedIn] = useState(false);
     const { data: buffersByOperation, isLoading: isLoadingBuffers } = useBuffers(BufferType.L1);
     const { data: operationsList, isLoading: isLoadingOperations } = useOperationsList();
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
@@ -30,6 +33,27 @@ function BufferSummaryPlotRenderer() {
 
     // Will need refactoring to handle multiple devices
     const memorySize = !isLoadingDevices && devices ? devices[0].worker_l1_size : 0;
+
+    const zoomedMemorySize = useMemo(() => {
+        let minValue: undefined | number;
+        let maxValue: undefined | number;
+
+        buffersByOperation?.forEach((operation) =>
+            operation.buffers.forEach((buffer) => {
+                minValue = minValue && !Number.isNaN(minValue) ? Math.min(minValue, buffer.address) : buffer.address;
+                maxValue =
+                    maxValue && !Number.isNaN(maxValue)
+                        ? Math.max(maxValue, buffer.address + buffer.size)
+                        : buffer.address + buffer.size;
+            }),
+        );
+
+        return minValue && maxValue ? [minValue, maxValue] : [0, memorySize];
+    }, [buffersByOperation, memorySize]);
+
+    const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
+    const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
+    const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
 
     const tensorList = useMemo(
         () => createHistoricalTensorList(operationsList, buffersByOperation),
@@ -53,6 +77,14 @@ function BufferSummaryPlotRenderer() {
 
     return buffersByOperation && !isLoadingBuffers && !isLoadingOperations && !isLoadingDevices && tensorList ? (
         <div className='buffer-summary-chart'>
+            <Switch
+                label='Buffer zoom'
+                checked={isZoomedIn}
+                onChange={() => {
+                    setIsZoomedIn(!isZoomedIn);
+                }}
+            />
+
             <p className='x-axis-label'>Memory Address</p>
 
             <div className='chart-position'>
@@ -71,8 +103,13 @@ function BufferSummaryPlotRenderer() {
                             },
                         ],
                     ]}
-                    isZoomedIn={false}
-                    memorySize={memorySize}
+                    isZoomedIn={isZoomedIn}
+                    memorySize={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
+                    plotZoomRange={
+                        isZoomedIn
+                            ? [zoomedMemorySizeStart - memoryPadding, zoomedMemorySizeEnd + memoryPadding]
+                            : [0, memorySize]
+                    }
                     configuration={BufferSummaryAxisConfiguration}
                 />
             </div>
@@ -111,7 +148,9 @@ function BufferSummaryPlotRenderer() {
                                     <BufferSummaryRow
                                         buffers={operation.buffers}
                                         operationId={operation.id}
-                                        memorySize={memorySize}
+                                        memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
+                                        memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
+                                        memoryPadding={memoryPadding}
                                     />
 
                                     <p className='y-axis-tick'>{operation.id}</p>
