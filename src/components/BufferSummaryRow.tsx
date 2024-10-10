@@ -9,8 +9,8 @@ import { getBufferColor } from '../functions/colorGenerator';
 interface BufferSummaryRowProps {
     buffers: Buffer[];
     operationId: number;
-    memorySize: number;
     memoryStart: number;
+    memoryEnd: number;
     memoryPadding: number;
 }
 
@@ -23,15 +23,20 @@ interface Buffer {
 
 const SCALE = 100;
 
-function BufferSummaryRow({ buffers, operationId, memorySize, memoryStart, memoryPadding }: BufferSummaryRowProps) {
-    const computedMemorySize = memorySize - memoryStart + memoryPadding * 2;
-    const positionOffset = memoryStart - memoryPadding * 2;
+function BufferSummaryRow({ buffers, operationId, memoryStart, memoryEnd, memoryPadding }: BufferSummaryRowProps) {
+    const computedMemorySize = memoryEnd - memoryStart;
+    const computedPadding = (memoryPadding / computedMemorySize) * SCALE;
 
     return (
-        <div className='buffer-summary-row'>
+        <div
+            className='buffer-summary-row'
+            style={{
+                margin: memoryStart > 0 ? `0 ${computedPadding}%` : '0',
+            }}
+        >
             {buffers.map((buffer: Buffer) => {
                 const size = (buffer.size / computedMemorySize) * SCALE;
-                const position = ((buffer.address - positionOffset) / computedMemorySize) * SCALE;
+                const position = ((buffer.address - memoryStart) / computedMemorySize) * SCALE;
 
                 return (
                     <div

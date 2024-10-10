@@ -35,21 +35,20 @@ function BufferSummaryPlotRenderer() {
     const memorySize = !isLoadingDevices && devices ? devices[0].worker_l1_size : 0;
 
     const zoomedMemorySize = useMemo(() => {
-        let firstBuffer: undefined | number;
-        let lastBuffer: undefined | number;
+        let minValue: undefined | number;
+        let maxValue: undefined | number;
 
         buffersByOperation?.forEach((operation) =>
             operation.buffers.forEach((buffer) => {
-                firstBuffer =
-                    firstBuffer && !Number.isNaN(firstBuffer) ? Math.min(firstBuffer, buffer.address) : buffer.address;
-                lastBuffer =
-                    lastBuffer && !Number.isNaN(lastBuffer)
-                        ? Math.max(lastBuffer, buffer.address + buffer.size)
+                minValue = minValue && !Number.isNaN(minValue) ? Math.min(minValue, buffer.address) : buffer.address;
+                maxValue =
+                    maxValue && !Number.isNaN(maxValue)
+                        ? Math.max(maxValue, buffer.address + buffer.size)
                         : buffer.address + buffer.size;
             }),
         );
 
-        return firstBuffer && lastBuffer ? [firstBuffer, lastBuffer] : [0, memorySize];
+        return minValue && maxValue ? [minValue, maxValue] : [0, memorySize];
     }, [buffersByOperation, memorySize]);
 
     const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
@@ -108,7 +107,7 @@ function BufferSummaryPlotRenderer() {
                     memorySize={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                     plotZoomRange={
                         isZoomedIn
-                            ? [zoomedMemorySizeStart + memoryPadding, zoomedMemorySizeEnd + memoryPadding]
+                            ? [zoomedMemorySizeStart - memoryPadding, zoomedMemorySizeEnd + memoryPadding]
                             : [0, memorySize]
                     }
                     configuration={BufferSummaryAxisConfiguration}
@@ -149,8 +148,8 @@ function BufferSummaryPlotRenderer() {
                                     <BufferSummaryRow
                                         buffers={operation.buffers}
                                         operationId={operation.id}
-                                        memorySize={isZoomedIn ? zoomedMemorySizeEnd + memoryPadding : memorySize}
-                                        memoryStart={isZoomedIn ? zoomedMemorySizeStart + memoryPadding : 0}
+                                        memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
+                                        memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
                                     />
 
