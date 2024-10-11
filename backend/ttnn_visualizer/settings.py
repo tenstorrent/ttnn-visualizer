@@ -30,6 +30,8 @@ class Config(object):
 
     # Disable modification tracking to improve performance
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = False  # For development on HTTP
 
 
 class DevelopmentConfig(Config):
