@@ -23,6 +23,8 @@ def update_tab_session(tab_id, active_report_data, remote_connection_data=None):
 
     # Store the active report in the session using the tab_id as the key
     session[tab_id] = {"active_report": active_report}
+
+    session.modified = True
     return jsonify({"message": "Tab session updated with new active report"}), 200
 
 
@@ -40,11 +42,13 @@ def get_or_create_tab_session(
     # If session doesn't exist, initialize it as an empty dictionary
     if not session_data:
         session[tab_id] = {}  # Initialize empty session data
+        session.modified = True
         session_data = session.get(tab_id)
 
     # If active_report_data is provided, update the session with the new report
     if active_report_data:
         update_tab_session(tab_id, active_report_data, remote_connection_data)
+        session.modified = True
 
     return session.get(tab_id), not bool(session_data)
 
