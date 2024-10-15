@@ -43,6 +43,7 @@ tab_clients = {}
 # Global variables for debouncing
 debounce_timer = None
 debounce_delay = 0.5  # Delay in seconds (adjust as needed)
+last_emit_time = 0
 
 
 def emit_file_status(progress: FileProgress, tab_id=None):
