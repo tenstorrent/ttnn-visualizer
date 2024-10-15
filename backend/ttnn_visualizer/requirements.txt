@@ -9,6 +9,8 @@ flask_static_digest==0.4.1
 setuptools==65.5.0
 python-dotenv==1.0.1
 flask-sqlalchemy
+flask-socketio
+eventlet
 flask-session
 wheel
 build
