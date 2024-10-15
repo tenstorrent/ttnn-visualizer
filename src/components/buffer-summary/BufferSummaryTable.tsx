@@ -6,15 +6,14 @@ import LoadingSpinner from '../LoadingSpinner';
 import '@blueprintjs/table/lib/css/table.css';
 import 'styles/components/BufferSummaryTable.scss';
 
-const HEADING_LABELS = ['', 'Operation Id', 'Operation Name', 'Address', 'Size', 'Buffer Type', 'Device Id'];
+const HEADING_LABELS = ['Operation Id', 'Operation Name', 'Address', 'Size', 'Buffer Type', 'Device Id'];
 const HEADINGS = {
-    0: '',
-    1: 'operationId',
-    2: 'operationName',
-    3: 'address',
-    4: 'size',
-    5: 'buffer_type',
-    6: 'device_id',
+    0: 'operationId',
+    1: 'operationName',
+    2: 'address',
+    3: 'size',
+    4: 'buffer_type',
+    5: 'device_id',
 };
 
 interface Buffer {
@@ -68,11 +67,14 @@ function BufferSummaryTable() {
     };
 
     const getCellContent = (colIndex: keyof typeof HEADINGS, rowIndex: number) => {
-        if (HEADINGS[colIndex] === 'buffer_type') {
-            return BufferTypeLabel[listOfBuffers[rowIndex][HEADINGS[colIndex]]];
+        const cellBuffer = listOfBuffers[rowIndex];
+        const cellHeading = HEADINGS[colIndex] as keyof Buffer;
+
+        if (cellHeading === 'buffer_type') {
+            return BufferTypeLabel[cellBuffer.buffer_type];
         }
 
-        return colIndex === 0 ? rowIndex + 1 : listOfBuffers[rowIndex][HEADINGS[colIndex]];
+        return cellBuffer[cellHeading];
     };
 
     return !isLoadingBuffers && buffersByOperation ? (
