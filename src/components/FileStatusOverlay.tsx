@@ -5,40 +5,80 @@
 import Overlay from './Overlay';
 import ProgressBar from './ProgressBar';
 import 'styles/components/FileStatusOverlay.scss';
+import { fileTransferProgressAtom } from '../store/app';
+import { useAtom } from 'jotai';
+import { useContext, useEffect, useState } from 'react';
+import { SocketContext, SocketContextType } from '../libs/SocketProvider';
+import { getOrCreateTabId } from '../libs/axiosInstance';
+import { FileProgress, FileStatus } from '../model/APIData';
 
 interface FileStatusOverlayProps {
-    isOpen: boolean;
     onClose?: () => void;
-    fileStatus: {
-        currentFileName: string;
-        numberOfFiles: number;
-        percentOfCurrent: number;
-        finishedFiles: number;
-        estimatedDuration?: number;
-    };
     canEscapeKeyClose?: boolean;
 }
 
-function FileStatusOverlay({ isOpen, onClose, fileStatus, canEscapeKeyClose = false }: FileStatusOverlayProps) {
+function FileStatusOverlay({ canEscapeKeyClose = false }: FileStatusOverlayProps) {
+    const [fileTransferProgress, setFileTransferProgress] = useAtom(fileTransferProgressAtom);
+    const [tabId] = useState(getOrCreateTabId())
+    const socket = useContext<SocketContextType>(SocketContext);
+
+    const formatPercentage = (percentage: number) => percentage.toFixed(2).padStart(5, '0');
+
+
+
+    useEffect(() => {
+
+        if (!socket) {
+            return;
+        }
+
+        socket.on('connect', () => {
+            // Reset the progress when the socket reconnects (possible HMR case)
+            setFileTransferProgress({
+                currentFileName: '',
+                numberOfFiles: 0,
+                percentOfCurrent: 0,
+                finishedFiles: 0,
+                status: FileStatus.FINISHED,
+            });
+        });
+
+        // Listen for file transfer progress messages
+        socket.on('fileTransferProgress', (data: FileProgress & { tab_id: string }) => {
+            if (data.tab_id === tabId) {
+                setFileTransferProgress({
+                    currentFileName: data.current_file_name,
+                    numberOfFiles: data.number_of_files,
+                    percentOfCurrent: data.percent_of_current,
+                    finishedFiles: data.finished_files,
+                    status: data.status,
+                });
+            }
+        });
+
+        // Clean up the WebSocket connection on component unmount
+        return () => {
+            socket.off('fileTransferProgress');
+        };
+
+    }, [socket, setFileTransferProgress]);
     return (
         <Overlay
-            isOpen={isOpen}
-            onClose={onClose}
+            isOpen={[FileStatus.COMPRESSING, FileStatus.DOWNLOADING, FileStatus.STARTED].includes(fileTransferProgress.status)}
             hideCloseButton
             canEscapeKeyClose={canEscapeKeyClose}
             canOutsideClickClose={false}
         >
-            <div className='heading'>
-                <p>
-                    Downloading <strong>{fileStatus.currentFileName}</strong>
-                </p>
-
-                <p>{`File ${fileStatus.numberOfFiles - fileStatus.finishedFiles} of ${fileStatus.numberOfFiles}`}</p>
+            <div className="overlay">
+                <h2>File Transfer Progress</h2>
+                <p>Current File: {fileTransferProgress.currentFileName}</p>
+                <p>Files Transferred: {fileTransferProgress.finishedFiles}/{fileTransferProgress.numberOfFiles}</p>
+                <p>Current File Progress: {formatPercentage(fileTransferProgress.percentOfCurrent)}%</p>
+                <p>Status: {fileTransferProgress.status}</p>
             </div>
 
             <ProgressBar
-                progress={fileStatus.percentOfCurrent / 100}
-                estimated={fileStatus?.estimatedDuration}
+                progress={fileTransferProgress.percentOfCurrent / 100}
             />
         </Overlay>
     );
