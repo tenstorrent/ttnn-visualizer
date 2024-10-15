@@ -45,6 +45,24 @@ export interface ActiveReport {
     remote_connection?: RemoteConnection;
 }
 
+export enum FileStatus {
+    DOWNLOADING = "DOWNLOADING",
+    FAILED = "FAILED",
+    COMPRESSING = "COMPRESSING",
+    FINISHED = "FINISHED",
+    STARTED = "STARTED"
+}
+
+// TypeScript Interface with underscored keys to match the backend data
+export interface FileProgress {
+    current_file_name: string;
+    number_of_files: number;
+    percent_of_current: number,
+    finished_files: number;
+    status: FileStatus;  // Use the FileStatus enum
+    timestamp?: string;  // Optional, with default handled elsewhere if necessary
+}
+
 // TODO: we may want to revisit the 'default' portion for the variable name
 export const defaultOperationDetailsData: OperationDetailsData = {
     id: 0,
