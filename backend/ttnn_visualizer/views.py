@@ -1,17 +1,21 @@
 import dataclasses
 import json
-import logging
-from http import HTTPStatus
-from pathlib import Path
-from typing import cast
 
-from flask import Blueprint, Response, current_app, request
+from flask import Blueprint, Response
 
 from ttnn_visualizer.decorators import with_report_path
 from ttnn_visualizer.exceptions import RemoteFolderException
 from ttnn_visualizer.models import RemoteFolder, RemoteConnection, StatusMessage
 from ttnn_visualizer.queries import DatabaseQueries
-
+from ttnn_visualizer.sockets import (
+    FileProgress,
+    emit_file_status,
+    FileStatus,
+)
+from flask import request, current_app
+from pathlib import Path
+from http import HTTPStatus
+import logging
 from ttnn_visualizer.serializers import (
     serialize_operations,
     serialize_tensors,
@@ -251,12 +255,14 @@ def get_devices(report_path):
     ],
 )
 def create_upload_files():
+    """Handle file uploads and emit progress for each file."""
     files = request.files.getlist("files")
     local_dir = current_app.config["LOCAL_DATA_DIRECTORY"]
     filenames = [Path(f.filename).name for f in files]
 
     logger.info(f"Received files: {filenames}")
 
+    # Validate necessary files
     if "db.sqlite" not in filenames or "config.json" not in filenames:
         return StatusMessage(
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
@@ -266,20 +272,56 @@ def create_upload_files():
     report_name = files[0].filename.split("/")[0]
     report_directory = Path(local_dir)
     logger.info(f"Writing report files to {report_directory}/{report_name}")
-    for file in files:
-        logger.info(f"Processing file: {file.filename}")
-        destination_file = Path(report_directory, Path(file.filename))
+
+    total_files = len(files)
+    processed_files = 0
+    tab_id = request.args.get("tabId")
+
+    for index, file in enumerate(files):
+        current_file_name = file.filename
+        logger.info(f"Processing file: {current_file_name}")
+
+        destination_file = Path(report_directory, Path(current_file_name))
         logger.info(f"Writing file to {destination_file}")
+
+        # Create the directory if it doesn't exist
         if not destination_file.parent.exists():
             logger.info(
                 f"{destination_file.parent.name} does not exist. Creating directory"
             )
             destination_file.parent.mkdir(exist_ok=True, parents=True)
+
+        # Emit 0% progress at the start
+        progress = FileProgress(
+            current_file_name=current_file_name,
+            number_of_files=total_files,
+            percent_of_current=0,
+            finished_files=processed_files,
+            status=FileStatus.DOWNLOADING,
+        )
+        emit_file_status(progress, tab_id)
+
+        # Save the file locally
         file.save(destination_file)
 
-    update_tab_session(
-        tab_id=request.args.get("tabId"), active_report_data={"name": report_name}
+        # Emit 100% progress after file is saved
+        processed_files += 1
+        progress.percent_of_current = 100
+        progress.finished_files = processed_files
+        emit_file_status(progress, tab_id)
+
+    # Update the session after all files are uploaded
+    update_tab_session(tab_id=tab_id, active_report_data={"name": report_name})
+
+    # Emit final success status after all files are processed
+    final_progress = FileProgress(
+        current_file_name=None,
+        number_of_files=total_files,
+        percent_of_current=100,
+        finished_files=processed_files,
+        status=FileStatus.FINISHED,
     )
+    emit_file_status(final_progress, tab_id)
 
     return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
 
@@ -320,9 +362,13 @@ def sync_remote_folder():
     request_body = request.json
     connection = request_body.get("connection")
     folder = request_body.get("folder")
+    tab_id = request.args.get("tabId", None)
     try:
         sync_test_folders(
-            RemoteConnection(**connection), RemoteFolder(**folder), remote_dir
+            RemoteConnection(**connection),
+            RemoteFolder(**folder),
+            remote_dir,
+            sid=tab_id,
         )
     except RemoteFolderException as e:
         return Response(status=e.status, response=e.message)
