@@ -35,7 +35,7 @@ const LocalFolderOptions: FC = () => {
     const queryClient = useQueryClient();
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
 
-    const { uploadLocalFolder, uploadProgress } = useLocalConnection();
+    const { uploadLocalFolder } = useLocalConnection();
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploading, setIsUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
@@ -141,18 +141,8 @@ const LocalFolderOptions: FC = () => {
                         View report
                     </Button>
 
-                    {isUploading && uploadProgress?.progress && uploadProgress?.estimated ? (
-                        <FileStatusOverlay
-                            isOpen
-                            fileStatus={{
-                                currentFileName: 'Local report',
-                                numberOfFiles: 1,
-                                percentOfCurrent: uploadProgress.progress,
-                                estimatedDuration: uploadProgress.estimated,
-                                finishedFiles: 0,
-                            }}
-                        />
-                    ) : null}
+                    // TODO This should live higher in the component stack maybe
+                    <FileStatusOverlay />
 
                     {folderStatus && !isUploading && (
                         <div className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}>
