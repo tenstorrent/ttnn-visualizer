@@ -6,11 +6,11 @@ import React from 'react';
 import Overlay from './Overlay';
 import ProgressBar from './ProgressBar';
 import 'styles/components/FileStatusOverlay.scss';
-import { FileProgress, FileStatus } from '../model/APIData';
+import { FileProgress } from '../model/APIData';
 
 interface FileTransferOverlayProps {
     progress: FileProgress;
-    open?: boolean;
+    open: boolean;
 }
 
 const FileStatusOverlay: React.FC<FileTransferOverlayProps> = ({ progress, open }) => {
@@ -20,7 +20,7 @@ const FileStatusOverlay: React.FC<FileTransferOverlayProps> = ({ progress, open 
 
     return (
         <Overlay
-            isOpen={open || [FileStatus.COMPRESSING, FileStatus.DOWNLOADING, FileStatus.STARTED].includes(status)}
+            isOpen={open}
             hideCloseButton
             canEscapeKeyClose={false}
             canOutsideClickClose={false}

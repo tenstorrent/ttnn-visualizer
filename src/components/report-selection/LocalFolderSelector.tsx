@@ -16,6 +16,7 @@ import { reportLocationAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusWrapper from '../FileStatusOverlayWrapper';
 import FileStatusOverlay from '../FileStatusOverlay';
+import { FileStatus } from '../../model/APIData';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -143,7 +144,12 @@ const LocalFolderOptions: FC = () => {
                     <FileStatusWrapper>
                         {(fileProgress) => (
                             <FileStatusOverlay
-                                open={isUploading}
+                                open={
+                                    isUploading ||
+                                    [FileStatus.DOWNLOADING, FileStatus.COMPRESSING, FileStatus.STARTED].includes(
+                                        fileProgress?.status,
+                                    )
+                                }
                                 progress={fileProgress}
                             />
                         )}
