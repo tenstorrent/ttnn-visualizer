@@ -57,7 +57,7 @@ def create_app(settings_override=None):
 
 
 def extensions(app: flask.Flask):
-    from ttnn_visualizer.extensions import flask_static_digest, db, session
+    from ttnn_visualizer.extensions import flask_static_digest, db
 
     """
     Register 0 or more extensions (mutates the app passed in).
@@ -68,11 +68,6 @@ def extensions(app: flask.Flask):
 
     flask_static_digest.init_app(app)
     db.init_app(app)
-
-    app.config["SESSION_TYPE"] = "sqlalchemy"
-    app.config["SESSION_SQLALCHEMY"] = db
-
-    session.init_app(app)
 
     # Create the tables within the application context
     with app.app_context():
