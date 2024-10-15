@@ -14,17 +14,24 @@ def with_report_path(func):
         tab_id = request.args.get("tabId")
 
         if not tab_id:
+            current_app.logger.error("No tabId present on request, returning 404")
             abort(404)
 
-        session, created = get_or_create_tab_session(tab_id=tab_id)
-        active_report = session.get("active_report", None)
+        session = get_or_create_tab_session(tab_id=tab_id)
+        active_report = session.active_report
 
         if not active_report:
+            current_app.logger.error(
+                f"No active report exists for tabId {tab_id}, returning 404"
+            )
             # Raise 404 if report_path is missing or does not exist
             abort(404)
 
         report_path = get_report_path(active_report, current_app)
         if not Path(report_path).exists():
+            current_app.logger.error(
+                f"Specified report path {report_path} does not exist, returning 404"
+            )
             abort(404)
 
         # Add the report path to the view's arguments
