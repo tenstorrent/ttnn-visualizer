@@ -6,10 +6,21 @@ from ttnn_visualizer.sessions import get_or_create_tab_session
 from ttnn_visualizer.utils import get_report_path
 
 
+REPORT_OVERRIDE = {
+    # Name of the folder under local
+    "name": "636093565"
+}
+
+
 def with_report_path(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         from flask import current_app
+
+        if REPORT_OVERRIDE:
+            # Add the report path to the view's arguments
+            kwargs["report_path"] = get_report_path(REPORT_OVERRIDE, current_app)
+            return func(*args, **kwargs)
 
         tab_id = request.args.get("tabId")
 
@@ -18,6 +29,10 @@ def with_report_path(func):
 
         session, created = get_or_create_tab_session(tab_id=tab_id)
         active_report = session.get("active_report", None)
+
+        active_report = {
+            "name" "636093565",
+        }
 
         if not active_report:
             # Raise 404 if report_path is missing or does not exist

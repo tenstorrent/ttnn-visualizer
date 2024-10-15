@@ -5,9 +5,10 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import cast
 
+from celery.worker.control import active
 from flask import Blueprint, Response, current_app, request
 
-from ttnn_visualizer.decorators import with_report_path
+from ttnn_visualizer.decorators import with_report_path, REPORT_OVERRIDE
 from ttnn_visualizer.exceptions import RemoteFolderException
 from ttnn_visualizer.models import RemoteFolder, RemoteConnection, StatusMessage
 from ttnn_visualizer.queries import DatabaseQueries
@@ -374,13 +375,19 @@ def get_active_folder():
 
     tab_id = request.args.get("tabId", None)
     current_app.logger.info(f"TabID: {tab_id}")
+    if REPORT_OVERRIDE:
+        return REPORT_OVERRIDE
     if tab_id:
         session, created = get_or_create_tab_session(
             tab_id=tab_id
         )  # Capture both the session and created flag
         current_app.logger.info(f"Session: {session}")
+
+        active_report = session.get("active_report", None)
+
+        logger.info(f"Active Report: {active_report}")
+
         if session and session.get("active_report", None):
-            active_report = session.get("active_report")
             return {
                 "name": active_report.get("name"),
                 "remote_connection": active_report.get("remote_connection", None),
