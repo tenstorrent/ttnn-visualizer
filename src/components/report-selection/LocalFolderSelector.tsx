@@ -14,6 +14,7 @@ import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
 import { reportLocationAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
+import FileStatusWrapper from '../FileStatusOverlayWrapper';
 import FileStatusOverlay from '../FileStatusOverlay';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
@@ -139,9 +140,10 @@ const LocalFolderOptions: FC = () => {
                     >
                         View report
                     </Button>
+                    <FileStatusWrapper>
+                        {(fileProgress) => <FileStatusOverlay progress={fileProgress} />}
+                    </FileStatusWrapper>
 
-                    {/* TODO This should live higher in the component stack maybe */}
-                    <FileStatusOverlay />
                     {folderStatus && !isUploading && (
                         <div className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}>
                             <Icon

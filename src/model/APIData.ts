@@ -51,14 +51,15 @@ export enum FileStatus {
     COMPRESSING = 'COMPRESSING',
     FINISHED = 'FINISHED',
     STARTED = 'STARTED',
+    INACTIVE = 'INACTIVE',
 }
 
 // TypeScript Interface with underscored keys to match the backend data
 export interface FileProgress {
-    current_file_name: string;
-    number_of_files: number;
-    percent_of_current: number;
-    finished_files: number;
+    currentFileName: string;
+    numberOfFiles: number;
+    percentOfCurrent: number;
+    finishedFiles: number;
     status: FileStatus; // Use the FileStatus enum
     timestamp?: string; // Optional, with default handled elsewhere if necessary
 }
