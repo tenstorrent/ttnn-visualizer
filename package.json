@@ -22,6 +22,7 @@
   "dependencies": {
     "@blueprintjs/core": "^5.10.3",
     "@blueprintjs/select": "^5.1.5",
+    "@blueprintjs/table": "^5.2.2",
     "@tanstack/react-virtual": "^3.5.1",
     "@types/tinycolor2": "^1.4.6",
     "axios": "^1.7.2",
@@ -85,9 +86,10 @@
     }
   },
   "lint-staged": {
-    "**/*.{ts,tsx}": ["eslint ./src --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0 --no-ignore"],
-     "**/*.scss": "npx stylelint --fix",
+    "**/*.{ts,tsx}": [
+      "eslint ./src --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0 --no-ignore"
+    ],
+    "**/*.scss": "npx stylelint --fix",
     "**/*.{js,jsx,ts,tsx,css,scss}": "npm run format"
-
   }
 }

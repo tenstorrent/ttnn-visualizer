@@ -2,9 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import { BufferType } from '../model/BufferType';
+import { BufferType } from '../../model/BufferType';
 import 'styles/components/BufferSummaryRow.scss';
-import { getBufferColor } from '../functions/colorGenerator';
+import { getBufferColor } from '../../functions/colorGenerator';
 
 interface BufferSummaryRowProps {
     buffers: Buffer[];
@@ -47,8 +47,6 @@ function BufferSummaryRow({ buffers, operationId, memoryStart, memoryEnd, memory
                             left: `${position}%`,
                             backgroundColor: getBufferColor(buffer.address),
                         }}
-                        data-address={buffer.address}
-                        data-size={buffer.size}
                     />
                 );
             })}
