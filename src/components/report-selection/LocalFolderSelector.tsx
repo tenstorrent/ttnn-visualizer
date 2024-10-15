@@ -141,7 +141,12 @@ const LocalFolderOptions: FC = () => {
                         View report
                     </Button>
                     <FileStatusWrapper>
-                        {(fileProgress) => <FileStatusOverlay progress={fileProgress} />}
+                        {(fileProgress) => (
+                            <FileStatusOverlay
+                                open={isUploading}
+                                progress={fileProgress}
+                            />
+                        )}
                     </FileStatusWrapper>
 
                     {folderStatus && !isUploading && (

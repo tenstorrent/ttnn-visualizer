@@ -10,16 +10,17 @@ import { FileProgress, FileStatus } from '../model/APIData';
 
 interface FileTransferOverlayProps {
     progress: FileProgress;
+    open?: boolean;
 }
 
-const FileStatusOverlay: React.FC<FileTransferOverlayProps> = ({ progress }) => {
+const FileStatusOverlay: React.FC<FileTransferOverlayProps> = ({ progress, open }) => {
     const formatPercentage = (percentage: number) => percentage.toFixed(2).padStart(5, '0');
 
     const { status, currentFileName, finishedFiles, numberOfFiles, percentOfCurrent } = progress;
 
     return (
         <Overlay
-            isOpen={[FileStatus.COMPRESSING, FileStatus.DOWNLOADING, FileStatus.STARTED].includes(status)}
+            isOpen={open || [FileStatus.COMPRESSING, FileStatus.DOWNLOADING, FileStatus.STARTED].includes(status)}
             hideCloseButton
             canEscapeKeyClose={false}
             canOutsideClickClose={false}
