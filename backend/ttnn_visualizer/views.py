@@ -375,7 +375,7 @@ def get_active_folder():
     tab_id = request.args.get("tabId", None)
     current_app.logger.info(f"TabID: {tab_id}")
     if tab_id:
-        session, created = get_or_create_tab_session(
+        session = get_or_create_tab_session(
             tab_id=tab_id
         )  # Capture both the session and created flag
         current_app.logger.info(f"Session: {session}")
