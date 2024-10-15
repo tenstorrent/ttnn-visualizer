@@ -378,9 +378,10 @@ def get_active_folder():
         session = get_or_create_tab_session(
             tab_id=tab_id
         )  # Capture both the session and created flag
+
         current_app.logger.info(f"Session: {session}")
-        if session and session.get("active_report", None):
-            active_report = session.get("active_report")
+        if session and session.active_report:
+            active_report = session.active_report
             return {
                 "name": active_report.get("name"),
                 "remote_connection": active_report.get("remote_connection", None),
