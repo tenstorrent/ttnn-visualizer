@@ -1,6 +1,6 @@
 from logging import getLogger
 
-from flask import request, jsonify, session, current_app
+from flask import request, jsonify, current_app
 
 from ttnn_visualizer.models import TabSession
 from ttnn_visualizer.extensions import db

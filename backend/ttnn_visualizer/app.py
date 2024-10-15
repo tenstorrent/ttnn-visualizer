@@ -59,7 +59,7 @@ def create_app(settings_override=None):
 
 
 def extensions(app: flask.Flask):
-    from ttnn_visualizer.extensions import flask_static_digest, db, session, socketio
+    from ttnn_visualizer.extensions import flask_static_digest, db, socketio
     from ttnn_visualizer.sockets import register_handlers
 
     """
@@ -78,9 +78,6 @@ def extensions(app: flask.Flask):
 
     with app.app_context():
         db.drop_all()
-
-    session.init_app(app)
-    # Register the handlers by passing the socketio instance
 
     register_handlers(socketio)
 
