@@ -4,6 +4,9 @@ import json
 from json import JSONDecodeError
 
 from pydantic import BaseModel, Field
+from sqlalchemy import Integer, Column, String, JSON
+
+from ttnn_visualizer.extensions import db
 
 
 class BufferType(enum.Enum):
@@ -163,6 +166,20 @@ class RemoteConnection(BaseModel):
     host: str
     port: int = Field(ge=1, le=65535)
     path: str
+
+
+class TabSession(db.Model):
+    __tablename__ = "tab_sessions"
+
+    id = Column(Integer, primary_key=True)
+    tab_id = Column(String, unique=True, nullable=False)
+    active_report = Column(JSON)
+    remote_connection = Column(JSON, nullable=True)
+
+    def __init__(self, tab_id, active_report, remote_connection=None):
+        self.tab_id = tab_id
+        self.active_report = active_report
+        self.remote_connection = remote_connection
 
 
 class StatusMessage(BaseModel):

@@ -18,7 +18,7 @@ def with_report_path(func):
             abort(404)
 
         session = get_or_create_tab_session(tab_id=tab_id)
-        active_report = session.get("active_report", None)
+        active_report = session.active_report
 
         if not active_report:
             current_app.logger.error(
