@@ -132,7 +132,6 @@ const LocalFolderOptions: FC = () => {
                         />
                         <span className='bp5-file-upload-input'>{localUploadLabel}</span>
                     </label>
-
                     <Button
                         disabled={!isLocalReportMounted}
                         onClick={viewOperation}
@@ -141,9 +140,8 @@ const LocalFolderOptions: FC = () => {
                         View report
                     </Button>
 
-                    // TODO This should live higher in the component stack maybe
+                    {/* TODO This should live higher in the component stack maybe */}
                     <FileStatusOverlay />
-
                     {folderStatus && !isUploading && (
                         <div className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}>
                             <Icon

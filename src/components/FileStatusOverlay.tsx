@@ -2,32 +2,28 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
+import { useAtom } from 'jotai';
+import { useContext, useEffect, useState } from 'react';
 import Overlay from './Overlay';
 import ProgressBar from './ProgressBar';
 import 'styles/components/FileStatusOverlay.scss';
-import { fileTransferProgressAtom } from '../store/app';
-import { useAtom } from 'jotai';
-import { useContext, useEffect, useState } from 'react';
 import { SocketContext, SocketContextType } from '../libs/SocketProvider';
 import { getOrCreateTabId } from '../libs/axiosInstance';
 import { FileProgress, FileStatus } from '../model/APIData';
+import { fileTransferProgressAtom } from '../store/app';
 
 interface FileStatusOverlayProps {
-    onClose?: () => void;
     canEscapeKeyClose?: boolean;
 }
 
 function FileStatusOverlay({ canEscapeKeyClose = false }: FileStatusOverlayProps) {
     const [fileTransferProgress, setFileTransferProgress] = useAtom(fileTransferProgressAtom);
-    const [tabId] = useState(getOrCreateTabId())
+    const [tabId] = useState(getOrCreateTabId());
     const socket = useContext<SocketContextType>(SocketContext);
 
     const formatPercentage = (percentage: number) => percentage.toFixed(2).padStart(5, '0');
 
-
-
     useEffect(() => {
-
         if (!socket) {
             return;
         }
@@ -57,29 +53,31 @@ function FileStatusOverlay({ canEscapeKeyClose = false }: FileStatusOverlayProps
         });
 
         // Clean up the WebSocket connection on component unmount
+        // eslint-disable-next-line consistent-return
         return () => {
             socket.off('fileTransferProgress');
         };
-
-    }, [socket, setFileTransferProgress]);
+    }, [socket, setFileTransferProgress, tabId]);
     return (
         <Overlay
-            isOpen={[FileStatus.COMPRESSING, FileStatus.DOWNLOADING, FileStatus.STARTED].includes(fileTransferProgress.status)}
+            isOpen={[FileStatus.COMPRESSING, FileStatus.DOWNLOADING, FileStatus.STARTED].includes(
+                fileTransferProgress.status,
+            )}
             hideCloseButton
             canEscapeKeyClose={canEscapeKeyClose}
             canOutsideClickClose={false}
         >
-            <div className="overlay">
+            <div className='overlay'>
                 <h2>File Transfer Progress</h2>
                 <p>Current File: {fileTransferProgress.currentFileName}</p>
-                <p>Files Transferred: {fileTransferProgress.finishedFiles}/{fileTransferProgress.numberOfFiles}</p>
+                <p>
+                    Files Transferred: {fileTransferProgress.finishedFiles}/{fileTransferProgress.numberOfFiles}
+                </p>
                 <p>Current File Progress: {formatPercentage(fileTransferProgress.percentOfCurrent)}%</p>
                 <p>Status: {fileTransferProgress.status}</p>
             </div>
 
-            <ProgressBar
-                progress={fileTransferProgress.percentOfCurrent / 100}
-            />
+            <ProgressBar progress={fileTransferProgress.percentOfCurrent / 100} />
         </Overlay>
     );
 }

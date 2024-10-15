@@ -21,10 +21,9 @@ export const isDramActiveAtom = atom<boolean>(false);
 
 // This atom stores the file transfer progress data in localStorage (or sessionStorage)
 export const fileTransferProgressAtom = atom({
-        currentFileName: '',
-        numberOfFiles: 0,
-        percentOfCurrent: 0,
-        finishedFiles: 0,
-        status: FileStatus.FINISHED
-    }
-);
+    currentFileName: '',
+    numberOfFiles: 0,
+    percentOfCurrent: 0,
+    finishedFiles: 0,
+    status: FileStatus.FINISHED,
+});

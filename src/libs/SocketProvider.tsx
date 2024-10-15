@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import React, { ReactNode, createContext, useEffect } from 'react';
 import { Socket, io } from 'socket.io-client';
 import { getOrCreateTabId } from './axiosInstance';
@@ -39,7 +40,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         // socket.onAny((eventName: string, data: any ) => {
         //     console.info(`Socket ${eventName}: ${JSON.stringify(data)}`);
         // })
-
 
         return () => {
             // Cleanup socket listeners on unmount
