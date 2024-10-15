@@ -18,6 +18,7 @@ import Styleguide from './routes/Styleguide';
 import ROUTES from './definitions/routes';
 import Tensors from './routes/Tensors';
 import BufferSummary from './routes/BufferSummary';
+import { SocketProvider } from './libs/SocketProvider';
 
 const router = createBrowserRouter([
     {
@@ -67,9 +68,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
         <HelmetProvider>
             <React.StrictMode>
-                <OverlaysProvider>
-                    <RouterProvider router={router} />
-                </OverlaysProvider>
+                <SocketProvider>
+                    <OverlaysProvider>
+
+                        <RouterProvider router={router} />
+                    </OverlaysProvider>
+                </SocketProvider>
             </React.StrictMode>
         </HelmetProvider>
     </QueryClientProvider>,
