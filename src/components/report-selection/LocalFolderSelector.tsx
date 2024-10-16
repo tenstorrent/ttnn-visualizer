@@ -14,7 +14,9 @@ import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
 import { reportLocationAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
+import FileStatusWrapper from '../FileStatusOverlayWrapper';
 import FileStatusOverlay from '../FileStatusOverlay';
+import { FileStatus } from '../../model/APIData';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -35,7 +37,7 @@ const LocalFolderOptions: FC = () => {
     const queryClient = useQueryClient();
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
 
-    const { uploadLocalFolder, uploadProgress } = useLocalConnection();
+    const { uploadLocalFolder } = useLocalConnection();
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploading, setIsUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
@@ -132,7 +134,6 @@ const LocalFolderOptions: FC = () => {
                         />
                         <span className='bp5-file-upload-input'>{localUploadLabel}</span>
                     </label>
-
                     <Button
                         disabled={!isLocalReportMounted}
                         onClick={viewOperation}
@@ -140,19 +141,19 @@ const LocalFolderOptions: FC = () => {
                     >
                         View report
                     </Button>
-
-                    {isUploading && uploadProgress?.progress && uploadProgress?.estimated ? (
-                        <FileStatusOverlay
-                            isOpen
-                            fileStatus={{
-                                currentFileName: 'Local report',
-                                numberOfFiles: 1,
-                                percentOfCurrent: uploadProgress.progress,
-                                estimatedDuration: uploadProgress.estimated,
-                                finishedFiles: 0,
-                            }}
-                        />
-                    ) : null}
+                    <FileStatusWrapper>
+                        {(fileProgress) => (
+                            <FileStatusOverlay
+                                open={
+                                    isUploading ||
+                                    [FileStatus.DOWNLOADING, FileStatus.COMPRESSING, FileStatus.STARTED].includes(
+                                        fileProgress?.status,
+                                    )
+                                }
+                                progress={fileProgress}
+                            />
+                        )}
+                    </FileStatusWrapper>
 
                     {folderStatus && !isUploading && (
                         <div className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}>

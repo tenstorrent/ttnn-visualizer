@@ -9,7 +9,7 @@ const axiosInstance = axios.create({
     baseURL: '/', // Your API base URL
 });
 
-const getOrCreateTabId = () => {
+export const getOrCreateTabId = () => {
     let tabId = sessionStorage.getItem('tab_id');
     if (!tabId) {
         tabId = Math.random().toString(36).substring(2, 15);

@@ -2,46 +2,42 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
+import React from 'react';
 import Overlay from './Overlay';
 import ProgressBar from './ProgressBar';
 import 'styles/components/FileStatusOverlay.scss';
+import { FileProgress } from '../model/APIData';
 
-interface FileStatusOverlayProps {
-    isOpen: boolean;
-    onClose?: () => void;
-    fileStatus: {
-        currentFileName: string;
-        numberOfFiles: number;
-        percentOfCurrent: number;
-        finishedFiles: number;
-        estimatedDuration?: number;
-    };
-    canEscapeKeyClose?: boolean;
+interface FileTransferOverlayProps {
+    progress: FileProgress;
+    open: boolean;
 }
 
-function FileStatusOverlay({ isOpen, onClose, fileStatus, canEscapeKeyClose = false }: FileStatusOverlayProps) {
+const FileStatusOverlay: React.FC<FileTransferOverlayProps> = ({ progress, open }) => {
+    const formatPercentage = (percentage: number) => percentage.toFixed(2).padStart(5, '0');
+
+    const { status, currentFileName, finishedFiles, numberOfFiles, percentOfCurrent } = progress;
+
     return (
         <Overlay
-            isOpen={isOpen}
-            onClose={onClose}
+            isOpen={open}
             hideCloseButton
-            canEscapeKeyClose={canEscapeKeyClose}
+            canEscapeKeyClose={false}
             canOutsideClickClose={false}
         >
-            <div className='heading'>
+            <div className='overlay'>
+                <h2>File Transfer Progress</h2>
+                <p>Current File: {currentFileName}</p>
                 <p>
-                    Downloading <strong>{fileStatus.currentFileName}</strong>
+                    Files Transferred: {finishedFiles}/{numberOfFiles}
                 </p>
-
-                <p>{`File ${fileStatus.numberOfFiles - fileStatus.finishedFiles} of ${fileStatus.numberOfFiles}`}</p>
+                <p>Current File Progress: {formatPercentage(percentOfCurrent)}%</p>
+                <p>Status: {status}</p>
             </div>
 
-            <ProgressBar
-                progress={fileStatus.percentOfCurrent / 100}
-                estimated={fileStatus?.estimatedDuration}
-            />
+            <ProgressBar progress={percentOfCurrent / 100} />
         </Overlay>
     );
-}
+};
 
 export default FileStatusOverlay;
