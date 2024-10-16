@@ -6,6 +6,7 @@ import { UIEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch } from '@blueprintjs/core';
+import { Link } from 'react-router-dom';
 import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
 import { BuffersByOperationData, useBuffers, useDevices, useOperationsList } from '../../hooks/useAPI';
 import { BufferType } from '../../model/BufferType';
@@ -14,6 +15,7 @@ import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
 import { HistoricalTensor, Operation, Tensor } from '../../model/Graph';
 import 'styles/components/BufferSummaryPlot.scss';
+import ROUTES from '../../definitions/routes';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -153,8 +155,12 @@ function BufferSummaryPlotRenderer() {
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
                                     />
-
-                                    <p className='y-axis-tick'>{operation.id}</p>
+                                    <Link
+                                        to={`${ROUTES.OPERATIONS}/${operation.id}`}
+                                        className='y-axis-tick'
+                                    >
+                                        {operation.id}
+                                    </Link>
                                 </div>
                             );
                         })}
