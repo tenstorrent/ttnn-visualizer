@@ -157,37 +157,32 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
     }
 
-    const selectTensorByAddress = (address: number): void => {
+    const selectTensorByAddress = (address: number, tensorId?: number): void => {
         setSelectedTensorAddress(address);
-        setSelectedTensor(details.getTensorForAddress(address)?.id || null);
+        setSelectedTensor(tensorId || details.getTensorForAddress(address)?.id || null);
         createToast(address);
     };
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address } = event.points[0].data.memoryData;
+        // No tensor data available here
         selectTensorByAddress(address);
     };
 
     const onDramBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        const { address } = event.points[0].data.memoryData;
-        selectTensorByAddress(address);
+        const { address, tensor } = event.points[0].data.memoryData;
+        selectTensorByAddress(address, tensor?.id);
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        const { address } = event.points[0].data.memoryData;
-        // TODO: we now have a tensor in event.points[0].data.memoryData.tensor Maybe we should just use that?
-        selectTensorByAddress(address);
+        const { address, tensor } = event.points[0].data.memoryData;
+        selectTensorByAddress(address, tensor?.id);
     };
 
     const onTensorClick = (address: number | null): void => {
         if (address) {
-            const tensor = details.getTensorForAddress(address);
-            createToast(address);
-            setSelectedTensorAddress(address);
-
-            if (tensor) {
-                setSelectedTensor(tensor.id);
-            }
+            // No tensor data available here
+            selectTensorByAddress(address);
         }
     };
 
