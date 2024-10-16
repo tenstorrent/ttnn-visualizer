@@ -2,6 +2,8 @@ import dataclasses
 from collections import defaultdict
 from email.policy import default
 
+from ttnn_visualizer.models import BufferType, Operation
+
 
 def serialize_operations(
     inputs,
@@ -86,6 +88,28 @@ def serialize_inputs_outputs(inputs, outputs, producers_consumers, tensors_dict)
     return inputs_dict, outputs_dict
 
 
+def serialize_buffer_pages(buffer_pages):
+    # Collect device-specific data if needed
+
+    # Serialize each buffer page to a dictionary using dataclasses.asdict
+    buffer_pages_list = [dataclasses.asdict(page) for page in buffer_pages]
+
+    # Optionally, modify or adjust the serialized data as needed
+    for page_data in buffer_pages_list:
+        # Set a custom id field if needed
+        page_data["id"] = f"{page_data['operation_id']}_{page_data['page_index']}"
+
+        # If the buffer_type is handled by an enum, adjust it similarly to your BufferPage model
+        if "buffer_type" in page_data and isinstance(
+            page_data["buffer_type"], BufferType
+        ):
+            page_data["buffer_type"] = page_data["buffer_type"].value
+
+    return {
+        "buffer_pages": buffer_pages_list,
+    }
+
+
 def serialize_operation(
     buffers,
     inputs,
@@ -128,12 +152,16 @@ def serialize_operation(
     }
 
 
-def serialize_operation_buffers(operation, operation_buffers):
+def serialize_operation_buffers(operation: Operation, operation_buffers):
     buffer_data = [dataclasses.asdict(b) for b in operation_buffers]
     for b in buffer_data:
         b.pop("operation_id")
         b.update({"size": b.pop("max_size_per_bank")})
-    return {"id": operation.operation_id, "buffers": list(buffer_data)}
+    return {
+        "id": operation.operation_id,
+        "name": operation.name,
+        "buffers": list(buffer_data),
+    }
 
 
 def serialize_devices(devices):

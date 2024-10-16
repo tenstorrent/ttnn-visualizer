@@ -1,16 +1,16 @@
 import logging
-import shutil
+import subprocess
 from os import environ
 from pathlib import Path
 
-from flask import Flask
 import flask
+from dotenv import load_dotenv
+from flask import Flask
+from flask_cors import CORS
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
-from flask_cors import CORS
-from ttnn_visualizer import settings
-from dotenv import load_dotenv
-from ttnn_visualizer.sessions import init_sessions, CustomRequest, init_session_db
+
+from ttnn_visualizer.settings import Config
 
 
 def create_app(settings_override=None):
@@ -31,9 +31,8 @@ def create_app(settings_override=None):
     flask_env = environ.get("FLASK_ENV", "development")
 
     app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
-    app.request_class = CustomRequest
 
-    app.config.from_object(getattr(settings, flask_env))
+    app.config.from_object(Config())
 
     logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
 
@@ -42,8 +41,7 @@ def create_app(settings_override=None):
     if settings_override:
         app.config.update(settings_override)
 
-    init_session_db()
-
+    app.config["USE_WEBSOCKETS"] = True  # Set this based on environment
     middleware(app)
 
     app.register_blueprint(api)
@@ -61,7 +59,8 @@ def create_app(settings_override=None):
 
 
 def extensions(app: flask.Flask):
-    from ttnn_visualizer.extensions import flask_static_digest
+    from ttnn_visualizer.extensions import flask_static_digest, db, socketio
+    from ttnn_visualizer.sockets import register_handlers
 
     """
     Register 0 or more extensions (mutates the app passed in).
@@ -71,6 +70,20 @@ def extensions(app: flask.Flask):
     """
 
     flask_static_digest.init_app(app)
+    socketio.init_app(app)
+    db.init_app(app)
+
+    app.config["SESSION_TYPE"] = "sqlalchemy"
+    app.config["SESSION_SQLALCHEMY"] = db
+
+    with app.app_context():
+        db.drop_all()
+
+    register_handlers(socketio)
+
+    # Create the tables within the application context
+    with app.app_context():
+        db.create_all()
 
     # For automatically reflecting table data
     # with app.app_context():
@@ -86,17 +99,17 @@ def middleware(app: flask.Flask):
     :param app: Flask application instance
     :return: None
     """
-    # Enable the Flask interactive debugger in the brower for development.
-    if app.debug:
-        app.wsgi_app = DebuggedApplication(app.wsgi_app, evalex=True)
+    # Only use the middleware if running in pure WSGI (HTTP requests)
+    if not app.config.get("USE_WEBSOCKETS"):
+        # Enable the Flask interactive debugger in the browser for development.
+        if app.debug:
+            app.wsgi_app = DebuggedApplication(app.wsgi_app, evalex=True)
 
-    # Set the real IP address into request.remote_addr when behind a proxy.
-    app.wsgi_app = ProxyFix(app.wsgi_app)
+        # Set the real IP address into request.remote_addr when behind a proxy.
+        app.wsgi_app = ProxyFix(app.wsgi_app)
 
     # CORS configuration
     origins = ["http://localhost:5173", "http://localhost:8000"]
-
-    init_sessions(app)
 
     CORS(
         app,
@@ -104,3 +117,20 @@ def middleware(app: flask.Flask):
     )
 
     return None
+
+
+if __name__ == "__main__":
+    config = Config()
+
+    gunicorn_args = [
+        "gunicorn",
+        "-k",
+        config.GUNICORN_WORKER_CLASS,
+        "-w",
+        config.GUNICORN_WORKERS,
+        config.GUNICORN_APP_MODULE,
+        "-b",
+        config.GUNICORN_BIND,
+    ]
+
+    subprocess.run(gunicorn_args)

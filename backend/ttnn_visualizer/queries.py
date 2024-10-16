@@ -181,15 +181,36 @@ class DatabaseQueries:
             cursor.close()
 
     def query_buffer_pages(
-        self, operation_id: int
+        self,
+        operation_id: Optional[int] = None,
+        address: Optional[int] = None,
+        buffer_type: Optional[int] = None,
     ) -> Generator[BufferPage, None, None]:
         cursor = self._get_cursor()
         try:
-            cursor.execute(
-                "SELECT * FROM buffer_pages WHERE operation_id = ?", (operation_id,)
-            )
+            # noinspection SqlConstantExpression
+            query = "SELECT * FROM buffer_pages WHERE 1=1"
+            params = []
+
+            # Add optional conditions
+            if operation_id is not None:
+                query += " AND operation_id = ?"
+                params.append(operation_id)
+
+            if address is not None:
+                query += " AND address = ?"
+                params.append(address)
+
+            if buffer_type is not None:
+                query += " AND buffer_type = ?"
+                params.append(buffer_type)
+
+            # Execute the query
+            cursor.execute(query, params)
+
             for row in cursor.fetchall():
                 yield BufferPage(*row)
+
         finally:
             cursor.close()
 

@@ -2,14 +2,16 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import { BufferType } from '../model/BufferType';
+import { BufferType } from '../../model/BufferType';
 import 'styles/components/BufferSummaryRow.scss';
-import { getBufferColor } from '../functions/colorGenerator';
+import { getBufferColor } from '../../functions/colorGenerator';
 
 interface BufferSummaryRowProps {
     buffers: Buffer[];
     operationId: number;
-    memorySize: number;
+    memoryStart: number;
+    memoryEnd: number;
+    memoryPadding: number;
 }
 
 interface Buffer {
@@ -21,12 +23,20 @@ interface Buffer {
 
 const SCALE = 100;
 
-function BufferSummaryRow({ buffers, operationId, memorySize }: BufferSummaryRowProps) {
+function BufferSummaryRow({ buffers, operationId, memoryStart, memoryEnd, memoryPadding }: BufferSummaryRowProps) {
+    const computedMemorySize = memoryEnd - memoryStart;
+    const computedPadding = (memoryPadding / computedMemorySize) * SCALE;
+
     return (
-        <div className='buffer-summary-row'>
+        <div
+            className='buffer-summary-row'
+            style={{
+                margin: memoryStart > 0 ? `0 ${computedPadding}%` : '0',
+            }}
+        >
             {buffers.map((buffer: Buffer) => {
-                const size = (buffer.size / memorySize) * SCALE;
-                const position = (buffer.address / memorySize) * SCALE;
+                const size = (buffer.size / computedMemorySize) * SCALE;
+                const position = ((buffer.address - memoryStart) / computedMemorySize) * SCALE;
 
                 return (
                     <div

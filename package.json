@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualzer",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,7 @@
     "lint": "eslint . --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
-    "flask:start": "PYTHONPATH=backend flask --app ttnn_visualizer.app run -h localhost -p 8000",
+    "flask:start": "PYTHONPATH=backend python -m ttnn_visualizer.app",
     "flask:test": "PYTHONPATH=backend pytest backend/ttnn_visualizer/tests",
     "flask:start-threaded": "PYTHONPATH=backend flask --app ttnn_visualizer.app run --with-threads -h localhost -p 8000",
     "flask:start-debug": "PYTHONPATH=backend flask --app ttnn_visualizer.app --debug run -h localhost -p 8000",
@@ -22,6 +22,7 @@
   "dependencies": {
     "@blueprintjs/core": "^5.10.3",
     "@blueprintjs/select": "^5.1.5",
+    "@blueprintjs/table": "^5.2.2",
     "@tanstack/react-virtual": "^3.5.1",
     "@types/tinycolor2": "^1.4.6",
     "axios": "^1.7.2",
@@ -36,6 +37,7 @@
     "react-router": "^6.23.1",
     "react-router-dom": "^6.23.1",
     "react-toastify": "^10.0.5",
+    "socket.io-client": "^4.8.0",
     "tinycolor2": "^1.6.0"
   },
   "devDependencies": {
@@ -85,9 +87,10 @@
     }
   },
   "lint-staged": {
-    "**/*.{ts,tsx}": ["eslint ./src --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0 --no-ignore"],
-     "**/*.{scss}": "npx stylelint --fix",
+    "**/*.{ts,tsx}": [
+      "eslint ./src --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0 --no-ignore"
+    ],
+    "**/*.scss": "npx stylelint --fix",
     "**/*.{js,jsx,ts,tsx,css,scss}": "npm run format"
-
   }
 }

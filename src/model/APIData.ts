@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Operation, Tensor } from './Graph';
+import { RemoteConnection } from '../definitions/RemoteConnection';
 
 export interface TensorData extends Tensor {
     shape: string;
@@ -41,7 +42,26 @@ export interface OperationDetailsData extends Operation {
 
 export interface ActiveReport {
     name: string;
-    hostname: string;
+    remote_connection?: RemoteConnection;
+}
+
+export enum FileStatus {
+    DOWNLOADING = 'DOWNLOADING',
+    FAILED = 'FAILED',
+    COMPRESSING = 'COMPRESSING',
+    FINISHED = 'FINISHED',
+    STARTED = 'STARTED',
+    INACTIVE = 'INACTIVE',
+}
+
+// TypeScript Interface with underscored keys to match the backend data
+export interface FileProgress {
+    currentFileName: string;
+    numberOfFiles: number;
+    percentOfCurrent: number;
+    finishedFiles: number;
+    status: FileStatus; // Use the FileStatus enum
+    timestamp?: string; // Optional, with default handled elsewhere if necessary
 }
 
 // TODO: we may want to revisit the 'default' portion for the variable name
