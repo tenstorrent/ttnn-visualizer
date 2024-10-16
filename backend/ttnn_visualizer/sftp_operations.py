@@ -232,7 +232,7 @@ def sync_test_folders(
 
     check_permissions(client, remote_folder.remotePath)
 
-    if not check_gzip_exists(client):
+    if check_gzip_exists(client):
         try:
             remote_tar_path = f"{remote_folder.remotePath}.tar.gz"
             folder_size = calculate_folder_size(client, remote_folder.remotePath)
