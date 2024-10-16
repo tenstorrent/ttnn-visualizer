@@ -24,7 +24,7 @@ def timer(f: Callable):
     return wrapper
 
 
-def get_report_path(active_report, current_app):
+def get_report_path(active_report, current_app, remote_connection=None):
     """
     Gets the report path for the given active_report object.
     :param active_report: Dictionary representing the active report.
@@ -36,7 +36,6 @@ def get_report_path(active_report, current_app):
 
     if active_report:
         # Check if there's an associated RemoteConnection
-        remote_connection = active_report.get("remote_connection")
         if remote_connection:
             # Use the remote directory if a remote connection exists
             base_dir = Path(remote_dir).joinpath(remote_connection.get("host"))
