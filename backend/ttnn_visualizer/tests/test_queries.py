@@ -178,7 +178,7 @@ class TestDatabaseQueries(unittest.TestCase):
 
     def test_query_buffers(self):
         self.connection.execute("INSERT INTO buffers VALUES (1, 1, 0, 1024, 0)")
-        buffers = list(self.db_queries.query_buffers(1))
+        buffers = list(self.db_queries.query_buffers())
         self.assertEqual(len(buffers), 1)
         buffer = buffers[0]
         self.assertIsInstance(buffer, Buffer)
