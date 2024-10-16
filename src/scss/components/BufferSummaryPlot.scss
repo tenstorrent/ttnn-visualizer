@@ -44,6 +44,12 @@ $height-offset: 15px;
             margin-bottom: 0;
             text-align: right;
             flex-shrink: 0;
+            color: $tt-white;
+            text-decoration: none;
+
+            &:hover {
+                text-decoration: underline;
+            }
         }
     }
 
