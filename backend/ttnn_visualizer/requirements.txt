@@ -10,8 +10,7 @@ setuptools==65.5.0
 python-dotenv==1.0.1
 flask-sqlalchemy
 flask-socketio
-gevent
-eventlet
+gevent==24.10.2
 flask-session
 wheel
 build
