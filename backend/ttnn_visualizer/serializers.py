@@ -2,7 +2,7 @@ import dataclasses
 from collections import defaultdict
 from email.policy import default
 
-from ttnn_visualizer.models import BufferType
+from ttnn_visualizer.models import BufferType, Operation
 
 
 def serialize_operations(
@@ -152,12 +152,16 @@ def serialize_operation(
     }
 
 
-def serialize_operation_buffers(operation, operation_buffers):
+def serialize_operation_buffers(operation: Operation, operation_buffers):
     buffer_data = [dataclasses.asdict(b) for b in operation_buffers]
     for b in buffer_data:
         b.pop("operation_id")
         b.update({"size": b.pop("max_size_per_bank")})
-    return {"id": operation.operation_id, "buffers": list(buffer_data)}
+    return {
+        "id": operation.operation_id,
+        "name": operation.name,
+        "buffers": list(buffer_data),
+    }
 
 
 def serialize_devices(devices):
