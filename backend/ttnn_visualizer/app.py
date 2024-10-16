@@ -1,4 +1,5 @@
 import logging
+import os
 import subprocess
 from os import environ
 from pathlib import Path
@@ -122,15 +123,21 @@ def middleware(app: flask.Flask):
 if __name__ == "__main__":
     config = Config()
 
+    # Check if DEBUG environment variable is set
+    debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
+
     gunicorn_args = [
         "gunicorn",
         "-k",
         config.GUNICORN_WORKER_CLASS,
         "-w",
         config.GUNICORN_WORKERS,
-        config.GUNICORN_APP_MODULE,
         "-b",
         config.GUNICORN_BIND,
+        config.GUNICORN_APP_MODULE,
     ]
+
+    if debug_mode:
+        gunicorn_args.insert(1, "--reload")  # Add the --reload flag if in debug mode
 
     subprocess.run(gunicorn_args)
