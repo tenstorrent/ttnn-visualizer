@@ -434,7 +434,8 @@ def get_active_folder():
             active_report = session.active_report
             return {
                 "name": active_report.get("name"),
-                "remote_connection": active_report.get("remote_connection", None),
+                "remote_connection": session.remote_connection,
+                "remote_folder": session.remote_folder,
             }
 
-    return {"name": None, "host": None}
+    return {"name": None, "remote_connection": None, "remote_folder": None }
