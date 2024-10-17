@@ -28,7 +28,7 @@ import {
 import { MemoryLegendElement } from './MemoryLegendElement';
 import OperationArguments from '../OperationArguments';
 import { isDramActiveAtom, isL1ActiveAtom, selectedTensorAddressAtom } from '../../store/app';
-import { getTensorColor } from '../../functions/colorGenerator';
+import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import ProducerConsumersData from './ProducerConsumersData';
@@ -207,7 +207,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             <ToastTensorMessage
                 tensorId={tensorId}
                 address={address}
-                colour={getTensorColor(tensorId || 0)}
+                colour={getTensorColor(tensorId) || getBufferColor(address)}
             />,
             {
                 position: 'bottom-right',

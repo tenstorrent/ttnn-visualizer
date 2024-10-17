@@ -70,7 +70,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <React.StrictMode>
                 <SocketProvider>
                     <OverlaysProvider>
-
                         <RouterProvider router={router} />
                     </OverlaysProvider>
                 </SocketProvider>
