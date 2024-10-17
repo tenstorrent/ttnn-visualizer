@@ -4,16 +4,20 @@
 
 import { Switch } from '@blueprintjs/core';
 import { useState } from 'react';
-import 'styles/components/ExpandableTensor.scss';
+import 'styles/components/TensorArgument.scss';
+import parseMemoryConfig from '../functions/parseMemoryConfig';
 
-interface ExpandableTensorProps {
-    tensor: string;
+interface TensorArgumentProps {
+    argument: {
+        name: string;
+        value: string;
+    };
     onCollapse?: () => void;
 }
 
-function ExpandableTensor({ tensor, onCollapse }: ExpandableTensorProps) {
+function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
     const [isExpanded, setIsExpanded] = useState(false);
-    const splitTensor = tensor.split('\n');
+    const splitArgument = argument.value.split('\n');
 
     const handleExpandToggle = () => {
         setIsExpanded((previousValue) => !previousValue);
@@ -23,12 +27,29 @@ function ExpandableTensor({ tensor, onCollapse }: ExpandableTensorProps) {
         }
     };
 
-    if (!isLengthyTensor(tensor)) {
-        return tensor;
+    if (argument.name === 'memory_config') {
+        const parsedArgument = Object.entries(parseMemoryConfig(argument.value)) as [string, string][];
+
+        return (
+            <table className='ttnn-table alt-two-tone-rows buffer-table'>
+                <tbody>
+                    {parsedArgument.map(([key, value]) => (
+                        <tr key={key}>
+                            <th>{key}</th>
+                            <td>{value}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        );
+    }
+
+    if (!isLengthyTensor(argument.value)) {
+        return argument.value;
     }
 
     return (
-        <div className='expandable-tensor'>
+        <div className='expandable-argument'>
             <Switch
                 className='expand-button'
                 label={isExpanded ? 'Hide full tensor' : 'Show full tensor'}
@@ -38,7 +59,7 @@ function ExpandableTensor({ tensor, onCollapse }: ExpandableTensorProps) {
 
             {isExpanded ? (
                 <>
-                    <pre className='full-tensor'>{tensor}</pre>
+                    <pre className='full-tensor'>{argument.value}</pre>
 
                     {onCollapse && (
                         <Switch
@@ -51,9 +72,9 @@ function ExpandableTensor({ tensor, onCollapse }: ExpandableTensorProps) {
                 </>
             ) : (
                 <>
-                    <p className='collapsed-tensor monospace'>{splitTensor[0]}</p>
+                    <p className='collapsed-tensor monospace'>{splitArgument[0]}</p>
                     <p className='collapsed-tensor monospace'>.........</p>
-                    <p className='collapsed-tensor monospace'>{splitTensor[splitTensor.length - 1]}</p>
+                    <p className='collapsed-tensor monospace'>{splitArgument[splitArgument.length - 1]}</p>
                 </>
             )}
         </div>
@@ -64,4 +85,4 @@ function isLengthyTensor(value: string) {
     return value.toLowerCase().includes('\n');
 }
 
-export default ExpandableTensor;
+export default TensorArgument;
