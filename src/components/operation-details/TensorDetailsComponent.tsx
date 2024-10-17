@@ -9,6 +9,7 @@ import { BufferTypeLabel } from '../../model/BufferType';
 import { useOperationsList } from '../../hooks/useAPI';
 import getDeallocationOperation from '../../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../../functions/getNextAllocationOperation';
+import isValidNumber from '../../functions/isValidNumber';
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
@@ -53,7 +54,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
                 <span className='format-numbers monospace'>{prettyPrintAddress(tensor.address, memorySize)}</span>
 
-                {Number.isFinite(deallocationOperationId) && operations ? (
+                {isValidNumber(deallocationOperationId) && operations ? (
                     <Tooltip
                         content={`Deallocation in ${deallocationOperationId} ${operations.find((operation) => operation.id === deallocationOperationId)?.name}`}
                         placement={PopoverPosition.TOP}
@@ -75,12 +76,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     </Tooltip>
                 )}
 
-                {/* For some reason doesn't like more concise checks like Number.isFinite */}
-                {nextAllocationOperationId !== undefined &&
-                nextAllocationOperationId !== null &&
-                address !== undefined &&
-                address !== null &&
-                operations ? (
+                {isValidNumber(nextAllocationOperationId) && isValidNumber(address) && operations ? (
                     <Tooltip
                         content={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}
                         (+${nextAllocationOperationId - operationId} operations)

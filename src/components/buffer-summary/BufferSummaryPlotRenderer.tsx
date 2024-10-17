@@ -16,6 +16,7 @@ import BufferSummaryRow from './BufferSummaryRow';
 import { HistoricalTensor, Operation, Tensor } from '../../model/Graph';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/routes';
+import isValidNumber from '../../functions/isValidNumber';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -43,11 +44,10 @@ function BufferSummaryPlotRenderer() {
 
         buffersByOperation?.forEach((operation) =>
             operation.buffers.forEach((buffer) => {
-                minValue = minValue && !Number.isNaN(minValue) ? Math.min(minValue, buffer.address) : buffer.address;
-                maxValue =
-                    maxValue && !Number.isNaN(maxValue)
-                        ? Math.max(maxValue, buffer.address + buffer.size)
-                        : buffer.address + buffer.size;
+                minValue = isValidNumber(minValue) ? Math.min(minValue, buffer.address) : buffer.address;
+                maxValue = isValidNumber(maxValue)
+                    ? Math.max(maxValue, buffer.address + buffer.size)
+                    : buffer.address + buffer.size;
             }),
         );
 
