@@ -183,8 +183,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         }
     };
 
-    const onLegendClick = (address: number) => {
-        updateBufferFocus(address);
+    const onLegendClick = (address: number, tensorId?: number) => {
+        updateBufferFocus(address, tensorId);
     };
 
     const createToast = (address: number) => {
