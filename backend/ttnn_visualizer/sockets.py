@@ -78,7 +78,6 @@ def emit_compression_progress(client, remote_tar_path, folder_size, sid):
         compressed_size_str = stdout.read().decode().strip().split("\t")[0]
         compressed_size = int(compressed_size_str)
         percent_of_compression = (compressed_size / folder_size) * 100
-        print(percent_of_compression)
         progress = FileProgress(
             current_file_name=remote_tar_path,
             number_of_files=1,

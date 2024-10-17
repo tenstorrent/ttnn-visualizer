@@ -2,7 +2,7 @@ import React from 'react';
 import classNames from 'classnames';
 import { Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { getBufferColor } from '../../functions/colorGenerator';
+import { getTensorColor } from '../../functions/colorGenerator';
 import { TensorData } from '../../model/APIData';
 import { prettyPrintAddress, toHex } from '../../functions/math';
 import { BufferTypeLabel } from '../../model/BufferType';
@@ -46,7 +46,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         'empty-tensor': tensor.address === null,
                     })}
                     style={{
-                        backgroundColor: getBufferColor(tensor.address),
+                        backgroundColor: getTensorColor(tensor.id),
                     }}
                 />
                 <h4>Tensor ID: {tensor.id}</h4>

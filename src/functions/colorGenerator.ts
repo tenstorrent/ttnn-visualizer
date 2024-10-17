@@ -48,3 +48,15 @@ export const getBufferColor = (address: number | null): string | undefined => {
     }
     return bufferColorCache.get(address);
 };
+const tensorNextColor = colorGenerator();
+const tensorColorCache = new Map<number, string>();
+
+export const getTensorColor = (tensorId: number | undefined): string | undefined => {
+    if (tensorId === undefined) {
+        return undefined;
+    }
+    if (!tensorColorCache.has(tensorId)) {
+        tensorColorCache.set(tensorId, tensorNextColor.next().value);
+    }
+    return tensorColorCache.get(tensorId);
+};

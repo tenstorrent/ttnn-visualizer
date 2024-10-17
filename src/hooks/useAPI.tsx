@@ -56,6 +56,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
 export interface BuffersByOperationData {
     buffers: Buffer[];
     id: number;
+    name: string;
 }
 
 export interface DeviceData {

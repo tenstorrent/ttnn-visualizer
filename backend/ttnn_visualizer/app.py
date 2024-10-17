@@ -3,6 +3,8 @@ import os
 import subprocess
 from os import environ
 from pathlib import Path
+import sys
+from typing import cast
 
 import flask
 from dotenv import load_dotenv
@@ -11,7 +13,7 @@ from flask_cors import CORS
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from ttnn_visualizer.settings import Config
+from ttnn_visualizer.settings import Config, DefaultConfig
 
 
 def create_app(settings_override=None):
@@ -28,21 +30,24 @@ def create_app(settings_override=None):
     if dotenv_path.exists():
         load_dotenv(str(dotenv_path))
 
-    static_assets_dir = environ.get("STATIC_ASSETS", "/public")
     flask_env = environ.get("FLASK_ENV", "development")
 
-    app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
+    config = cast(DefaultConfig, Config())
 
-    app.config.from_object(Config())
-
+    app = Flask(__name__, static_folder=config.STATIC_ASSETS_DIR, static_url_path="/")
     logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
+
+    if config.PRINT_ENV:
+        for key, value in config.to_dict().items():
+            app.logger.info(f"{key}={value}")
+
+    app.config.from_object(config)
 
     app.logger.info(f"Starting TTNN visualizer in {flask_env} mode")
 
     if settings_override:
         app.config.update(settings_override)
 
-    app.config["USE_WEBSOCKETS"] = True  # Set this based on environment
     middleware(app)
 
     app.register_blueprint(api)
@@ -120,7 +125,7 @@ def middleware(app: flask.Flask):
     return None
 
 
-if __name__ == "__main__":
+def main():
     config = Config()
 
     # Check if DEBUG environment variable is set
@@ -141,3 +146,7 @@ if __name__ == "__main__":
         gunicorn_args.insert(1, "--reload")  # Add the --reload flag if in debug mode
 
     subprocess.run(gunicorn_args)
+
+
+if __name__ == "__main__":
+    main()
