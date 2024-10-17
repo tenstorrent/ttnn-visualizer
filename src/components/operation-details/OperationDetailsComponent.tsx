@@ -55,11 +55,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const [isL1Active, setIsL1Active] = useAtom(isL1ActiveAtom);
     const [isDramActive, setIsDramActive] = useAtom(isDramActiveAtom);
-    const [selectedTensorAddress, setSelectedTensorAddress] = useAtom(selectedTensorAddressAtom);
+    const [selectedAddress, setSelectedAddress] = useAtom(selectedTensorAddressAtom);
     const [toastId, setToastId] = useState<number | null>(null);
 
     const onClickOutside = () => {
-        setSelectedTensorAddress(null);
+        setSelectedAddress(null);
 
         if (toastId) {
             toast.dismiss(toastId);
@@ -155,36 +155,36 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
     }
 
-    const selectedTensor = selectedTensorAddress ? details.getTensorForAddress(selectedTensorAddress)?.id : null;
+    const selectedTensor = selectedAddress ? details.getTensorForAddress(selectedAddress)?.id : null;
 
-    const selectTensorByAddress = (address: number): void => {
-        setSelectedTensorAddress(address);
+    const updateBufferFocus = (address: number): void => {
+        setSelectedAddress(address);
         createToast(address);
     };
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address } = event.points[0].data.memoryData;
-        selectTensorByAddress(address);
+        updateBufferFocus(address);
     };
 
     const onDramBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address } = event.points[0].data.memoryData;
-        selectTensorByAddress(address);
+        updateBufferFocus(address);
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address } = event.points[0].data.memoryData;
-        selectTensorByAddress(address);
+        updateBufferFocus(address);
     };
 
     const onTensorClick = (address: number | null): void => {
         if (address) {
-            selectTensorByAddress(address);
+            updateBufferFocus(address);
         }
     };
 
     const onLegendClick = (address: number) => {
-        selectTensorByAddress(address);
+        updateBufferFocus(address);
     };
 
     const createToast = (address: number) => {
@@ -238,7 +238,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
 
             <div className='operation-details-component'>
-                {selectedTensorAddress && (
+                {selectedAddress && (
                     // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
                     <div
                         className='outside-click'
@@ -382,7 +382,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             chunk={chunk}
                                             key={chunk.address}
                                             memSize={memorySizeL1}
-                                            selectedTensorAddress={selectedTensorAddress}
+                                            selectedTensorAddress={selectedAddress}
                                             operationDetails={details}
                                             onLegendClick={onLegendClick}
                                         />
@@ -391,10 +391,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             </>
                         )}
 
-                        {selectedTensorAddress &&
+                        {selectedAddress &&
                         selectedTensor &&
-                        (details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1 ||
-                            details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.L1_SMALL) ? (
+                        (details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.L1 ||
+                            details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.L1_SMALL) ? (
                             <ProducerConsumersData
                                 selectedTensor={selectedTensor}
                                 details={details}
@@ -455,7 +455,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             chunk={chunk}
                                             key={chunk.address}
                                             memSize={DRAM_MEMORY_SIZE}
-                                            selectedTensorAddress={selectedTensorAddress}
+                                            selectedTensorAddress={selectedAddress}
                                             operationDetails={details}
                                             onLegendClick={onLegendClick}
                                         />
@@ -464,9 +464,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             </>
                         )}
 
-                        {selectedTensorAddress &&
+                        {selectedAddress &&
                         selectedTensor &&
-                        details.getTensorForAddress(selectedTensorAddress)?.buffer_type === BufferType.DRAM ? (
+                        details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.DRAM ? (
                             <ProducerConsumersData
                                 selectedTensor={selectedTensor}
                                 details={details}
@@ -483,7 +483,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     <TensorDetailsComponent
                                         tensor={tensor}
                                         key={tensor.id}
-                                        selectedAddress={selectedTensorAddress}
+                                        selectedAddress={selectedAddress}
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
                                         operationId={operationId}
@@ -497,7 +497,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     <TensorDetailsComponent
                                         tensor={tensor}
                                         key={tensor.id}
-                                        selectedAddress={selectedTensorAddress}
+                                        selectedAddress={selectedAddress}
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
                                         operationId={operationId}
@@ -540,7 +540,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                                         chunk={cb}
                                                         key={cb.address}
                                                         memSize={memorySizeL1}
-                                                        selectedTensorAddress={selectedTensorAddress}
+                                                        selectedTensorAddress={selectedAddress}
                                                         operationDetails={details}
                                                         onLegendClick={onLegendClick}
                                                         colorVariance={deviceOperation.colorVariance}
@@ -578,7 +578,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                                         chunk={buffer}
                                                         key={buffer.address}
                                                         memSize={memorySizeL1}
-                                                        selectedTensorAddress={selectedTensorAddress}
+                                                        selectedTensorAddress={selectedAddress}
                                                         operationDetails={details}
                                                         onLegendClick={onLegendClick}
                                                         bufferType={buffer.type}
