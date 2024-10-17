@@ -127,22 +127,35 @@ def middleware(app: flask.Flask):
     return None
 
 
+
+
+def get_run_env():
+    """Determine the runtime environment (docker, wheel, or local)."""
+    run_command = sys.argv[0].split('/')
+    run_env = 'local'  # Default environment is local
+
+    # Handle wheel environment
+    if run_command[-1] == 'ttnn-visualizer':
+        run_env = 'wheel'
+        os.environ.setdefault('FLASK_ENV', 'production')
+    else:
+        # Check for Docker environment by inspecting /proc/1/cgroup
+        try:
+            with open('/proc/1/cgroup', 'rt') as f:
+                if 'docker' in f.read() or 'kubepods' in f.read():
+                    run_env = 'docker'
+        except FileNotFoundError:
+            pass
+
+    return run_env
+
 def main():
     config = Config()
 
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
 
-    # Determine run env (docker/wheel/local)
-    run_command = sys.argv[0].split('/')
-    run_env = ''
-
-    # Handle wheel environment
-    if run_command[-1] == 'ttnn-visualizer':
-        run_env = 'wheel'
-        os.environ.setdefault('FLASK_ENV', 'production')
-
-    os.environ.setdefault('RUN_ENV', run_env)
+    os.environ.setdefault('RUN_ENV', get_run_env())
 
     gunicorn_args = [
         "gunicorn",
