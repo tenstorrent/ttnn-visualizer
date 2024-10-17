@@ -6,6 +6,7 @@ from pathlib import Path
 from stat import S_ISDIR
 from typing import List
 
+from threading import Thread
 from flask import current_app
 from paramiko.client import SSHClient
 from paramiko.sftp_client import SFTPClient
@@ -30,8 +31,16 @@ REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
 
 def start_background_task(task, *args):
     with current_app.app_context():
-        """Start a background task with SocketIO."""
-        socketio.start_background_task(task, *args)
+        if current_app.config["USE_WEBSOCKETS"]:
+            with current_app.app_context():
+                # Use SocketIO's background task mechanism if available
+                from ttnn_visualizer.extensions import socketio
+
+                socketio.start_background_task(task, *args)
+        else:
+            # Use a basic thread if WebSockets are not enabled
+            thread = Thread(target=task, args=args)
+            thread.start()
 
 
 def calculate_folder_size(client: SSHClient, folder_path: str) -> int:
