@@ -5,9 +5,8 @@
 import 'styles/components/OperationArguments.scss';
 import { ScrollToOptions } from '@tanstack/react-virtual';
 import { useRef } from 'react';
-import ExpandableTensor from './ExpandableTensor';
-
 import { OperationDescription } from '../model/APIData';
+import TensorArgument from './TensorArgument';
 
 interface OperationArgumentsProps {
     operation: OperationDescription;
@@ -38,8 +37,8 @@ function OperationArguments({ operationIndex, operation, onCollapseTensor }: Ope
                         <td>{arg.name}</td>
 
                         <td ref={cellRef}>
-                            <ExpandableTensor
-                                tensor={arg.value}
+                            <TensorArgument
+                                argument={arg}
                                 onCollapse={handleOnCollapse}
                             />
                         </td>
