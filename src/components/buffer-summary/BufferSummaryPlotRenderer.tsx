@@ -154,6 +154,7 @@ function BufferSummaryPlotRenderer() {
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
+                                        tensorList={tensorList.get(operation.id)!}
                                     />
                                     <Link
                                         to={`${ROUTES.OPERATIONS}/${operation.id}`}
@@ -176,13 +177,14 @@ function BufferSummaryPlotRenderer() {
 // Modified from 'createHitoricalTensorList' function in OperationDetails.ts
 // TODO: Refactor to optimise historical tensor lookup
 function createHistoricalTensorList(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
-    const tensorsByBufferAddress: Map<number, HistoricalTensor> = new Map();
+    const historicalTensorByOperationMap: Map<number, Map<number, HistoricalTensor>> = new Map();
 
     if (!operations || !buffersByOperation) {
-        return tensorsByBufferAddress;
+        return historicalTensorByOperationMap;
     }
 
     buffersByOperation.forEach((operation) => {
+        const tensorsByBufferAddress: Map<number, HistoricalTensor> = new Map();
         const currentOperation = operations.find((op) => op.id === operation.id);
 
         // eslint-disable-next-line no-restricted-syntax
@@ -219,9 +221,11 @@ function createHistoricalTensorList(operations?: Operation[], buffersByOperation
                 tensorsByBufferAddress.set(bufferAddress, historicalTensor);
             }
         }
+
+        historicalTensorByOperationMap.set(operation.id, tensorsByBufferAddress);
     });
 
-    return tensorsByBufferAddress;
+    return historicalTensorByOperationMap;
 }
 
 export default BufferSummaryPlotRenderer;
