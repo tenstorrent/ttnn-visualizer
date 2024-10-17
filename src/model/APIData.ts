@@ -103,6 +103,7 @@ export const defaultBuffer: BufferData = {
 export interface Chunk {
     address: number;
     size: number;
+    tensorId?: number;
 }
 
 export interface FragmentationEntry extends Chunk {
