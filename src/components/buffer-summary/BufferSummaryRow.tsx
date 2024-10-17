@@ -4,7 +4,8 @@
 
 import { BufferType } from '../../model/BufferType';
 import 'styles/components/BufferSummaryRow.scss';
-import { getBufferColor } from '../../functions/colorGenerator';
+import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
+import { HistoricalTensor } from '../../model/Graph';
 
 interface BufferSummaryRowProps {
     buffers: Buffer[];
@@ -12,6 +13,7 @@ interface BufferSummaryRowProps {
     memoryStart: number;
     memoryEnd: number;
     memoryPadding: number;
+    tensorList: Map<number, HistoricalTensor>;
 }
 
 interface Buffer {
@@ -23,7 +25,14 @@ interface Buffer {
 
 const SCALE = 100;
 
-function BufferSummaryRow({ buffers, operationId, memoryStart, memoryEnd, memoryPadding }: BufferSummaryRowProps) {
+function BufferSummaryRow({
+    buffers,
+    operationId,
+    memoryStart,
+    memoryEnd,
+    memoryPadding,
+    tensorList,
+}: BufferSummaryRowProps) {
     const computedMemorySize = memoryEnd - memoryStart;
     const computedPadding = (memoryPadding / computedMemorySize) * SCALE;
 
@@ -37,6 +46,7 @@ function BufferSummaryRow({ buffers, operationId, memoryStart, memoryEnd, memory
             {buffers.map((buffer: Buffer) => {
                 const size = (buffer.size / computedMemorySize) * SCALE;
                 const position = ((buffer.address - memoryStart) / computedMemorySize) * SCALE;
+                const tensor = tensorList.get(buffer.address);
 
                 return (
                     <div
@@ -45,7 +55,7 @@ function BufferSummaryRow({ buffers, operationId, memoryStart, memoryEnd, memory
                         style={{
                             width: `${size}%`,
                             left: `${position}%`,
-                            backgroundColor: getBufferColor(buffer.address),
+                            backgroundColor: tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address),
                         }}
                     />
                 );
