@@ -39,9 +39,7 @@ def create_app(settings_override=None):
     app = Flask(__name__, static_folder=config.STATIC_ASSETS_DIR, static_url_path="/")
     logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
 
-
     app.config.from_object(config)
-
 
     if settings_override:
         app.config.update(settings_override)
@@ -74,7 +72,8 @@ def extensions(app: flask.Flask):
     """
 
     flask_static_digest.init_app(app)
-    socketio.init_app(app)
+    if app.config["USE_WEBSOCKETS"]:
+        socketio.init_app(app)
     db.init_app(app)
 
     app.config["SESSION_TYPE"] = "sqlalchemy"
@@ -83,7 +82,8 @@ def extensions(app: flask.Flask):
     with app.app_context():
         db.drop_all()
 
-    register_handlers(socketio)
+    if app.config["USE_WEBSOCKETS"]:
+        register_handlers(socketio)
 
     # Create the tables within the application context
     with app.app_context():
@@ -128,9 +128,8 @@ def main():
 
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
-
     if config.PRINT_ENV:
-        print('ENVIRONMENT:')
+        print("ENVIRONMENT:")
         for key, value in config.to_dict().items():
             print(f"{key}={value}")
 
