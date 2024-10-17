@@ -15,6 +15,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from ttnn_visualizer.settings import Config, DefaultConfig
 
+logger = logging.getLogger(__name__)
+
 
 def create_app(settings_override=None):
     from ttnn_visualizer.views import api
@@ -37,13 +39,9 @@ def create_app(settings_override=None):
     app = Flask(__name__, static_folder=config.STATIC_ASSETS_DIR, static_url_path="/")
     logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
 
-    if config.PRINT_ENV:
-        for key, value in config.to_dict().items():
-            app.logger.info(f"{key}={value}")
 
     app.config.from_object(config)
 
-    app.logger.info(f"Starting TTNN visualizer in {flask_env} mode")
 
     if settings_override:
         app.config.update(settings_override)
@@ -130,6 +128,11 @@ def main():
 
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
+
+    if config.PRINT_ENV:
+        print('ENVIRONMENT:')
+        for key, value in config.to_dict().items():
+            print(f"{key}={value}")
 
     gunicorn_args = [
         "gunicorn",
