@@ -33,10 +33,11 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
         return (
             <table className='ttnn-table alt-two-tone-rows buffer-table'>
                 <tbody>
-                    {parsedArgument.map(([key, value]) => (
+                    {parsedArgument?.map(([key, value]) => (
                         <tr key={key}>
                             <th>{key}</th>
-                            <td>{value}</td>
+                            {/* TODO: 'shard_spec' is a nested object, handle this better */}
+                            <td>{key === 'shard_spec' ? JSON.stringify(value) : value}</td>
                         </tr>
                     ))}
                 </tbody>
