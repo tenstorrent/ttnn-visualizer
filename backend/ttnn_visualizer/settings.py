@@ -10,6 +10,7 @@ class DefaultConfig(object):
     DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))
     TESTING = False
     PRINT_ENV = True
+    COMPRESS_REMOTE_FILES=False
 
     # Path Settings
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
@@ -36,7 +37,7 @@ class DefaultConfig(object):
 
     # Gunicorn settings
     GUNICORN_WORKER_CLASS = os.getenv("GUNICORN_WORKER_CLASS", "gevent")
-    GUNICORN_WORKERS = os.getenv("GUNICORN_WORKERS", "1")
+    GUNICORN_WORKERS = os.getenv("GUNICORN_WORKERS", "4")
     GUNICORN_BIND = f"0.0.0.0:{os.getenv('PORT', '8000')}"
     GUNICORN_APP_MODULE = os.getenv(
         "GUNICORN_APP_MODULE", "ttnn_visualizer.app:create_app()"
