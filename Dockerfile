@@ -81,4 +81,4 @@ ENTRYPOINT ["/app/bin/docker-entrypoint-web"]
 
 EXPOSE 8000
 
-CMD ["gunicorn", "-c", "backend/ttnn_visualizer/config/gunicorn.py", "ttnn_visualizer.app:create_app()"]
+CMD ["python", "-m", "backend.ttnn_visualizer.app"]

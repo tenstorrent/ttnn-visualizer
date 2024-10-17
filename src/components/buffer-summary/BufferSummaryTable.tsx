@@ -1,6 +1,6 @@
 import { HotkeysProvider } from '@blueprintjs/core';
 import { Table2 as BlueprintTable, Cell, Column } from '@blueprintjs/table';
-import { useBuffers, useOperationsList } from '../../hooks/useAPI';
+import { useBuffers } from '../../hooks/useAPI';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import LoadingSpinner from '../LoadingSpinner';
 import '@blueprintjs/table/lib/css/table.css';
@@ -26,19 +26,18 @@ interface Buffer {
 }
 
 function BufferSummaryTable() {
-    const { data: operations } = useOperationsList();
     const { data: buffersByOperation, isLoading: isLoadingBuffers } = useBuffers(BufferType.L1);
 
     let listOfBuffers: Buffer[] = [];
 
-    if (buffersByOperation && operations) {
+    if (buffersByOperation) {
         listOfBuffers = buffersByOperation
             .map((operation) =>
                 operation.buffers
                     .map((buffer) => ({
                         ...buffer,
                         operationId: operation.id,
-                        operationName: operations.find((op) => op.id === operation.id)?.name,
+                        operationName: operation.name,
                     }))
                     .flat(),
             )

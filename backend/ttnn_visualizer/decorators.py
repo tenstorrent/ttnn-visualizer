@@ -18,6 +18,12 @@ def with_report_path(func):
             abort(404)
 
         session = get_or_create_tab_session(tab_id=tab_id)
+
+        remote_connection = None
+
+        if hasattr(session, "remote_connection"):
+            remote_connection = session.remote_connection
+
         active_report = session.active_report
 
         if not active_report:
@@ -27,7 +33,8 @@ def with_report_path(func):
             # Raise 404 if report_path is missing or does not exist
             abort(404)
 
-        report_path = get_report_path(active_report, current_app)
+        report_path = get_report_path(active_report, current_app, remote_connection)
+
         if not Path(report_path).exists():
             current_app.logger.error(
                 f"Specified report path {report_path} does not exist, returning 404"
