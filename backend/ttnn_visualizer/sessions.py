@@ -8,13 +8,17 @@ from ttnn_visualizer.extensions import db
 logger = getLogger(__name__)
 
 
-def update_tab_session(tab_id, active_report_data, remote_connection: RemoteConnection =None, remote_folder: RemoteFolder = None):
+def update_tab_session(
+    tab_id,
+    active_report_data,
+    remote_connection: RemoteConnection = None,
+    remote_folder: RemoteFolder = None,
+):
     """
     Overwrite the active report for a given tab session or create a new session if one doesn't exist.
     Store everything in the database using the TabSession model.
     """
     active_report = {"name": active_report_data.get("name")}
-
 
     # Query the database to find the existing tab session
     session_data = TabSession.query.filter_by(tab_id=tab_id).first()
@@ -32,14 +36,14 @@ def update_tab_session(tab_id, active_report_data, remote_connection: RemoteConn
             tab_id=tab_id,
             active_report=active_report,
             remote_connection=remote_connection_data,
-            remote_folder=remote_folder_data
+            remote_folder=remote_folder_data,
         )
 
         db.session.add(session_data)
 
     db.session.commit()
 
-    current_app.logger.info(f"Set active report for tab {tab_id} to {active_report}")
+    current_app.logger.info(f"Session data for tab {tab_id}: {session_data.__dict__}")
 
     return jsonify({"message": "Tab session updated with new active report"}), 200
 
