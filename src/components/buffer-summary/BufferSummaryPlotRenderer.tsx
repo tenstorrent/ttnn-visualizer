@@ -177,10 +177,10 @@ function BufferSummaryPlotRenderer() {
 // Modified from 'createHitoricalTensorList' function in OperationDetails.ts
 // TODO: Refactor to optimise historical tensor lookup
 function createHistoricalTensorList(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
-    const historicalTensorByOperationMap: Map<number, Map<number, HistoricalTensor>> = new Map();
+    const historicalTensorsByOperation: Map<number, Map<number, HistoricalTensor>> = new Map();
 
     if (!operations || !buffersByOperation) {
-        return historicalTensorByOperationMap;
+        return historicalTensorsByOperation;
     }
 
     buffersByOperation.forEach((operation) => {
@@ -222,10 +222,10 @@ function createHistoricalTensorList(operations?: Operation[], buffersByOperation
             }
         }
 
-        historicalTensorByOperationMap.set(operation.id, tensorsByBufferAddress);
+        historicalTensorsByOperation.set(operation.id, tensorsByBufferAddress);
     });
 
-    return historicalTensorByOperationMap;
+    return historicalTensorsByOperation;
 }
 
 export default BufferSummaryPlotRenderer;
