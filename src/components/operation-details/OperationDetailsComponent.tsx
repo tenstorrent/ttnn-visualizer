@@ -56,12 +56,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [isL1Active, setIsL1Active] = useAtom(isL1ActiveAtom);
     const [isDramActive, setIsDramActive] = useAtom(isDramActiveAtom);
     const [selectedTensorAddress, setSelectedTensorAddress] = useAtom(selectedTensorAddressAtom);
-    const [selectedTensor, setSelectedTensor] = useState<number | null>(null);
     const [toastId, setToastId] = useState<number | null>(null);
 
     const onClickOutside = () => {
         setSelectedTensorAddress(null);
-        setSelectedTensor(null);
 
         if (toastId) {
             toast.dismiss(toastId);
@@ -157,31 +155,30 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
     }
 
-    const selectTensorByAddress = (address: number, tensorId?: number): void => {
+    const selectedTensor = selectedTensorAddress ? details.getTensorForAddress(selectedTensorAddress)?.id : null;
+
+    const selectTensorByAddress = (address: number): void => {
         setSelectedTensorAddress(address);
-        setSelectedTensor(tensorId || details.getTensorForAddress(address)?.id || null);
         createToast(address);
     };
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address } = event.points[0].data.memoryData;
-        // No tensor data available here
         selectTensorByAddress(address);
     };
 
     const onDramBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        const { address, tensor } = event.points[0].data.memoryData;
-        selectTensorByAddress(address, tensor?.id);
+        const { address } = event.points[0].data.memoryData;
+        selectTensorByAddress(address);
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        const { address, tensor } = event.points[0].data.memoryData;
-        selectTensorByAddress(address, tensor?.id);
+        const { address } = event.points[0].data.memoryData;
+        selectTensorByAddress(address);
     };
 
     const onTensorClick = (address: number | null): void => {
         if (address) {
-            // No tensor data available here
             selectTensorByAddress(address);
         }
     };
