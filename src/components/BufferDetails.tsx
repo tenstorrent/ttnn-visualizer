@@ -13,6 +13,7 @@ import 'styles/components/BufferDetails.scss';
 import getDeallocationOperation from '../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../functions/getNextAllocationOperation';
 import { Operation, Tensor } from '../model/Graph';
+import isValidNumber from '../functions/isValidNumber';
 import parseMemoryConfig from '../functions/parseMemoryConfig';
 
 interface BufferDetailsProps {
@@ -50,7 +51,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                     <tr>
                         <th>Last used</th>
                         <td>
-                            {Number.isFinite(lastOperationId)
+                            {isValidNumber(lastOperationId)
                                 ? getLastOperation(lastOperationId, operations, tensor)
                                 : 'No consumers for this tensor'}
                         </td>
@@ -59,7 +60,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                     <tr>
                         <th>Deallocation</th>
                         <td>
-                            {Number.isFinite(deallocationOperationId) ? (
+                            {isValidNumber(deallocationOperationId) ? (
                                 <div>
                                     Deallocation found in{' '}
                                     <Link to={`${ROUTES.OPERATIONS}/${deallocationOperationId}`}>
@@ -86,12 +87,9 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                     </tr>
 
                     {/* This is stupid but Typescript is complaining otherwise */}
-                    {nextAllocationOperationId !== undefined &&
-                    Number.isFinite(nextAllocationOperationId) &&
-                    deallocationOperationId !== undefined &&
-                    Number.isFinite(deallocationOperationId) &&
-                    address !== null &&
-                    Number.isFinite(address) ? (
+                    {isValidNumber(nextAllocationOperationId) &&
+                    isValidNumber(deallocationOperationId) &&
+                    isValidNumber(address) ? (
                         <tr>
                             <th>Next allocation</th>
                             <td>

@@ -32,6 +32,7 @@ import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import ProducerConsumersData from './ProducerConsumersData';
+import isValidNumber from '../../functions/isValidNumber';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -253,7 +254,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         onClick={onClickOutside}
                     />
                 )}
-                {!isLoading && Number.isSafeInteger(operationDetails?.id) ? (
+                {!isLoading && isValidNumber(operationDetails?.id) ? (
                     <>
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
                         <div className='chart-controls'>
