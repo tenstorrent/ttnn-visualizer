@@ -75,8 +75,7 @@ ENV PYTHONUNBUFFERED="true" \
     FLASK_ENV="${FLASK_ENV}" \
     PYTHONPATH="/app/backend/" \
     PATH="${PATH}:/root/.local/bin" \
-    USER="root" \
-    RUN_ENV="docker"
+    USER="root"
 
 ENTRYPOINT ["/app/bin/docker-entrypoint-web"]
 
