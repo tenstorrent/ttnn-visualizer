@@ -16,7 +16,7 @@ class DefaultConfig(object):
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
     REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
-    STATIC_ASSETS_DIR  = Path(APPLICATION_DIR).joinpath('static')
+    STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0
 
     # File Name Configs
@@ -54,24 +54,15 @@ class DefaultConfig(object):
                 if env_value is not None:
                     setattr(self, key, env_value)
 
-        run_environment = os.environ.get('RUN_ENV', None)
-        application_dir = getattr(self, 'APPLICATION_DIR')
-
-        if run_environment == 'docker':
-            setattr(self, 'STATIC_ASSETS_DIR', '/public')
-        elif run_environment == 'wheel' or run_environment == 'local':
-            setattr(self, 'STATIC_ASSETS_DIR', Path(application_dir).joinpath('ttnn_visualizer', 'static'))
- 
-
     def to_dict(self):
         """Return all config values as a dictionary, including inherited attributes."""
         return {
-            key: getattr(self, key) 
-            for key in dir(self) 
-            if not key.startswith('_') and not callable(getattr(self, key))
+            key: getattr(self, key)
+            for key in dir(self)
+            if not key.startswith("_") and not callable(getattr(self, key))
         }
 
- 
+
 class DevelopmentConfig(DefaultConfig):
     pass
 
@@ -93,9 +84,8 @@ class Config:
         if cls._instance is None:
             cls._instance = super(Config, cls).__new__(cls)
             cls._instance = cls._determine_config()
-            cls._instance.override_with_env_variables() 
+            cls._instance.override_with_env_variables()
         return cls._instance
-    
 
     @staticmethod
     def _determine_config():

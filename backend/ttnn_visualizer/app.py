@@ -4,6 +4,7 @@ import subprocess
 from os import environ
 from pathlib import Path
 import sys
+from typing import cast
 
 import flask
 from dotenv import load_dotenv
@@ -12,7 +13,7 @@ from flask_cors import CORS
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from ttnn_visualizer.settings import Config
+from ttnn_visualizer.settings import Config, DefaultConfig
 
 
 def create_app(settings_override=None):
@@ -29,21 +30,18 @@ def create_app(settings_override=None):
     if dotenv_path.exists():
         load_dotenv(str(dotenv_path))
 
-
     flask_env = environ.get("FLASK_ENV", "development")
-    config = Config()
 
+    config = cast(DefaultConfig, Config())
 
     app = Flask(__name__, static_folder=config.STATIC_ASSETS_DIR, static_url_path="/")
     logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
 
-
     if config.PRINT_ENV:
         for key, value in config.to_dict().items():
-                app.logger.info(f"{key}={value}")
+            app.logger.info(f"{key}={value}")
 
     app.config.from_object(config)
-
 
     app.logger.info(f"Starting TTNN visualizer in {flask_env} mode")
 
@@ -127,38 +125,11 @@ def middleware(app: flask.Flask):
     return None
 
 
-
-
-def get_run_env():
-    """Determine the runtime environment (docker, wheel, or local)."""
-    run_command = sys.argv[0].split('/')
-    run_env = 'local'  # Default environment is local
-
-    if os.getenv('RUN_ENV', None):
-        return os.getenv('RUN_ENV')
-
-    # Handle wheel environment
-    if run_command[-1] == 'ttnn-visualizer':
-        run_env = 'wheel'
-        os.environ.setdefault('FLASK_ENV', 'production')
-    else:
-        # Check for Docker environment by inspecting /proc/1/cgroup
-        try:
-            with open('/proc/1/cgroup', 'rt') as f:
-                if 'docker' in f.read() or 'kubepods' in f.read():
-                    run_env = 'docker'
-        except FileNotFoundError:
-            pass
-
-    return run_env
-
 def main():
     config = Config()
 
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
-
-    os.environ.setdefault('RUN_ENV', get_run_env())
 
     gunicorn_args = [
         "gunicorn",
@@ -175,6 +146,7 @@ def main():
         gunicorn_args.insert(1, "--reload")  # Add the --reload flag if in debug mode
 
     subprocess.run(gunicorn_args)
+
 
 if __name__ == "__main__":
     main()
