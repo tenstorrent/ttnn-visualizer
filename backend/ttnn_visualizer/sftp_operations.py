@@ -150,7 +150,9 @@ def download_file_with_progress(
                 finished_files=finished_files,
                 status=FileStatus.DOWNLOADING,
             )
-            emit_file_status(progress, sid)
+
+            if current_app.config["USE_WEBSOCKETS"]:
+                emit_file_status(progress, sid)
 
         # Perform the download
         sftp.get(remote_path, str(local_path), callback=download_progress_callback)
@@ -292,5 +294,7 @@ def sync_test_folders(
             logger.error(f"Compression failed: {e}, falling back to individual sync.")
             sync_files_and_directories(client, remote_folder, destination_dir, sid)
     else:
+        if not use_compression:
+            logger.info("Compression disabled. Syncing files individually")
         logger.info("gzip/tar not found, syncing files individually.")
         sync_files_and_directories(client, remote_folder, destination_dir, sid)
