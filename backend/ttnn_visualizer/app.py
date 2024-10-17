@@ -3,6 +3,7 @@ import os
 import subprocess
 from os import environ
 from pathlib import Path
+import sys
 
 import flask
 from dotenv import load_dotenv
@@ -28,21 +29,27 @@ def create_app(settings_override=None):
     if dotenv_path.exists():
         load_dotenv(str(dotenv_path))
 
-    static_assets_dir = environ.get("STATIC_ASSETS", "/public")
+
     flask_env = environ.get("FLASK_ENV", "development")
+    config = Config()
 
-    app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
 
-    app.config.from_object(Config())
-
+    app = Flask(__name__, static_folder=config.STATIC_ASSETS_DIR, static_url_path="/")
     logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
+
+
+    if config.PRINT_ENV:
+        for key, value in config.to_dict().items():
+                app.logger.info(f"{key}={value}")
+
+    app.config.from_object(config)
+
 
     app.logger.info(f"Starting TTNN visualizer in {flask_env} mode")
 
     if settings_override:
         app.config.update(settings_override)
 
-    app.config["USE_WEBSOCKETS"] = True  # Set this based on environment
     middleware(app)
 
     app.register_blueprint(api)
@@ -120,11 +127,22 @@ def middleware(app: flask.Flask):
     return None
 
 
-if __name__ == "__main__":
+def main():
     config = Config()
 
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
+
+    # Determine run env (docker/wheel/local)
+    run_command = sys.argv[0].split('/')
+    run_env = ''
+
+    # Handle wheel environment
+    if run_command[-1] == 'ttnn-visualizer':
+        run_env = 'wheel'
+        os.environ.setdefault('FLASK_ENV', 'production')
+
+    os.environ.setdefault('RUN_ENV', run_env)
 
     gunicorn_args = [
         "gunicorn",
@@ -141,3 +159,6 @@ if __name__ == "__main__":
         gunicorn_args.insert(1, "--reload")  # Add the --reload flag if in debug mode
 
     subprocess.run(gunicorn_args)
+
+if __name__ == "__main__":
+    main()
