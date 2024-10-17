@@ -131,7 +131,9 @@ def sync_files_and_directories(
             finished_files=finished_files,
             status=FileStatus.FINISHED.value,
         )
-        emit_file_status(final_progress, sid)
+
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(final_progress, sid)
         logger.info("All files downloaded. Final progress emitted.")
 
 

@@ -299,7 +299,8 @@ def create_upload_files():
             finished_files=processed_files,
             status=FileStatus.DOWNLOADING,
         )
-        emit_file_status(progress, tab_id)
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(progress, tab_id)
 
         # Save the file locally
         file.save(destination_file)
@@ -308,7 +309,8 @@ def create_upload_files():
         processed_files += 1
         progress.percent_of_current = 100
         progress.finished_files = processed_files
-        emit_file_status(progress, tab_id)
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(progress, tab_id)
 
     # Update the session after all files are uploaded
     update_tab_session(tab_id=tab_id, active_report_data={"name": report_name})
@@ -321,7 +323,9 @@ def create_upload_files():
         finished_files=processed_files,
         status=FileStatus.FINISHED,
     )
-    emit_file_status(final_progress, tab_id)
+
+    if current_app.config["USE_WEBSOCKETS"]:
+        emit_file_status(final_progress, tab_id)
 
     return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
 
@@ -438,4 +442,4 @@ def get_active_folder():
                 "remote_folder": session.remote_folder,
             }
 
-    return {"name": None, "remote_connection": None, "remote_folder": None }
+    return {"name": None, "remote_connection": None, "remote_folder": None}
