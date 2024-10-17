@@ -359,15 +359,18 @@ def read_remote_folder():
 @api.route("/remote/sync", methods=["POST"])
 def sync_remote_folder():
     remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
+    use_compression = current_app.config["COMPRESS_REMOTE_FILES"]
     request_body = request.json
     connection = request_body.get("connection")
     folder = request_body.get("folder")
     tab_id = request.args.get("tabId", None)
+
     try:
         sync_test_folders(
             RemoteConnection(**connection),
             RemoteFolder(**folder),
             remote_dir,
+            use_compression,
             sid=tab_id,
         )
     except RemoteFolderException as e:
@@ -403,7 +406,8 @@ def use_remote_folder():
     update_tab_session(
         tab_id=tab_id,
         active_report_data={"name": report_folder},
-        remote_connection_data=connection.dict(),
+        remote_connection=connection,
+        remote_folder=folder,
     )
 
     return Response(status=HTTPStatus.OK)

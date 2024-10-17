@@ -220,6 +220,7 @@ def sync_test_folders(
     remote_connection: RemoteConnection,
     remote_folder: RemoteFolder,
     path_prefix: str,
+    use_compression: bool,
     sid=None,
 ):
     """Main function to sync test folders, handles both compressed and individual syncs."""
@@ -232,7 +233,7 @@ def sync_test_folders(
 
     check_permissions(client, remote_folder.remotePath)
 
-    if check_gzip_exists(client):
+    if check_gzip_exists(client) and use_compression:
         try:
             remote_tar_path = f"{remote_folder.remotePath}.tar.gz"
             folder_size = calculate_folder_size(client, remote_folder.remotePath)

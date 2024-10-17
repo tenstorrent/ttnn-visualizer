@@ -37,7 +37,7 @@ class DefaultConfig(object):
 
     # Gunicorn settings
     GUNICORN_WORKER_CLASS = os.getenv("GUNICORN_WORKER_CLASS", "gevent")
-    GUNICORN_WORKERS = os.getenv("GUNICORN_WORKERS", "4")
+    GUNICORN_WORKERS = os.getenv("GUNICORN_WORKERS", "1")
     GUNICORN_BIND = f"0.0.0.0:{os.getenv('PORT', '8000')}"
     GUNICORN_APP_MODULE = os.getenv(
         "GUNICORN_APP_MODULE", "ttnn_visualizer.app:create_app()"

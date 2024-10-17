@@ -33,7 +33,6 @@ def update_tab_session(tab_id, active_report_data, remote_connection: RemoteConn
             active_report=active_report,
             remote_connection=remote_connection_data,
             remote_folder=remote_folder_data
-
         )
 
         db.session.add(session_data)
@@ -46,7 +45,7 @@ def update_tab_session(tab_id, active_report_data, remote_connection: RemoteConn
 
 
 def get_or_create_tab_session(
-    tab_id, active_report_data=None, remote_connection_data=None
+    tab_id, active_report_data=None, remote_connection=None, remote_folder=None
 ):
     """
     Retrieve an existing tab session or create a new one if it doesn't exist.
@@ -65,7 +64,7 @@ def get_or_create_tab_session(
 
     # If active_report_data is provided, update the session with the new report
     if active_report_data:
-        update_tab_session(tab_id, active_report_data, remote_connection_data)
+        update_tab_session(tab_id, active_report_data, remote_connection, remote_folder)
 
     return session_data
 
