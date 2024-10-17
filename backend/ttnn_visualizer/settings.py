@@ -16,7 +16,7 @@ class DefaultConfig(object):
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
     REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
-    STATIC_ASSETS_DIR  = Path('/public')
+    STATIC_ASSETS_DIR  = Path(APPLICATION_DIR).joinpath('static')
     SEND_FILE_MAX_AGE_DEFAULT = 0
 
     # File Name Configs
