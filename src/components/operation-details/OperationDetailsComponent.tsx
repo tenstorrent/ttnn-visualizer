@@ -56,6 +56,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [isL1Active, setIsL1Active] = useAtom(isL1ActiveAtom);
     const [isDramActive, setIsDramActive] = useAtom(isDramActiveAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedTensorAddressAtom);
+    const [selectedTensorId, setSelectedTensorId] = useState<number | null>(null);
     const [toastId, setToastId] = useState<number | null>(null);
 
     const onClickOutside = () => {
@@ -155,31 +156,30 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
     }
 
-    const selectedTensor = selectedAddress ? details.getTensorForAddress(selectedAddress)?.id : null;
-
-    const updateBufferFocus = (address: number): void => {
+    const updateBufferFocus = (address: number, tensorId?: number): void => {
         setSelectedAddress(address);
+        setSelectedTensorId(tensorId ?? null);
         createToast(address);
     };
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        const { address } = event.points[0].data.memoryData;
-        updateBufferFocus(address);
+        const { address, tensor } = event.points[0].data.memoryData;
+        updateBufferFocus(address, tensor?.id);
     };
 
     const onDramBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        const { address } = event.points[0].data.memoryData;
-        updateBufferFocus(address);
+        const { address, tensor } = event.points[0].data.memoryData;
+        updateBufferFocus(address, tensor?.id);
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
-        const { address } = event.points[0].data.memoryData;
-        updateBufferFocus(address);
+        const { address, tensor } = event.points[0].data.memoryData;
+        updateBufferFocus(address, tensor?.id);
     };
 
-    const onTensorClick = (address: number | null): void => {
+    const onTensorClick = (address: number | null, tensorId: number): void => {
         if (address) {
-            updateBufferFocus(address);
+            updateBufferFocus(address, tensorId);
         }
     };
 
@@ -392,11 +392,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         )}
 
                         {selectedAddress &&
-                        selectedTensor &&
+                        selectedTensorId &&
                         (details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.L1 ||
                             details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.L1_SMALL) ? (
                             <ProducerConsumersData
-                                selectedTensor={selectedTensor}
+                                selectedTensor={selectedTensorId}
                                 details={details}
                                 operationId={operationId}
                             />
@@ -465,10 +465,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         )}
 
                         {selectedAddress &&
-                        selectedTensor &&
+                        selectedTensorId &&
                         details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.DRAM ? (
                             <ProducerConsumersData
-                                selectedTensor={selectedTensor}
+                                selectedTensor={selectedTensorId}
                                 details={details}
                                 operationId={operationId}
                             />
