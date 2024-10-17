@@ -10,6 +10,7 @@ class DefaultConfig(object):
     DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))
     TESTING = False
     PRINT_ENV = True
+    COMPRESS_REMOTE_FILES = False
 
     # Path Settings
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
@@ -23,6 +24,7 @@ class DefaultConfig(object):
     TEST_CONFIG_FILE = "config.json"
     SQLITE_DB_PATH = "db.sqlite"
 
+    # For development you may want to disable sockets
     USE_WEBSOCKETS = True
 
     # SQL Alchemy Settings

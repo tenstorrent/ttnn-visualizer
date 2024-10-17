@@ -6,6 +6,7 @@ from pathlib import Path
 from stat import S_ISDIR
 from typing import List
 
+from threading import Thread
 from flask import current_app
 from paramiko.client import SSHClient
 from paramiko.sftp_client import SFTPClient
@@ -30,8 +31,16 @@ REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
 
 def start_background_task(task, *args):
     with current_app.app_context():
-        """Start a background task with SocketIO."""
-        socketio.start_background_task(task, *args)
+        if current_app.config["USE_WEBSOCKETS"]:
+            with current_app.app_context():
+                # Use SocketIO's background task mechanism if available
+                from ttnn_visualizer.extensions import socketio
+
+                socketio.start_background_task(task, *args)
+        else:
+            # Use a basic thread if WebSockets are not enabled
+            thread = Thread(target=task, args=args)
+            thread.start()
 
 
 def calculate_folder_size(client: SSHClient, folder_path: str) -> int:
@@ -87,6 +96,7 @@ def sync_files_and_directories(
             def download_file(remote_file_path, local_file_path, index):
                 nonlocal finished_files
                 # Download file with progress callback
+                logger.info(f"Downloading {remote_file_path}")
                 download_file_with_progress(
                     sftp,
                     remote_file_path,
@@ -95,6 +105,7 @@ def sync_files_and_directories(
                     total_files,
                     finished_files,
                 )
+                logger.info(f"Finished downloading {remote_file_path}")
                 finished_files += 1
 
             # Download all files in the current directory
@@ -120,7 +131,9 @@ def sync_files_and_directories(
             finished_files=finished_files,
             status=FileStatus.FINISHED.value,
         )
-        emit_file_status(final_progress, sid)
+
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(final_progress, sid)
         logger.info("All files downloaded. Final progress emitted.")
 
 
@@ -139,7 +152,9 @@ def download_file_with_progress(
                 finished_files=finished_files,
                 status=FileStatus.DOWNLOADING,
             )
-            emit_file_status(progress, sid)
+
+            if current_app.config["USE_WEBSOCKETS"]:
+                emit_file_status(progress, sid)
 
         # Perform the download
         sftp.get(remote_path, str(local_path), callback=download_progress_callback)
@@ -220,6 +235,7 @@ def sync_test_folders(
     remote_connection: RemoteConnection,
     remote_folder: RemoteFolder,
     path_prefix: str,
+    use_compression: bool,
     sid=None,
 ):
     """Main function to sync test folders, handles both compressed and individual syncs."""
@@ -232,7 +248,7 @@ def sync_test_folders(
 
     check_permissions(client, remote_folder.remotePath)
 
-    if check_gzip_exists(client):
+    if check_gzip_exists(client) and use_compression:
         try:
             remote_tar_path = f"{remote_folder.remotePath}.tar.gz"
             folder_size = calculate_folder_size(client, remote_folder.remotePath)
@@ -280,5 +296,7 @@ def sync_test_folders(
             logger.error(f"Compression failed: {e}, falling back to individual sync.")
             sync_files_and_directories(client, remote_folder, destination_dir, sid)
     else:
+        if not use_compression:
+            logger.info("Compression disabled. Syncing files individually")
         logger.info("gzip/tar not found, syncing files individually.")
         sync_files_and_directories(client, remote_folder, destination_dir, sid)

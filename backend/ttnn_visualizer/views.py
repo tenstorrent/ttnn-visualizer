@@ -299,7 +299,8 @@ def create_upload_files():
             finished_files=processed_files,
             status=FileStatus.DOWNLOADING,
         )
-        emit_file_status(progress, tab_id)
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(progress, tab_id)
 
         # Save the file locally
         file.save(destination_file)
@@ -308,7 +309,8 @@ def create_upload_files():
         processed_files += 1
         progress.percent_of_current = 100
         progress.finished_files = processed_files
-        emit_file_status(progress, tab_id)
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(progress, tab_id)
 
     # Update the session after all files are uploaded
     update_tab_session(tab_id=tab_id, active_report_data={"name": report_name})
@@ -321,7 +323,9 @@ def create_upload_files():
         finished_files=processed_files,
         status=FileStatus.FINISHED,
     )
-    emit_file_status(final_progress, tab_id)
+
+    if current_app.config["USE_WEBSOCKETS"]:
+        emit_file_status(final_progress, tab_id)
 
     return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
 
@@ -359,15 +363,18 @@ def read_remote_folder():
 @api.route("/remote/sync", methods=["POST"])
 def sync_remote_folder():
     remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
+    use_compression = current_app.config["COMPRESS_REMOTE_FILES"]
     request_body = request.json
     connection = request_body.get("connection")
     folder = request_body.get("folder")
     tab_id = request.args.get("tabId", None)
+
     try:
         sync_test_folders(
             RemoteConnection(**connection),
             RemoteFolder(**folder),
             remote_dir,
+            use_compression,
             sid=tab_id,
         )
     except RemoteFolderException as e:
@@ -403,7 +410,8 @@ def use_remote_folder():
     update_tab_session(
         tab_id=tab_id,
         active_report_data={"name": report_folder},
-        remote_connection_data=connection.dict(),
+        remote_connection=connection,
+        remote_folder=folder,
     )
 
     return Response(status=HTTPStatus.OK)
@@ -430,7 +438,8 @@ def get_active_folder():
             active_report = session.active_report
             return {
                 "name": active_report.get("name"),
-                "remote_connection": active_report.get("remote_connection", None),
+                "remote_connection": session.remote_connection,
+                "remote_folder": session.remote_folder,
             }
 
-    return {"name": None, "host": None}
+    return {"name": None, "remote_connection": None, "remote_folder": None}
