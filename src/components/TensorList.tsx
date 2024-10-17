@@ -327,7 +327,7 @@ const TensorList = () => {
 };
 
 function getTensorFilterName(tensor: Tensor) {
-    const bufferTypeLabel = isValidNumber(tensor.buffer_type) ? BufferTypeLabel[tensor.buffer_type] : 'null';
+    const bufferTypeLabel = isValidNumber(tensor.buffer_type) ? BufferTypeLabel[tensor.buffer_type] : 'n/a';
 
     return `Tensor ${tensor.id} ${bufferTypeLabel}`;
 }
