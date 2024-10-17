@@ -96,6 +96,7 @@ def sync_files_and_directories(
             def download_file(remote_file_path, local_file_path, index):
                 nonlocal finished_files
                 # Download file with progress callback
+                logger.info(f"Downloading {remote_file_path}")
                 download_file_with_progress(
                     sftp,
                     remote_file_path,
@@ -104,6 +105,7 @@ def sync_files_and_directories(
                     total_files,
                     finished_files,
                 )
+                logger.info(f"Finished downloading {remote_file_path}")
                 finished_files += 1
 
             # Download all files in the current directory
