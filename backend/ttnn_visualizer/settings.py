@@ -16,7 +16,7 @@ class DefaultConfig(object):
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
     REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
-    STATIC_ASSETS_DIR  = Path(APPLICATION_DIR).joinpath('static')
+    STATIC_ASSETS_DIR  = Path('/public')
     SEND_FILE_MAX_AGE_DEFAULT = 0
 
     # File Name Configs
@@ -59,7 +59,7 @@ class DefaultConfig(object):
 
         if run_environment == 'docker':
             setattr(self, 'STATIC_ASSETS_DIR', '/public')
-        elif run_environment == 'wheel':
+        elif run_environment == 'wheel' or run_environment == 'local':
             setattr(self, 'STATIC_ASSETS_DIR', Path(application_dir).joinpath('ttnn_visualizer', 'static'))
  
 

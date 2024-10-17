@@ -134,6 +134,9 @@ def get_run_env():
     run_command = sys.argv[0].split('/')
     run_env = 'local'  # Default environment is local
 
+    if os.getenv('RUN_ENV', None):
+        return os.getenv('RUN_ENV')
+
     # Handle wheel environment
     if run_command[-1] == 'ttnn-visualizer':
         run_env = 'wheel'
