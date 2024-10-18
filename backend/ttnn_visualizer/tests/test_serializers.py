@@ -304,8 +304,7 @@ class TestSerializers(unittest.TestCase):
 
         result = serialize_buffer_pages(buffer_pages)
 
-        expected = {
-            "buffer_pages": [
+        expected = [
                 {
                     "operation_id": 1,
                     "device_id": 1,
@@ -333,7 +332,7 @@ class TestSerializers(unittest.TestCase):
                     "id": "2_1",
                 },
             ]
-        }
+        
 
         self.assertEqual(result, expected)
 
