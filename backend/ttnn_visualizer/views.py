@@ -427,17 +427,4 @@ def health_check():
 @with_session
 def get_tab_session(session):
     # Used to gate UI functions if no report is active
-    if session and session.active_report:
-        return {
-            "active_report": session.active_report,
-            "remote_connection": session.remote_connection,
-            "remote_folder": session.remote_folder,
-            "report_path": session.report_path,
-        }
-
-    return {
-        "name": None,
-        "remote_connection": None,
-        "remote_folder": None,
-        "report_path": None,
-    }
+    return session.to_dict()
