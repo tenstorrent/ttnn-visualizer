@@ -5,7 +5,8 @@
 import { Switch } from '@blueprintjs/core';
 import { useState } from 'react';
 import 'styles/components/TensorArgument.scss';
-import parseMemoryConfig from '../functions/parseMemoryConfig';
+import parseMemoryConfig, { ShardSpec } from '../functions/parseMemoryConfig';
+import MemoryConfigRow from './MemoryConfigRow';
 
 interface TensorArgumentProps {
     argument: {
@@ -28,16 +29,17 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
     };
 
     if (argument.name === 'memory_config') {
-        const parsedArgument = Object.entries(parseMemoryConfig(argument.value)) as [string, string][];
+        const parsedArgument = Object.entries(parseMemoryConfig(argument.value));
 
         return (
             <table className='ttnn-table alt-two-tone-rows buffer-table'>
                 <tbody>
-                    {parsedArgument.map(([key, value]) => (
-                        <tr key={key}>
-                            <th>{key}</th>
-                            <td>{value}</td>
-                        </tr>
+                    {parsedArgument?.map(([key, value]) => (
+                        <MemoryConfigRow
+                            key={key}
+                            header={key}
+                            value={value as string | ShardSpec}
+                        />
                     ))}
                 </tbody>
             </table>

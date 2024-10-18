@@ -49,7 +49,7 @@ export const MemoryLegendElement: React.FC<{
                 dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
             })}
             // eslint-disable-next-line react/jsx-props-no-spreading
-            {...(!chunk.empty ? { type: 'button', onClick: () => onLegendClick(chunk.address) } : {})}
+            {...(!chunk.empty ? { type: 'button', onClick: () => onLegendClick(chunk.address, chunk.tensorId) } : {})}
         >
             <div
                 className={classNames('memory-color-block', {

@@ -2,6 +2,15 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
+export interface ShardSpec {
+    grid?: string;
+    shape?: [number, number];
+    orientation?: string;
+    halo?: number;
+}
+
+export type MemoryKeys = 'shard_spec' | 'memory_layout' | 'grid' | 'shape' | 'orientation' | 'halo';
+
 const parseMemoryConfig = (string: string) => {
     const regex = /MemoryConfig\((.*)\)$/;
     const match = string.match(regex);
@@ -34,5 +43,18 @@ const parseMemoryConfig = (string: string) => {
 
     return string;
 };
+
+export const MEMORY_CONFIG_HEADERS = {
+    shard_spec: 'ShardSpec',
+    memory_layout: 'MemoryLayout',
+    grid: 'CoreRangeSet',
+    shape: 'Shape',
+    orientation: 'ShardOrientation',
+    halo: 'Halo',
+};
+
+export function getMemoryConfigHeader(key: MemoryKeys) {
+    return MEMORY_CONFIG_HEADERS[key];
+}
 
 export default parseMemoryConfig;

@@ -14,29 +14,14 @@ import getDeallocationOperation from '../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../functions/getNextAllocationOperation';
 import { Operation, Tensor } from '../model/Graph';
 import isValidNumber from '../functions/isValidNumber';
-import parseMemoryConfig from '../functions/parseMemoryConfig';
+import parseMemoryConfig, { ShardSpec } from '../functions/parseMemoryConfig';
+import MemoryConfigRow from './MemoryConfigRow';
 
 interface BufferDetailsProps {
     tensor: TensorData;
     operations: OperationDescription[];
     className?: string;
 }
-
-interface ShardSpec {
-    grid: string;
-    shape: [number, number];
-    orientation: string;
-    halo: number;
-}
-
-const HEADER_LABELS = {
-    shard_spec: 'ShardSpec',
-    memory_layout: 'MemoryLayout',
-    grid: 'CoreRangeSet',
-    shape: 'Shape',
-    orientation: 'ShardOrientation',
-    halo: 'Halo',
-};
 
 function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
     const { address, dtype, layout, shape } = tensor;
@@ -129,36 +114,11 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
 
                     {tensor?.memory_config
                         ? Object.entries(parseMemoryConfig(tensor.memory_config)).map(([key, value]) => (
-                              <tr key={key}>
-                                  {key === 'shard_spec' && value && typeof value !== 'string' ? (
-                                      <>
-                                          <th>{getHeaderLabel(key)}</th>
-                                          <td>
-                                              <table className='ttnn-table alt-two-tone-rows'>
-                                                  <tbody>
-                                                      {Object.entries(value as ShardSpec).map(
-                                                          ([innerKey, innerValue]) => (
-                                                              <tr key={innerKey}>
-                                                                  <th>
-                                                                      {getHeaderLabel(
-                                                                          innerKey as keyof typeof HEADER_LABELS,
-                                                                      )}
-                                                                  </th>
-                                                                  <td>{innerValue}</td>
-                                                              </tr>
-                                                          ),
-                                                      )}
-                                                  </tbody>
-                                              </table>
-                                          </td>
-                                      </>
-                                  ) : (
-                                      <>
-                                          <th>{getHeaderLabel(key as keyof typeof HEADER_LABELS)}</th>
-                                          <td>{value as string}</td>
-                                      </>
-                                  )}
-                              </tr>
+                              <MemoryConfigRow
+                                  key={key}
+                                  header={key}
+                                  value={value as string | ShardSpec}
+                              />
                           ))
                         : null}
 
@@ -170,10 +130,6 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
             </table>
         </>
     );
-}
-
-function getHeaderLabel(key: keyof typeof HEADER_LABELS) {
-    return HEADER_LABELS[key];
 }
 
 function getLastOperation(lastOperationId: number, operations: Operation[], tensor: Tensor) {
