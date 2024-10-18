@@ -8,7 +8,7 @@ import { BufferPage } from '../../model/APIData';
 
 export interface TensorVisualisationComponentProps {
     operationId: number;
-    address: number;
+    address?: number | undefined;
     bufferType?: BufferType;
     isOpen: boolean;
     onClose: () => void;
@@ -37,10 +37,11 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
     const buffersByBankId: BufferPage[][] = [];
     const coordsByBankId: { x: number; y: number }[] = [];
 
-    data.forEach((page) => {
+    data.forEach((page: BufferPage) => {
         if (!buffersByBankId[page.bank_id]) {
             buffersByBankId[page.bank_id] = [];
         }
+        // page.tensor_id =
         buffersByBankId[page.bank_id].push(page);
         coordsByBankId[page.bank_id] = { x: page.core_x, y: page.core_y };
     });
@@ -78,7 +79,7 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                 gridRow: coords.y + 1,
                                 display: 'flex',
                                 flexDirection: 'column',
-                                gap: '1px',
+                                // gap: '1px',
                             }}
                         >
                             {buffersByBankId[index].map((page) => (
@@ -86,7 +87,7 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                     key={page.id}
                                     style={{
                                         width: '100%',
-                                        height: `${(tensixSize / memSize) * page.page_size}px`,
+                                        height: `${(tensixSize / memSize) * page.page_size * 10}px`,
                                         backgroundColor: 'red',
                                     }}
                                 />

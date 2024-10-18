@@ -33,6 +33,7 @@ import ToastTensorMessage from './ToastTensorMessage';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
+import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -59,6 +60,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [selectedTensorAddress, setSelectedTensorAddress] = useAtom(selectedTensorAddressAtom);
     const [selectedTensor, setSelectedTensor] = useState<number | null>(null);
     const [toastId, setToastId] = useState<number | null>(null);
+    const [tensixVisualisationOpen, setTensixVisualisationOpen] = useState(false);
 
     const onClickOutside = () => {
         setSelectedTensorAddress(null);
@@ -257,6 +259,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 {!isLoading && isValidNumber(operationDetails?.id) ? (
                     <>
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
+                        {tensixVisualisationOpen && (
+                            <TensorVisualisationComponent
+                                operationId={operationId}
+                                address={undefined}
+                                bufferType={BufferType.L1}
+                                isOpen={tensixVisualisationOpen}
+                                onClose={() => setTensixVisualisationOpen(false)}
+                            />
+                        )}
                         <div className='chart-controls'>
                             <ButtonGroup>
                                 <Button
@@ -303,7 +314,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                         {isL1Active && (
                             <>
-                                <h3>L1 Memory</h3>
+                                <h3>
+                                    L1 Memory{' '}
+                                    <Button
+                                        title='Visualize tensix cores'
+                                        icon={IconNames.EYE_OPEN}
+                                        minimal
+                                        small
+                                        onClick={() => {
+                                            setTensixVisualisationOpen(true);
+                                        }}
+                                    />
+                                </h3>
+
                                 <MemoryPlotRenderer
                                     title='Previous Summarized L1 Report'
                                     className={classNames('l1-memory-renderer', {
