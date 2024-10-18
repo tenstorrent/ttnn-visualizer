@@ -1,4 +1,4 @@
-import { MEMORY_CONFIG_HEADERS, ShardSpec, getMemoryConfigHeader } from '../functions/parseMemoryConfig';
+import { MEMORY_CONFIG_HEADERS, MemoryKeys, ShardSpec, getMemoryConfigHeader } from '../functions/parseMemoryConfig';
 
 interface MemoryConfigRowProps {
     header: string;
@@ -16,7 +16,7 @@ const MemoryConfigRow = ({ header, value }: MemoryConfigRowProps) => {
                             <tbody>
                                 {Object.entries(value as ShardSpec).map(([innerKey, innerValue]) => (
                                     <tr key={innerKey}>
-                                        <th>{getMemoryConfigHeader(innerKey as keyof typeof MEMORY_CONFIG_HEADERS)}</th>
+                                        <th>{getMemoryConfigHeader(innerKey as MemoryKeys)}</th>
                                         <td>{innerValue}</td>
                                     </tr>
                                 ))}
@@ -26,7 +26,7 @@ const MemoryConfigRow = ({ header, value }: MemoryConfigRowProps) => {
                 </>
             ) : (
                 <>
-                    <th>{getMemoryConfigHeader(header as keyof typeof MEMORY_CONFIG_HEADERS)}</th>
+                    <th>{getMemoryConfigHeader(header as MemoryKeys)}</th>
                     <td>{value as string}</td>
                 </>
             )}

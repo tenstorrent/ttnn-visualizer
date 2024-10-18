@@ -9,6 +9,8 @@ export interface ShardSpec {
     halo?: number;
 }
 
+export type MemoryKeys = 'shard_spec' | 'memory_layout' | 'grid' | 'shape' | 'orientation' | 'halo';
+
 const parseMemoryConfig = (string: string) => {
     const regex = /MemoryConfig\((.*)\)$/;
     const match = string.match(regex);
@@ -51,7 +53,7 @@ export const MEMORY_CONFIG_HEADERS = {
     halo: 'Halo',
 };
 
-export function getMemoryConfigHeader(key: keyof typeof MEMORY_CONFIG_HEADERS) {
+export function getMemoryConfigHeader(key: MemoryKeys) {
     return MEMORY_CONFIG_HEADERS[key];
 }
 
