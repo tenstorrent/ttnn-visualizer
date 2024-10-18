@@ -10,6 +10,8 @@ export interface RemoteConnection {
     host: string;
     port: number;
     path: string;
+    sqliteBinaryPath?: string;
+    useRemoteQuerying: boolean;
 }
 
 export interface RemoteFolder {
