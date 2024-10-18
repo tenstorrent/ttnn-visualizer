@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import classNames from 'classnames';
-import { Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { TensorData } from '../../model/APIData';
@@ -10,6 +10,7 @@ import { useOperationsList } from '../../hooks/useAPI';
 import getDeallocationOperation from '../../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../../functions/getNextAllocationOperation';
 import isValidNumber from '../../functions/isValidNumber';
+import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
@@ -31,12 +32,28 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations)?.id : null;
     const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations)?.id : null;
 
+    const [overlayOpen, setOverlayOpen] = useState(false);
+
+    const openTensorVisualization = (e: React.MouseEvent<HTMLElement>) => {
+        e.stopPropagation();
+        setOverlayOpen(true);
+    };
+
     return (
         <div
             className={classNames('tensor-item', {
                 dimmed: tensor.address !== selectedAddress && selectedAddress !== null,
             })}
         >
+            {overlayOpen && address !== null && tensor.buffer_type !== null && (
+                <TensorVisualisationComponent
+                    operationId={operationId}
+                    address={address}
+                    bufferType={tensor.buffer_type}
+                    isOpen={overlayOpen}
+                    onClose={() => setOverlayOpen(false)}
+                />
+            )}
             <button
                 type='button'
                 className='tensor-name'
@@ -78,9 +95,8 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
                 {isValidNumber(nextAllocationOperationId) && isValidNumber(address) && operations ? (
                     <Tooltip
-                        content={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}
-                        (+${nextAllocationOperationId - operationId} operations)
-                        `}
+                        // @ts-expect-error - nextAllocationOperationId is a number
+                        content={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
                         placement={PopoverPosition.TOP}
                     >
                         <Icon
@@ -89,6 +105,13 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         />
                     </Tooltip>
                 ) : null}
+                <Button
+                    title={`Visualize tensor ${tensor.id}`}
+                    icon={IconNames.EYE_OPEN}
+                    minimal
+                    small
+                    onClick={(e) => openTensorVisualization(e)}
+                />
             </button>
 
             <div className='tensor-meta'>
