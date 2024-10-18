@@ -1,20 +1,26 @@
 import { HotkeysProvider } from '@blueprintjs/core';
 import { Table2 as BlueprintTable, Cell, Column } from '@blueprintjs/table';
-import { useBuffers } from '../../hooks/useAPI';
-import { BufferType, BufferTypeLabel } from '../../model/BufferType';
+import { BufferTypeLabel } from '../../model/BufferType';
 import LoadingSpinner from '../LoadingSpinner';
 import '@blueprintjs/table/lib/css/table.css';
 import 'styles/components/BufferSummaryTable.scss';
+import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
+import { BuffersByOperationData } from '../../hooks/useAPI';
+import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
 
-const HEADING_LABELS = ['Operation Id', 'Operation Name', 'Address', 'Size', 'Buffer Type', 'Device Id'];
+const HEADING_LABELS = ['Operation', 'Address', 'Size', 'Buffer Type', 'Device Id'];
 const HEADINGS = {
     0: 'operationId',
-    1: 'operationName',
-    2: 'address',
-    3: 'size',
-    4: 'buffer_type',
-    5: 'device_id',
+    1: 'address',
+    2: 'size',
+    3: 'buffer_type',
+    4: 'device_id',
 };
+
+interface BufferSummaryTableProps {
+    buffersByOperation: BuffersByOperationData[];
+    tensorListByOperation: HistoricalTensorsByOperation;
+}
 
 interface Buffer {
     address: number;
@@ -25,9 +31,7 @@ interface Buffer {
     operationName: string;
 }
 
-function BufferSummaryTable() {
-    const { data: buffersByOperation, isLoading: isLoadingBuffers } = useBuffers(BufferType.L1);
-
+function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
     let listOfBuffers: Buffer[] = [];
 
     if (buffersByOperation) {
@@ -69,6 +73,23 @@ function BufferSummaryTable() {
         const cellBuffer = listOfBuffers[rowIndex];
         const cellHeading = HEADINGS[colIndex] as keyof Buffer;
 
+        if (cellHeading === 'operationId') {
+            const tensor = tensorListByOperation.get(cellBuffer.operationId)?.get(cellBuffer.address);
+
+            return (
+                <div className='operation-cell'>
+                    <div
+                        className='memory-color-block'
+                        style={{
+                            backgroundColor: tensor ? getTensorColor(tensor.id) : getBufferColor(cellBuffer.address),
+                        }}
+                    />
+                    <span>{cellBuffer.operationId}</span>
+                    <span>{cellBuffer.operationName}</span>
+                </div>
+            );
+        }
+
         if (cellHeading === 'buffer_type') {
             return BufferTypeLabel[cellBuffer.buffer_type];
         }
@@ -76,7 +97,7 @@ function BufferSummaryTable() {
         return cellBuffer[cellHeading];
     };
 
-    return !isLoadingBuffers && buffersByOperation ? (
+    return buffersByOperation ? (
         <HotkeysProvider>
             <BlueprintTable
                 className='buffer-summary-table'

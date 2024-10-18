@@ -1,4 +1,10 @@
 .buffer-summary-table {
     display: inline-flex;
     height: 600px;
+
+    .operation-cell {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
 }
