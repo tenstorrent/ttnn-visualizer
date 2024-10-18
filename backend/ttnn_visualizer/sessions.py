@@ -2,6 +2,7 @@ from logging import getLogger
 
 from flask import request, jsonify, current_app
 
+from backend.ttnn_visualizer.utils import get_report_path
 from ttnn_visualizer.models import RemoteConnection, RemoteFolder, TabSession
 from ttnn_visualizer.extensions import db
 
@@ -24,8 +25,10 @@ def update_tab_session(
     session_data = TabSession.query.filter_by(tab_id=tab_id).first()
     remote_folder_data = remote_folder.dict() if remote_folder else None
     remote_connection_data = remote_connection.dict() if remote_connection else None
+    report_path = get_report_path(active_report, current_app=current_app, remote_connection=remote_connection)
 
     if session_data:
+        session_data.report_path = report_path
         session_data.remote_folder = remote_folder_data
         session_data.remote_connection = remote_connection_data
         session_data.active_report = active_report
@@ -35,6 +38,7 @@ def update_tab_session(
         session_data = TabSession(
             tab_id=tab_id,
             active_report=active_report,
+            report_path=report_path,
             remote_connection=remote_connection_data,
             remote_folder=remote_folder_data,
         )
