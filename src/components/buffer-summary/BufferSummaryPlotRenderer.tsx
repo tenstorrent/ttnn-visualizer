@@ -22,13 +22,12 @@ const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
-function BufferSummaryPlotRenderer({
-    buffersByOperation,
-    tensorListByOperation,
-}: {
+interface BufferSummaryPlotRendererProps {
     buffersByOperation: BuffersByOperationData[];
     tensorListByOperation: HistoricalTensorsByOperation;
-}) {
+}
+
+function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }: BufferSummaryPlotRendererProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [isZoomedIn, setIsZoomedIn] = useState(false);

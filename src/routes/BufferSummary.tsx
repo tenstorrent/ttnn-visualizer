@@ -62,7 +62,7 @@ function BufferSummary() {
         return () => window.removeEventListener('scroll', navHighlighter);
     }, []);
 
-    const tensorList = useMemo(
+    const tensorListByOperation = useMemo(
         () => createHistoricalTensorList(operationsList, buffersByOperation),
         [operationsList, buffersByOperation],
     );
@@ -93,7 +93,7 @@ function BufferSummary() {
                 </AnchorButton>
             </ButtonGroup>
 
-            {buffersByOperation && operationsList && tensorList ? (
+            {buffersByOperation && operationsList && tensorListByOperation ? (
                 <>
                     <h2>Plot view</h2>
                     <div
@@ -102,7 +102,7 @@ function BufferSummary() {
                     >
                         <BufferSummaryPlotRenderer
                             buffersByOperation={buffersByOperation}
-                            tensorListByOperation={tensorList}
+                            tensorListByOperation={tensorListByOperation}
                         />
                     </div>
 
@@ -113,7 +113,7 @@ function BufferSummary() {
                     >
                         <BufferSummaryTable
                             buffersByOperation={buffersByOperation}
-                            tensorListByOperation={tensorList}
+                            tensorListByOperation={tensorListByOperation}
                         />
                     </div>
                 </>
@@ -137,7 +137,6 @@ function createHistoricalTensorList(operations?: Operation[], buffersByOperation
         const tensorsByBufferAddress: Map<number, HistoricalTensor> = new Map();
         const currentOperation = operations.find((op) => op.id === operation.id);
 
-        // eslint-disable-next-line no-restricted-syntax
         for (const buffer of operation.buffers) {
             const bufferAddress = buffer.address;
             const bufferType = buffer.buffer_type;
