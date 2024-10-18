@@ -2,6 +2,7 @@ import dataclasses
 import enum
 import json
 from json import JSONDecodeError
+from typing import Optional
 
 from pydantic import BaseModel, Field
 from sqlalchemy import Integer, Column, String, JSON
@@ -166,6 +167,8 @@ class RemoteConnection(BaseModel):
     host: str
     port: int = Field(ge=1, le=65535)
     path: str
+    useRemoteQuerying: bool
+    sqliteBinaryPath: Optional[str] = None
 
 
 class TabSession(db.Model):
