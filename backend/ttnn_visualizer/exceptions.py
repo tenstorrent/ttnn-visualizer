@@ -16,6 +16,12 @@ class RemoteConnectionException(Exception):
         if self.status == ConnectionTestStates.OK:
             return HTTPStatus.OK
 
+class RemoteSqliteException(Exception):
+    def __init__(self, message, status):
+        super().__init__(message)
+        self.message = message
+        self.status = status
+
 
 class NoProjectsException(RemoteConnectionException):
     pass
