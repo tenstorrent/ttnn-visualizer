@@ -4,9 +4,10 @@ import { BufferTypeLabel } from '../../model/BufferType';
 import LoadingSpinner from '../LoadingSpinner';
 import '@blueprintjs/table/lib/css/table.css';
 import 'styles/components/BufferSummaryTable.scss';
-import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { BuffersByOperationData } from '../../hooks/useAPI';
 import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
+import { toHex } from '../../functions/math';
+import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 
 const HEADING_LABELS = ['Operation', 'Address', 'Size', 'Buffer Type', 'Device Id'];
 const HEADINGS = {
@@ -83,15 +84,23 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                         style={{
                             backgroundColor: tensor ? getTensorColor(tensor.id) : getBufferColor(cellBuffer.address),
                         }}
-                    />
-                    <span>{cellBuffer.operationId}</span>
-                    <span>{cellBuffer.operationName}</span>
+                    >
+                        {/* Ensures the memory color block takes up space when the table component recalculates the width of the column */}
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    </div>
+                    <span>
+                        {cellBuffer.operationId} {cellBuffer.operationName}
+                    </span>
                 </div>
             );
         }
 
         if (cellHeading === 'buffer_type') {
             return BufferTypeLabel[cellBuffer.buffer_type];
+        }
+
+        if (cellHeading === 'address') {
+            return toHex(cellBuffer.address);
         }
 
         return cellBuffer[cellHeading];
@@ -103,6 +112,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                 className='buffer-summary-table'
                 numRows={listOfBuffers.length}
                 enableRowResizing={false}
+                columnWidths={[200, 150, 150, 100, 100]}
             >
                 {createColumns()}
             </BlueprintTable>
