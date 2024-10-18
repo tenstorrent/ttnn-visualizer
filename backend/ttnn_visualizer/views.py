@@ -243,8 +243,6 @@ def get_operation_buffers(operation_id, session):
 @api.route("/devices", methods=["GET"])
 @with_session
 def get_devices(session):
-    
-
     with DatabaseQueries(session.report_path) as db:
         devices = list(db.query_devices())
         return serialize_devices(devices)
