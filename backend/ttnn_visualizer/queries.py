@@ -182,8 +182,8 @@ class DatabaseQueries:
 
     def query_buffer_pages(
         self,
-        operation_id: Optional[int] = None,
-        address: Optional[int] = None,
+        operation_id: Optional[str] = None,
+        addresses: Optional[List[str]] = None,
         buffer_type: Optional[int] = None,
     ) -> Generator[BufferPage, None, None]:
         cursor = self._get_cursor()
@@ -197,9 +197,10 @@ class DatabaseQueries:
                 query += " AND operation_id = ?"
                 params.append(operation_id)
 
-            if address is not None:
-                query += " AND address = ?"
-                params.append(address)
+            if addresses is not None and len(addresses) > 0:
+                placeholders = ",".join(["?"] * len(addresses))
+                query += f" AND address IN ({placeholders})"
+                params.extend(addresses)
 
             if buffer_type is not None:
                 query += " AND buffer_type = ?"
