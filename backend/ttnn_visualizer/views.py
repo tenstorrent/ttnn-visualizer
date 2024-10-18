@@ -27,7 +27,6 @@ from ttnn_visualizer.serializers import (
 )
 from ttnn_visualizer.sessions import (
     update_tab_session,
-    get_or_create_tab_session,
 )
 from ttnn_visualizer.sftp_operations import (
     sync_test_folders,
@@ -74,7 +73,7 @@ def operation_list(session):
 @api.route("/operations/<operation_id>", methods=["GET"])
 @with_session
 @timer
-def operation_detail(operation_id, report_path):
+def operation_detail(operation_id, session):
     with DatabaseQueries(session.report_path) as db:
         operation = db.query_operation_by_id(operation_id)
 
@@ -128,7 +127,9 @@ def operation_detail(operation_id, report_path):
 def operation_history(session):
 
     operation_history_filename = "operation_history.json"
-    operation_history_file = Path(session.report_path).parent / operation_history_filename
+    operation_history_file = (
+        Path(session.report_path).parent / operation_history_filename
+    )
     if not operation_history_file.exists():
         return []
     with open(operation_history_file, "r") as file:
@@ -422,16 +423,21 @@ def health_check():
     return Response(status=HTTPStatus.OK)
 
 
-@api.route("/reports/active", methods=["GET"])
+@api.route("/session", methods=["GET"])
 @with_session
-def get_active_folder(session):
+def get_tab_session(session):
     # Used to gate UI functions if no report is active
     if session and session.active_report:
-       active_report = session.active_report
-       return {
-                "name": active_report.get("name"),
-                "remote_connection": session.remote_connection,
-                "remote_folder": session.remote_folder,
-            }
+        return {
+            "active_report": session.active_report,
+            "remote_connection": session.remote_connection,
+            "remote_folder": session.remote_folder,
+            "report_path": session.report_path,
+        }
 
-    return {"name": None, "remote_connection": None, "remote_folder": None}
+    return {
+        "name": None,
+        "remote_connection": None,
+        "remote_folder": None,
+        "report_path": None,
+    }

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Operation, Tensor } from './Graph';
-import { RemoteConnection } from '../definitions/RemoteConnection';
+import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
 
 export interface TensorData extends Tensor {
     shape: string;
@@ -40,9 +40,10 @@ export interface OperationDetailsData extends Operation {
     device_operations: Node[];
 }
 
-export interface ActiveReport {
-    name: string;
+export interface TabSession {
+    active_report?: { name: string };
     remote_connection?: RemoteConnection;
+    remote_folder?: RemoteFolder;
 }
 
 export enum FileStatus {
