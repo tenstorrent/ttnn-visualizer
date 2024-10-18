@@ -6,12 +6,12 @@ import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import axiosInstance from '../libs/axiosInstance';
 import {
-    ActiveReport,
     Buffer,
     BufferData,
     OperationDescription,
     OperationDetailsData,
     ReportMetaData,
+    TabSession,
     TensorData,
     defaultBuffer,
     defaultOperationDetailsData,
@@ -19,9 +19,9 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 
-export const fetchActiveReport = async (): Promise<ActiveReport | null> => {
+export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
-    const response = await axiosInstance.get<ActiveReport>('/api/reports/active').catch();
+    const response = await axiosInstance.get<TabSession>('/api/session').catch();
     return response?.data;
 };
 
