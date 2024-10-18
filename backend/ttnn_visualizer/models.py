@@ -178,20 +178,29 @@ class TabSession(db.Model):
     remote_connection = Column(JSON, nullable=True)
     remote_folder = Column(JSON, nullable=True)
 
-    def __init__(self, tab_id, active_report, remote_connection=None, remote_folder=None, report_path=None):
+    def __init__(
+        self,
+        tab_id,
+        active_report,
+        remote_connection=None,
+        remote_folder=None,
+        report_path=None,
+    ):
         self.tab_id = tab_id
         self.active_report = active_report
         self.report_path = report_path
         self.remote_connection = remote_connection
         self.remote_folder = remote_folder
-    
+
     def to_dict(self):
         return {
             "id": self.id,
             "tab_id": self.tab_id,
             "active_report": self.active_report,
             "remote_connection": self.remote_connection,
+            "report_path": self.report_path,
         }
+
 
 class StatusMessage(BaseModel):
     status: int
