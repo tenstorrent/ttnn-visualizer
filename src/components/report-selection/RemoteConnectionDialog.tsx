@@ -2,13 +2,22 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup } from '@blueprintjs/core';
+import {
+    Button,
+    ButtonGroup,
+    Checkbox,
+    Dialog,
+    DialogBody,
+    DialogFooter,
+    FormGroup,
+    InputGroup,
+} from '@blueprintjs/core';
 import { FC, useState } from 'react';
 import useRemoteConnection from '../../hooks/useRemote';
-import ConnectionTestMessage from './ConnectionTestMessage';
 import 'styles/components/RemoteConnectionDialog.scss';
 import { RemoteConnection } from '../../definitions/RemoteConnection';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
+import ConnectionTestMessage from './ConnectionTestMessage';
 
 interface RemoteConnectionDialogProps {
     title?: string;
@@ -133,6 +142,50 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                         }}
                     />
                 </FormGroup>
+
+                <FormGroup>
+                    <Checkbox
+                        checked={connection.useRemoteQuerying}
+                        label='Use Remote Querying'
+                        onChange={(e) => setConnection({ ...connection, useRemoteQuerying: e.target.checked })}
+                    />
+                </FormGroup>
+
+                {connection.useRemoteQuerying && (
+                    <fieldset className='remote-querying-fieldset'>
+                        <legend>Remote Querying Configuration</legend>
+
+                        <FormGroup
+                            label='Remote SQLite Binary Location'
+                            labelFor='text-input'
+                            subLabel='SQLite Binary Location'
+                        >
+                            <InputGroup
+                                key='sqliteBinaryPath'
+                                value={connection.sqliteBinaryPath}
+                                onChange={(e) => setConnection({ ...connection, sqliteBinaryPath: e.target.value })}
+                            />
+                        </FormGroup>
+
+                        <br />
+
+                        <ButtonGroup className='remote-sql-test-buttons'>
+                            <Button
+                                text='Detect Path'
+                                disabled={isTestingConnection}
+                                loading={isTestingConnection}
+                                onClick={testConnectionStatus}
+                            />
+                            <Button
+                                text='Test Remote SQL'
+                                disabled={isTestingConnection || !connection.sqliteBinaryPath}
+                                loading={isTestingConnection}
+                                onClick={testConnectionStatus}
+                            />
+                        </ButtonGroup>
+                    </fieldset>
+                )}
+
                 <FormGroup
                     label='Remote Folder path'
                     labelFor='text-input'
@@ -144,18 +197,18 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                         onChange={(e) => setConnection({ ...connection, path: e.target.value })}
                     />
                 </FormGroup>
+
                 <fieldset>
                     <legend>Test Connection</legend>
 
-                    <ConnectionTestMessage
-                        status={connectionTests[0].status}
-                        message={connectionTests[0].message}
-                    />
-
-                    <ConnectionTestMessage
-                        status={connectionTests[1].status}
-                        message={connectionTests[1].message}
-                    />
+                    {connectionTests.map((test, index) => (
+                        <ConnectionTestMessage
+                            // eslint-disable-next-line react/no-array-index-key
+                            key={index}
+                            status={test.status}
+                            message={test.message}
+                        />
+                    ))}
 
                     <br />
 
