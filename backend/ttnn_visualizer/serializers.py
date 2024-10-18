@@ -105,9 +105,8 @@ def serialize_buffer_pages(buffer_pages):
         ):
             page_data["buffer_type"] = page_data["buffer_type"].value
 
-    return {
-        "buffer_pages": buffer_pages_list,
-    }
+    return buffer_pages_list
+    
 
 
 def serialize_operation(
