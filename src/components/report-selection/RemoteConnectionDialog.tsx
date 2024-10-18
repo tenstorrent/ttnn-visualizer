@@ -2,7 +2,16 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup } from '@blueprintjs/core';
+import {
+    Button,
+    ButtonGroup,
+    Checkbox,
+    Dialog,
+    DialogBody,
+    DialogFooter,
+    FormGroup,
+    InputGroup,
+} from '@blueprintjs/core';
 import { FC, useState } from 'react';
 import 'styles/components/RemoteConnectionDialog.scss';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
@@ -132,6 +141,50 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                         }}
                     />
                 </FormGroup>
+
+                <FormGroup>
+                    <Checkbox
+                        checked={connection.useRemoteQuerying}
+                        label='Use Remote Querying'
+                        onChange={(e) => setConnection({ ...connection, useRemoteQuerying: e.target.checked })}
+                    />
+                </FormGroup>
+
+                {connection.useRemoteQuerying && (
+                    <fieldset className='remote-querying-fieldset'>
+                        <legend>Remote Querying Configuration</legend>
+
+                        <FormGroup
+                            label='Remote SQLite Binary Location'
+                            labelFor='text-input'
+                            subLabel='SQLite Binary Location'
+                        >
+                            <InputGroup
+                                key='sqliteBinaryPath'
+                                value={connection.sqliteBinaryPath}
+                                onChange={(e) => setConnection({ ...connection, sqliteBinaryPath: e.target.value })}
+                            />
+                        </FormGroup>
+
+                        <br />
+
+                        <ButtonGroup className='remote-sql-test-buttons'>
+                            <Button
+                                text='Detect Path'
+                                disabled={isTestingConnection}
+                                loading={isTestingConnection}
+                                onClick={testConnectionStatus}
+                            />
+                            <Button
+                                text='Test Remote SQL'
+                                disabled={isTestingConnection || !connection.sqliteBinaryPath}
+                                loading={isTestingConnection}
+                                onClick={testConnectionStatus}
+                            />
+                        </ButtonGroup>
+                    </fieldset>
+                )}
+
                 <FormGroup
                     label='Remote Folder path'
                     labelFor='text-input'
@@ -143,6 +196,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                         onChange={(e) => setConnection({ ...connection, path: e.target.value })}
                     />
                 </FormGroup>
+
                 <fieldset>
                     <legend>Test Connection</legend>
                     {connectionTests.map((v) => {

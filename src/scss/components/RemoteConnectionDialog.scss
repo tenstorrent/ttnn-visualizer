@@ -42,6 +42,15 @@ $tt-pending: $tt-yellow;
     }
 }
 
+.remote-querying-fieldset {
+    margin-bottom: 15px;
+}
+
+.remote-sql-test-buttons {
+    display: flex;
+    gap: 5px;
+}
+
 @keyframes connection-test-progress {
     from { color: $tt-grey-5; }
     to { color: $tt-yellow; }
