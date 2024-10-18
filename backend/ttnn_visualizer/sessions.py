@@ -1,3 +1,4 @@
+import json
 from logging import getLogger
 
 from flask import request, jsonify, current_app
@@ -47,7 +48,7 @@ def update_tab_session(
 
     db.session.commit()
 
-    current_app.logger.info(f"Session data for tab {tab_id}: {session_data.__dict__}")
+    current_app.logger.info(f"Session data for tab {tab_id}: {json.dumps(session_data.to_dict(), indent=4)}")
 
     return jsonify({"message": "Tab session updated with new active report"}), 200
 

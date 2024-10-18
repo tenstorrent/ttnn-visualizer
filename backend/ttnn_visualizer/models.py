@@ -184,7 +184,14 @@ class TabSession(db.Model):
         self.report_path = report_path
         self.remote_connection = remote_connection
         self.remote_folder = remote_folder
-
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "tab_id": self.tab_id,
+            "active_report": self.active_report,
+            "remote_connection": self.remote_connection,
+        }
 
 class StatusMessage(BaseModel):
     status: int
