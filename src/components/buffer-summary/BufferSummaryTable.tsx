@@ -90,7 +90,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                         }}
                     >
                         {/* Ensures the memory color block takes up space when the table component recalculates the width of the column */}
-                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                     </div>
                     <span>{tensor?.id ? `Tensor ${tensor.id}` : ''}</span>
                 </div>
