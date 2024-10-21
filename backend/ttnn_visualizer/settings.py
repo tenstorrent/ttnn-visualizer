@@ -25,7 +25,7 @@ class DefaultConfig(object):
     SQLITE_DB_PATH = "db.sqlite"
 
     # For development you may want to disable sockets
-    USE_WEBSOCKETS = True
+    USE_WEBSOCKETS = False
 
     # SQL Alchemy Settings
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(APPLICATION_DIR, 'ttnn.db')}"

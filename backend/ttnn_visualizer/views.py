@@ -53,7 +53,11 @@ api = Blueprint("api", __name__, url_prefix="/api")
 @with_session
 @timer
 def operation_list(session):
-    with DatabaseQueries(session.report_path) as db:
+    with DatabaseQueries(
+        session.report_path,
+        remote_connection=session.remote_connection,
+        remote_folder=session.remote_folder,
+    ) as db:
         operations = list(db.query_operations())
         operations.sort(key=lambda o: o.operation_id)
         operation_arguments = list(db.query_operation_arguments())
@@ -82,7 +86,12 @@ def operation_list(session):
 @with_session
 @timer
 def operation_detail(operation_id, session):
-    with DatabaseQueries(session.report_path) as db:
+
+    with DatabaseQueries(
+        session.report_path,
+        remote_connection=session.remote_connection,
+        remote_folder=session.remote_folder,
+    ) as db:
         operation = db.query_operation_by_id(operation_id)
 
         if not operation:
@@ -133,7 +142,7 @@ def operation_detail(operation_id, session):
 @with_session
 @timer
 def operation_history(session):
-
+    # TODO Read Remotely
     operation_history_filename = "operation_history.json"
     operation_history_file = (
         Path(session.report_path).parent / operation_history_filename
@@ -148,6 +157,7 @@ def operation_history(session):
 @with_session
 @timer
 def get_config(session):
+    # TODO Read Remotely
     config_file = Path(session.report_path).parent.joinpath("config.json")
     if not config_file.exists():
         return {}
@@ -159,7 +169,12 @@ def get_config(session):
 @with_session
 @timer
 def tensors_list(session):
-    with DatabaseQueries(session.report_path) as db:
+
+    with DatabaseQueries(
+        session.report_path,
+        remote_connection=session.remote_connection,
+        remote_folder=session.remote_folder,
+    ) as db:
         tensors = list(db.query_tensors())
         producers_consumers = list(db.query_producers_consumers())
         return serialize_tensors(tensors, producers_consumers)
@@ -175,7 +190,11 @@ def buffer_detail(session):
     if not address or not operation_id:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
-    with DatabaseQueries(session.report_path) as db:
+    with DatabaseQueries(
+        session.report_path,
+        remote_connection=session.remote_connection,
+        remote_folder=session.remote_folder,
+    ) as db:
         buffer = db.query_next_buffer(operation_id, address)
         if not buffer:
             return Response(status=HTTPStatus.NOT_FOUND)
@@ -194,8 +213,11 @@ def buffer_pages(session):
         buffer_type = int(buffer_type)
     else:
         buffer_type = None
-
-    with DatabaseQueries(session.report_path) as db:
+    with DatabaseQueries(
+        session.report_path,
+        remote_connection=session.remote_connection,
+        remote_folder=session.remote_folder,
+    ) as db:
         buffers = list(db.query_buffer_pages(operation_id, address, buffer_type))
         return serialize_buffer_pages(buffers)
 
@@ -205,7 +227,12 @@ def buffer_pages(session):
 @timer
 def tensor_detail(tensor_id, session):
 
-    with DatabaseQueries(session) as db:
+    with DatabaseQueries(
+        session.report_path,
+        remote_connection=session.remote_connection,
+        remote_folder=session.remote_folder,
+    ) as db:
+
         tensor = db.query_tensor_by_id(tensor_id)
         if not tensor:
             return Response(status=HTTPStatus.NOT_FOUND)
@@ -223,7 +250,11 @@ def get_operations_buffers(session):
     else:
         buffer_type = None
 
-    with DatabaseQueries(session.report_path) as db:
+    with DatabaseQueries(
+        session.report_path,
+        remote_connection=session.remote_connection,
+        remote_folder=session.remote_folder,
+    ) as db:
         buffers = list(db.query_buffers(buffer_type=buffer_type))
         operations = list(db.query_operations())
         return serialize_operations_buffers(operations, buffers)
@@ -239,7 +270,11 @@ def get_operation_buffers(operation_id, session):
     else:
         buffer_type = None
 
-    with DatabaseQueries(session.report_path) as db:
+    with DatabaseQueries(
+        session.report_path,
+        remote_connection=session.remote_connection,
+        remote_folder=session.remote_folder,
+    ) as db:
         operation = db.query_operation_by_id(operation_id)
         buffers = list(
             db.query_buffers_by_operation_id(operation_id, buffer_type=buffer_type)
@@ -252,7 +287,12 @@ def get_operation_buffers(operation_id, session):
 @api.route("/devices", methods=["GET"])
 @with_session
 def get_devices(session):
-    with DatabaseQueries(session.report_path) as db:
+
+    with DatabaseQueries(
+        session.report_path,
+        remote_connection=session.remote_connection,
+        remote_folder=session.remote_folder,
+    ) as db:
         devices = list(db.query_devices())
         return serialize_devices(devices)
 
@@ -346,7 +386,7 @@ def get_remote_folders():
     connection = request.json
     try:
         remote_folders = get_remote_test_folders(
-            RemoteConnection.model_validate(connection)
+            RemoteConnection.model_validate(connection, strict=False)
         )
         return [r.model_dump() for r in remote_folders]
     except RemoteConnectionException as e:
@@ -355,6 +395,17 @@ def get_remote_folders():
 
 @api.route("/remote/sqlite/detect-path", methods=["POST"])
 def detect_sqlite_path():
+    connection = request.json
+    connection = RemoteConnection.model_validate(connection, strict=False)
+    path = get_sqlite_path(connection=connection)
+    if path:
+        return StatusMessage(
+            status=ConnectionTestStates.OK.value, message=path
+        ).model_dump()
+
+
+@api.route("/remote/sqlite/test", methods=["POST"])
+def test_sqlite_path():
     connection = request.json
     connection = RemoteConnection.model_validate(connection, strict=False)
     path = get_sqlite_path(connection=connection)

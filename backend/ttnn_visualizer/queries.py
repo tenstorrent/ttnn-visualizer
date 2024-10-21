@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 import sqlite3
 from pathlib import Path
@@ -20,6 +21,8 @@ from ttnn_visualizer.models import (
     OutputTensor,
     Device,
     ProducersConsumers,
+    RemoteConnection,
+    RemoteFolder,
 )
 
 
@@ -28,51 +31,95 @@ class DatabaseQueries:
         self,
         db_path: Optional[str] = None,
         connection=None,
-        remote_connection=None,
+        remote_connection: Optional[RemoteConnection] = None,
         remote_folder=None,
     ):
 
-        if not connection and not remote_connection and not Path(str(db_path)).exists():
-            raise DatabaseFileNotFoundException(
-                f"Database not found at path: {db_path}"
-            )
+        if not remote_connection.get("useRemoteQuerying", False):
+            if not connection and not Path(str(db_path)).exists():
+                raise DatabaseFileNotFoundException(
+                    f"Database not found at path: {db_path}"
+                )
 
         if db_path is not None and connection is not None:
             raise ValueError("Specify either an existing connection or path")
 
-        self.remote_connection = remote_connection
-
         if remote_connection:
-            self.ssh_client = self._get_ssh_client(remote_connection)
+            self.remote_connection = RemoteConnection.model_validate(
+                remote_connection, strict=False
+            )
+        if remote_folder:
+            self.remote_folder = RemoteFolder.model_validate(
+                remote_folder, strict=False
+            )
+
+        if self.remote_connection and self.remote_connection.useRemoteQuerying:
+            self.ssh_client = self._get_ssh_client(self.remote_connection)
+            self.connection = None
         else:
             self.ssh_client = None
+            if not connection:
+                self.connection = sqlite3.connect(
+                    db_path, isolation_level=None, timeout=30
+                )
+            else:
+                self.connection = connection
 
-        if not connection and not remote_connection:
-            self.connection = sqlite3.connect(db_path, isolation_level=None, timeout=30)
-        else:
-            self.connection = connection
+    def _check_table_exists(self, table_name: str) -> bool:
+        """
+        Checks if a table exists in the database.
+        This method works for both local and remote databases.
+        """
+        # Properly format the table name into the query string with single quotes
+        query = "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
+
+        # Use the execute_query method to handle both local and remote cases.
+        rows = self.execute_query(query, [table_name])
+
+        return bool(rows)
 
     def _get_ssh_client(self, remote_connection) -> paramiko.SSHClient:
         return get_client(remote_connection=remote_connection)
 
     def _execute_remote_query(self, query: str, params: Optional[List] = None) -> List:
         sqlite_binary = self.remote_connection.sqliteBinaryPath or "sqlite3"
-        remote_db_path = str(Path(self.remote_connection.path, "db.sqlite"))
+        remote_db_path = str(Path(self.remote_folder.remotePath, "db.sqlite"))
         formatted_query = query
 
         if params:
-            # Format parameters into a query string safely
-            formatted_query = formatted_query.replace("?", "{}").format(*params)
+            # Properly quote string parameters for SQLite, adding single quotes where needed
+            formatted_params = [
+                f"'{param}'" if isinstance(param, str) else str(param)
+                for param in params
+            ]
+            formatted_query = formatted_query.replace("?", "{}").format(
+                *formatted_params
+            )
 
-        command = f'{sqlite_binary} {remote_db_path} "{formatted_query}"'
+        command = f'{sqlite_binary} {remote_db_path} "{formatted_query}" -json'
         stdin, stdout, stderr = self.ssh_client.exec_command(command)
-        output = stdout.readlines()
-        if stderr.readlines():
-            raise RuntimeError("Error executing query remotely")
+        output = (
+            stdout.read().decode("utf-8").strip()
+        )  # Read, decode, and strip extra whitespace
+        error_output = stderr.read().decode("utf-8").strip()
 
-        return [
-            line.strip().split("|") for line in output
-        ]  # Assuming pipe-separated output
+        if error_output:
+            raise RuntimeError(
+                f"Error executing query remotely: {error_output}\nCommand: {command}"
+            )
+
+        # Handle empty output safely
+        if not output.strip():
+            return []
+
+        # Try to parse JSON output or fallback to line-based parsing
+        try:
+            rows = json.loads(output)
+            return [tuple(row.values()) for row in rows]
+        except json.JSONDecodeError:
+            # If output is not JSON, fallback to parsing using a pipe as a delimiter
+            print("Output is not valid JSON, attempting manual parsing.")
+            return [tuple(line.split("|")) for line in output.splitlines()]
 
     def _get_cursor(self):
         if self.ssh_client:
@@ -83,6 +130,7 @@ class DatabaseQueries:
         """
         Executes a query either locally or remotely based on the connection type.
         """
+
         if self.ssh_client:
             # Run the query on the remote server
             return self._execute_remote_query(query, params)
@@ -96,8 +144,11 @@ class DatabaseQueries:
                 cursor.close()
 
     # Query methods below:
-
     def query_device_operations(self) -> List[DeviceOperation]:
+        # Check if the 'captured_graph' table exists before querying
+        if not self._check_table_exists("captured_graph"):
+            return []  # Return an empty list if the table does not exist
+
         query = "SELECT * FROM captured_graph"
         rows = self.execute_query(query)
         return [DeviceOperation(*row) for row in rows]
@@ -105,6 +156,8 @@ class DatabaseQueries:
     def query_device_operations_by_operation_id(
         self, operation_id: int
     ) -> Optional[DeviceOperation]:
+        if not self._check_table_exists("captured_graph"):
+            return []  # Return an empty list if the table does not exist
         query = "SELECT * FROM captured_graph WHERE operation_id = ?"
         rows = self.execute_query(query, [operation_id])
         if rows:
