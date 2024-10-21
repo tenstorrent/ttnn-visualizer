@@ -14,6 +14,7 @@ from ttnn_visualizer.models import (
     StatusMessage,
 )
 from ttnn_visualizer.queries import DatabaseQueries
+from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path
 from ttnn_visualizer.sockets import (
     FileProgress,
     emit_file_status,
@@ -352,11 +353,11 @@ def get_remote_folders():
         return Response(status=e.http_status, response=e.message)
 
 
-@api.route("/remote/sqlite/detect-path")
+@api.route("/remote/sqlite/detect-path", methods=["POST"])
 def detect_sqlite_path():
     connection = request.json
-    connection = RemoteConnection.model_validate(connection)
-    path = detect_sqlite_path(connection=connection)
+    connection = RemoteConnection.model_validate(connection, strict=False)
+    path = get_sqlite_path(connection=connection)
     if path:
         return StatusMessage(
             status=ConnectionTestStates.OK.value, message=path

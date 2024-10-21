@@ -1,10 +1,14 @@
 import os
 import zipfile
 
+from pydevd import remote
+
 from ttnn_visualizer.decorators import remote_exception_handler
-from ttnn_visualizer.exceptions import RemoteSqliteException
+from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.exceptions import RemoteSqliteException, RemoteConnectionException
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.queries import DatabaseQueries
+from ttnn_visualizer.serializers import serialize_operations
 from ttnn_visualizer.ssh_client import get_client
 
 
@@ -50,8 +54,9 @@ def check_internet_connectivity(ssh_client):
         raise Exception(f"Failed to check internet connectivity: {str(e)}")
 
 
-def find_sqlite_binary(ssh_client):
+def find_sqlite_binary(connection):
     """Check if SQLite is installed on the remote machine and return its path."""
+    ssh_client = get_client(connection)
     try:
         stdin, stdout, stderr = ssh_client.exec_command("which sqlite3")
         binary_path = stdout.read().decode().strip()
@@ -63,7 +68,10 @@ def find_sqlite_binary(ssh_client):
             print(f"Error checking SQLite binary: {error}")
         return None
     except Exception as e:
-        raise Exception(f"Error finding SQLite binary: {str(e)}")
+        raise RemoteSqliteException(
+            message=f"Error finding SQLite binary: {str(e)}",
+            status=ConnectionTestStates.FAILED.value,
+        )
 
 
 def determine_os(ssh_client):
@@ -253,15 +261,16 @@ def check_sqlite_path(remote_connection: RemoteConnection):
         raise RemoteSqliteException(message=str(e), status=500)
 
 
-@remote_exception_handler
-def get_sqlite_path(remote_connection: RemoteConnection):
+def get_sqlite_path(connection: RemoteConnection):
     try:
-        client = get_client(remote_connection)
-        path = find_sqlite_binary(client)
+        client = get_client(connection)
+        path = find_sqlite_binary(connection)
         if path:
             return path
     except Exception as e:
-        raise RemoteSqliteException(message=str(e), status=500)
+        raise RemoteSqliteException(
+            message=str(e), status=ConnectionTestStates.FAILED.value
+        )
 
 
 def move_sqlite_binary(ssh_client, download_folder, target_binary_path):
@@ -432,17 +441,46 @@ def ensure_sqlite_binary_and_update_connection(
         return remote_connection
 
 
-if __name__ == "__main__":
-
+def check_sqlite_binary_detect():
     # Example
     remote_conn = RemoteConnection(
-        name="your_site",
-        username="your_username",
-        host="your_host",
+        name="Test Connection",
+        username="root",
+        host="groggle.site",
         port=22,
         path="/report/path",
         sqlite_binary_path=None,
     )
+    path = None
+    try:
 
-    remote_conn = ensure_sqlite_binary_and_update_connection(remote_conn)
-    remote_querying_example(remote_conn, "/home/w0269804/12232452/")
+        path = get_sqlite_path(remote_conn)
+    except RemoteConnectionException as e:
+        print(f"Error connecting to host via SSH: {str(e)}")
+    except RemoteSqliteException as e:
+        print(f"Sqlite binary not found {str(e.message)}")
+    if path:
+        print(f"Sqlite binary found at {path}")
+
+
+if __name__ == "__main__":
+    remote_conn = RemoteConnection(
+        name="Test Connection",
+        username="root",
+        host="groggle.site",
+        port=22,
+        path="/home/w0269804/12232452",
+        sqlite_binary_path=None,
+    )
+
+    sqlite_path = get_sqlite_path(remote_conn)
+    remote_conn.sqliteBinaryPath = sqlite_path
+    with DatabaseQueries(remote_connection=remote_conn) as db:
+        operations = list(db.query_operations())
+        first_operation = operations[0]
+        print(f"First operation: {first_operation}")
+        print(f"Operations found {len(operations)}")
+        devices = list(db.query_devices())
+        print(f"Devices found {len(devices)}")
+        buffers = list(db.query_buffers(buffer_type=None))
+        print(f"Buffers found {len(buffers)}")

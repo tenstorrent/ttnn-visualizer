@@ -43,10 +43,17 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     ];
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
-    const { testConnection } = useRemoteConnection();
+    const { testConnection, fetchSqlitePath } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
 
     const isValidConnection = connectionTests.every((status) => status.status === ConnectionTestStates.OK);
+
+    const getSqlitePath = async () => {
+        const status = await fetchSqlitePath(connection);
+        if (status.status === ConnectionTestStates.OK) {
+            setConnection({ ...connection, sqliteBinaryPath: status.message });
+        }
+    };
 
     const testConnectionStatus = async () => {
         setIsTestingconnection(true);
@@ -173,7 +180,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                                 text='Detect Path'
                                 disabled={isTestingConnection}
                                 loading={isTestingConnection}
-                                onClick={testConnectionStatus}
+                                onClick={getSqlitePath}
                             />
                             <Button
                                 text='Test Remote SQL'

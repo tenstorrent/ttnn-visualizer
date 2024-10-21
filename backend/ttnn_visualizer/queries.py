@@ -24,9 +24,15 @@ from ttnn_visualizer.models import (
 
 
 class DatabaseQueries:
-    def __init__(self, db_path: Optional[str] = None, connection=None, remote_connection=None):
+    def __init__(
+        self,
+        db_path: Optional[str] = None,
+        connection=None,
+        remote_connection=None,
+        remote_folder=None,
+    ):
 
-        if not connection and not Path(str(db_path)).exists():
+        if not connection and not remote_connection and not Path(str(db_path)).exists():
             raise DatabaseFileNotFoundException(
                 f"Database not found at path: {db_path}"
             )

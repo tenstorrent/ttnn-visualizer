@@ -1,12 +1,14 @@
-from typing import List, Optional
-import paramiko
+import logging
 import os
 from pathlib import Path
+from typing import List, Optional
+
+import paramiko
 from paramiko.agent import Agent
 from paramiko.ssh_exception import SSHException
-from ttnn_visualizer.models import RemoteConnection, StatusMessage
+
 from ttnn_visualizer.enums import ConnectionTestStates
-import logging
+from ttnn_visualizer.models import RemoteConnection, StatusMessage
 
 logger = logging.getLogger(__name__)
 

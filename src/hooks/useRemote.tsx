@@ -11,6 +11,15 @@ import useAppConfig from './useAppConfig';
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
 
+    // TODO Ensure on form that SSH connection is valid first
+    const fetchSqlitePath = async (connection: Partial<RemoteConnection>) => {
+        const { data: connectionTestStates } = await axiosInstance.post(
+            `${import.meta.env.VITE_API_ROOT}/remote/sqlite/detect-path`,
+            connection,
+        );
+        return connectionTestStates;
+    };
+
     const testConnection = async (connection: Partial<RemoteConnection>) => {
         const connectionStatus: ConnectionStatus[] = [
             {
@@ -115,6 +124,7 @@ const useRemoteConnection = () => {
         syncRemoteFolder,
         listRemoteFolders,
         mountRemoteFolder,
+        fetchSqlitePath,
         persistentState,
         readRemoteFile,
     };

@@ -168,8 +168,8 @@ class RemoteConnection(BaseModel):
     host: str
     port: int = Field(ge=1, le=65535)
     path: str
-    useRemoteQuerying: bool
-    sqliteBinaryPath: Optional[str] = None
+    useRemoteQuerying: Optional[bool] = False
+    sqliteBinaryPath: Optional[str] = ""
 
 
 class TabSession(db.Model):
