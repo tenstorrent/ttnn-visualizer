@@ -81,14 +81,6 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         }
 
         if (key === 'tensor_id') {
-            return tensor?.id || '';
-        }
-
-        if (key === 'buffer_type') {
-            return BufferTypeLabel[buffer.buffer_type];
-        }
-
-        if (key === 'address') {
             return (
                 <div className='operation-cell'>
                     <div
@@ -100,9 +92,17 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                         {/* Ensures the memory color block takes up space when the table component recalculates the width of the column */}
                         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                     </div>
-                    <span>{toHex(buffer.address)}</span>
+                    <span>{tensor?.id ? `Tensor ${tensor.id}` : ''}</span>
                 </div>
             );
+        }
+
+        if (key === 'buffer_type') {
+            return BufferTypeLabel[buffer.buffer_type];
+        }
+
+        if (key === 'address') {
+            return toHex(buffer.address);
         }
 
         return buffer[key];
