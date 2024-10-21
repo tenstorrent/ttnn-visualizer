@@ -9,13 +9,13 @@ import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
 import { toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 
-const HEADING_LABELS = ['Operation', 'Address', 'Size', 'Buffer Type', 'Device Id'];
-const HEADINGS = {
-    0: 'operationId',
-    1: 'address',
-    2: 'size',
-    3: 'buffer_type',
-    4: 'device_id',
+const COLUMNS = {
+    operationId: 'Operation',
+    tensor_id: 'Tensor Id',
+    address: 'Address',
+    size: 'Size',
+    buffer_type: 'Buffer Type',
+    device_id: 'Device Id',
 };
 
 interface BufferSummaryTableProps {
@@ -50,60 +50,62 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     }
 
     const createColumns = () => {
-        return HEADING_LABELS.map((heading, index) => createColumn(heading, index));
+        const columns = Object.entries(COLUMNS) as [keyof typeof COLUMNS, string][];
+
+        return columns.map(([key, label]) => createColumn(key, label));
     };
 
-    const createColumn = (heading: string, colIndex: number) => {
+    const createColumn = (key: keyof typeof COLUMNS, label: string) => {
         return (
             <Column
-                name={heading}
-                key={heading}
-                cellRenderer={createCell(colIndex as keyof typeof HEADINGS)}
+                key={key}
+                name={label}
+                cellRenderer={createCell(key)}
             />
         );
     };
 
     // eslint-disable-next-line react/no-unstable-nested-components
-    const createCell = (colIndex: keyof typeof HEADINGS) => (rowIndex: number) => {
-        const cellContent = getCellContent(colIndex, rowIndex);
+    const createCell = (key: keyof typeof COLUMNS) => (rowIndex: number) => {
+        const cellContent = getCellContent(key, rowIndex);
 
         return <Cell>{cellContent}</Cell>;
     };
 
-    const getCellContent = (colIndex: keyof typeof HEADINGS, rowIndex: number) => {
-        const cellBuffer = listOfBuffers[rowIndex];
-        const cellHeading = HEADINGS[colIndex] as keyof Buffer;
+    const getCellContent = (key: keyof typeof COLUMNS, rowIndex: number) => {
+        const buffer = listOfBuffers[rowIndex];
+        const tensor = tensorListByOperation.get(buffer.operationId)?.get(buffer.address);
 
-        if (cellHeading === 'operationId') {
-            const tensor = tensorListByOperation.get(cellBuffer.operationId)?.get(cellBuffer.address);
+        if (key === 'operationId') {
+            return `${buffer.operationId} - ${buffer.operationName}`;
+        }
 
+        if (key === 'tensor_id') {
+            return tensor?.id || '';
+        }
+
+        if (key === 'buffer_type') {
+            return BufferTypeLabel[buffer.buffer_type];
+        }
+
+        if (key === 'address') {
             return (
                 <div className='operation-cell'>
                     <div
                         className='memory-color-block'
                         style={{
-                            backgroundColor: tensor ? getTensorColor(tensor.id) : getBufferColor(cellBuffer.address),
+                            backgroundColor: tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address),
                         }}
                     >
                         {/* Ensures the memory color block takes up space when the table component recalculates the width of the column */}
                         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                     </div>
-                    <span>
-                        {cellBuffer.operationId} {cellBuffer.operationName}
-                    </span>
+                    <span>{toHex(buffer.address)}</span>
                 </div>
             );
         }
 
-        if (cellHeading === 'buffer_type') {
-            return BufferTypeLabel[cellBuffer.buffer_type];
-        }
-
-        if (cellHeading === 'address') {
-            return toHex(cellBuffer.address);
-        }
-
-        return cellBuffer[cellHeading];
+        return buffer[key];
     };
 
     return buffersByOperation ? (
@@ -112,7 +114,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                 className='buffer-summary-table'
                 numRows={listOfBuffers.length}
                 enableRowResizing={false}
-                columnWidths={[200, 150, 150, 100, 100]}
+                columnWidths={[200, 100, 150, 150, 100, 100]}
             >
                 {createColumns()}
             </BlueprintTable>
