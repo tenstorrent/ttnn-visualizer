@@ -1,6 +1,8 @@
+from pathlib import Path
 import sqlite3
 from typing import List, Optional, Generator
 
+from backend.ttnn_visualizer.exceptions import DatabaseFileNotFoundException
 from ttnn_visualizer.models import (
     Operation,
     Device,
@@ -18,6 +20,9 @@ from ttnn_visualizer.models import (
 
 class DatabaseQueries:
     def __init__(self, db_path: str = None, connection=None):
+
+        if not connection and not Path(db_path).exists():
+            raise DatabaseFileNotFoundException(f"Database not found at path: {db_path}")
 
         if db_path is not None and connection is not None:
             raise ValueError(

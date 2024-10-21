@@ -7,3 +7,6 @@ class RemoteFolderException(Exception):
 
 class NoProjectsException(RemoteFolderException):
     pass
+
+class DatabaseFileNotFoundException(Exception):
+    pass

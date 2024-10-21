@@ -8,11 +8,12 @@ from typing import cast
 
 import flask
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from backend.ttnn_visualizer.exceptions import DatabaseFileNotFoundException
 from ttnn_visualizer.settings import Config, DefaultConfig
 
 logger = logging.getLogger(__name__)
@@ -103,6 +104,14 @@ def middleware(app: flask.Flask):
     :param app: Flask application instance
     :return: None
     """
+
+    @app.errorhandler(DatabaseFileNotFoundException)
+    def handle_database_not_found_error(error):
+        # Return a JSON response with a 404 status code
+        response = jsonify({"error": str(error)})
+        response.status_code = 404
+        return response
+
     # Only use the middleware if running in pure WSGI (HTTP requests)
     if not app.config.get("USE_WEBSOCKETS"):
         # Enable the Flask interactive debugger in the browser for development.
