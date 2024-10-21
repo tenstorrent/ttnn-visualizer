@@ -2,6 +2,7 @@ import dataclasses
 import json
 
 from flask import Blueprint, Response
+from jedi.inference.flow_analysis import Status
 
 from backend.ttnn_visualizer.ssh_client import test_ssh_connection
 from ttnn_visualizer.decorators import with_session
@@ -349,6 +350,17 @@ def get_remote_folders():
         return [r.model_dump() for r in remote_folders]
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
+
+
+@api.route("/remote/sqlite/detect-path")
+def detect_sqlite_path():
+    connection = request.json
+    connection = RemoteConnection.model_validate(connection)
+    path = detect_sqlite_path(connection=connection)
+    if path:
+        return StatusMessage(
+            status=ConnectionTestStates.OK.value, message=path
+        ).model_dump()
 
 
 @api.route("/remote/test", methods=["POST"])

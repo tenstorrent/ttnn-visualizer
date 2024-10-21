@@ -249,8 +249,19 @@ def check_sqlite_path(remote_connection: RemoteConnection):
     try:
         client = get_client(remote_connection)
         is_sqlite_executable(client, remote_connection.sqliteBinaryPath)
+    except Exception as e:  # TODO - Specify exceptions here
+        raise RemoteSqliteException(message=str(e), status=500)
+
+
+@remote_exception_handler
+def get_sqlite_path(remote_connection: RemoteConnection):
+    try:
+        client = get_client(remote_connection)
+        path = find_sqlite_binary(client)
+        if path:
+            return path
     except Exception as e:
-        raise RemoteSqliteException(str(e), status=500)
+        raise RemoteSqliteException(message=str(e), status=500)
 
 
 def move_sqlite_binary(ssh_client, download_folder, target_binary_path):
