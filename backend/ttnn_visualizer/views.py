@@ -3,9 +3,15 @@ import json
 
 from flask import Blueprint, Response
 
+from backend.ttnn_visualizer.ssh_client import test_ssh_connection
 from ttnn_visualizer.decorators import with_session
-from ttnn_visualizer.exceptions import RemoteFolderException
-from ttnn_visualizer.models import RemoteFolder, RemoteConnection, StatusMessage
+from ttnn_visualizer.exceptions import RemoteConnectionException
+from ttnn_visualizer.models import (
+    ConnectionTestStates,
+    RemoteFolder,
+    RemoteConnection,
+    StatusMessage,
+)
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.sockets import (
     FileProgress,
@@ -266,7 +272,7 @@ def create_upload_files():
     # Validate necessary files
     if "db.sqlite" not in filenames or "config.json" not in filenames:
         return StatusMessage(
-            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            status=ConnectionTestStates.FAILED.value,
             message="Invalid project directory.",
         ).model_dump()
 
@@ -282,7 +288,7 @@ def create_upload_files():
         current_file_name = file.filename
         logger.info(f"Processing file: {current_file_name}")
 
-        destination_file = Path(report_directory, Path(current_file_name))
+        destination_file = Path(report_directory, Path(str(current_file_name)))
         logger.info(f"Writing file to {destination_file}")
 
         # Create the directory if it doesn't exist
@@ -294,7 +300,7 @@ def create_upload_files():
 
         # Emit 0% progress at the start
         progress = FileProgress(
-            current_file_name=current_file_name,
+            current_file_name="",
             number_of_files=total_files,
             percent_of_current=0,
             finished_files=processed_files,
@@ -318,7 +324,7 @@ def create_upload_files():
 
     # Emit final success status after all files are processed
     final_progress = FileProgress(
-        current_file_name=None,
+        current_file_name="",
         number_of_files=total_files,
         percent_of_current=100,
         finished_files=processed_files,
@@ -328,36 +334,54 @@ def create_upload_files():
     if current_app.config["USE_WEBSOCKETS"]:
         emit_file_status(final_progress, tab_id)
 
-    return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
+    return StatusMessage(
+        status=ConnectionTestStates.OK.value, message="Success."
+    ).model_dump()
 
 
 @api.route("/remote/folder", methods=["POST"])
 def get_remote_folders():
     connection = request.json
     try:
-        remote_folders = get_remote_test_folders(RemoteConnection(**connection))
+        remote_folders = get_remote_test_folders(
+            RemoteConnection.model_validate(connection)
+        )
         return [r.model_dump() for r in remote_folders]
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
 
 
 @api.route("/remote/test", methods=["POST"])
 def test_remote_folder():
     connection = request.json
-    try:
-        check_remote_path(RemoteConnection(**connection))
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
-    return Response(status=HTTPStatus.OK)
+    connection = RemoteConnection.model_validate(connection)
+    statuses = test_ssh_connection(remote_connection=connection)
+
+    has_failures = any(
+        status.status != ConnectionTestStates.OK.value for status in statuses
+    )
+
+    if not has_failures:
+        try:
+            check_remote_path(connection)
+        except RemoteConnectionException:
+            statuses.append(
+                StatusMessage(
+                    status=ConnectionTestStates.FAILED.value,
+                    message="No projects found in specified path",
+                )
+            )
+
+    return list(map(lambda s: s.model_dump(), statuses))
 
 
 @api.route("/remote/read", methods=["POST"])
 def read_remote_folder():
     connection = request.json
     try:
-        content = read_remote_file(RemoteConnection(**connection))
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
+        content = read_remote_file(RemoteConnection.model_validate(connection))
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
     return Response(status=200, response=content)
 
 
@@ -372,14 +396,14 @@ def sync_remote_folder():
 
     try:
         sync_test_folders(
-            RemoteConnection(**connection),
+            RemoteConnection.model_validate(connection),
             RemoteFolder(**folder),
             remote_dir,
             use_compression,
             sid=tab_id,
         )
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
     return Response(status=HTTPStatus.OK)
 
 
@@ -390,7 +414,7 @@ def use_remote_folder():
     if not connection or not folder:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
-    connection = RemoteConnection(**connection)
+    connection = RemoteConnection.model_validate(connection)
     folder = RemoteFolder(**folder)
     report_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
     report_folder = Path(folder.remotePath).name
