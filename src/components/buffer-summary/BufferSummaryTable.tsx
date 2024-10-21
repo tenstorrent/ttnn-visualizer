@@ -9,14 +9,16 @@ import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
 import { toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 
-const COLUMNS = {
-    operationId: 'Operation',
-    tensor_id: 'Tensor Id',
-    address: 'Address',
-    size: 'Size',
-    buffer_type: 'Buffer Type',
-    device_id: 'Device Id',
-};
+enum COLUMNS {
+    operationId = 'Operation',
+    tensor_id = 'Tensor Id',
+    address = 'Address',
+    size = 'Size',
+    buffer_type = 'Buffer Type',
+    device_id = 'Device Id',
+}
+
+type COLUMN_KEYS = keyof typeof COLUMNS;
 
 interface BufferSummaryTableProps {
     buffersByOperation: BuffersByOperationData[];
@@ -50,12 +52,12 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     }
 
     const createColumns = () => {
-        const columns = Object.entries(COLUMNS) as [keyof typeof COLUMNS, string][];
+        const columns = Object.entries(COLUMNS) as [COLUMN_KEYS, string][];
 
         return columns.map(([key, label]) => createColumn(key, label));
     };
 
-    const createColumn = (key: keyof typeof COLUMNS, label: string) => {
+    const createColumn = (key: COLUMN_KEYS, label: string) => {
         return (
             <Column
                 key={key}
@@ -66,13 +68,13 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     };
 
     // eslint-disable-next-line react/no-unstable-nested-components
-    const createCell = (key: keyof typeof COLUMNS) => (rowIndex: number) => {
+    const createCell = (key: COLUMN_KEYS) => (rowIndex: number) => {
         const cellContent = getCellContent(key, rowIndex);
 
         return <Cell>{cellContent}</Cell>;
     };
 
-    const getCellContent = (key: keyof typeof COLUMNS, rowIndex: number) => {
+    const getCellContent = (key: COLUMN_KEYS, rowIndex: number) => {
         const buffer = listOfBuffers[rowIndex];
         const tensor = tensorListByOperation.get(buffer.operationId)?.get(buffer.address);
 
