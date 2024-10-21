@@ -19,17 +19,21 @@ from ttnn_visualizer.models import (
 
 
 class DatabaseQueries:
-    def __init__(self, db_path: str = None, connection=None):
+    def __init__(self, db_path: Optional[str] = None, connection=None):
 
-        if not connection and not Path(db_path).exists():
-            raise DatabaseFileNotFoundException(f"Database not found at path: {db_path}")
+        if not connection and not Path(str(db_path)).exists():
+            raise DatabaseFileNotFoundException(
+                f"Database not found at path: {db_path}"
+            )
 
         if db_path is not None and connection is not None:
             raise ValueError(
                 "Invalid arguments, specify either existing connection or path"
             )
         if not connection:
-            self.connection = sqlite3.connect(db_path, isolation_level=None, timeout=30)
+            self.connection = sqlite3.connect(
+                str(db_path), isolation_level=None, timeout=30
+            )
         else:
             self.connection = connection
 
@@ -187,8 +191,8 @@ class DatabaseQueries:
 
     def query_buffer_pages(
         self,
-        operation_id: Optional[int] = None,
-        address: Optional[int] = None,
+        operation_id: Optional[int | str] = None,
+        address: Optional[int | str] = None,
         buffer_type: Optional[int] = None,
     ) -> Generator[BufferPage, None, None]:
         cursor = self._get_cursor()
