@@ -6,6 +6,7 @@ from json import JSONDecodeError
 from pydantic import BaseModel, Field
 from sqlalchemy import Integer, Column, String, JSON
 
+from backend.ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
 
 
@@ -203,8 +204,11 @@ class TabSession(db.Model):
 
 
 class StatusMessage(BaseModel):
-    status: int
+    status: ConnectionTestStates
     message: str
+
+    class Config:
+        use_enum_values = True
 
 
 class RemoteFolder(BaseModel):
