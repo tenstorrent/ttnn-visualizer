@@ -10,7 +10,7 @@
             "request": "launch",
             "module": "flask",
             "env": {
-                "FLASK_APP": "backend/app.py",
+                "FLASK_APP": "backend/ttnn_visualizer/app.py",
                 "FLASK_DEBUG": "1"
             },
             "args": [
@@ -19,7 +19,7 @@
                 "--no-reload",
                 "-h",
                 "localhost",
-                "-p 8000",  
+                "-p 8000",
             ],
             "jinja": true,
             "autoStartBrowser": false
