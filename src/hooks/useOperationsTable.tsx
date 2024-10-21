@@ -9,6 +9,10 @@ enum SortingDirection {
     DESC = 'desc',
 }
 
+export interface SortingObject {
+    value: string;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const sortAsc = (a: any, b: any) => {
     if (a === undefined || b === undefined) {
@@ -45,21 +49,14 @@ const useOperationsTable = () => {
     //     getOperandSelectedState,
     //     getSlowestOperandSelectedState,
     // } = useSelectedTableRows();
-    const [sortingColumn, setSortingColumn] = useState('');
+    const [sortingColumn, setSortingColumn] = useState<string>('');
     const [sortDirection, setSortDirection] = useState<SortingDirection>(SortingDirection.DESC);
 
     const sortTableFields = useCallback(
-        (tableFields: string[]) => {
-            if (sortingColumn === 'operation') {
-                return sortDirection === SortingDirection.ASC
-                    ? tableFields.sort((a, b) => sortAsc(a.name, b.name))
-                    : tableFields.sort((a, b) => sortDesc(a.name, b.name));
-            }
-
-            return sortDirection === SortingDirection.ASC
+        (tableFields: []) =>
+            sortDirection === SortingDirection.ASC
                 ? tableFields.sort((a, b) => sortAsc(a ? a[sortingColumn] : '', b ? b[sortingColumn] : ''))
-                : tableFields.sort((a, b) => sortDesc(a ? a[sortingColumn] : '', b ? b[sortingColumn] : ''));
-        },
+                : tableFields.sort((a, b) => sortDesc(a ? a[sortingColumn] : '', b ? b[sortingColumn] : '')),
         [sortingColumn, sortDirection],
     );
 
