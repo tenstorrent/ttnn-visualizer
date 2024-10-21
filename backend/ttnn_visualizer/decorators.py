@@ -3,7 +3,6 @@ from flask import request, abort
 from pathlib import Path
 
 from ttnn_visualizer.sessions import get_or_create_tab_session
-from ttnn_visualizer.utils import get_report_path
 
 
 def with_session(func):
@@ -40,8 +39,9 @@ def remote_exception_handler(func):
         from paramiko.ssh_exception import AuthenticationException
         from paramiko.ssh_exception import NoValidConnectionsError
         from paramiko.ssh_exception import SSHException
+        from backend.ttnn_visualizer.enums import ConnectionTestStates
         from ttnn_visualizer.exceptions import (
-            RemoteFolderException,
+            RemoteConnectionException,
             NoProjectsException,
         )
 
@@ -54,16 +54,25 @@ def remote_exception_handler(func):
             current_app.logger.error(
                 f"{error_type} while connecting to {connection.host}: {str(err)}"
             )
-            raise RemoteFolderException(status=500, message=f"{error_type}: {str(err)}")
+            raise RemoteConnectionException(
+                status=ConnectionTestStates.FAILED,
+                message=f"{error_type}: {str(err)}",
+            )
         except (FileNotFoundError, IOError) as err:
             current_app.logger.error(
                 f"Error accessing remote file at {connection.path}: {str(err)}"
             )
-            raise RemoteFolderException(status=400, message=f"File error: {str(err)}")
+            raise RemoteConnectionException(
+                status=ConnectionTestStates.FAILED,
+                message=f"File error: {str(err)}",
+            )
         except NoProjectsException as err:
             current_app.logger.error(
                 f"No projects found at {connection.path}: {str(err)}"
             )
-            raise RemoteFolderException(status=400, message=f"No projects: {str(err)}")
+            raise RemoteConnectionException(
+                status=ConnectionTestStates.FAILED,
+                message=f"No projects: {str(err)}",
+            )
 
     return remote_handler
