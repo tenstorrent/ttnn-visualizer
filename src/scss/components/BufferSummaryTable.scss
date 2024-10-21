@@ -1,4 +1,16 @@
 .buffer-summary-table {
     display: inline-flex;
     height: 600px;
+
+    .operation-cell {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+
+        .memory-color-block {
+            width: 12px;
+            height: 12px;
+            margin-bottom: 1px; // Offset needed because align-items center doesn't quite center it in the table cell
+        }
+    }
 }

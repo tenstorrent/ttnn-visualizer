@@ -95,5 +95,6 @@ module.exports = {
             { vars: 'all', varsIgnorePattern: '^_', args: 'after-used', argsIgnorePattern: '^_' },
         ],
         'react/require-default-props': 'off',
+        'no-restricted-syntax': 'off'
     },
 };

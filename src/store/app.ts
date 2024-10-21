@@ -15,7 +15,7 @@ export const isFullStackTraceAtom = atom(false);
 export const shouldCollapseAllOperationsAtom = atom(false);
 export const expandedOperationsAtom = atom<number[]>([]);
 export const expandedTensorsAtom = atom<number[]>([]);
-export const selectedTensorAddressAtom = atom<number | null>(null);
+export const selectedAddressAtom = atom<number | null>(null);
 export const isL1ActiveAtom = atom<boolean>(true);
 export const isDramActiveAtom = atom<boolean>(false);
 

@@ -4,7 +4,7 @@ import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
 import { PlotConfiguration, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
-import { selectedTensorAddressAtom } from '../../store/app';
+import { selectedAddressAtom } from '../../store/app';
 
 export interface MemoryPlotRendererProps {
     chartDataList: Partial<PlotData>[][];
@@ -30,7 +30,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
 }) => {
     const chartData = useMemo(() => chartDataList.flat(), [chartDataList]);
 
-    const selectedAddress = useAtomValue(selectedTensorAddressAtom);
+    const selectedAddress = useAtomValue(selectedAddressAtom);
     const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
 
     const [augmentedChart, setAugmentedChart] = useState<Partial<PlotData>[]>(structuredClone(chartData));

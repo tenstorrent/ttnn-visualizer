@@ -181,26 +181,6 @@
         }
     }
 
-    .memory-color-block {
-        width: 15px;
-        height: 15px;
-        display: inline-block;
-
-        &.empty {
-            background-color: $tt-white;
-        }
-
-        &.empty-tensor {
-            background: repeating-linear-gradient(
-                45deg,
-                transparent,
-                transparent 5px,
-                $tt-red-accent 5px,
-                $tt-red-accent 7px
-            );
-        }
-    }
-
     .tensor-list {
         display: grid;
         grid-template-columns: 1fr 1fr;
