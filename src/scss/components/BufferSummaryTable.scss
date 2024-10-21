@@ -1,4 +1,22 @@
 .buffer-summary-table {
     display: inline-flex;
     height: 600px;
+
+    .sortable-table-header {
+        cursor: pointer;
+        position: absolute;
+        width: 100%;
+
+        // this is a little hackish, maybe find a more elegant solution
+        height: 30px;
+        top: -30px;
+
+        .sort-icon {
+            right: 5px;
+            top: calc(50% - 8px);
+            position: absolute;
+            padding-left: 25px;
+        }
+    }
 }
+
