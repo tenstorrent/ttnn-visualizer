@@ -133,7 +133,7 @@ def middleware(app: flask.Flask):
 
 
 def main():
-    config = Config()
+    config = cast(DefaultConfig, Config())
 
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
