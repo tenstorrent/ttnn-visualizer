@@ -10,6 +10,7 @@
         .memory-color-block {
             width: 12px;
             height: 12px;
+            margin-bottom: 1px; // Offset needed because align-items center doesn't quite center it in the table cell
         }
     }
 }
