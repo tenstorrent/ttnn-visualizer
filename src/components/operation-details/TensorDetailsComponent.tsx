@@ -18,6 +18,7 @@ export interface TensorDetailsComponentProps {
     memorySize: number;
     onTensorClick: (tensorId: number | null) => void;
     operationId: number;
+    zoomRange: [number, number];
 }
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
@@ -26,6 +27,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     memorySize,
     onTensorClick,
     operationId,
+    zoomRange,
 }) => {
     const { address } = tensor;
     const { data: operations } = useOperationsList();
@@ -52,6 +54,8 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     bufferType={tensor.buffer_type}
                     isOpen={overlayOpen}
                     onClose={() => setOverlayOpen(false)}
+                    zoomRange={zoomRange}
+                    tensorId={tensor.id}
                 />
             )}
             <button

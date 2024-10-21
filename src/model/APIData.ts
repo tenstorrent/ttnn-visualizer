@@ -208,6 +208,6 @@ export interface BufferPage {
     page_size: number;
     id: string;
 
-    tensor_id: number;
-    color: string;
+    tensor_id?: number;
+    color?: string;
 }

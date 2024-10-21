@@ -60,7 +60,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [selectedTensorAddress, setSelectedTensorAddress] = useAtom(selectedTensorAddressAtom);
     const [selectedTensor, setSelectedTensor] = useState<number | null>(null);
     const [toastId, setToastId] = useState<number | null>(null);
-    const [tensixVisualisationOpen, setTensixVisualisationOpen] = useState(false);
+    const [tensixFullVisualisationOpen, setTensixFullVisualisationOpen] = useState(false);
+    const [tensixIOVisualisationOpen, setTensixIOVisualisationOpen] = useState(false);
 
     const onClickOutside = () => {
         setSelectedTensorAddress(null);
@@ -224,6 +225,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         setToastId(toastInstance);
     };
 
+    const inputOutputAddressList: string = details.inputs
+        .concat(details.outputs)
+        .map((tensor) => tensor.address)
+        .join(',');
+
     // TODO: keeping this as a reminder. this wont work properly while we pick tensor by address only, an only for a specific operation
     // const onPreviousBufferClick = (event: Readonly<PlotMouseEvent>): void => {
     //     const { address } = previousMemory[event.points[0].curveNumber];
@@ -259,13 +265,26 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 {!isLoading && isValidNumber(operationDetails?.id) ? (
                     <>
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
-                        {tensixVisualisationOpen && (
+                        {tensixIOVisualisationOpen && (
+                            <TensorVisualisationComponent
+                                operationId={operationId}
+                                address={inputOutputAddressList}
+                                bufferType={BufferType.L1}
+                                zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
+                                isOpen={tensixIOVisualisationOpen}
+                                onClose={() => setTensixIOVisualisationOpen(false)}
+                                tensorByAddress={details.historicalTensorListByAddress}
+                            />
+                        )}
+                        {tensixFullVisualisationOpen && (
                             <TensorVisualisationComponent
                                 operationId={operationId}
                                 address={undefined}
                                 bufferType={BufferType.L1}
-                                isOpen={tensixVisualisationOpen}
-                                onClose={() => setTensixVisualisationOpen(false)}
+                                zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
+                                isOpen={tensixFullVisualisationOpen}
+                                onClose={() => setTensixFullVisualisationOpen(false)}
+                                tensorByAddress={details.historicalTensorListByAddress}
                             />
                         )}
                         <div className='chart-controls'>
@@ -317,12 +336,21 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 <h3>
                                     L1 Memory{' '}
                                     <Button
-                                        title='Visualize tensix cores'
+                                        title='Visualize io tensix cores'
+                                        icon={IconNames.EYE_ON}
+                                        minimal
+                                        small
+                                        onClick={() => {
+                                            setTensixIOVisualisationOpen(true);
+                                        }}
+                                    />
+                                    <Button
+                                        title='Visualize all tensix cores'
                                         icon={IconNames.EYE_OPEN}
                                         minimal
                                         small
                                         onClick={() => {
-                                            setTensixVisualisationOpen(true);
+                                            setTensixFullVisualisationOpen(true);
                                         }}
                                     />
                                 </h3>
@@ -519,6 +547,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
                                         operationId={operationId}
+                                        zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
                                     />
                                 ))}
                             </div>
@@ -533,6 +562,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
                                         operationId={operationId}
+                                        zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
                                     />
                                 ))}{' '}
                             </div>

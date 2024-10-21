@@ -5,13 +5,19 @@ import { useBufferPages, useDevices } from '../../hooks/useAPI';
 import '../../scss/components/TensorVisualizationComponent.scss';
 import LoadingSpinner from '../LoadingSpinner';
 import { BufferPage } from '../../model/APIData';
+import SVGBufferRenderer from './SVGBufferRenderer';
+import { HistoricalTensor } from '../../model/Graph';
+import { getTensorColor } from '../../functions/colorGenerator';
 
 export interface TensorVisualisationComponentProps {
     operationId: number;
-    address?: number | undefined;
+    address?: number | string | undefined;
     bufferType?: BufferType;
     isOpen: boolean;
     onClose: () => void;
+    tensorByAddress?: Map<number, HistoricalTensor>;
+    tensorId?: number;
+    zoomRange: [number, number];
 }
 
 const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> = ({
@@ -20,6 +26,9 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
     bufferType,
     isOpen,
     onClose,
+    tensorByAddress,
+    zoomRange,
+    tensorId,
 }) => {
     const { data } = useBufferPages(operationId, address, bufferType);
     const { data: devices } = useDevices();
@@ -31,7 +40,8 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
     const width = devices[0].num_x_cores;
     const height = devices[0].num_y_cores;
 
-    const memSize = devices[0].l1_bank_size;
+    const memStart = zoomRange[0];
+    const memSize = zoomRange[1];
     const tensixSize = 80;
 
     const buffersByBankId: BufferPage[][] = [];
@@ -41,10 +51,18 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
         if (!buffersByBankId[page.bank_id]) {
             buffersByBankId[page.bank_id] = [];
         }
-        // page.tensor_id =
+
+        if (tensorByAddress) {
+            const tensor = tensorByAddress?.get(page.address);
+            page.tensor_id = tensor?.id;
+            page.color = getTensorColor(tensor?.id);
+        } else {
+            page.color = getTensorColor(tensorId);
+        }
         buffersByBankId[page.bank_id].push(page);
         coordsByBankId[page.bank_id] = { x: page.core_x, y: page.core_y };
     });
+
     return (
         <Overlay2
             isOpen={isOpen}
@@ -82,16 +100,23 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                 // gap: '1px',
                             }}
                         >
-                            {buffersByBankId[index].map((page) => (
-                                <div
-                                    key={page.id}
-                                    style={{
-                                        width: '100%',
-                                        height: `${(tensixSize / memSize) * page.page_size * 10}px`,
-                                        backgroundColor: 'red',
-                                    }}
-                                />
-                            ))}
+                            <SVGBufferRenderer
+                                width={tensixSize}
+                                height={tensixSize}
+                                data={buffersByBankId[index]}
+                                memorySize={memSize}
+                                memoryStart={memStart}
+                            />
+                            {/* {buffersByBankId[index].map((page) => ( */}
+                            {/*    <div */}
+                            {/*        key={page.id} */}
+                            {/*        style={{ */}
+                            {/*            width: '100%', */}
+                            {/*            height: `${(tensixSize / memSize) * page.page_size * 10}px`, */}
+                            {/*            backgroundColor: 'red', */}
+                            {/*        }} */}
+                            {/*    /> */}
+                            {/* ))} */}
                         </div>
                     ))}
                 </div>
