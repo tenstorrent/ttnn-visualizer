@@ -40,7 +40,7 @@ from ttnn_visualizer.sftp_operations import (
     check_remote_path,
     get_remote_test_folders,
 )
-from ttnn_visualizer.ssh_client import test_ssh_connection
+from ttnn_visualizer.ssh_client import check_connection, check_directory
 from ttnn_visualizer.utils import timer
 
 logger = logging.getLogger(__name__)
@@ -357,7 +357,15 @@ def get_remote_folders():
 def test_remote_folder():
     connection = request.json
     connection = RemoteConnection.model_validate(connection)
-    statuses = test_ssh_connection(remote_connection=connection)
+
+    statuses = []
+    try:
+        connection_status = check_connection(connection)
+        statuses.append(connection_status)
+    except RemoteConnectionException as e:
+        statuses.append(
+            StatusMessage(status=ConnectionTestStates.FAILED.value, message=e.message)
+        )
 
     has_failures = any(
         status.status != ConnectionTestStates.OK.value for status in statuses
@@ -365,12 +373,25 @@ def test_remote_folder():
 
     if not has_failures:
         try:
-            check_remote_path(connection)
-        except (RemoteConnectionException, NoProjectsException):
+            directory_status = check_directory(connection)
+            statuses.append(directory_status)
+        except RemoteConnectionException as e:
             statuses.append(
                 StatusMessage(
-                    status=ConnectionTestStates.FAILED.value,
-                    message="No projects found in specified path",
+                    status=ConnectionTestStates.FAILED.value, message=e.message
+                )
+            )
+
+    has_failures = any(
+        status.status != ConnectionTestStates.OK.value for status in statuses
+    )
+    if not has_failures:
+        try:
+            check_remote_path(connection)
+        except RemoteConnectionException as e:
+            statuses.append(
+                StatusMessage(
+                    status=ConnectionTestStates.FAILED.value, message=e.message
                 )
             )
 
