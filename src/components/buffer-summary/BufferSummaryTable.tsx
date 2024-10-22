@@ -50,7 +50,7 @@ interface Buffer {
 function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useOperationsTable();
 
-    const listOfBuffers: Buffer[] = useMemo(
+    const listOfBuffers = useMemo(
         () =>
             buffersByOperation
                 ?.map((operation) =>
@@ -72,16 +72,14 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         return columns.map(([key, label]) => createColumn(key, label));
     };
 
-    const createColumn = (key: COLUMN_KEYS, label: string) => {
-        return (
-            <Column
-                key={key}
-                name={label}
-                cellRenderer={createCell(key)}
-                columnHeaderCellRenderer={() => createCellHeader(key, label)}
-            />
-        );
-    };
+    const createColumn = (key: COLUMN_KEYS, label: string) => (
+        <Column
+            key={key}
+            name={label}
+            cellRenderer={createCell(key, tableFields)}
+            columnHeaderCellRenderer={() => createCellHeader(key, label)}
+        />
+    );
 
     const createCellHeader = (key: COLUMN_KEYS, label: string) => {
         let targetSortDirection = sortDirection;
@@ -121,13 +119,6 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         );
     };
 
-    // eslint-disable-next-line react/no-unstable-nested-components
-    const createCell = (key: COLUMN_KEYS) => (rowIndex: number) => {
-        const cellContent = getCellContent(key, rowIndex);
-
-        return <Cell>{cellContent}</Cell>;
-    };
-
     const tableFields = useMemo(() => {
         const buffers = listOfBuffers.map((buffer) => ({
             ...buffer,
@@ -136,43 +127,6 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
 
         return [...sortTableFields(buffers)];
     }, [listOfBuffers, sortTableFields, tensorListByOperation]);
-
-    const getCellContent = (key: COLUMN_KEYS, rowIndex: number) => {
-        const buffer = tableFields[rowIndex] as Buffer;
-
-        if (key === 'operationId') {
-            return `${buffer.operationId} - ${buffer.operationName}`;
-        }
-
-        if (key === 'tensor_id') {
-            return (
-                <div className='operation-cell'>
-                    <div
-                        className='memory-color-block'
-                        style={{
-                            backgroundColor: buffer?.tensor_id
-                                ? getTensorColor(buffer.tensor_id)
-                                : getBufferColor(buffer.address),
-                        }}
-                    >
-                        {/* Ensures the memory color block takes up space when the table component recalculates the width of the column */}
-                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                    </div>
-                    <span>{buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : ''}</span>
-                </div>
-            );
-        }
-
-        if (key === 'buffer_type') {
-            return BufferTypeLabel[buffer.buffer_type];
-        }
-
-        if (key === 'address') {
-            return toHex(buffer.address);
-        }
-
-        return buffer[key];
-    };
 
     return tableFields ? (
         <HotkeysProvider>
@@ -190,5 +144,46 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         <LoadingSpinner />
     );
 }
+
+const createCell = (key: COLUMN_KEYS, tableFields: Buffer[]) => (rowIndex: number) => (
+    <Cell>{getCellContent(key, rowIndex, tableFields)}</Cell>
+);
+
+const getCellContent = (key: COLUMN_KEYS, rowIndex: number, tableFields: Buffer[]) => {
+    const buffer = tableFields[rowIndex] as Buffer;
+
+    if (key === 'operationId') {
+        return `${buffer.operationId} - ${buffer.operationName}`;
+    }
+
+    if (key === 'tensor_id') {
+        return (
+            <div className='operation-cell'>
+                <div
+                    className='memory-color-block'
+                    style={{
+                        backgroundColor: buffer?.tensor_id
+                            ? getTensorColor(buffer.tensor_id)
+                            : getBufferColor(buffer.address),
+                    }}
+                >
+                    {/* Ensures the memory color block takes up space when the table component recalculates the width of the column */}
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                </div>
+                <span>{buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : ''}</span>
+            </div>
+        );
+    }
+
+    if (key === 'buffer_type') {
+        return BufferTypeLabel[buffer.buffer_type];
+    }
+
+    if (key === 'address') {
+        return toHex(buffer.address);
+    }
+
+    return buffer[key];
+};
 
 export default BufferSummaryTable;
