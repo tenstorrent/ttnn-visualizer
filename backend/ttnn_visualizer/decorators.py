@@ -1,3 +1,4 @@
+import re
 from functools import wraps
 from flask import request, abort
 from pathlib import Path
@@ -95,21 +96,34 @@ def remote_exception_handler(func):
         except NoProjectsException as err:
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
-                message=f"No projects found at remote location: {connection.path}: {str(err)}",
+                message=f"No projects found at remote location: {connection.path}",
             )
         except NoValidConnectionsError as err:
+            message = re.sub(r"\[.*?]", "", str(err)).strip()
+
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
-                message=f"Unable to connect to host {connection.host}: {str(err)}",
+                message=f"{message}",
             )
         except IOError as err:
+            message = (f"Error opening remote folder {connection.path}: {str(err)}",)
+            if "Name or service not known" in str(err):
+                message = f"Unable to connect to {connection.host} - check hostname"
             raise RemoteConnectionException(
-                status=400,
-                message=f"Error opening remote folder {connection.path}: {str(err)}",
+                status=ConnectionTestStates.FAILED,
+                message=message,
             )
         except SSHException as err:
+            if str(err) == "No existing session":
+                message = "Authentication failed - check credentials and ssh-agent"
+            else:
+                err_message = re.sub(r"\[.*?]", "", str(err)).strip()
+                message = (
+                    f"Error connecting to host {connection.host}: {err_message}",
+                )
+
             raise RemoteConnectionException(
-                status=500, message=f"Error connecting to host {connection.host}: {err}"
+                status=ConnectionTestStates.FAILED, message=message
             )
 
     return remote_handler
