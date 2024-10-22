@@ -17,10 +17,10 @@ def with_session(func):
             current_app.logger.error("No tabId present on request, returning 404")
             abort(404)
 
-        session = get_or_create_tab_session(tab_id=tab_id)
-        active_report = session.active_report
+        session_query_data = get_or_create_tab_session(tab_id=tab_id)
+        session = session_query_data.to_pydantic()
 
-        if not active_report:
+        if not session.active_report:
             current_app.logger.error(
                 f"No active report exists for tabId {tab_id}, returning 404"
             )
