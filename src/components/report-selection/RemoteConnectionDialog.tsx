@@ -148,6 +148,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                     {connectionTests.map((v) => {
                         return (
                             <ConnectionTestMessage
+                                key={v.message}
                                 status={v.status}
                                 message={v.message}
                             />

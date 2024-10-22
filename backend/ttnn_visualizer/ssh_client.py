@@ -77,7 +77,7 @@ def check_connection(remote_connection: RemoteConnection) -> StatusMessage:
             message="Authentication failed. Please verify your SSH credentials.",
         )
     except paramiko.SSHException as e:
-        message = f"An SSH-related error occured {str(e)}"
+        message = f"An SSH-related error occurred {str(e)}"
 
         if "No existing session" in str(e):
             message = f"SSH error - check username and ensure ssh-agent is running"
