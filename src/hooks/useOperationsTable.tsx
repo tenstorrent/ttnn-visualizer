@@ -9,46 +9,33 @@ enum SortingDirection {
     DESC = 'desc',
 }
 
-export interface SortingObject {
-    value: string;
-}
+type SortingValue = number | string;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const sortAsc = (a: any, b: any) => {
-    if (a === undefined || b === undefined) {
+const sortAsc = (a: SortingValue, b: SortingValue) => {
+    if (a === undefined || b === undefined || a === b) {
         return 0;
     }
-    if (typeof a === 'string' && typeof b === 'number') {
+
+    if (typeof a !== typeof b) {
         return 1;
     }
-    if (a === b) {
-        return 0;
-    }
+
     return a > b ? 1 : -1;
 };
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const sortDesc = (a: any, b: any) => {
-    if (a === undefined || b === undefined) {
+
+const sortDesc = (a: SortingValue, b: SortingValue) => {
+    if (a === undefined || b === undefined || a === b) {
         return 0;
     }
-    if (typeof a === 'string' && typeof b === 'number') {
+
+    if (typeof a !== typeof b) {
         return 1;
     }
-    if (a === b) {
-        return 0;
-    }
+
     return a < b ? 1 : -1;
 };
 
 const useOperationsTable = () => {
-    // const {
-    //     handleSelectAllCores,
-    //     handleSelectAllOperands,
-    //     handleSelectAllSlowestOperands,
-    //     getCoreSelectedState,
-    //     getOperandSelectedState,
-    //     getSlowestOperandSelectedState,
-    // } = useSelectedTableRows();
     const [sortingColumn, setSortingColumn] = useState<string>('');
     const [sortDirection, setSortDirection] = useState<SortingDirection>(SortingDirection.DESC);
 

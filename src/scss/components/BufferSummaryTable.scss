@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 .buffer-summary-table {
     display: inline-flex;
     height: 600px;
@@ -16,6 +20,12 @@
             top: calc(50% - 8px);
             position: absolute;
             padding-left: 25px;
+        }
+    }
+
+    .cell-header {
+        .bp5-table-truncated-text {
+            padding-right: 15px;
         }
     }
 

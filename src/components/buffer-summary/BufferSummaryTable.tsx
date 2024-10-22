@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { useMemo } from 'react';
 import { HotkeysProvider, Icon } from '@blueprintjs/core';
 import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell } from '@blueprintjs/table';
@@ -40,6 +44,7 @@ interface Buffer {
     size: number;
     operationId: number;
     operationName: string;
+    tensor_id: number;
 }
 
 function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
@@ -47,7 +52,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
 
     const listOfBuffers: Buffer[] = useMemo(
         () =>
-            (buffersByOperation
+            buffersByOperation
                 ?.map((operation) =>
                     operation.buffers
                         .map((buffer) => ({
@@ -57,7 +62,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                         }))
                         .flat(),
                 )
-                .flat() as Buffer[]) ?? [],
+                .flat() as Buffer[],
         [buffersByOperation],
     );
 
@@ -73,15 +78,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                 key={key}
                 name={label}
                 cellRenderer={createCell(key)}
-                columnHeaderCellRenderer={
-                    () => createCellHeader(key, label)
-                    // definition: columnDefinition.get(key),
-                    // changeSorting,
-                    // sortDirection,
-                    // sortingColumn,
-                    // tableFields,
-                    // })
-                }
+                columnHeaderCellRenderer={() => createCellHeader(key, label)}
             />
         );
     };
@@ -97,45 +94,29 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
 
         return (
             <ColumnHeaderCell
-                // className={`${definition?.sortable ? sortClass : ''} ${selectableClass}`}
+                className='cell-header'
                 name={label}
             >
-                <>
-                    {definition?.sortable && (
-                        <>
-                            {}
-                            <button
-                                type='button'
-                                className='sortable-table-header'
-                                onClick={() => changeSorting(key)(targetSortDirection)}
-                                title={label}
-                            >
-                                {sortingColumn === key && (
-                                    <span className='sort-icon'>
-                                        <Icon
-                                            icon={
-                                                sortDirection === SortingDirection.ASC
-                                                    ? IconNames.SORT_ASC
-                                                    : IconNames.SORT_DESC
-                                            }
-                                        />
-                                    </span>
-                                )}
-                            </button>
-                        </>
-                    )}
-                    {/* {definition?.canSelectAllRows && (
-                        <Checkbox
-                            checked={checkboxState === 'checked'}
-                            indeterminate={checkboxState === 'indeterminate'}
-                            disabled={checkboxState === 'disabled'}
-                            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                                definition.handleSelectAll?.(tableFields, e.target.checked)
-                            }
-                            className='sortable-table-checkbox'
-                        />
-                    )} */}
-                </>
+                {definition?.sortable && (
+                    <button
+                        type='button'
+                        className='sortable-table-header'
+                        onClick={() => changeSorting(key)(targetSortDirection)}
+                        title={label}
+                    >
+                        {sortingColumn === key && (
+                            <span className='sort-icon'>
+                                <Icon
+                                    icon={
+                                        sortDirection === SortingDirection.ASC
+                                            ? IconNames.SORT_ASC
+                                            : IconNames.SORT_DESC
+                                    }
+                                />
+                            </span>
+                        )}
+                    </button>
+                )}
             </ColumnHeaderCell>
         );
     };
@@ -148,56 +129,16 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     };
 
     const tableFields = useMemo(() => {
-        // const selectedOperationCores: ComputeNode[] = [];
+        const buffers = listOfBuffers.map((buffer) => ({
+            ...buffer,
+            tensor_id: tensorListByOperation.get(buffer.operationId)?.get(buffer.address)?.id,
+        })) as [];
 
-        // for (const { graphOnChip } of graphOnChipList) {
-        //     selectedOperationCores.push(...(graphOnChip.getOperation(selectedOperationName)?.cores ?? []));
-        // }
-
-        // if (selectedOperationCores.length > 0) {
-        //     list = selectedOperationCores.map((core: ComputeNode) => {
-        //         return {
-        //             name: core.operation?.name,
-        //             ...core.perfAnalyzerResults,
-        //             core_id: core.uid,
-        //             slowestOperandRef: core.operation?.slowestOperand,
-        //             chipId: core.chipId,
-        //         } as OpTableFields;
-        //     });
-        // } else {
-        //     list = [
-        //         ...graphOnChipList
-        //             .reduce((opMap, { graphOnChip }) => {
-        //                 [...graphOnChip.operations].forEach((op) => {
-        //                     if (!opMap.has(op.name)) {
-        //                         opMap.set(op.name, {
-        //                             operation: op,
-        //                             name: op.name,
-        //                             ...op.details,
-        //                             slowestOperandRef: op.slowestOperand,
-        //                             chipId: graphOnChip.chipId,
-        //                         } as unknown as OpTableFields);
-        //                     }
-        //                 });
-
-        //                 return opMap;
-        //             }, new Map<string, OpTableFields>())
-        //             .values(),
-        //     ];
-        // }
-
-        // if (filterQuery) {
-        //     list = list.filter(({ operation }) => {
-        //         return operation?.name.toLowerCase().includes(filterQuery.toLowerCase()) ?? true;
-        //     });
-        // }
-
-        return [...sortTableFields(listOfBuffers)];
-    }, [listOfBuffers, sortTableFields]);
+        return [...sortTableFields(buffers)];
+    }, [listOfBuffers, sortTableFields, tensorListByOperation]);
 
     const getCellContent = (key: COLUMN_KEYS, rowIndex: number) => {
-        const buffer = listOfBuffers[rowIndex];
-        const tensor = tensorListByOperation.get(buffer.operationId)?.get(buffer.address);
+        const buffer = tableFields[rowIndex] as Buffer;
 
         if (key === 'operationId') {
             return `${buffer.operationId} - ${buffer.operationName}`;
@@ -209,13 +150,15 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     <div
                         className='memory-color-block'
                         style={{
-                            backgroundColor: tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address),
+                            backgroundColor: buffer?.tensor_id
+                                ? getTensorColor(buffer.tensor_id)
+                                : getBufferColor(buffer.address),
                         }}
                     >
                         {/* Ensures the memory color block takes up space when the table component recalculates the width of the column */}
                         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                     </div>
-                    <span>{tensor?.id ? `Tensor ${tensor.id}` : ''}</span>
+                    <span>{buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : ''}</span>
                 </div>
             );
         }
@@ -238,7 +181,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                 numRows={tableFields.length}
                 enableRowResizing={false}
                 cellRendererDependencies={[sortDirection, sortingColumn, tableFields, tableFields.length]}
-                columnWidths={[200, 100, 150, 150, 100, 100]}
+                columnWidths={[200, 120, 150, 150, 100, 100]}
             >
                 {createColumns()}
             </BlueprintTable>
