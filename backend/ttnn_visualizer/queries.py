@@ -32,6 +32,7 @@ from ttnn_visualizer.models import (
 class DatabaseQueries:
 
     session: Optional[TabSession] = None
+    ssh_client = None
 
     def __init__(self, session: Optional[TabSession] = None, connection=None):
 

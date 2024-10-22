@@ -391,6 +391,7 @@ def test_remote_folder():
         except RemoteConnectionException as e:
             add_status(ConnectionTestStates.FAILED.value, e.message)
 
+    # Test Sqlite binary path configuration
     if not has_failures() and connection.useRemoteQuerying:
         if not connection.sqliteBinaryPath:
             add_status(
