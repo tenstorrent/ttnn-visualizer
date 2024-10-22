@@ -11,7 +11,7 @@ from flask import current_app
 from paramiko.client import SSHClient
 from paramiko.sftp_client import SFTPClient
 
-from ttnn_visualizer.extensions import socketio
+from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.sockets import (
     FileProgress,
     FileStatus,
@@ -202,7 +202,7 @@ def get_remote_folder_config_paths(remote_connection, ssh_client) -> List[str]:
     if not project_configs:
         error = f"No projects found at remote path: {remote_path}"
         logger.info(error)
-        raise NoProjectsException(status=400, message=error)
+        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
     return project_configs
 
 
@@ -226,7 +226,7 @@ def get_remote_test_folders(remote_connection: RemoteConnection) -> List[RemoteF
     if not remote_config_paths:
         error = f"No projects found at {remote_connection.path}"
         logger.info(error)
-        raise NoProjectsException(status=400, message=error)
+        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
     return get_remote_folders(client, remote_config_paths)
 
 
