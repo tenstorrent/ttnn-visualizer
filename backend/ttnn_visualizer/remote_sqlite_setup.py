@@ -257,13 +257,12 @@ def check_sqlite_path(remote_connection: RemoteConnection):
     try:
         client = get_client(remote_connection)
         is_sqlite_executable(client, remote_connection.sqliteBinaryPath)
-    except Exception as e:  # TODO - Specify exceptions here
-        raise RemoteSqliteException(message=str(e), status=500)
+    except Exception as e:
+        raise RemoteSqliteException(message=str(e), status=ConnectionTestStates.FAILED)
 
 
 def get_sqlite_path(connection: RemoteConnection):
     try:
-        client = get_client(connection)
         path = find_sqlite_binary(connection)
         if path:
             return path

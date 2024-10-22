@@ -13,7 +13,7 @@ from ttnn_visualizer.models import (
     TabSession,
 )
 from ttnn_visualizer.queries import DatabaseQueries
-from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path
+from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path, check_sqlite_path
 from ttnn_visualizer.sockets import (
     FileProgress,
     emit_file_status,
@@ -391,6 +391,18 @@ def test_remote_folder():
         except RemoteConnectionException as e:
             add_status(ConnectionTestStates.FAILED.value, e.message)
 
+    if not has_failures() and connection.useRemoteQuerying:
+        if not connection.sqliteBinaryPath:
+            add_status(
+                ConnectionTestStates.FAILED.value, "SQL binary path not provided"
+            )
+        else:
+            try:
+                check_sqlite_path(connection)
+                add_status(ConnectionTestStates.OK.value, "SQLite binary found.")
+            except RemoteConnectionException as e:
+                add_status(ConnectionTestStates.FAILED.value, e.message)
+
     return [status.model_dump() for status in statuses]
 
 
@@ -430,17 +442,6 @@ def sync_remote_folder():
 
 @api.route("/remote/sqlite/detect-path", methods=["POST"])
 def detect_sqlite_path():
-    connection = request.json
-    connection = RemoteConnection.model_validate(connection, strict=False)
-    path = get_sqlite_path(connection=connection)
-    if path:
-        return StatusMessage(
-            status=ConnectionTestStates.OK.value, message=path
-        ).model_dump()
-
-
-@api.route("/remote/sqlite/test", methods=["POST"])
-def test_sqlite_path():
     connection = request.json
     connection = RemoteConnection.model_validate(connection, strict=False)
     path = get_sqlite_path(connection=connection)

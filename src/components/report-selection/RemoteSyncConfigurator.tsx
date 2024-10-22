@@ -260,7 +260,9 @@ const RemoteSyncConfigurator: FC = () => {
                     </Tooltip>
 
                     <Button
-                        disabled={!isRemoteReportMounted}
+                        disabled={
+                            !remote.persistentState.selectedConnection?.useRemoteQuerying && !isRemoteReportMounted
+                        }
                         onClick={viewReport}
                         icon={IconNames.EYE_OPEN}
                     >

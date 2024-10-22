@@ -42,7 +42,11 @@ from paramiko.ssh_exception import (
     SSHException,
 )
 
-from ttnn_visualizer.exceptions import RemoteConnectionException, NoProjectsException
+from ttnn_visualizer.exceptions import (
+    RemoteConnectionException,
+    NoProjectsException,
+    RemoteSqliteException,
+)
 from ttnn_visualizer.sessions import get_or_create_tab_session
 
 
@@ -104,6 +108,16 @@ def remote_exception_handler(func):
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
                 message=f"{message}",
+            )
+
+        except RemoteSqliteException as err:
+
+            message = ("Error opening sqlite binary. See logs for details",)
+            if "No such file" in str(err):
+                message = "Unable to open SQLite binary, check path"
+            raise RemoteConnectionException(
+                status=ConnectionTestStates.FAILED,
+                message=message,
             )
         except IOError as err:
             message = f"Error opening remote folder {connection.path}: {str(err)}"
