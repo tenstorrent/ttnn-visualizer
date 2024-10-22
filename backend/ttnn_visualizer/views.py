@@ -4,7 +4,8 @@ import json
 from flask import Blueprint, Response
 
 from ttnn_visualizer.decorators import with_session
-from ttnn_visualizer.exceptions import RemoteFolderException
+from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.exceptions import RemoteConnectionException, NoProjectsException
 from ttnn_visualizer.models import (
     RemoteFolder,
     RemoteConnection,
@@ -36,9 +37,11 @@ from ttnn_visualizer.sessions import (
 from ttnn_visualizer.sftp_operations import (
     sync_test_folders,
     read_remote_file,
-    check_remote_path,
+    check_remote_path_for_projects,
     get_remote_test_folders,
+    check_remote_path_exists,
 )
+from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.utils import timer
 
 logger = logging.getLogger(__name__)
@@ -271,7 +274,7 @@ def create_upload_files():
     # Validate necessary files
     if "db.sqlite" not in filenames or "config.json" not in filenames:
         return StatusMessage(
-            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            status=ConnectionTestStates.FAILED.value,
             message="Invalid project directory.",
         ).model_dump()
 
@@ -334,7 +337,9 @@ def create_upload_files():
     if current_app.config["USE_WEBSOCKETS"]:
         emit_file_status(final_progress, tab_id)
 
-    return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
+    return StatusMessage(
+        status=ConnectionTestStates.OK.value, message="Success."
+    ).model_dump()
 
 
 @api.route("/remote/folder", methods=["POST"])
@@ -345,18 +350,47 @@ def get_remote_folders():
             RemoteConnection.model_validate(connection, strict=False)
         )
         return [r.model_dump() for r in remote_folders]
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
 
 
 @api.route("/remote/test", methods=["POST"])
 def test_remote_folder():
-    connection = RemoteConnection.model_validate(request.json, strict=False)
+    connection_data = request.json
+    connection = RemoteConnection.model_validate(connection_data)
+    statuses = []
+
+    def add_status(status, message):
+        statuses.append(StatusMessage(status=status, message=message))
+
+    def has_failures():
+        return any(
+            status.status != ConnectionTestStates.OK.value for status in statuses
+        )
+
+    # Test SSH Connection
     try:
-        check_remote_path(connection)
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
-    return Response(status=HTTPStatus.OK)
+        get_client(connection)
+        add_status(ConnectionTestStates.OK.value, "SSH connection established.")
+    except RemoteConnectionException as e:
+        add_status(ConnectionTestStates.FAILED.value, e.message)
+
+    # Test Directory Configuration
+    if not has_failures():
+        try:
+            check_remote_path_exists(connection)
+            add_status(ConnectionTestStates.OK.value, "Remote folder path exists.")
+        except RemoteConnectionException as e:
+            add_status(ConnectionTestStates.FAILED.value, e.message)
+
+    # Check for Project Configurations
+    if not has_failures():
+        try:
+            check_remote_path_for_projects(connection)
+        except RemoteConnectionException as e:
+            add_status(ConnectionTestStates.FAILED.value, e.message)
+
+    return [status.model_dump() for status in statuses]
 
 
 @api.route("/remote/read", methods=["POST"])
@@ -364,8 +398,8 @@ def read_remote_folder():
     connection = RemoteConnection.model_validate(request.json, strict=False)
     try:
         content = read_remote_file(connection)
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
     return Response(status=200, response=content)
 
 
@@ -388,8 +422,8 @@ def sync_remote_folder():
             use_compression,
             sid=tab_id,
         )
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
     return Response(status=HTTPStatus.OK)
 
 

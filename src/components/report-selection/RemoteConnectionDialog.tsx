@@ -4,11 +4,11 @@
 
 import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup } from '@blueprintjs/core';
 import { FC, useState } from 'react';
+import 'styles/components/RemoteConnectionDialog.scss';
+import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
+import { RemoteConnection } from '../../definitions/RemoteConnection';
 import useRemoteConnection from '../../hooks/useRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
-import 'styles/components/RemoteConnectionDialog.scss';
-import { RemoteConnection } from '../../definitions/RemoteConnection';
-import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 
 interface RemoteConnectionDialogProps {
     title?: string;
@@ -48,9 +48,8 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
         setConnectionTests([sshProgressStatus, folderProgressStatus]);
 
         try {
-            const [sshStatus, folderStatus] = await testConnection(connection);
-
-            setConnectionTests([sshStatus, folderStatus]);
+            const statuses = await testConnection(connection);
+            setConnectionTests(statuses);
         } catch (err) {
             // TODO: Look at error handling
             setConnectionTests([
@@ -146,19 +145,17 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
                 <fieldset>
                     <legend>Test Connection</legend>
-
-                    <ConnectionTestMessage
-                        status={connectionTests[0].status}
-                        message={connectionTests[0].message}
-                    />
-
-                    <ConnectionTestMessage
-                        status={connectionTests[1].status}
-                        message={connectionTests[1].message}
-                    />
+                    {connectionTests.map((v) => {
+                        return (
+                            <ConnectionTestMessage
+                                key={v.message}
+                                status={v.status}
+                                message={v.message}
+                            />
+                        );
+                    })}
 
                     <br />
-
                     <Button
                         text='Test Connection'
                         disabled={isTestingConnection}
