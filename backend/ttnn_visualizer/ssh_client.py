@@ -110,6 +110,8 @@ def check_directory(remote_connection: RemoteConnection) -> StatusMessage:
         stdin, stdout, stderr = client.exec_command(f"ls {remote_connection.path}")  # type: ignore
         error = stderr.read().decode().strip()
         if error:
+            message = f"An SSH-related error occurred {str(error)}"
+            logger.error(message)
             return StatusMessage(
                 status=ConnectionTestStates.FAILED.value,
                 message=f"Invalid Folder Path",
