@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 import React, { Fragment, useState } from 'react';
-import { Button, ButtonGroup, Icon, Intent, Switch } from '@blueprintjs/core';
+import { Button, ButtonGroup, Icon, Intent, Position, Switch, Tooltip } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { IconNames } from '@blueprintjs/icons';
 import { toast } from 'react-toastify';
@@ -257,30 +257,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 {!isLoading && isValidNumber(operationDetails?.id) ? (
                     <>
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
-                        {tensixIOVisualisationOpen && (
-                            <TensorVisualisationComponent
-                                title={`Operation ${operationId} inputs/outputs`}
-                                operationId={operationId}
-                                address={inputOutputAddressList}
-                                bufferType={BufferType.L1}
-                                zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
-                                isOpen={tensixIOVisualisationOpen}
-                                onClose={() => setTensixIOVisualisationOpen(false)}
-                                tensorByAddress={details.historicalTensorListByAddress}
-                            />
-                        )}
-                        {tensixFullVisualisationOpen && (
-                            <TensorVisualisationComponent
-                                title={`Operation ${operationId} detailed memory report`}
-                                operationId={operationId}
-                                address={undefined}
-                                bufferType={BufferType.L1}
-                                zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
-                                isOpen={tensixFullVisualisationOpen}
-                                onClose={() => setTensixFullVisualisationOpen(false)}
-                                tensorByAddress={details.historicalTensorListByAddress}
-                            />
-                        )}
                         <div className='chart-controls'>
                             <ButtonGroup>
                                 <Button
@@ -329,24 +305,59 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             <>
                                 <h3>
                                     L1 Memory{' '}
-                                    <Button
-                                        title='Visualize io tensix cores'
-                                        icon={IconNames.EYE_ON}
-                                        minimal
-                                        small
-                                        onClick={() => {
-                                            setTensixIOVisualisationOpen(true);
-                                        }}
-                                    />
-                                    <Button
-                                        title='Visualize all tensix cores'
-                                        icon={IconNames.EYE_OPEN}
-                                        minimal
-                                        small
-                                        onClick={() => {
-                                            setTensixFullVisualisationOpen(true);
-                                        }}
-                                    />
+                                    <Tooltip
+                                        content='Visualize io tensix cores'
+                                        placement={Position.TOP}
+                                    >
+                                        <Button
+                                            title='Visualize io tensix cores'
+                                            icon={IconNames.FLOW_REVIEW}
+                                            intent={Intent.SUCCESS}
+                                            minimal
+                                            small
+                                            onClick={() => {
+                                                setTensixIOVisualisationOpen(true);
+                                            }}
+                                        />
+                                    </Tooltip>
+                                    <Tooltip
+                                        content='Visualize all tensix cores'
+                                        placement={Position.TOP}
+                                    >
+                                        <Button
+                                            icon={IconNames.LAYOUT_GRID}
+                                            intent={Intent.SUCCESS}
+                                            minimal
+                                            small
+                                            onClick={() => {
+                                                setTensixFullVisualisationOpen(true);
+                                            }}
+                                        />
+                                    </Tooltip>
+                                    {tensixIOVisualisationOpen && (
+                                        <TensorVisualisationComponent
+                                            title={`Operation ${operationId} inputs/outputs`}
+                                            operationId={operationId}
+                                            address={inputOutputAddressList}
+                                            bufferType={BufferType.L1}
+                                            zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
+                                            isOpen={tensixIOVisualisationOpen}
+                                            onClose={() => setTensixIOVisualisationOpen(false)}
+                                            tensorByAddress={details.historicalTensorListByAddress}
+                                        />
+                                    )}
+                                    {tensixFullVisualisationOpen && (
+                                        <TensorVisualisationComponent
+                                            title={`Operation ${operationId} detailed memory report`}
+                                            operationId={operationId}
+                                            address={undefined}
+                                            bufferType={BufferType.L1}
+                                            zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
+                                            isOpen={tensixFullVisualisationOpen}
+                                            onClose={() => setTensixFullVisualisationOpen(false)}
+                                            tensorByAddress={details.historicalTensorListByAddress}
+                                        />
+                                    )}
                                 </h3>
 
                                 <MemoryPlotRenderer

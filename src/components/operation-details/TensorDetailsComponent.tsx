@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import classNames from 'classnames';
-import { Button, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, Icon, Intent, PopoverPosition, Position, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+
 import { getTensorColor } from '../../functions/colorGenerator';
 import { TensorData } from '../../model/APIData';
 import { prettyPrintAddress, toHex } from '../../functions/math';
-import { BufferTypeLabel } from '../../model/BufferType';
+import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { useOperationsList } from '../../hooks/useAPI';
 import getDeallocationOperation from '../../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../../functions/getNextAllocationOperation';
@@ -39,6 +40,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     const openTensorVisualization = (e: React.MouseEvent<HTMLElement>) => {
         e.stopPropagation();
         setOverlayOpen(true);
+        return false;
     };
 
     return (
@@ -47,18 +49,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 dimmed: tensor.address !== selectedAddress && selectedAddress !== null,
             })}
         >
-            {overlayOpen && address !== null && tensor.buffer_type !== null && (
-                <TensorVisualisationComponent
-                    title={`Tensor ${tensor.id}`}
-                    operationId={operationId}
-                    address={address}
-                    bufferType={tensor.buffer_type}
-                    isOpen={overlayOpen}
-                    onClose={() => setOverlayOpen(false)}
-                    zoomRange={zoomRange}
-                    tensorId={tensor.id}
-                />
-            )}
             <button
                 type='button'
                 className='tensor-name'
@@ -100,7 +90,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
                 {isValidNumber(nextAllocationOperationId) && isValidNumber(address) && operations ? (
                     <Tooltip
-                        // @ts-expect-error - nextAllocationOperationId is a number
                         content={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
                         placement={PopoverPosition.TOP}
                     >
@@ -111,14 +100,32 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     </Tooltip>
                 ) : null}
 
-                {/* // only if L1 */}
-                <Button
-                    title={`Visualize tensor ${tensor.id}`}
-                    icon={IconNames.EYE_OPEN}
-                    minimal
-                    small
-                    onClick={(e) => openTensorVisualization(e)}
-                />
+                {tensor.buffer_type === BufferType.L1 && (
+                    <Tooltip
+                        content={`Visualize tensor ${tensor.id}`}
+                        placement={Position.TOP}
+                    >
+                        <Button
+                            icon={tensor.io === 'input' ? IconNames.FLOW_END : IconNames.FLOW_LINEAR}
+                            minimal
+                            small
+                            intent={Intent.SUCCESS}
+                            onClick={(e) => openTensorVisualization(e)}
+                        />
+                    </Tooltip>
+                )}
+                {overlayOpen && address !== null && tensor.buffer_type !== null && (
+                    <TensorVisualisationComponent
+                        title={`Tensor ${tensor.id}`}
+                        operationId={operationId}
+                        address={address}
+                        bufferType={tensor.buffer_type}
+                        isOpen={overlayOpen}
+                        onClose={() => setOverlayOpen(false)}
+                        zoomRange={zoomRange}
+                        tensorId={tensor.id}
+                    />
+                )}
             </button>
 
             <div className='tensor-meta'>
