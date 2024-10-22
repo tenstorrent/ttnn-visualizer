@@ -41,6 +41,7 @@ def get_connection_args(remote_connection: RemoteConnection) -> dict:
     return {"key_filename": config["identityfile"].pop(), "look_for_keys": False}
 
 
+@remote_exception_handler
 def get_client(remote_connection: RemoteConnection) -> paramiko.SSHClient:
     ssh = initialize_ssh_client()
     connection_args = get_connection_args(remote_connection)
@@ -52,49 +53,6 @@ def get_client(remote_connection: RemoteConnection) -> paramiko.SSHClient:
         **connection_args,
     )
     return ssh
-
-
-@remote_exception_handler
-def check_connection(remote_connection: RemoteConnection) -> StatusMessage:
-    client = get_client(remote_connection)
-
-    stdin, stdout, stderr = client.exec_command('echo "test connection"')  # type: ignore
-    output = stdout.read().decode().strip()
-    if output != "test connection":
-        return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
-            message="The SSH connection was established, but the server returned an unexpected response.",
-        )
-
-    return StatusMessage(
-        status=ConnectionTestStates.OK.value,
-        message="SSH connection established.",
-    )
-
-
-@remote_exception_handler
-def check_directory(remote_connection: RemoteConnection) -> StatusMessage:
-    client: Optional[paramiko.SSHClient] = None
-    client = get_client(remote_connection)
-    # Check if the specified directory exists
-    stdin, stdout, stderr = client.exec_command(f"ls {remote_connection.path}")  # type: ignore
-    error = stderr.read().decode().strip()
-    if error:
-        message = f"An SSH-related error occurred {str(error)}"
-        logger.error(message)
-        return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
-            message=f"Invalid Folder Path",
-        )
-
-    if client:
-        client.close()
-    # If the directory check is successful
-
-    return StatusMessage(
-        status=ConnectionTestStates.OK.value,
-        message="Provided path is accessible.",
-    )
 
 
 def check_permissions(client, directory):
