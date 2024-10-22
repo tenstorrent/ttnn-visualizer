@@ -27,7 +27,7 @@ import {
 } from '../../definitions/PlotConfigurations';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import OperationArguments from '../OperationArguments';
-import { isDramActiveAtom, isL1ActiveAtom, selectedTensorAddressAtom } from '../../store/app';
+import { isDramActiveAtom, isL1ActiveAtom, selectedAddressAtom } from '../../store/app';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
 import TensorDetailsComponent from './TensorDetailsComponent';
@@ -57,7 +57,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const [isL1Active, setIsL1Active] = useAtom(isL1ActiveAtom);
     const [isDramActive, setIsDramActive] = useAtom(isDramActiveAtom);
-    const [selectedAddress, setSelectedAddress] = useAtom(selectedTensorAddressAtom);
+    const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
     const [selectedTensorId, setSelectedTensorId] = useState<number | null>(null);
     const [toastId, setToastId] = useState<number | null>(null);
     const [tensixFullVisualisationOpen, setTensixFullVisualisationOpen] = useState(false);

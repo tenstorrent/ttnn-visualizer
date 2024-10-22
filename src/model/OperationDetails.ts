@@ -424,7 +424,6 @@ ${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cb
 
         const currentOperation = this.operations.find((op) => op.id === this.id);
 
-        // eslint-disable-next-line no-restricted-syntax
         for (const buffer of this.buffers) {
             const bufferAddress = buffer.address;
             const bufferType = buffer.buffer_type;
