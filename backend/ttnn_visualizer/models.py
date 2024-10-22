@@ -7,6 +7,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from sqlalchemy import Integer, Column, String, JSON
 
+from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
 
 
@@ -170,8 +171,11 @@ class RemoteConnection(BaseModel):
 
 
 class StatusMessage(BaseModel):
-    status: int
+    status: ConnectionTestStates
     message: str
+
+    class Config:
+        use_enum_values = True
 
 
 class ActiveReport(BaseModel):
