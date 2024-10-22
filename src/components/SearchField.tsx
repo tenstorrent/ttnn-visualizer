@@ -6,6 +6,7 @@ import React from 'react';
 import { Button, Icon, InputGroup } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/SearchField.scss';
+import classNames from 'classnames';
 
 interface SearchFieldProps {
     searchQuery: string;
@@ -13,6 +14,7 @@ interface SearchFieldProps {
     controls?: React.ReactElement[];
     placeholder?: string;
     disabled?: boolean;
+    className?: string;
 }
 
 /**
@@ -24,9 +26,10 @@ function SearchField({
     controls,
     disabled = false,
     placeholder = '',
+    className,
 }: SearchFieldProps): React.ReactElement {
     return (
-        <div className='search-field'>
+        <div className={classNames(className, 'search-field')}>
             <InputGroup
                 disabled={disabled}
                 rightElement={

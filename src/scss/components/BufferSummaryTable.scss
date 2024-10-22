@@ -2,6 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+.buffer-summary-filter {
+    margin-bottom: 20px;
+}
+
 .buffer-summary-table {
     display: inline-flex;
     height: 600px;
@@ -15,11 +19,26 @@
         height: 30px;
         top: -30px;
 
+        &:hover,
+        &:focus {
+            .sort-icon {
+                display: block;
+                opacity: 0.5;
+            }
+        }
+
         .sort-icon {
+            display: none;
             right: 5px;
             top: calc(50% - 8px);
             position: absolute;
             padding-left: 25px;
+
+
+            &.is-active {
+                display: block;
+                opacity: 1;
+            }
         }
     }
 

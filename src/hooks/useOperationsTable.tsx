@@ -4,7 +4,7 @@
 
 import { useCallback, useState } from 'react';
 
-enum SortingDirection {
+export enum SortingDirection {
     ASC = 'asc',
     DESC = 'desc',
 }
