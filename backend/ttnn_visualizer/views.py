@@ -3,7 +3,7 @@ import json
 
 from flask import Blueprint, Response
 
-from ttnn_visualizer.decorators import with_report_path
+from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.exceptions import RemoteFolderException
 from ttnn_visualizer.models import RemoteFolder, RemoteConnection, StatusMessage
 from ttnn_visualizer.queries import DatabaseQueries
@@ -27,7 +27,6 @@ from ttnn_visualizer.serializers import (
 )
 from ttnn_visualizer.sessions import (
     update_tab_session,
-    get_or_create_tab_session,
 )
 from ttnn_visualizer.sftp_operations import (
     sync_test_folders,
@@ -43,10 +42,10 @@ api = Blueprint("api", __name__, url_prefix="/api")
 
 
 @api.route("/operations", methods=["GET"])
-@with_report_path
+@with_session
 @timer
-def operation_list(report_path):
-    with DatabaseQueries(report_path) as db:
+def operation_list(session):
+    with DatabaseQueries(session.report_path) as db:
         operations = list(db.query_operations())
         operations.sort(key=lambda o: o.operation_id)
         operation_arguments = list(db.query_operation_arguments())
@@ -72,10 +71,10 @@ def operation_list(report_path):
 
 
 @api.route("/operations/<operation_id>", methods=["GET"])
-@with_report_path
+@with_session
 @timer
-def operation_detail(operation_id, report_path):
-    with DatabaseQueries(report_path) as db:
+def operation_detail(operation_id, session):
+    with DatabaseQueries(session.report_path) as db:
         operation = db.query_operation_by_id(operation_id)
 
         if not operation:
@@ -123,12 +122,14 @@ def operation_detail(operation_id, report_path):
         "GET",
     ],
 )
-@with_report_path
+@with_session
 @timer
-def operation_history(report_path):
+def operation_history(session):
 
     operation_history_filename = "operation_history.json"
-    operation_history_file = Path(report_path).parent / operation_history_filename
+    operation_history_file = (
+        Path(session.report_path).parent / operation_history_filename
+    )
     if not operation_history_file.exists():
         return []
     with open(operation_history_file, "r") as file:
@@ -136,10 +137,10 @@ def operation_history(report_path):
 
 
 @api.route("/config")
-@with_report_path
+@with_session
 @timer
-def get_config(report_path):
-    config_file = Path(report_path).parent.joinpath("config.json")
+def get_config(session):
+    config_file = Path(session.report_path).parent.joinpath("config.json")
     if not config_file.exists():
         return {}
     with open(config_file, "r") as file:
@@ -147,26 +148,26 @@ def get_config(report_path):
 
 
 @api.route("/tensors", methods=["GET"])
-@with_report_path
+@with_session
 @timer
-def tensors_list(report_path):
-    with DatabaseQueries(report_path) as db:
+def tensors_list(session):
+    with DatabaseQueries(session.report_path) as db:
         tensors = list(db.query_tensors())
         producers_consumers = list(db.query_producers_consumers())
         return serialize_tensors(tensors, producers_consumers)
 
 
 @api.route("/buffer", methods=["GET"])
-@with_report_path
+@with_session
 @timer
-def buffer_detail(report_path):
+def buffer_detail(session):
     address = request.args.get("address")
     operation_id = request.args.get("operation_id")
 
     if not address or not operation_id:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
-    with DatabaseQueries(report_path) as db:
+    with DatabaseQueries(session.report_path) as db:
         buffer = db.query_next_buffer(operation_id, address)
         if not buffer:
             return Response(status=HTTPStatus.NOT_FOUND)
@@ -174,9 +175,9 @@ def buffer_detail(report_path):
 
 
 @api.route("/buffer-pages", methods=["GET"])
-@with_report_path
+@with_session
 @timer
-def buffer_pages(report_path):
+def buffer_pages(session):
     address = request.args.get("address")
     operation_id = request.args.get("operation_id")
     buffer_type = request.args.get("buffer_type", "")
@@ -191,17 +192,17 @@ def buffer_pages(report_path):
     else:
         buffer_type = None
 
-    with DatabaseQueries(report_path) as db:
-        buffers = list(db.query_buffer_pages(operation_id, addresses, buffer_type))
+    with DatabaseQueries(session.report_path) as db:
+        buffers = list(db.query_buffer_pages(operation_id, address, buffer_type))
         return serialize_buffer_pages(buffers)
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
-@with_report_path
+@with_session
 @timer
-def tensor_detail(tensor_id, report_path):
+def tensor_detail(tensor_id, session):
 
-    with DatabaseQueries(report_path) as db:
+    with DatabaseQueries(session) as db:
         tensor = db.query_tensor_by_id(tensor_id)
         if not tensor:
             return Response(status=HTTPStatus.NOT_FOUND)
@@ -210,8 +211,8 @@ def tensor_detail(tensor_id, report_path):
 
 
 @api.route("/operation-buffers", methods=["GET"])
-@with_report_path
-def get_operations_buffers(report_path):
+@with_session
+def get_operations_buffers(session):
 
     buffer_type = request.args.get("buffer_type", "")
     if buffer_type and str.isdigit(buffer_type):
@@ -219,15 +220,15 @@ def get_operations_buffers(report_path):
     else:
         buffer_type = None
 
-    with DatabaseQueries(report_path) as db:
+    with DatabaseQueries(session.report_path) as db:
         buffers = list(db.query_buffers(buffer_type=buffer_type))
         operations = list(db.query_operations())
         return serialize_operations_buffers(operations, buffers)
 
 
 @api.route("/operation-buffers/<operation_id>", methods=["GET"])
-@with_report_path
-def get_operation_buffers(operation_id, report_path):
+@with_session
+def get_operation_buffers(operation_id, session):
 
     buffer_type = request.args.get("buffer_type", "")
     if buffer_type and str.isdigit(buffer_type):
@@ -235,7 +236,7 @@ def get_operation_buffers(operation_id, report_path):
     else:
         buffer_type = None
 
-    with DatabaseQueries(report_path) as db:
+    with DatabaseQueries(session.report_path) as db:
         operation = db.query_operation_by_id(operation_id)
         buffers = list(
             db.query_buffers_by_operation_id(operation_id, buffer_type=buffer_type)
@@ -246,9 +247,9 @@ def get_operation_buffers(operation_id, report_path):
 
 
 @api.route("/devices", methods=["GET"])
-@with_report_path
-def get_devices(report_path):
-    with DatabaseQueries(report_path) as db:
+@with_session
+def get_devices(session):
+    with DatabaseQueries(session.report_path) as db:
         devices = list(db.query_devices())
         return serialize_devices(devices)
 
@@ -427,24 +428,8 @@ def health_check():
     return Response(status=HTTPStatus.OK)
 
 
-@api.route("/reports/active", methods=["GET"])
-def get_active_folder():
+@api.route("/session", methods=["GET"])
+@with_session
+def get_tab_session(session):
     # Used to gate UI functions if no report is active
-
-    tab_id = request.args.get("tabId", None)
-    current_app.logger.info(f"TabID: {tab_id}")
-    if tab_id:
-        session = get_or_create_tab_session(
-            tab_id=tab_id
-        )  # Capture both the session and created flag
-
-        current_app.logger.info(f"Session: {session}")
-        if session and session.active_report:
-            active_report = session.active_report
-            return {
-                "name": active_report.get("name"),
-                "remote_connection": session.remote_connection,
-                "remote_folder": session.remote_folder,
-            }
-
-    return {"name": None, "remote_connection": None, "remote_folder": None}
+    return session.to_dict()
