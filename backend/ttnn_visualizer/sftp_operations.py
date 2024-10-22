@@ -19,7 +19,7 @@ from ttnn_visualizer.sockets import (
     emit_file_status,
 )
 from ttnn_visualizer.decorators import remote_exception_handler
-from ttnn_visualizer.exceptions import NoProjectsException
+from ttnn_visualizer.exceptions import NoProjectsException, RemoteConnectionException
 from ttnn_visualizer.models import RemoteConnection, RemoteFolder
 from ttnn_visualizer.ssh_client import check_gzip_exists, check_permissions, get_client
 
@@ -180,10 +180,26 @@ def read_remote_file(remote_connection):
 
 
 @remote_exception_handler
-def check_remote_path(remote_connection):
+def check_remote_path_for_projects(remote_connection):
     """Check the remote path for config files."""
     ssh_client = get_client(remote_connection)
     get_remote_folder_config_paths(remote_connection, ssh_client)
+
+
+@remote_exception_handler
+def check_remote_path_exists(remote_connection: RemoteConnection):
+    client = get_client(remote_connection)
+    sftp = client.open_sftp()
+    # Attempt to list the directory to see if it exists
+    try:
+        sftp.stat(remote_connection.path)
+    except IOError as e:
+        # Directory does not exist or is inaccessible
+        message = f"Directory does not exist or cannot be accessed: {str(e)}"
+        logger.error(message)
+        raise RemoteConnectionException(
+            message=message, status=ConnectionTestStates.FAILED
+        )
 
 
 @remote_exception_handler
