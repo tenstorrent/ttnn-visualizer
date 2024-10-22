@@ -222,6 +222,7 @@ const RemoteSyncConfigurator: FC = () => {
                             loading={isSyncingRemoteFolder}
                             disabled={
                                 isSyncingRemoteFolder ||
+                                remote.persistentState.selectedConnection?.useRemoteQuerying ||
                                 isLoadingFolderList ||
                                 !selectedRemoteFolder ||
                                 remoteFolderList?.length === 0
