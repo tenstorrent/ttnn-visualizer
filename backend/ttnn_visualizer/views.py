@@ -193,7 +193,7 @@ def buffer_pages(session):
         buffer_type = None
 
     with DatabaseQueries(session.report_path) as db:
-        buffers = list(db.query_buffer_pages(operation_id, address, buffer_type))
+        buffers = list(db.query_buffer_pages(operation_id, addresses, buffer_type))
         return serialize_buffer_pages(buffers)
 
 
