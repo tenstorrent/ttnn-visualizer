@@ -203,7 +203,7 @@ def buffer_pages(session):
 @timer
 def tensor_detail(tensor_id, session):
 
-    with DatabaseQueries(session) as db:
+    with DatabaseQueries(session.report_path) as db:
         tensor = db.query_tensor_by_id(tensor_id)
         if not tensor:
             return Response(status=HTTPStatus.NOT_FOUND)
