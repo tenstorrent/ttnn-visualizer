@@ -70,7 +70,7 @@ const LocalFolderOptions: FC = () => {
             connectionStatus.message = 'Unable to upload selected directory.';
         }
 
-        if (response.data.status !== 200) {
+        if (response.data.status !== ConnectionTestStates.OK) {
             connectionStatus.status = ConnectionTestStates.FAILED;
             connectionStatus.message = 'Selected directory does not contain a valid report.';
         }
