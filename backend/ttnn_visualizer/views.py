@@ -37,10 +37,11 @@ from ttnn_visualizer.sessions import (
 from ttnn_visualizer.sftp_operations import (
     sync_test_folders,
     read_remote_file,
-    check_remote_path,
+    check_remote_path_for_projects,
     get_remote_test_folders,
+    check_remote_path_exists,
 )
-from ttnn_visualizer.ssh_client import check_connection, check_directory
+from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.utils import timer
 
 logger = logging.getLogger(__name__)
@@ -355,47 +356,41 @@ def get_remote_folders():
 
 @api.route("/remote/test", methods=["POST"])
 def test_remote_folder():
-    connection = request.json
-    connection = RemoteConnection.model_validate(connection)
-
+    connection_data = request.json
+    connection = RemoteConnection.model_validate(connection_data)
     statuses = []
-    try:
-        connection_status = check_connection(connection)
-        statuses.append(connection_status)
-    except RemoteConnectionException as e:
-        statuses.append(
-            StatusMessage(status=ConnectionTestStates.FAILED.value, message=e.message)
+
+    def add_status(status, message):
+        statuses.append(StatusMessage(status=status, message=message))
+
+    def has_failures():
+        return any(
+            status.status != ConnectionTestStates.OK.value for status in statuses
         )
 
-    has_failures = any(
-        status.status != ConnectionTestStates.OK.value for status in statuses
-    )
+    # Test SSH Connection
+    try:
+        get_client(connection)
+        add_status(ConnectionTestStates.OK.value, "SSH connection established.")
+    except RemoteConnectionException as e:
+        add_status(ConnectionTestStates.FAILED.value, e.message)
 
-    if not has_failures:
+    # Test Directory Configuration
+    if not has_failures():
         try:
-            directory_status = check_directory(connection)
-            statuses.append(directory_status)
+            check_remote_path_exists(connection)
+            add_status(ConnectionTestStates.OK.value, "Remote folder path exists.")
         except RemoteConnectionException as e:
-            statuses.append(
-                StatusMessage(
-                    status=ConnectionTestStates.FAILED.value, message=e.message
-                )
-            )
+            add_status(ConnectionTestStates.FAILED.value, e.message)
 
-    has_failures = any(
-        status.status != ConnectionTestStates.OK.value for status in statuses
-    )
-    if not has_failures:
+    # Check for Project Configurations
+    if not has_failures():
         try:
-            check_remote_path(connection)
+            check_remote_path_for_projects(connection)
         except RemoteConnectionException as e:
-            statuses.append(
-                StatusMessage(
-                    status=ConnectionTestStates.FAILED.value, message=e.message
-                )
-            )
+            add_status(ConnectionTestStates.FAILED.value, e.message)
 
-    return list(map(lambda s: s.model_dump(), statuses))
+    return [status.model_dump() for status in statuses]
 
 
 @api.route("/remote/read", methods=["POST"])
