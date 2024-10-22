@@ -394,7 +394,7 @@ def test_remote_folder():
     if not has_failures() and connection.useRemoteQuerying:
         if not connection.sqliteBinaryPath:
             add_status(
-                ConnectionTestStates.FAILED.value, "SQL binary path not provided"
+                ConnectionTestStates.FAILED.value, "SQLite binary path not provided"
             )
         else:
             try:

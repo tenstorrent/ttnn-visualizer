@@ -45,16 +45,20 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
     const { testConnection, fetchSqlitePath } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
+    const [isDetectingBinaryPath, setIsDetectingBinaryPath] = useState(false);
 
     const isValidConnection = connectionTests.every((status) => status.status === ConnectionTestStates.OK);
 
     const getSqlitePath = async () => {
-        setIsTestingconnection(true);
+        setIsDetectingBinaryPath(true);
         const status = await fetchSqlitePath(connection);
         if (status.status === ConnectionTestStates.OK) {
             setConnection({ ...connection, sqliteBinaryPath: status.message });
         }
-        setIsTestingconnection(false);
+        if (status.status === ConnectionTestStates.FAILED) {
+            setConnection({ ...connection, sqliteBinaryPath: 'Path Not Found' });
+        }
+        setIsDetectingBinaryPath(false);
     };
 
     const testConnectionStatus = async () => {
@@ -189,8 +193,8 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                         <ButtonGroup className='remote-sql-test-buttons'>
                             <Button
                                 text='Detect Path'
-                                disabled={isTestingConnection}
-                                loading={isTestingConnection}
+                                disabled={isDetectingBinaryPath}
+                                loading={isDetectingBinaryPath}
                                 onClick={getSqlitePath}
                             />
                         </ButtonGroup>
@@ -213,7 +217,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                     <Button
                         text='Test Connection'
-                        disabled={isTestingConnection}
+                        disabled={isTestingConnection || isDetectingBinaryPath}
                         loading={isTestingConnection}
                         onClick={testConnectionStatus}
                     />
