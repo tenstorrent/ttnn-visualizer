@@ -118,9 +118,7 @@ def remote_exception_handler(func):
                 message = "Authentication failed - check credentials and ssh-agent"
             else:
                 err_message = re.sub(r"\[.*?]", "", str(err)).strip()
-                message = (
-                    f"Error connecting to host {connection.host}: {err_message}",
-                )
+                message = f"Error connecting to host {connection.host}: {err_message}"
 
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED, message=message
