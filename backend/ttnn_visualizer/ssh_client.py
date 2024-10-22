@@ -80,13 +80,14 @@ def check_connection(remote_connection: RemoteConnection) -> StatusMessage:
         message = f"An SSH-related error occurred {str(e)}"
 
         if "No existing session" in str(e):
-            message = f"SSH error - check username and ensure ssh-agent is running"
+            message = f"Authentication Failed"
 
         return StatusMessage(status=ConnectionTestStates.FAILED.value, message=message)
     except Exception as e:
+        message = "Unable to Connect to Host"
         return StatusMessage(
             status=ConnectionTestStates.FAILED.value,
-            message=f"Unable to establish an SSH connection: {str(e)}",
+            message=f"{message}",
         )
     finally:
         if client:
@@ -106,7 +107,7 @@ def check_directory(remote_connection: RemoteConnection) -> StatusMessage:
         if error:
             return StatusMessage(
                 status=ConnectionTestStates.FAILED.value,
-                message=f"Failed to access the specified directory: {error}",
+                message=f"Invalid Folder Path",
             )
 
         # If the directory check is successful
@@ -115,10 +116,12 @@ def check_directory(remote_connection: RemoteConnection) -> StatusMessage:
             message="Provided path is accessible.",
         )
 
+    except paramiko.SSHException as e:
+        pass
     except Exception as e:
         return StatusMessage(
             status=ConnectionTestStates.FAILED.value,
-            message=f"An error occurred while checking the directory: {str(e)}",
+            message=f"Error accessing directory",
         )
     finally:
         if client:
@@ -132,8 +135,13 @@ def test_ssh_connection(remote_connection: RemoteConnection) -> list[StatusMessa
     status_results: List[StatusMessage] = []
     # Perform the connection check and add the result
     status_results.append(check_connection(remote_connection))
+
+    has_failures = any(
+        status.status != ConnectionTestStates.OK.value for status in status_results
+    )
     # Perform the directory check and add the result
-    status_results.append(check_directory(remote_connection))
+    if not has_failures:
+        status_results.append(check_directory(remote_connection))
     return status_results
 
 
