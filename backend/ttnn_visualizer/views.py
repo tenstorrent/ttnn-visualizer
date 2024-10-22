@@ -200,7 +200,7 @@ def buffer_pages(session: TabSession):
     else:
         buffer_type = None
 
-    with DatabaseQueries(session.report_path) as db:
+    with DatabaseQueries(session) as db:
         buffers = list(db.query_buffer_pages(operation_id, addresses, buffer_type))
         return serialize_buffer_pages(buffers)
 
