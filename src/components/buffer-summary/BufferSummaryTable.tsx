@@ -135,7 +135,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                 numRows={tableFields.length}
                 enableRowResizing={false}
                 cellRendererDependencies={[sortDirection, sortingColumn, tableFields, tableFields.length]}
-                columnWidths={[200, 120, 150, 150, 100, 100]}
+                columnWidths={[200, 120, 120, 120, 120, 100]}
             >
                 {createColumns()}
             </BlueprintTable>
