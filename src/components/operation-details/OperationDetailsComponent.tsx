@@ -267,6 +267,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
                         {tensixIOVisualisationOpen && (
                             <TensorVisualisationComponent
+                                title={`Operation ${operationId} inputs/outputs`}
                                 operationId={operationId}
                                 address={inputOutputAddressList}
                                 bufferType={BufferType.L1}
@@ -278,6 +279,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         )}
                         {tensixFullVisualisationOpen && (
                             <TensorVisualisationComponent
+                                title={`Operation ${operationId} detailed memory report`}
                                 operationId={operationId}
                                 address={undefined}
                                 bufferType={BufferType.L1}

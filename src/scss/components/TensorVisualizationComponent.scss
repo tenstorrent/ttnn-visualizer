@@ -13,11 +13,34 @@
     }
 
     .tensor-visualisation {
-        background-color: $tt-background;
+        background-color: $tt-grey-4;
 
-        .chip {
+        .title {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0;
+
+            svg {
+                fill: $tt-white;
+            }
+        }
+
+        .tensix-grid {
+            &.empty {
+                position: absolute;
+                z-index: -1;
+            }
+
+            display: grid;
+            gap: 10px;
+
             .tensix {
-                border: 1px solid;
+                border: 1px solid $tt-black;
+                background-color: $tt-grey-2;
+
+                &.empty-tensix {
+                    opacity: 0.3;
+                }
             }
         }
     }

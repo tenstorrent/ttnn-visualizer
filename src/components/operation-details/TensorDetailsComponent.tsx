@@ -49,6 +49,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
         >
             {overlayOpen && address !== null && tensor.buffer_type !== null && (
                 <TensorVisualisationComponent
+                    title={`Tensor ${tensor.id}`}
                     operationId={operationId}
                     address={address}
                     bufferType={tensor.buffer_type}
@@ -109,6 +110,8 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         />
                     </Tooltip>
                 ) : null}
+
+                {/* // only if L1 */}
                 <Button
                     title={`Visualize tensor ${tensor.id}`}
                     icon={IconNames.EYE_OPEN}

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Card, Overlay2 } from '@blueprintjs/core';
+import { Button, Card, Overlay2 } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import { BufferType } from '../../model/BufferType';
 import { useBufferPages, useDevices } from '../../hooks/useAPI';
 import '../../scss/components/TensorVisualizationComponent.scss';
@@ -10,6 +11,7 @@ import { HistoricalTensor } from '../../model/Graph';
 import { getTensorColor } from '../../functions/colorGenerator';
 
 export interface TensorVisualisationComponentProps {
+    title: string;
     operationId: number;
     address?: number | string | undefined;
     bufferType?: BufferType;
@@ -21,6 +23,7 @@ export interface TensorVisualisationComponentProps {
 }
 
 const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> = ({
+    title,
     operationId,
     address,
     bufferType,
@@ -42,7 +45,8 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
 
     const memStart = zoomRange[0];
     const memSize = zoomRange[1];
-    const tensixSize = 80;
+    const tensixSize = 120;
+    const tensixHeight = tensixSize / 3;
 
     const buffersByBankId: BufferPage[][] = [];
     const coordsByBankId: { x: number; y: number }[] = [];
@@ -76,49 +80,70 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
             portalClassName='tensor-visualisation-overlay'
         >
             <Card className='tensor-visualisation'>
-                <div
-                    className='chip'
-                    style={{
-                        display: 'grid',
-                        gap: '5px',
-                        gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
-                        gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
-                    }}
-                >
-                    {coordsByBankId.map((coords, index) => (
-                        <div
-                            // eslint-disable-next-line react/no-array-index-key
-                            key={index}
-                            className='tensix'
-                            style={{
-                                width: `${tensixSize}px`,
-                                height: `${tensixSize}px`,
-                                gridColumn: coords.x + 1,
-                                gridRow: coords.y + 1,
-                                display: 'flex',
-                                flexDirection: 'column',
-                                // gap: '1px',
-                            }}
-                        >
-                            <SVGBufferRenderer
-                                width={tensixSize}
-                                height={tensixSize}
-                                data={buffersByBankId[index]}
-                                memorySize={memSize}
-                                memoryStart={memStart}
+                <div className='header'>
+                    <h3 className='title'>
+                        {title}
+                        <Button
+                            icon={IconNames.CROSS}
+                            minimal
+                            small
+                            onClick={onClose}
+                        />
+                    </h3>
+                </div>
+                <div className='chip'>
+                    <div
+                        className='tensix-grid empty'
+                        style={{
+                            gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
+                            gridTemplateRows: `repeat(${height || 0}, ${tensixHeight}px)`,
+                        }}
+                    >
+                        {Array.from({ length: width * height }).map((_, index) => (
+                            <div
+                                // eslint-disable-next-line react/no-array-index-key
+                                key={index}
+                                className='tensix empty-tensix'
+                                style={{
+                                    width: `${tensixSize}px`,
+                                    height: `${tensixHeight}px`,
+                                    gridColumn: (index % width) + 1,
+                                    gridRow: Math.floor(index / width) + 1,
+                                }}
                             />
-                            {/* {buffersByBankId[index].map((page) => ( */}
-                            {/*    <div */}
-                            {/*        key={page.id} */}
-                            {/*        style={{ */}
-                            {/*            width: '100%', */}
-                            {/*            height: `${(tensixSize / memSize) * page.page_size * 10}px`, */}
-                            {/*            backgroundColor: 'red', */}
-                            {/*        }} */}
-                            {/*    /> */}
-                            {/* ))} */}
-                        </div>
-                    ))}
+                        ))}
+                    </div>
+                    <div
+                        className='tensix-grid'
+                        style={{
+                            gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
+                            gridTemplateRows: `repeat(${height || 0}, ${tensixHeight}px)`,
+                        }}
+                    >
+                        {coordsByBankId.map((coords, index) => (
+                            <div
+                                // eslint-disable-next-line react/no-array-index-key
+                                key={index}
+                                className='tensix'
+                                style={{
+                                    width: `${tensixSize}px`,
+                                    height: `${tensixHeight}px`,
+                                    gridColumn: coords.x + 1,
+                                    gridRow: coords.y + 1,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                }}
+                            >
+                                <SVGBufferRenderer
+                                    width={tensixSize}
+                                    height={tensixHeight}
+                                    data={buffersByBankId[index]}
+                                    memorySize={memSize}
+                                    memoryStart={memStart}
+                                />
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </Card>
         </Overlay2>
