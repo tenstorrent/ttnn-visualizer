@@ -71,19 +71,24 @@ def check_connection(remote_connection: RemoteConnection) -> StatusMessage:
             message="SSH connection established.",
         )
 
-    except paramiko.AuthenticationException:
+    except paramiko.AuthenticationException as e:
+        message = f"An SSH-related error occurred {str(e)}"
+        logger.error(message)
         return StatusMessage(
             status=ConnectionTestStates.FAILED.value,
             message="Authentication failed. Please verify your SSH credentials.",
         )
     except paramiko.SSHException as e:
         message = f"An SSH-related error occurred {str(e)}"
+        logger.error(message)
 
         if "No existing session" in str(e):
             message = f"Authentication Failed"
 
         return StatusMessage(status=ConnectionTestStates.FAILED.value, message=message)
     except Exception as e:
+        message = f"An SSH-related error occurred {str(e)}"
+        logger.error(message)
         message = "Unable to Connect to Host"
         return StatusMessage(
             status=ConnectionTestStates.FAILED.value,
@@ -116,9 +121,9 @@ def check_directory(remote_connection: RemoteConnection) -> StatusMessage:
             message="Provided path is accessible.",
         )
 
-    except paramiko.SSHException as e:
-        pass
     except Exception as e:
+        message = f"An SSH-related error occurred {str(e)}"
+        logger.error(message)
         return StatusMessage(
             status=ConnectionTestStates.FAILED.value,
             message=f"Error accessing directory",
