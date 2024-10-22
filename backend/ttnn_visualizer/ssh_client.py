@@ -1,9 +1,11 @@
+from typing import List, Optional
 import paramiko
 import os
 from pathlib import Path
 from paramiko.agent import Agent
 from paramiko.ssh_exception import SSHException
-from ttnn_visualizer.models import RemoteConnection
+from ttnn_visualizer.models import RemoteConnection, StatusMessage
+from ttnn_visualizer.enums import ConnectionTestStates
 import logging
 
 logger = logging.getLogger(__name__)
@@ -48,6 +50,91 @@ def get_client(remote_connection: RemoteConnection) -> paramiko.SSHClient:
         **connection_args,
     )
     return ssh
+
+
+def check_connection(remote_connection: RemoteConnection) -> StatusMessage:
+    client: Optional[paramiko.SSHClient] = None
+    try:
+        client = get_client(remote_connection)
+
+        stdin, stdout, stderr = client.exec_command('echo "test connection"')  # type: ignore
+        output = stdout.read().decode().strip()
+        if output != "test connection":
+            return StatusMessage(
+                status=ConnectionTestStates.FAILED.value,
+                message="The SSH connection was established, but the server returned an unexpected response.",
+            )
+
+        # If the connection and command execution are successful
+        return StatusMessage(
+            status=ConnectionTestStates.OK.value,
+            message="SSH connection established.",
+        )
+
+    except paramiko.AuthenticationException:
+        return StatusMessage(
+            status=ConnectionTestStates.FAILED.value,
+            message="Authentication failed. Please verify your SSH credentials.",
+        )
+    except paramiko.SSHException as e:
+        message = f"An SSH-related error occured {str(e)}"
+
+        if "No existing session" in str(e):
+            message = f"SSH error - check username and ensure ssh-agent is running"
+
+        return StatusMessage(status=ConnectionTestStates.FAILED.value, message=message)
+    except Exception as e:
+        return StatusMessage(
+            status=ConnectionTestStates.FAILED.value,
+            message=f"Unable to establish an SSH connection: {str(e)}",
+        )
+    finally:
+        if client:
+            try:
+                client.close()
+            except:
+                pass
+
+
+def check_directory(remote_connection: RemoteConnection) -> StatusMessage:
+    client: Optional[paramiko.SSHClient] = None
+    try:
+        client = get_client(remote_connection)
+        # Check if the specified directory exists
+        stdin, stdout, stderr = client.exec_command(f"ls {remote_connection.path}")  # type: ignore
+        error = stderr.read().decode().strip()
+        if error:
+            return StatusMessage(
+                status=ConnectionTestStates.FAILED.value,
+                message=f"Failed to access the specified directory: {error}",
+            )
+
+        # If the directory check is successful
+        return StatusMessage(
+            status=ConnectionTestStates.OK.value,
+            message="Provided path is accessible.",
+        )
+
+    except Exception as e:
+        return StatusMessage(
+            status=ConnectionTestStates.FAILED.value,
+            message=f"An error occurred while checking the directory: {str(e)}",
+        )
+    finally:
+        if client:
+            try:
+                client.close()
+            except:
+                pass
+
+
+def test_ssh_connection(remote_connection: RemoteConnection) -> list[StatusMessage]:
+    status_results: List[StatusMessage] = []
+    # Perform the connection check and add the result
+    status_results.append(check_connection(remote_connection))
+    # Perform the directory check and add the result
+    status_results.append(check_directory(remote_connection))
+    return status_results
 
 
 def check_permissions(client, directory):
