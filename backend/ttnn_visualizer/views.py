@@ -4,7 +4,8 @@ import json
 from flask import Blueprint, Response
 
 from ttnn_visualizer.decorators import with_session
-from ttnn_visualizer.exceptions import RemoteFolderException
+from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.exceptions import RemoteConnectionException, NoProjectsException
 from ttnn_visualizer.models import (
     RemoteFolder,
     RemoteConnection,
@@ -39,6 +40,7 @@ from ttnn_visualizer.sftp_operations import (
     check_remote_path,
     get_remote_test_folders,
 )
+from ttnn_visualizer.ssh_client import test_ssh_connection
 from ttnn_visualizer.utils import timer
 
 logger = logging.getLogger(__name__)
@@ -271,7 +273,7 @@ def create_upload_files():
     # Validate necessary files
     if "db.sqlite" not in filenames or "config.json" not in filenames:
         return StatusMessage(
-            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            status=ConnectionTestStates.FAILED.value,
             message="Invalid project directory.",
         ).model_dump()
 
@@ -334,7 +336,9 @@ def create_upload_files():
     if current_app.config["USE_WEBSOCKETS"]:
         emit_file_status(final_progress, tab_id)
 
-    return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
+    return StatusMessage(
+        status=ConnectionTestStates.OK.value, message="Success."
+    ).model_dump()
 
 
 @api.route("/remote/folder", methods=["POST"])
@@ -345,18 +349,32 @@ def get_remote_folders():
             RemoteConnection.model_validate(connection, strict=False)
         )
         return [r.model_dump() for r in remote_folders]
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
 
 
 @api.route("/remote/test", methods=["POST"])
 def test_remote_folder():
-    connection = RemoteConnection.model_validate(request.json, strict=False)
-    try:
-        check_remote_path(connection)
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
-    return Response(status=HTTPStatus.OK)
+    connection = request.json
+    connection = RemoteConnection.model_validate(connection)
+    statuses = test_ssh_connection(remote_connection=connection)
+
+    has_failures = any(
+        status.status != ConnectionTestStates.OK.value for status in statuses
+    )
+
+    if not has_failures:
+        try:
+            check_remote_path(connection)
+        except (RemoteConnectionException, NoProjectsException):
+            statuses.append(
+                StatusMessage(
+                    status=ConnectionTestStates.FAILED.value,
+                    message="No projects found in specified path",
+                )
+            )
+
+    return list(map(lambda s: s.model_dump(), statuses))
 
 
 @api.route("/remote/read", methods=["POST"])
@@ -364,8 +382,8 @@ def read_remote_folder():
     connection = RemoteConnection.model_validate(request.json, strict=False)
     try:
         content = read_remote_file(connection)
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
     return Response(status=200, response=content)
 
 
@@ -388,8 +406,8 @@ def sync_remote_folder():
             use_compression,
             sid=tab_id,
         )
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
     return Response(status=HTTPStatus.OK)
 
 
