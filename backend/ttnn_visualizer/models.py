@@ -168,6 +168,8 @@ class RemoteConnection(BaseModel):
     host: str
     port: int = Field(ge=1, le=65535)
     path: str
+    sqliteBinaryPath: Optional[str] = None
+    useRemoteQuerying: bool = False
 
 
 class StatusMessage(BaseModel):

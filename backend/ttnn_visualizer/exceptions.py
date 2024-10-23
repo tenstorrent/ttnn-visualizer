@@ -21,5 +21,12 @@ class NoProjectsException(RemoteConnectionException):
     pass
 
 
+class RemoteSqliteException(Exception):
+    def __init__(self, message, status):
+        super().__init__(message)
+        self.message = message
+        self.status = status
+
+
 class DatabaseFileNotFoundException(Exception):
     pass

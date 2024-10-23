@@ -87,6 +87,8 @@ const RemoteSyncConfigurator: FC = () => {
         }
     };
 
+    const isUsingRemoteQuerying = remote.persistentState.selectedConnection?.useRemoteQuerying;
+
     const isRemoteReportMounted =
         !isSyncingRemoteFolder &&
         !isLoadingFolderList &&
@@ -222,6 +224,7 @@ const RemoteSyncConfigurator: FC = () => {
                             loading={isSyncingRemoteFolder}
                             disabled={
                                 isSyncingRemoteFolder ||
+                                isUsingRemoteQuerying ||
                                 isLoadingFolderList ||
                                 !selectedRemoteFolder ||
                                 remoteFolderList?.length === 0
@@ -260,7 +263,7 @@ const RemoteSyncConfigurator: FC = () => {
                     </Tooltip>
 
                     <Button
-                        disabled={!isRemoteReportMounted}
+                        disabled={!isUsingRemoteQuerying && !isRemoteReportMounted}
                         onClick={viewReport}
                         icon={IconNames.EYE_OPEN}
                     >

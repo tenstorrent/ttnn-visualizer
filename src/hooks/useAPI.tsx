@@ -63,6 +63,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
     }
     return defaultOperationDetailsData;
 };
+
 const fetchOperations = async (): Promise<OperationDescription[]> => {
     const { data: operationList } = await axiosInstance.get<OperationDescription[]>('/api/operations');
 
