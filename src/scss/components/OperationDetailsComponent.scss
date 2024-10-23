@@ -185,42 +185,6 @@
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 5px;
-
-        .tensor-item {
-            margin-top: 20px;
-
-            &.dimmed {
-                opacity: 0.5;
-            }
-
-            h4 {
-                cursor: pointer;
-            }
-        }
-
-        .tensor-name {
-            display: inline-flex;
-            align-items: center;
-            color: $tt-white;
-            gap: 8px;
-            margin-bottom: 10px;
-            font-size: inherit;
-
-            h4 {
-                margin: 0;
-            }
-
-            &:focus,
-            &:hover {
-                h4 {
-                    text-decoration: underline;
-                }
-            }
-        }
-
-        .tensor-meta {
-            padding-left: 25px;
-        }
     }
 
     .plot-title {
