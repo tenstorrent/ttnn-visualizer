@@ -235,9 +235,9 @@ class DatabaseQueries:
 
     def query_buffer_pages(
         self,
-        operation_id: Optional[int | str] = None,
-        address: Optional[int | str] = None,
-        buffer_type: Optional[int] = None,
+        operation_id=None,
+        address=None,
+        buffer_type=None,
     ) -> Generator[BufferPage, None, None]:
         query = "SELECT * FROM buffer_pages WHERE 1=1"
         params = []
