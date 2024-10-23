@@ -48,6 +48,8 @@
             gap: 10px;
 
             .tensix {
+                display: flex;
+                flex-direction: column;
                 border: 1px solid $tt-black;
                 background-color: $tt-grey-2;
 

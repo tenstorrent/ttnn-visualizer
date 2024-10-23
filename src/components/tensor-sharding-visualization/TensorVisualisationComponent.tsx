@@ -147,8 +147,6 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                     height: `${tensixHeight}px`,
                                     gridColumn: coords.x + 1,
                                     gridRow: coords.y + 1,
-                                    display: 'flex',
-                                    flexDirection: 'column',
                                 }}
                             >
                                 <SVGBufferRenderer

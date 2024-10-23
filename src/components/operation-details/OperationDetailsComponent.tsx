@@ -350,7 +350,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         <TensorVisualisationComponent
                                             title={`Operation ${operationId} detailed memory report`}
                                             operationId={operationId}
-                                            address={undefined}
                                             bufferType={BufferType.L1}
                                             zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
                                             isOpen={tensixFullVisualisationOpen}
