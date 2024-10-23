@@ -1,8 +1,6 @@
 import os
 import zipfile
 
-from pydevd import remote
-
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import RemoteConnectionException, RemoteSqliteException
