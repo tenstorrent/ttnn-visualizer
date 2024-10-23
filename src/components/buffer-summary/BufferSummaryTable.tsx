@@ -11,10 +11,11 @@ import { BufferTypeLabel } from '../../model/BufferType';
 import LoadingSpinner from '../LoadingSpinner';
 import '@blueprintjs/table/lib/css/table.css';
 import 'styles/components/BufferSummaryTable.scss';
-import useOperationsTable from '../../hooks/useOperationsTable';
+import useBuffersTable, { SortingDirection } from '../../hooks/useBuffersTable';
 import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
 import { toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
+import { BufferData } from '../../model/APIData';
 
 enum COLUMNS {
     operationId = 'Operation',
@@ -32,23 +33,14 @@ interface BufferSummaryTableProps {
     tensorListByOperation: HistoricalTensorsByOperation;
 }
 
-enum SortingDirection {
-    ASC = 'asc',
-    DESC = 'desc',
-}
-
-interface Buffer {
-    address: number;
-    buffer_type: number;
-    device_id: number;
+interface SummaryTableBuffer extends BufferData {
     size: number;
-    operationId: number;
     operationName: string;
     tensor_id: number;
 }
 
 function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
-    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useOperationsTable();
+    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useBuffersTable();
 
     const listOfBuffers = useMemo(
         () =>
@@ -57,12 +49,12 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     operation.buffers
                         .map((buffer) => ({
                             ...buffer,
-                            operationId: operation.id,
+                            operation_id: operation.id,
                             operationName: operation.name,
                         }))
                         .flat(),
                 )
-                .flat() as Buffer[],
+                .flat() as SummaryTableBuffer[],
         [buffersByOperation],
     );
 
@@ -122,7 +114,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     const tableFields = useMemo(() => {
         const buffers = listOfBuffers.map((buffer) => ({
             ...buffer,
-            tensor_id: tensorListByOperation.get(buffer.operationId)?.get(buffer.address)?.id,
+            tensor_id: tensorListByOperation.get(buffer.operation_id)?.get(buffer.address)?.id,
         })) as [];
 
         return [...sortTableFields(buffers)];
@@ -145,15 +137,15 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     );
 }
 
-const createCell = (key: COLUMN_KEYS, tableFields: Buffer[]) => (rowIndex: number) => (
+const createCell = (key: COLUMN_KEYS, tableFields: SummaryTableBuffer[]) => (rowIndex: number) => (
     <Cell>{getCellContent(key, rowIndex, tableFields)}</Cell>
 );
 
-const getCellContent = (key: COLUMN_KEYS, rowIndex: number, tableFields: Buffer[]) => {
-    const buffer = tableFields[rowIndex] as Buffer;
+const getCellContent = (key: COLUMN_KEYS, rowIndex: number, tableFields: SummaryTableBuffer[]) => {
+    const buffer = tableFields[rowIndex] as SummaryTableBuffer;
 
     if (key === 'operationId') {
-        return `${buffer.operationId} - ${buffer.operationName}`;
+        return `${buffer.operation_id} - ${buffer.operationName}`;
     }
 
     if (key === 'tensor_id') {

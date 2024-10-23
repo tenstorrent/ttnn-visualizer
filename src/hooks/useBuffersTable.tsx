@@ -4,7 +4,7 @@
 
 import { useCallback, useState } from 'react';
 
-enum SortingDirection {
+export enum SortingDirection {
     ASC = 'asc',
     DESC = 'desc',
 }
@@ -35,7 +35,7 @@ const sortDesc = (a: SortingValue, b: SortingValue) => {
     return a < b ? 1 : -1;
 };
 
-const useOperationsTable = () => {
+const useBuffersTable = () => {
     const [sortingColumn, setSortingColumn] = useState<string>('');
     const [sortDirection, setSortDirection] = useState<SortingDirection>(SortingDirection.DESC);
 
@@ -60,4 +60,4 @@ const useOperationsTable = () => {
     };
 };
 
-export default useOperationsTable;
+export default useBuffersTable;
