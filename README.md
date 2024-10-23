@@ -98,6 +98,106 @@ For MacOS you need to use the 'magic' socket file. The docker-compose.yml file h
 
 Before running the application ensure that your keys are added to the agent (`ssh-add -L`). If your keys are not present, run `ssh-add` to add them.
 
+## Remote Querying 
+
+**REQUIREMENTS**
+
+```
+glibc=>2.28.0 (`ldd --version`)
+sqlite3=>3.38.0 (`sqlite3 --version`)
+```
+
+
+
+If your machine already has SQLite3 installed you can simply use the path provided by the command `which sqlite3`.
+
+If you do not have SQLite3  installed you can download the SQLite3 binary, extract it and use the path. For instance:
+
+`/home/user/bin/sqlite3`
+
+### Downloading SQLite Binary on a Remote Linux Machine
+
+This guide provides instructions for downloading the SQLite binary on a remote Linux machine. The instructions include determining your operating system architecture and using `wget` or `curl` to download the appropriate binary.
+
+#### Step 1: Determine System Architecture
+
+First, determine the architecture of your Linux system. This is important to ensure you download the correct SQLite binary.
+
+```bash
+uname -m
+```
+
+- `x86_64` indicates a 64-bit architecture.
+- `i386` or `i686` indicates a 32-bit architecture.
+- `aarch64` indicates a 64-bit ARM architecture.
+
+#### Step 2: Download the SQLite Binary
+
+Visit the [SQLite Download Page](https://sqlite.org/download.html) to find the latest version. Copy the link for the appropriate precompiled binary for your architecture.
+
+##### Example Download Using `wget`
+
+Replace `<url>` with the URL of the SQLite binary (for instance https://sqlite.org/2024/sqlite-tools-linux-x64-3470000.zip):
+
+```bash
+wget <url> -O sqlite3.tar.gz
+```
+
+#### Example Download Using `curl`
+
+Replace `<url>` with the URL of the SQLite binary:
+
+```bash
+curl -o sqlite3.tar.gz <url>
+```
+
+#### Step 3: Extract the SQLite Binary
+
+Once downloaded, extract the binary:
+
+```bash
+tar -xzf sqlite3.tar.gz
+```
+
+This will create a folder with the SQLite binary inside. You can move it to a directory in your home folder to avoid needing root permissions:
+
+```bash
+mv sqlite3 ~/bin/
+```
+
+Make sure the `bin` directory exists and add it to your `PATH` if not already done:
+
+```bash
+mkdir -p ~/bin
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+#### Step 4: Verify the Installation
+
+After the binary is moved and made executable, verify that SQLite is properly installed:
+
+```bash
+sqlite3 --version
+```
+
+This command should output the version of SQLite, confirming the installation was successful.
+
+
+
+## Troubleshooting
+
+- If `wget` or `curl` is not installed, you can install them using your system's package manager (e.g., `sudo apt-get install wget` for Debian-based systems). If you do not have `sudo` permissions, consider asking your system administrator.
+- Ensure that the `~/bin` directory is included in your `PATH` by running:
+
+  ```bash
+  echo $PATH
+  ```
+
+- If `sqlite3` is not found, ensure you have reloaded your `.bashrc` file with `source ~/.bashrc`.
+
+
+
 ## Contributing
 
 ### React + TypeScript + Vite {#react-typescript-vite}

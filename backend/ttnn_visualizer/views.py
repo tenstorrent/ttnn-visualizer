@@ -5,7 +5,7 @@ from flask import Blueprint, Response
 
 from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.enums import ConnectionTestStates
-from ttnn_visualizer.exceptions import RemoteConnectionException, NoProjectsException
+from ttnn_visualizer.exceptions import RemoteConnectionException, RemoteSqliteException
 from ttnn_visualizer.models import (
     RemoteFolder,
     RemoteConnection,
@@ -13,6 +13,7 @@ from ttnn_visualizer.models import (
     TabSession,
 )
 from ttnn_visualizer.queries import DatabaseQueries
+from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path, check_sqlite_path
 from ttnn_visualizer.sockets import (
     FileProgress,
     emit_file_status,
@@ -390,6 +391,19 @@ def test_remote_folder():
         except RemoteConnectionException as e:
             add_status(ConnectionTestStates.FAILED.value, e.message)
 
+    # Test Sqlite binary path configuration
+    if not has_failures() and connection.useRemoteQuerying:
+        if not connection.sqliteBinaryPath:
+            add_status(
+                ConnectionTestStates.FAILED.value, "SQLite binary path not provided"
+            )
+        else:
+            try:
+                check_sqlite_path(connection)
+                add_status(ConnectionTestStates.OK.value, "SQLite binary found.")
+            except RemoteConnectionException as e:
+                add_status(ConnectionTestStates.FAILED.value, e.message)
+
     return [status.model_dump() for status in statuses]
 
 
@@ -427,6 +441,24 @@ def sync_remote_folder():
     return Response(status=HTTPStatus.OK)
 
 
+@api.route("/remote/sqlite/detect-path", methods=["POST"])
+def detect_sqlite_path():
+    connection = request.json
+    connection = RemoteConnection.model_validate(connection, strict=False)
+    try:
+        path = get_sqlite_path(connection=connection)
+        if path:
+            return StatusMessage(
+                status=ConnectionTestStates.OK.value, message=path
+            ).model_dump()
+    except RemoteSqliteException as e:
+        current_app.logger.error(f"Unable to detect SQLite3 path {str(e)}")
+        return StatusMessage(
+            status=ConnectionTestStates.FAILED.value,
+            message="Unable to detect SQLite3 path. See logs",
+        )
+
+
 @api.route("/remote/use", methods=["POST"])
 def use_remote_folder():
     connection = request.json.get("connection", None)
@@ -439,13 +471,12 @@ def use_remote_folder():
     report_folder = Path(folder.remotePath).name
     connection_directory = Path(report_data_directory, connection.host, report_folder)
 
-    if not connection_directory.exists():
+    if not connection.useRemoteQuerying and not connection_directory.exists():
         return Response(
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
             response=f"{connection_directory} does not exist.",
         )
 
-    # Set Active Report on View
     remote_path = f"{Path(report_data_directory).name}/{connection.host}/{connection_directory.name}"
 
     tab_id = request.args.get("tabId")
