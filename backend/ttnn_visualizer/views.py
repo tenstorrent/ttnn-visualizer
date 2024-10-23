@@ -471,13 +471,12 @@ def use_remote_folder():
     report_folder = Path(folder.remotePath).name
     connection_directory = Path(report_data_directory, connection.host, report_folder)
 
-    if not connection_directory.exists():
+    if not connection.useRemoteQuerying and not connection_directory.exists():
         return Response(
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
             response=f"{connection_directory} does not exist.",
         )
 
-    # Set Active Report on View
     remote_path = f"{Path(report_data_directory).name}/{connection.host}/{connection_directory.name}"
 
     tab_id = request.args.get("tabId")
