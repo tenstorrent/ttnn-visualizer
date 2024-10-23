@@ -191,13 +191,18 @@ def buffer_pages(session: TabSession):
     operation_id = request.args.get("operation_id")
     buffer_type = request.args.get("buffer_type", "")
 
+    if address:
+        addresses = [addr.strip() for addr in address.split(",")]
+    else:
+        addresses = None
+
     if buffer_type and str.isdigit(buffer_type):
         buffer_type = int(buffer_type)
     else:
         buffer_type = None
 
     with DatabaseQueries(session) as db:
-        buffers = list(db.query_buffer_pages(operation_id, address, buffer_type))
+        buffers = list(db.query_buffer_pages(operation_id, addresses, buffer_type))
         return serialize_buffer_pages(buffers)
 
 

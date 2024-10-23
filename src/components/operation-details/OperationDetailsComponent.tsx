@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 import React, { Fragment, useState } from 'react';
-import { Button, ButtonGroup, Icon, Intent, Switch } from '@blueprintjs/core';
+import { Button, ButtonGroup, Icon, Intent, Position, Switch, Tooltip } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { IconNames } from '@blueprintjs/icons';
 import { toast } from 'react-toastify';
@@ -33,6 +33,7 @@ import ToastTensorMessage from './ToastTensorMessage';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
+import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -59,6 +60,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
     const [selectedTensorId, setSelectedTensorId] = useState<number | null>(null);
     const [toastId, setToastId] = useState<number | null>(null);
+    const [tensixFullVisualisationOpen, setTensixFullVisualisationOpen] = useState(false);
+    const [tensixIOVisualisationOpen, setTensixIOVisualisationOpen] = useState(false);
 
     const onClickOutside = () => {
         setSelectedAddress(null);
@@ -214,6 +217,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         setToastId(toastInstance);
     };
 
+    const inputOutputAddressList: string = details.inputs
+        .concat(details.outputs)
+        .map((tensor) => tensor.address)
+        .join(',');
+
     // TODO: keeping this as a reminder. this wont work properly while we pick tensor by address only, an only for a specific operation
     // const onPreviousBufferClick = (event: Readonly<PlotMouseEvent>): void => {
     //     const { address } = previousMemory[event.points[0].curveNumber];
@@ -295,7 +303,62 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                         {isL1Active && (
                             <>
-                                <h3>L1 Memory</h3>
+                                <h3>
+                                    L1 Memory{' '}
+                                    <Tooltip
+                                        content='Visualize io tensix cores'
+                                        placement={Position.TOP}
+                                    >
+                                        <Button
+                                            title='Visualize io tensix cores'
+                                            icon={IconNames.FLOW_REVIEW}
+                                            intent={Intent.SUCCESS}
+                                            minimal
+                                            small
+                                            onClick={() => {
+                                                setTensixIOVisualisationOpen(true);
+                                            }}
+                                        />
+                                    </Tooltip>
+                                    <Tooltip
+                                        content='Visualize all tensix cores'
+                                        placement={Position.TOP}
+                                    >
+                                        <Button
+                                            icon={IconNames.LAYOUT_GRID}
+                                            intent={Intent.SUCCESS}
+                                            minimal
+                                            small
+                                            onClick={() => {
+                                                setTensixFullVisualisationOpen(true);
+                                            }}
+                                        />
+                                    </Tooltip>
+                                    {tensixIOVisualisationOpen && (
+                                        <TensorVisualisationComponent
+                                            title={`Operation ${operationId} inputs/outputs`}
+                                            operationId={operationId}
+                                            address={inputOutputAddressList}
+                                            bufferType={BufferType.L1}
+                                            zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
+                                            isOpen={tensixIOVisualisationOpen}
+                                            onClose={() => setTensixIOVisualisationOpen(false)}
+                                            tensorByAddress={details.historicalTensorListByAddress}
+                                        />
+                                    )}
+                                    {tensixFullVisualisationOpen && (
+                                        <TensorVisualisationComponent
+                                            title={`Operation ${operationId} detailed memory report`}
+                                            operationId={operationId}
+                                            bufferType={BufferType.L1}
+                                            zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
+                                            isOpen={tensixFullVisualisationOpen}
+                                            onClose={() => setTensixFullVisualisationOpen(false)}
+                                            tensorByAddress={details.historicalTensorListByAddress}
+                                        />
+                                    )}
+                                </h3>
+
                                 <MemoryPlotRenderer
                                     title='Previous Summarized L1 Report'
                                     className={classNames('l1-memory-renderer', {
@@ -488,6 +551,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
                                         operationId={operationId}
+                                        zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
                                     />
                                 ))}
                             </div>
@@ -502,6 +566,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         onTensorClick={onTensorClick}
                                         memorySize={memorySizeL1}
                                         operationId={operationId}
+                                        zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
                                     />
                                 ))}{' '}
                             </div>

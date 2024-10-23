@@ -163,7 +163,7 @@ class TestDatabaseQueries(unittest.TestCase):
         self.assertEqual(len(buffer_pages), 1)
 
         # Query with filter by address
-        buffer_pages = list(self.db_queries.query_buffer_pages(address=1234))
+        buffer_pages = list(self.db_queries.query_buffer_pages(addresses=["1234"]))
         self.assertEqual(len(buffer_pages), 1)
 
         # Query with filter by buffer_type
@@ -173,7 +173,7 @@ class TestDatabaseQueries(unittest.TestCase):
         self.assertEqual(len(buffer_pages), 1)
 
         # Query with a non-matching filter
-        buffer_pages = list(self.db_queries.query_buffer_pages(operation_id=9999))
+        buffer_pages = list(self.db_queries.query_buffer_pages(operation_id="9999"))
         self.assertEqual(len(buffer_pages), 0)
 
     def test_query_buffers(self):

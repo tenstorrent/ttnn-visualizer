@@ -8,6 +8,7 @@ import axiosInstance from '../libs/axiosInstance';
 import {
     Buffer,
     BufferData,
+    BufferPage,
     OperationDescription,
     OperationDetailsData,
     ReportMetaData,
@@ -23,6 +24,21 @@ export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
     const response = await axiosInstance.get<TabSession>('/api/session').catch();
     return response?.data;
+};
+
+export const fetchBufferPages = async (
+    operationId: number,
+    address?: number | string,
+    bufferType?: BufferType,
+): Promise<BufferPage[]> => {
+    const response = await axiosInstance.get<BufferPage[]>(`/api/buffer-pages`, {
+        params: {
+            operation_id: operationId,
+            address,
+            buffer_type: bufferType,
+        },
+    });
+    return response.data;
 };
 
 const fetchOperationDetails = async (id: number | null): Promise<OperationDetailsData> => {
@@ -167,6 +183,12 @@ export const useNextOperation = (operationId: number) => {
 
 export const useReportMeta = () => {
     return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
+};
+
+export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
+    return useQuery<BufferPage[], AxiosError>(['get-buffer-pages', operationId, address, bufferType], () =>
+        fetchBufferPages(operationId, address, bufferType),
+    );
 };
 
 export const fetchTensors = async (): Promise<TensorData[]> => {

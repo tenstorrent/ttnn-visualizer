@@ -38,7 +38,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     device_operations: Node[] = [];
 
-    private historicalTensorListByAddress: Map<number, HistoricalTensor> = new Map();
+    historicalTensorListByAddress: Map<number, HistoricalTensor> = new Map();
 
     private historicalTensorListById: Map<number, HistoricalTensor> = new Map();
 

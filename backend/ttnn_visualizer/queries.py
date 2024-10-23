@@ -236,23 +236,31 @@ class DatabaseQueries:
     def query_buffer_pages(
         self,
         operation_id=None,
-        address=None,
+        addresses=None,
         buffer_type=None,
     ) -> Generator[BufferPage, None, None]:
+        # noinspection SqlConstantExpression
         query = "SELECT * FROM buffer_pages WHERE 1=1"
         params = []
+
+        # Add optional conditions
         if operation_id is not None:
             query += " AND operation_id = ?"
             params.append(operation_id)
-        if address is not None:
-            query += " AND address = ?"
-            params.append(address)
+
+        if addresses is not None and len(addresses) > 0:
+            placeholders = ",".join(["?"] * len(addresses))
+            query += f" AND address IN ({placeholders})"
+            params.extend(addresses)
+
         if buffer_type is not None:
             query += " AND buffer_type = ?"
             params.append(buffer_type)
+
         rows = self.execute_query(query, params)
         for row in rows:
             yield BufferPage(*row)
+
 
     def query_tensors(self) -> Generator[Tensor, None, None]:
         query = "SELECT * FROM tensors"

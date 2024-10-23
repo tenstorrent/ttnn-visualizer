@@ -195,3 +195,20 @@ export interface TensorBuffer extends Chunk {
     layout: DeviceOperationLayoutTypes;
     type: DeviceOperationTypes;
 }
+
+export interface BufferPage {
+    address: number;
+    bank_id: number;
+    buffer_type: number;
+    core_x: number;
+    core_y: number;
+    device_id: number;
+    operation_id: number;
+    page_address: number;
+    page_index: number;
+    page_size: number;
+    id: string;
+
+    tensor_id?: number;
+    color?: string;
+}
