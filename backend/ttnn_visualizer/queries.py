@@ -8,8 +8,8 @@ from typing import List, Optional, Generator
 from ttnn_visualizer.exceptions import DatabaseFileNotFoundException
 import paramiko
 
-from backend.ttnn_visualizer.exceptions import DatabaseFileNotFoundException
-from backend.ttnn_visualizer.ssh_client import get_client
+from ttnn_visualizer.exceptions import DatabaseFileNotFoundException
+from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.models import (
     Operation,
     DeviceOperation,
@@ -260,7 +260,6 @@ class DatabaseQueries:
         rows = self.execute_query(query, params)
         for row in rows:
             yield BufferPage(*row)
-
 
     def query_tensors(self) -> Generator[Tensor, None, None]:
         query = "SELECT * FROM tensors"

@@ -13,7 +13,7 @@ from flask_cors import CORS
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from backend.ttnn_visualizer.exceptions import DatabaseFileNotFoundException
+from ttnn_visualizer.exceptions import DatabaseFileNotFoundException
 from ttnn_visualizer.settings import Config, DefaultConfig
 
 logger = logging.getLogger(__name__)
@@ -133,6 +133,11 @@ def middleware(app: flask.Flask):
 
 
 def main():
+
+    run_command = sys.argv[0].split("/")
+    if run_command[-1] == "ttnn-visualizer":
+        os.environ.setdefault("FLASK_ENV", "production")
+
     config = Config()
 
     # Check if DEBUG environment variable is set

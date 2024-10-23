@@ -4,11 +4,10 @@ from typing import Optional
 
 from flask import request, jsonify, current_app
 
-from backend.ttnn_visualizer.utils import get_report_path
+from ttnn_visualizer.utils import get_report_path
 from ttnn_visualizer.models import (
     RemoteConnection,
     RemoteFolder,
-    TabSession,
     TabSessionTable,
 )
 from ttnn_visualizer.extensions import db
