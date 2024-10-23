@@ -100,6 +100,15 @@ Before running the application ensure that your keys are added to the agent (`ss
 
 ## Remote Querying 
 
+**REQUIREMENTS**
+
+```
+glibc=>2.28.0 (`ldd --version`)
+sqlite3=>3.38.0 (`sqlite3 --version`)
+```
+
+
+
 If your machine already has SQLite3 installed you can simply use the path provided by the command `which sqlite3`.
 
 If you do not have SQLite3  installed you can download the SQLite3 binary, extract it and use the path. For instance:
