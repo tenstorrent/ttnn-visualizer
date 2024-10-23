@@ -49,7 +49,9 @@ const RemoteSyncConfigurator: FC = () => {
         const savedFolders = remote.persistentState.getSavedRemoteFolders(connection);
         const mergedFolders = (updatedFolders ?? []).map((updatedFolder) => {
             const existingFolder = savedFolders?.find((f) => f.localPath === updatedFolder.localPath);
-
+            if (existingFolder) {
+                existingFolder.lastSynced = undefined;
+            }
             return {
                 ...existingFolder,
                 ...updatedFolder,
