@@ -105,9 +105,8 @@ def serialize_buffer_pages(buffer_pages):
         ):
             page_data["buffer_type"] = page_data["buffer_type"].value
 
-    return {
-        "buffer_pages": buffer_pages_list,
-    }
+    return buffer_pages_list
+    
 
 
 def serialize_operation(
@@ -139,11 +138,15 @@ def serialize_operation(
     outputs_data = outputs_dict.get(operation.operation_id)
     id = operation_data.pop("operation_id", None)
 
+    device_operations_data = []
+    if hasattr(device_operations, "captured_graph"):
+        device_operations_data = device_operations.captured_graph
+
     return {
         **operation_data,
         "id": id,
         "l1_sizes": l1_sizes,
-        "device_operations": device_operations.captured_graph or [],
+        "device_operations": device_operations_data,
         "stack_trace": stack_trace.stack_trace if stack_trace else "",
         "buffers": buffer_list,
         "arguments": arguments_data,

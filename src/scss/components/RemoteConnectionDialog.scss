@@ -27,7 +27,6 @@ $tt-pending: $tt-yellow;
 
 .verify-connection-item {
     display: flex;
-    align-items: center;
     gap: 2px;
 
     .connection-status-icon {
@@ -40,6 +39,15 @@ $tt-pending: $tt-yellow;
         animation-name: connection-test-progress;
         color: $tt-yellow;
     }
+}
+
+.remote-querying-fieldset {
+    margin-bottom: 15px;
+}
+
+.remote-sql-test-buttons {
+    display: flex;
+    gap: 5px;
 }
 
 @keyframes connection-test-progress {

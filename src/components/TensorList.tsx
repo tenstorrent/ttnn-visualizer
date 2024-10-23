@@ -24,6 +24,7 @@ import '@blueprintjs/select/lib/css/blueprint-select.css';
 import 'styles/components/ListView.scss';
 import 'styles/components/TensorList.scss';
 import BufferDetails from './BufferDetails';
+import isValidNumber from '../functions/isValidNumber';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -326,10 +327,7 @@ const TensorList = () => {
 };
 
 function getTensorFilterName(tensor: Tensor) {
-    const bufferTypeLabel =
-        Number.isInteger(tensor.buffer_type) && tensor.buffer_type !== null
-            ? BufferTypeLabel[tensor.buffer_type]
-            : 'null';
+    const bufferTypeLabel = isValidNumber(tensor.buffer_type) ? BufferTypeLabel[tensor.buffer_type] : 'n/a';
 
     return `Tensor ${tensor.id} ${bufferTypeLabel}`;
 }
@@ -349,7 +347,7 @@ function getBufferTypeFilterOptions(tensors: Tensor[]) {
         ...new Set(
             tensors
                 ?.map((tensor) => (tensor.buffer_type !== null ? tensor.buffer_type : ''))
-                .filter((value) => Number.isInteger(value)) ?? [],
+                .filter((value) => isValidNumber(value)) ?? [],
         ),
     ] as BufferType[];
 }

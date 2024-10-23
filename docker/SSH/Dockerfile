@@ -5,7 +5,7 @@
 FROM ubuntu:latest
 
 # Install dependencies
-RUN apt update && apt install openssh-server rsync sudo -y
+RUN apt update && apt install openssh-server rsync sudo sqlite3 -y
 
 # Create directory for sshd
 RUN mkdir /var/run/sshd

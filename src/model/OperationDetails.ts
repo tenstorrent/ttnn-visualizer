@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { PlotData } from 'plotly.js';
-import { getBufferColor } from '../functions/colorGenerator';
+import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
 import { formatSize, toHex } from '../functions/math';
 import {
     BufferData,
@@ -38,7 +38,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     device_operations: Node[] = [];
 
-    private historicalTensorListByAddress: Map<number, HistoricalTensor> = new Map();
+    historicalTensorListByAddress: Map<number, HistoricalTensor> = new Map();
 
     private historicalTensorListById: Map<number, HistoricalTensor> = new Map();
 
@@ -163,6 +163,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                                 size: parseInt(node.params.size, 10),
                                 layout: node.params.layout,
                                 type: node.params.type,
+                                tensorId: this.getTensorForAddress(parseInt(node.params.address, 10))?.id,
                             });
                         }
                     }
@@ -188,10 +189,16 @@ export class OperationDetails implements Partial<OperationDetailsData> {
     private getChartData(memory: Chunk[], overrides?: PlotDataOverrides): Partial<PlotData>[] {
         return memory.map((chunk) => {
             const { address, size } = chunk;
-            const color = overrides?.color
-                ? overrides?.color
-                : getBufferColor(address + (overrides?.colorVariance || 0));
             const tensor = this.getTensorForAddress(address);
+            const tensorColor = getTensorColor(tensor?.id);
+            let color;
+            if (overrides?.color) {
+                color = overrides?.color;
+            } else {
+                color =
+                    tensorColor !== undefined ? tensorColor : getBufferColor(address + (overrides?.colorVariance || 0));
+            }
+
             return {
                 x: [address + size / 2],
                 y: [1],
@@ -297,6 +304,7 @@ ${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
                     return {
                         address: buffer.address,
                         size: buffer.max_size_per_bank,
+                        tensorId: this.getTensorForAddress(buffer.address)?.id,
                     };
                 })
                 .sort((a, b) => a.address - b.address) || [];
@@ -416,7 +424,6 @@ ${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cb
 
         const currentOperation = this.operations.find((op) => op.id === this.id);
 
-        // eslint-disable-next-line no-restricted-syntax
         for (const buffer of this.buffers) {
             const bufferAddress = buffer.address;
             const bufferType = buffer.buffer_type;

@@ -2,13 +2,22 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup } from '@blueprintjs/core';
+import {
+    Button,
+    ButtonGroup,
+    Checkbox,
+    Dialog,
+    DialogBody,
+    DialogFooter,
+    FormGroup,
+    InputGroup,
+} from '@blueprintjs/core';
 import { FC, useState } from 'react';
+import 'styles/components/RemoteConnectionDialog.scss';
+import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
+import { RemoteConnection } from '../../definitions/RemoteConnection';
 import useRemoteConnection from '../../hooks/useRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
-import 'styles/components/RemoteConnectionDialog.scss';
-import { RemoteConnection } from '../../definitions/RemoteConnection';
-import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 
 interface RemoteConnectionDialogProps {
     title?: string;
@@ -34,10 +43,23 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     ];
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
-    const { testConnection } = useRemoteConnection();
+    const { testConnection, fetchSqlitePath } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
+    const [isDetectingBinaryPath, setIsDetectingBinaryPath] = useState(false);
 
     const isValidConnection = connectionTests.every((status) => status.status === ConnectionTestStates.OK);
+
+    const getSqlitePath = async () => {
+        setIsDetectingBinaryPath(true);
+        const status = await fetchSqlitePath(connection);
+        if (status.status === ConnectionTestStates.OK) {
+            setConnection({ ...connection, sqliteBinaryPath: status.message });
+        }
+        if (status.status === ConnectionTestStates.FAILED) {
+            setConnection({ ...connection, sqliteBinaryPath: 'Path Not Found' });
+        }
+        setIsDetectingBinaryPath(false);
+    };
 
     const testConnectionStatus = async () => {
         setIsTestingconnection(true);
@@ -48,9 +70,8 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
         setConnectionTests([sshProgressStatus, folderProgressStatus]);
 
         try {
-            const [sshStatus, folderStatus] = await testConnection(connection);
-
-            setConnectionTests([sshStatus, folderStatus]);
+            const statuses = await testConnection(connection);
+            setConnectionTests(statuses);
         } catch (err) {
             // TODO: Look at error handling
             setConnectionTests([
@@ -133,6 +154,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                         }}
                     />
                 </FormGroup>
+
                 <FormGroup
                     label='Remote Folder path'
                     labelFor='text-input'
@@ -144,24 +166,58 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                         onChange={(e) => setConnection({ ...connection, path: e.target.value })}
                     />
                 </FormGroup>
+
+                <FormGroup>
+                    <Checkbox
+                        checked={connection.useRemoteQuerying}
+                        label='Use Remote Querying'
+                        onChange={(e) => setConnection({ ...connection, useRemoteQuerying: e.target.checked })}
+                    />
+                </FormGroup>
+                {connection.useRemoteQuerying && (
+                    <fieldset className='remote-querying-fieldset'>
+                        <legend>Remote Querying Configuration</legend>
+
+                        <FormGroup
+                            label='Remote SQLite Binary Location'
+                            labelFor='text-input'
+                            subLabel='SQLite Binary Location'
+                        >
+                            <InputGroup
+                                key='sqliteBinaryPath'
+                                value={connection.sqliteBinaryPath}
+                                onChange={(e) => setConnection({ ...connection, sqliteBinaryPath: e.target.value })}
+                            />
+                        </FormGroup>
+
+                        <ButtonGroup className='remote-sql-test-buttons'>
+                            <Button
+                                text='Detect Path'
+                                disabled={isDetectingBinaryPath}
+                                loading={isDetectingBinaryPath}
+                                onClick={getSqlitePath}
+                            />
+                        </ButtonGroup>
+                    </fieldset>
+                )}
+
                 <fieldset>
                     <legend>Test Connection</legend>
-
-                    <ConnectionTestMessage
-                        status={connectionTests[0].status}
-                        message={connectionTests[0].message}
-                    />
-
-                    <ConnectionTestMessage
-                        status={connectionTests[1].status}
-                        message={connectionTests[1].message}
-                    />
+                    {connectionTests.map((v) => {
+                        return (
+                            <ConnectionTestMessage
+                                key={v.message}
+                                status={v.status}
+                                message={v.message}
+                            />
+                        );
+                    })}
 
                     <br />
 
                     <Button
                         text='Test Connection'
-                        disabled={isTestingConnection}
+                        disabled={isTestingConnection || isDetectingBinaryPath}
                         loading={isTestingConnection}
                         onClick={testConnectionStatus}
                     />

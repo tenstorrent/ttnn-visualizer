@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Operation, Tensor } from './Graph';
-import { RemoteConnection } from '../definitions/RemoteConnection';
+import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
 
 export interface TensorData extends Tensor {
     shape: string;
@@ -40,9 +40,10 @@ export interface OperationDetailsData extends Operation {
     device_operations: Node[];
 }
 
-export interface ActiveReport {
-    name: string;
+export interface TabSession {
+    active_report?: { name: string };
     remote_connection?: RemoteConnection;
+    remote_folder?: RemoteFolder;
 }
 
 export enum FileStatus {
@@ -103,6 +104,7 @@ export const defaultBuffer: BufferData = {
 export interface Chunk {
     address: number;
     size: number;
+    tensorId?: number;
 }
 
 export interface FragmentationEntry extends Chunk {
@@ -192,4 +194,21 @@ export interface CircularBuffer extends Chunk {
 export interface TensorBuffer extends Chunk {
     layout: DeviceOperationLayoutTypes;
     type: DeviceOperationTypes;
+}
+
+export interface BufferPage {
+    address: number;
+    bank_id: number;
+    buffer_type: number;
+    core_x: number;
+    core_y: number;
+    device_id: number;
+    operation_id: number;
+    page_address: number;
+    page_index: number;
+    page_size: number;
+    id: string;
+
+    tensor_id?: number;
+    color?: string;
 }

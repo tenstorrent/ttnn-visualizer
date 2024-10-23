@@ -3,10 +3,17 @@ import json
 
 from flask import Blueprint, Response
 
-from ttnn_visualizer.decorators import with_report_path
-from ttnn_visualizer.exceptions import RemoteFolderException
-from ttnn_visualizer.models import RemoteFolder, RemoteConnection, StatusMessage
+from ttnn_visualizer.decorators import with_session
+from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.exceptions import RemoteConnectionException, RemoteSqliteException
+from ttnn_visualizer.models import (
+    RemoteFolder,
+    RemoteConnection,
+    StatusMessage,
+    TabSession,
+)
 from ttnn_visualizer.queries import DatabaseQueries
+from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path, check_sqlite_path
 from ttnn_visualizer.sockets import (
     FileProgress,
     emit_file_status,
@@ -27,14 +34,15 @@ from ttnn_visualizer.serializers import (
 )
 from ttnn_visualizer.sessions import (
     update_tab_session,
-    get_or_create_tab_session,
 )
 from ttnn_visualizer.sftp_operations import (
     sync_test_folders,
     read_remote_file,
-    check_remote_path,
+    check_remote_path_for_projects,
     get_remote_test_folders,
+    check_remote_path_exists,
 )
+from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.utils import timer
 
 logger = logging.getLogger(__name__)
@@ -43,10 +51,10 @@ api = Blueprint("api", __name__, url_prefix="/api")
 
 
 @api.route("/operations", methods=["GET"])
-@with_report_path
+@with_session
 @timer
-def operation_list(report_path):
-    with DatabaseQueries(report_path) as db:
+def operation_list(session):
+    with DatabaseQueries(session) as db:
         operations = list(db.query_operations())
         operations.sort(key=lambda o: o.operation_id)
         operation_arguments = list(db.query_operation_arguments())
@@ -72,10 +80,10 @@ def operation_list(report_path):
 
 
 @api.route("/operations/<operation_id>", methods=["GET"])
-@with_report_path
+@with_session
 @timer
-def operation_detail(operation_id, report_path):
-    with DatabaseQueries(report_path) as db:
+def operation_detail(operation_id, session):
+    with DatabaseQueries(session) as db:
         operation = db.query_operation_by_id(operation_id)
 
         if not operation:
@@ -123,12 +131,14 @@ def operation_detail(operation_id, report_path):
         "GET",
     ],
 )
-@with_report_path
+@with_session
 @timer
-def operation_history(report_path):
+def operation_history(session: TabSession):
 
     operation_history_filename = "operation_history.json"
-    operation_history_file = Path(report_path).parent / operation_history_filename
+    operation_history_file = (
+        Path(str(session.report_path)).parent / operation_history_filename
+    )
     if not operation_history_file.exists():
         return []
     with open(operation_history_file, "r") as file:
@@ -136,10 +146,10 @@ def operation_history(report_path):
 
 
 @api.route("/config")
-@with_report_path
+@with_session
 @timer
-def get_config(report_path):
-    config_file = Path(report_path).parent.joinpath("config.json")
+def get_config(session: TabSession):
+    config_file = Path(str(session.report_path)).parent.joinpath("config.json")
     if not config_file.exists():
         return {}
     with open(config_file, "r") as file:
@@ -147,26 +157,26 @@ def get_config(report_path):
 
 
 @api.route("/tensors", methods=["GET"])
-@with_report_path
+@with_session
 @timer
-def tensors_list(report_path):
-    with DatabaseQueries(report_path) as db:
+def tensors_list(session: TabSession):
+    with DatabaseQueries(session) as db:
         tensors = list(db.query_tensors())
         producers_consumers = list(db.query_producers_consumers())
         return serialize_tensors(tensors, producers_consumers)
 
 
 @api.route("/buffer", methods=["GET"])
-@with_report_path
+@with_session
 @timer
-def buffer_detail(report_path):
+def buffer_detail(session: TabSession):
     address = request.args.get("address")
     operation_id = request.args.get("operation_id")
 
     if not address or not operation_id:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
-    with DatabaseQueries(report_path) as db:
+    with DatabaseQueries(session) as db:
         buffer = db.query_next_buffer(operation_id, address)
         if not buffer:
             return Response(status=HTTPStatus.NOT_FOUND)
@@ -174,29 +184,34 @@ def buffer_detail(report_path):
 
 
 @api.route("/buffer-pages", methods=["GET"])
-@with_report_path
+@with_session
 @timer
-def buffer_pages(report_path):
+def buffer_pages(session: TabSession):
     address = request.args.get("address")
     operation_id = request.args.get("operation_id")
     buffer_type = request.args.get("buffer_type", "")
+
+    if address:
+        addresses = [addr.strip() for addr in address.split(",")]
+    else:
+        addresses = None
 
     if buffer_type and str.isdigit(buffer_type):
         buffer_type = int(buffer_type)
     else:
         buffer_type = None
 
-    with DatabaseQueries(report_path) as db:
-        buffers = list(db.query_buffer_pages(operation_id, address, buffer_type))
+    with DatabaseQueries(session) as db:
+        buffers = list(db.query_buffer_pages(operation_id, addresses, buffer_type))
         return serialize_buffer_pages(buffers)
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
-@with_report_path
+@with_session
 @timer
-def tensor_detail(tensor_id, report_path):
+def tensor_detail(tensor_id, session: TabSession):
 
-    with DatabaseQueries(report_path) as db:
+    with DatabaseQueries(session) as db:
         tensor = db.query_tensor_by_id(tensor_id)
         if not tensor:
             return Response(status=HTTPStatus.NOT_FOUND)
@@ -205,8 +220,8 @@ def tensor_detail(tensor_id, report_path):
 
 
 @api.route("/operation-buffers", methods=["GET"])
-@with_report_path
-def get_operations_buffers(report_path):
+@with_session
+def get_operations_buffers(session: TabSession):
 
     buffer_type = request.args.get("buffer_type", "")
     if buffer_type and str.isdigit(buffer_type):
@@ -214,15 +229,15 @@ def get_operations_buffers(report_path):
     else:
         buffer_type = None
 
-    with DatabaseQueries(report_path) as db:
+    with DatabaseQueries(session) as db:
         buffers = list(db.query_buffers(buffer_type=buffer_type))
         operations = list(db.query_operations())
         return serialize_operations_buffers(operations, buffers)
 
 
 @api.route("/operation-buffers/<operation_id>", methods=["GET"])
-@with_report_path
-def get_operation_buffers(operation_id, report_path):
+@with_session
+def get_operation_buffers(operation_id, session: TabSession):
 
     buffer_type = request.args.get("buffer_type", "")
     if buffer_type and str.isdigit(buffer_type):
@@ -230,7 +245,7 @@ def get_operation_buffers(operation_id, report_path):
     else:
         buffer_type = None
 
-    with DatabaseQueries(report_path) as db:
+    with DatabaseQueries(session) as db:
         operation = db.query_operation_by_id(operation_id)
         buffers = list(
             db.query_buffers_by_operation_id(operation_id, buffer_type=buffer_type)
@@ -241,9 +256,9 @@ def get_operation_buffers(operation_id, report_path):
 
 
 @api.route("/devices", methods=["GET"])
-@with_report_path
-def get_devices(report_path):
-    with DatabaseQueries(report_path) as db:
+@with_session
+def get_devices(session: TabSession):
+    with DatabaseQueries(session) as db:
         devices = list(db.query_devices())
         return serialize_devices(devices)
 
@@ -258,18 +273,19 @@ def create_upload_files():
     """Handle file uploads and emit progress for each file."""
     files = request.files.getlist("files")
     local_dir = current_app.config["LOCAL_DATA_DIRECTORY"]
-    filenames = [Path(f.filename).name for f in files]
+    filenames = [Path(str(f.filename)).name for f in files]
 
     logger.info(f"Received files: {filenames}")
 
     # Validate necessary files
     if "db.sqlite" not in filenames or "config.json" not in filenames:
         return StatusMessage(
-            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            status=ConnectionTestStates.FAILED.value,
             message="Invalid project directory.",
         ).model_dump()
 
-    report_name = files[0].filename.split("/")[0]
+    unsplit_report_name = str(files[0].filename)
+    report_name = unsplit_report_name.split("/")[0]
     report_directory = Path(local_dir)
     logger.info(f"Writing report files to {report_directory}/{report_name}")
 
@@ -278,10 +294,10 @@ def create_upload_files():
     tab_id = request.args.get("tabId")
 
     for index, file in enumerate(files):
-        current_file_name = file.filename
+        current_file_name = str(file.filename)
         logger.info(f"Processing file: {current_file_name}")
 
-        destination_file = Path(report_directory, Path(current_file_name))
+        destination_file = Path(report_directory, Path(str(current_file_name)))
         logger.info(f"Writing file to {destination_file}")
 
         # Create the directory if it doesn't exist
@@ -299,7 +315,8 @@ def create_upload_files():
             finished_files=processed_files,
             status=FileStatus.DOWNLOADING,
         )
-        emit_file_status(progress, tab_id)
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(progress, tab_id)
 
         # Save the file locally
         file.save(destination_file)
@@ -308,71 +325,143 @@ def create_upload_files():
         processed_files += 1
         progress.percent_of_current = 100
         progress.finished_files = processed_files
-        emit_file_status(progress, tab_id)
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(progress, tab_id)
 
     # Update the session after all files are uploaded
     update_tab_session(tab_id=tab_id, active_report_data={"name": report_name})
 
     # Emit final success status after all files are processed
     final_progress = FileProgress(
-        current_file_name=None,
+        current_file_name="",
         number_of_files=total_files,
         percent_of_current=100,
         finished_files=processed_files,
         status=FileStatus.FINISHED,
     )
-    emit_file_status(final_progress, tab_id)
 
-    return StatusMessage(status=HTTPStatus.OK, message="Success.").model_dump()
+    if current_app.config["USE_WEBSOCKETS"]:
+        emit_file_status(final_progress, tab_id)
+
+    return StatusMessage(
+        status=ConnectionTestStates.OK.value, message="Success."
+    ).model_dump()
 
 
 @api.route("/remote/folder", methods=["POST"])
 def get_remote_folders():
-    connection = request.json
+    connection = RemoteConnection.model_validate(request.json, strict=False)
     try:
-        remote_folders = get_remote_test_folders(RemoteConnection(**connection))
+        remote_folders = get_remote_test_folders(
+            RemoteConnection.model_validate(connection, strict=False)
+        )
         return [r.model_dump() for r in remote_folders]
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
 
 
 @api.route("/remote/test", methods=["POST"])
 def test_remote_folder():
-    connection = request.json
+    connection_data = request.json
+    connection = RemoteConnection.model_validate(connection_data)
+    statuses = []
+
+    def add_status(status, message):
+        statuses.append(StatusMessage(status=status, message=message))
+
+    def has_failures():
+        return any(
+            status.status != ConnectionTestStates.OK.value for status in statuses
+        )
+
+    # Test SSH Connection
     try:
-        check_remote_path(RemoteConnection(**connection))
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
-    return Response(status=HTTPStatus.OK)
+        get_client(connection)
+        add_status(ConnectionTestStates.OK.value, "SSH connection established.")
+    except RemoteConnectionException as e:
+        add_status(ConnectionTestStates.FAILED.value, e.message)
+
+    # Test Directory Configuration
+    if not has_failures():
+        try:
+            check_remote_path_exists(connection)
+            add_status(ConnectionTestStates.OK.value, "Remote folder path exists.")
+        except RemoteConnectionException as e:
+            add_status(ConnectionTestStates.FAILED.value, e.message)
+
+    # Check for Project Configurations
+    if not has_failures():
+        try:
+            check_remote_path_for_projects(connection)
+        except RemoteConnectionException as e:
+            add_status(ConnectionTestStates.FAILED.value, e.message)
+
+    # Test Sqlite binary path configuration
+    if not has_failures() and connection.useRemoteQuerying:
+        if not connection.sqliteBinaryPath:
+            add_status(
+                ConnectionTestStates.FAILED.value, "SQLite binary path not provided"
+            )
+        else:
+            try:
+                check_sqlite_path(connection)
+                add_status(ConnectionTestStates.OK.value, "SQLite binary found.")
+            except RemoteConnectionException as e:
+                add_status(ConnectionTestStates.FAILED.value, e.message)
+
+    return [status.model_dump() for status in statuses]
 
 
 @api.route("/remote/read", methods=["POST"])
 def read_remote_folder():
-    connection = request.json
+    connection = RemoteConnection.model_validate(request.json, strict=False)
     try:
-        content = read_remote_file(RemoteConnection(**connection))
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
+        content = read_remote_file(connection)
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
     return Response(status=200, response=content)
 
 
 @api.route("/remote/sync", methods=["POST"])
 def sync_remote_folder():
     remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
+    use_compression = current_app.config["COMPRESS_REMOTE_FILES"]
     request_body = request.json
     connection = request_body.get("connection")
     folder = request_body.get("folder")
     tab_id = request.args.get("tabId", None)
+    connection = RemoteConnection.model_validate(
+        request_body.get("connection"), strict=False
+    )
     try:
         sync_test_folders(
-            RemoteConnection(**connection),
+            connection,
             RemoteFolder(**folder),
             remote_dir,
+            use_compression,
             sid=tab_id,
         )
-    except RemoteFolderException as e:
-        return Response(status=e.status, response=e.message)
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
     return Response(status=HTTPStatus.OK)
+
+
+@api.route("/remote/sqlite/detect-path", methods=["POST"])
+def detect_sqlite_path():
+    connection = request.json
+    connection = RemoteConnection.model_validate(connection, strict=False)
+    try:
+        path = get_sqlite_path(connection=connection)
+        if path:
+            return StatusMessage(
+                status=ConnectionTestStates.OK.value, message=path
+            ).model_dump()
+    except RemoteSqliteException as e:
+        current_app.logger.error(f"Unable to detect SQLite3 path {str(e)}")
+        return StatusMessage(
+            status=ConnectionTestStates.FAILED.value,
+            message="Unable to detect SQLite3 path. See logs",
+        )
 
 
 @api.route("/remote/use", methods=["POST"])
@@ -381,20 +470,18 @@ def use_remote_folder():
     folder = request.json.get("folder", None)
     if not connection or not folder:
         return Response(status=HTTPStatus.BAD_REQUEST)
-
-    connection = RemoteConnection(**connection)
+    connection = RemoteConnection.model_validate(connection, strict=False)
     folder = RemoteFolder(**folder)
     report_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
     report_folder = Path(folder.remotePath).name
     connection_directory = Path(report_data_directory, connection.host, report_folder)
 
-    if not connection_directory.exists():
+    if not connection.useRemoteQuerying and not connection_directory.exists():
         return Response(
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
             response=f"{connection_directory} does not exist.",
         )
 
-    # Set Active Report on View
     remote_path = f"{Path(report_data_directory).name}/{connection.host}/{connection_directory.name}"
 
     tab_id = request.args.get("tabId")
@@ -403,7 +490,8 @@ def use_remote_folder():
     update_tab_session(
         tab_id=tab_id,
         active_report_data={"name": report_folder},
-        remote_connection_data=connection.dict(),
+        remote_connection=connection,
+        remote_folder=folder,
     )
 
     return Response(status=HTTPStatus.OK)
@@ -414,23 +502,8 @@ def health_check():
     return Response(status=HTTPStatus.OK)
 
 
-@api.route("/reports/active", methods=["GET"])
-def get_active_folder():
+@api.route("/session", methods=["GET"])
+@with_session
+def get_tab_session(session: TabSession):
     # Used to gate UI functions if no report is active
-
-    tab_id = request.args.get("tabId", None)
-    current_app.logger.info(f"TabID: {tab_id}")
-    if tab_id:
-        session = get_or_create_tab_session(
-            tab_id=tab_id
-        )  # Capture both the session and created flag
-
-        current_app.logger.info(f"Session: {session}")
-        if session and session.active_report:
-            active_report = session.active_report
-            return {
-                "name": active_report.get("name"),
-                "remote_connection": active_report.get("remote_connection", None),
-            }
-
-    return {"name": None, "host": None}
+    return session.dict()

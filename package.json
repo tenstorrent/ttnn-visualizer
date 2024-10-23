@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualzer",
   "private": true,
-  "version": "0.6.1",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,9 +10,8 @@
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
     "flask:start": "PYTHONPATH=backend python -m ttnn_visualizer.app",
+    "flask:start-debug": "DEBUG=true PYTHONPATH=backend python -m ttnn_visualizer.app",
     "flask:test": "PYTHONPATH=backend pytest backend/ttnn_visualizer/tests",
-    "flask:start-threaded": "PYTHONPATH=backend flask --app ttnn_visualizer.app run --with-threads -h localhost -p 8000",
-    "flask:start-debug": "PYTHONPATH=backend flask --app ttnn_visualizer.app --debug run -h localhost -p 8000",
     "build:wheel": "npm run build && python -m build --wheel",
     "compose:up": "docker-compose up web --build",
     "docker:build:ssh": "docker build docker/SSH --build-arg username=$(logname) -t local-ssh-image",

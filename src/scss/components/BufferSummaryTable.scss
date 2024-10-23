@@ -1,4 +1,63 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
+.buffer-summary-filter {
+    margin-bottom: 20px;
+}
+
 .buffer-summary-table {
     display: inline-flex;
     height: 600px;
+
+    .sortable-table-header {
+        cursor: pointer;
+        position: absolute;
+        width: 100%;
+
+        // this is a little hackish, maybe find a more elegant solution
+        height: 30px;
+        top: -30px;
+
+        &:hover,
+        &:focus {
+            .sort-icon {
+                display: block;
+                opacity: 0.5;
+            }
+        }
+
+        .sort-icon {
+            display: none;
+            right: 5px;
+            top: calc(50% - 8px);
+            position: absolute;
+            padding-left: 25px;
+
+
+            &.is-active {
+                display: block;
+                opacity: 1;
+            }
+        }
+    }
+
+    .cell-header {
+        .bp5-table-truncated-text {
+            padding-right: 15px;
+        }
+    }
+
+    .operation-cell {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+
+        .memory-color-block {
+            width: 12px;
+            height: 12px;
+            margin-bottom: 1px; // Offset needed because align-items center doesn't quite center it in the table cell
+        }
+    }
 }
+

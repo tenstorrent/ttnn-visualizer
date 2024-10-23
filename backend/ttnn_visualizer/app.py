@@ -1,16 +1,22 @@
 import logging
+import os
 import subprocess
 from os import environ
 from pathlib import Path
+import sys
+from typing import cast
 
 import flask
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from ttnn_visualizer.settings import Config
+from ttnn_visualizer.exceptions import DatabaseFileNotFoundException
+from ttnn_visualizer.settings import Config, DefaultConfig
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(settings_override=None):
@@ -27,21 +33,18 @@ def create_app(settings_override=None):
     if dotenv_path.exists():
         load_dotenv(str(dotenv_path))
 
-    static_assets_dir = environ.get("STATIC_ASSETS", "/public")
     flask_env = environ.get("FLASK_ENV", "development")
 
-    app = Flask(__name__, static_folder=static_assets_dir, static_url_path="/")
+    config = cast(DefaultConfig, Config())
 
-    app.config.from_object(Config())
-
+    app = Flask(__name__, static_folder=config.STATIC_ASSETS_DIR, static_url_path="/")
     logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
 
-    app.logger.info(f"Starting TTNN visualizer in {flask_env} mode")
+    app.config.from_object(config)
 
     if settings_override:
         app.config.update(settings_override)
 
-    app.config["USE_WEBSOCKETS"] = True  # Set this based on environment
     middleware(app)
 
     app.register_blueprint(api)
@@ -70,7 +73,8 @@ def extensions(app: flask.Flask):
     """
 
     flask_static_digest.init_app(app)
-    socketio.init_app(app)
+    if app.config["USE_WEBSOCKETS"]:
+        socketio.init_app(app)
     db.init_app(app)
 
     app.config["SESSION_TYPE"] = "sqlalchemy"
@@ -79,7 +83,8 @@ def extensions(app: flask.Flask):
     with app.app_context():
         db.drop_all()
 
-    register_handlers(socketio)
+    if app.config["USE_WEBSOCKETS"]:
+        register_handlers(socketio)
 
     # Create the tables within the application context
     with app.app_context():
@@ -99,6 +104,14 @@ def middleware(app: flask.Flask):
     :param app: Flask application instance
     :return: None
     """
+
+    @app.errorhandler(DatabaseFileNotFoundException)
+    def handle_database_not_found_error(error):
+        # Return a JSON response with a 404 status code
+        response = jsonify({"error": str(error)})
+        response.status_code = 404
+        return response
+
     # Only use the middleware if running in pure WSGI (HTTP requests)
     if not app.config.get("USE_WEBSOCKETS"):
         # Enable the Flask interactive debugger in the browser for development.
@@ -119,8 +132,20 @@ def middleware(app: flask.Flask):
     return None
 
 
-if __name__ == "__main__":
+def main():
+
+    run_command = sys.argv[0].split("/")
+    if run_command[-1] == "ttnn-visualizer":
+        os.environ.setdefault("FLASK_ENV", "production")
+
     config = Config()
+
+    # Check if DEBUG environment variable is set
+    debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
+    if config.PRINT_ENV:
+        print("ENVIRONMENT:")
+        for key, value in config.to_dict().items():
+            print(f"{key}={value}")
 
     gunicorn_args = [
         "gunicorn",
@@ -128,9 +153,16 @@ if __name__ == "__main__":
         config.GUNICORN_WORKER_CLASS,
         "-w",
         config.GUNICORN_WORKERS,
-        config.GUNICORN_APP_MODULE,
         "-b",
         config.GUNICORN_BIND,
+        config.GUNICORN_APP_MODULE,
     ]
 
+    if debug_mode:
+        gunicorn_args.insert(1, "--reload")  # Add the --reload flag if in debug mode
+
     subprocess.run(gunicorn_args)
+
+
+if __name__ == "__main__":
+    main()

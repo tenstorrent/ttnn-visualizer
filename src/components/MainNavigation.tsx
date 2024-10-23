@@ -7,13 +7,13 @@ import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useQuery } from 'react-query';
 import ROUTES from '../definitions/routes';
-import { fetchActiveReport } from '../hooks/useAPI';
+import { fetchTabSession } from '../hooks/useAPI';
 import 'styles/components/MainNavigation.scss';
 
 function MainNavigation() {
     const navigate = useNavigate();
-    const { data: activeReport } = useQuery('active_report', {
-        queryFn: fetchActiveReport,
+    const { data: tabSession } = useQuery('tabSession', {
+        queryFn: fetchTabSession,
         initialData: null,
     });
 
@@ -39,7 +39,7 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.OPERATIONS)}
                     active={hasMatchingPath(ROUTES.OPERATIONS)}
                     icon={IconNames.CUBE}
-                    disabled={!activeReport?.name}
+                    disabled={!tabSession?.active_report}
                     minimal
                     large
                     className='operations-button'
@@ -50,7 +50,7 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.TENSORS)}
                     active={hasMatchingPath(ROUTES.TENSORS)}
                     icon={IconNames.FLOW_LINEAR}
-                    disabled={!activeReport?.name}
+                    disabled={!tabSession?.active_report}
                     minimal
                     large
                     className='tensors-button'
@@ -61,7 +61,7 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.BUFFERS)}
                     active={window.location.pathname === ROUTES.BUFFERS}
                     icon={IconNames.SMALL_SQUARE}
-                    disabled={!activeReport?.name}
+                    disabled={!tabSession?.active_report}
                     minimal
                     large
                     className='buffers-button'

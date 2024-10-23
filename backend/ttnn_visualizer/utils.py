@@ -38,7 +38,7 @@ def get_report_path(active_report, current_app, remote_connection=None):
         # Check if there's an associated RemoteConnection
         if remote_connection:
             # Use the remote directory if a remote connection exists
-            base_dir = Path(remote_dir).joinpath(remote_connection.get("host"))
+            base_dir = Path(remote_dir).joinpath(remote_connection.host)
         else:
             # Default to local directory if no remote connection is present
             base_dir = local_dir

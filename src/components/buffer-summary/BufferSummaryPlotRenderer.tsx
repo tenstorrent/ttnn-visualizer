@@ -8,31 +8,37 @@ import classNames from 'classnames';
 import { Switch } from '@blueprintjs/core';
 import { Link } from 'react-router-dom';
 import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
-import { BuffersByOperationData, useBuffers, useDevices, useOperationsList } from '../../hooks/useAPI';
-import { BufferType } from '../../model/BufferType';
+import { BuffersByOperationData, useDevices } from '../../hooks/useAPI';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
-import { HistoricalTensor, Operation, Tensor } from '../../model/Graph';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/routes';
+import isValidNumber from '../../functions/isValidNumber';
+import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
-function BufferSummaryPlotRenderer() {
+interface BufferSummaryPlotRendererProps {
+    buffersByOperation: BuffersByOperationData[];
+    tensorListByOperation: HistoricalTensorsByOperation;
+}
+
+function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }: BufferSummaryPlotRendererProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [isZoomedIn, setIsZoomedIn] = useState(false);
-    const { data: buffersByOperation, isLoading: isLoadingBuffers } = useBuffers(BufferType.L1);
-    const { data: operationsList, isLoading: isLoadingOperations } = useOperationsList();
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const scrollElementRef = useRef(null);
 
-    const numberOfOperations =
-        buffersByOperation && buffersByOperation.length >= 0 ? buffersByOperation.length : PLACEHOLDER_ARRAY_SIZE;
+    const numberOfOperations = useMemo(
+        () =>
+            buffersByOperation && buffersByOperation.length >= 0 ? buffersByOperation.length : PLACEHOLDER_ARRAY_SIZE,
+        [buffersByOperation],
+    );
 
     // Will need refactoring to handle multiple devices
     const memorySize = !isLoadingDevices && devices ? devices[0].worker_l1_size : 0;
@@ -43,11 +49,10 @@ function BufferSummaryPlotRenderer() {
 
         buffersByOperation?.forEach((operation) =>
             operation.buffers.forEach((buffer) => {
-                minValue = minValue && !Number.isNaN(minValue) ? Math.min(minValue, buffer.address) : buffer.address;
-                maxValue =
-                    maxValue && !Number.isNaN(maxValue)
-                        ? Math.max(maxValue, buffer.address + buffer.size)
-                        : buffer.address + buffer.size;
+                minValue = isValidNumber(minValue) ? Math.min(minValue, buffer.address) : buffer.address;
+                maxValue = isValidNumber(maxValue)
+                    ? Math.max(maxValue, buffer.address + buffer.size)
+                    : buffer.address + buffer.size;
             }),
         );
 
@@ -57,11 +62,6 @@ function BufferSummaryPlotRenderer() {
     const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
     const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
     const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
-
-    const tensorList = useMemo(
-        () => createHistoricalTensorList(operationsList, buffersByOperation),
-        [operationsList, buffersByOperation],
-    );
 
     const virtualizer = useVirtualizer({
         count: buffersByOperation?.length || PLACEHOLDER_ARRAY_SIZE,
@@ -78,7 +78,7 @@ function BufferSummaryPlotRenderer() {
         setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
     };
 
-    return buffersByOperation && !isLoadingBuffers && !isLoadingOperations && !isLoadingDevices && tensorList ? (
+    return buffersByOperation && !isLoadingDevices && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
             <Switch
                 label='Buffer zoom'
@@ -154,6 +154,7 @@ function BufferSummaryPlotRenderer() {
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
+                                        tensorList={tensorListByOperation.get(operation.id)!}
                                     />
                                     <Link
                                         to={`${ROUTES.OPERATIONS}/${operation.id}`}
@@ -171,57 +172,6 @@ function BufferSummaryPlotRenderer() {
     ) : (
         <LoadingSpinner />
     );
-}
-
-// Modified from 'createHitoricalTensorList' function in OperationDetails.ts
-// TODO: Refactor to optimise historical tensor lookup
-function createHistoricalTensorList(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
-    const tensorsByBufferAddress: Map<number, HistoricalTensor> = new Map();
-
-    if (!operations || !buffersByOperation) {
-        return tensorsByBufferAddress;
-    }
-
-    buffersByOperation.forEach((operation) => {
-        const currentOperation = operations.find((op) => op.id === operation.id);
-
-        // eslint-disable-next-line no-restricted-syntax
-        for (const buffer of operation.buffers) {
-            const bufferAddress = buffer.address;
-            const bufferType = buffer.buffer_type;
-            let opId: number | undefined;
-            let tensor: Tensor | undefined;
-
-            for (let i = operations.indexOf(currentOperation!); i >= 0; i--) {
-                const op = operations[i];
-                opId = op.id;
-
-                tensor = op.inputs.find((input) => input.address === bufferAddress);
-
-                if (tensor !== undefined) {
-                    break;
-                }
-
-                tensor = op.outputs.find((output) => output.address === bufferAddress);
-
-                if (tensor !== undefined) {
-                    break;
-                }
-            }
-
-            if (tensor !== undefined) {
-                const historicalTensor: HistoricalTensor = {
-                    ...tensor,
-                    parentOperationId: opId!,
-                    historical: opId! !== operation.id,
-                    buffer_type: bufferType,
-                };
-                tensorsByBufferAddress.set(bufferAddress, historicalTensor);
-            }
-        }
-    });
-
-    return tensorsByBufferAddress;
 }
 
 export default BufferSummaryPlotRenderer;

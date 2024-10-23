@@ -9,17 +9,23 @@ class DefaultConfig(object):
     SECRET_KEY = os.getenv("SECRET_KEY", "90909")
     DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))
     TESTING = False
+    PRINT_ENV = True
+    COMPRESS_REMOTE_FILES = False
 
     # Path Settings
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
     REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
+    STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0
 
     # File Name Configs
     TEST_CONFIG_FILE = "config.json"
     SQLITE_DB_PATH = "db.sqlite"
+
+    # For development you may want to disable sockets
+    USE_WEBSOCKETS = str_to_bool(os.getenv("USE_WEBSOCKETS", "true"))
 
     # SQL Alchemy Settings
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(APPLICATION_DIR, 'ttnn.db')}"
@@ -41,6 +47,22 @@ class DefaultConfig(object):
     # Session Settings
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = False  # For development on HTTP
+
+    def override_with_env_variables(self):
+        """Override config values with environment variables."""
+        for key, value in self.__class__.__dict__.items():
+            if not key.startswith("_"):  # Skip private/protected attributes
+                env_value = os.getenv(key)
+                if env_value is not None:
+                    setattr(self, key, env_value)
+
+    def to_dict(self):
+        """Return all config values as a dictionary, including inherited attributes."""
+        return {
+            key: getattr(self, key)
+            for key in dir(self)
+            if not key.startswith("_") and not callable(getattr(self, key))
+        }
 
 
 class DevelopmentConfig(DefaultConfig):
@@ -64,6 +86,7 @@ class Config:
         if cls._instance is None:
             cls._instance = super(Config, cls).__new__(cls)
             cls._instance = cls._determine_config()
+            cls._instance.override_with_env_variables()
         return cls._instance
 
     @staticmethod

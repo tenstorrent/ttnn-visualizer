@@ -3,16 +3,25 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import axios from 'axios';
-import useAppConfig from './useAppConfig';
-import { MountRemoteFolder, RemoteConnection, RemoteFolder, SyncRemoteFolder } from '../definitions/RemoteConnection';
 import { ConnectionStatus, ConnectionTestStates } from '../definitions/ConnectionStatus';
+import { MountRemoteFolder, RemoteConnection, RemoteFolder, SyncRemoteFolder } from '../definitions/RemoteConnection';
 import axiosInstance from '../libs/axiosInstance';
+import useAppConfig from './useAppConfig';
 
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
 
+    // TODO Ensure on form that SSH connection is valid first
+    const fetchSqlitePath = async (connection: Partial<RemoteConnection>) => {
+        const { data: connectionTestStates } = await axiosInstance.post(
+            `${import.meta.env.VITE_API_ROOT}/remote/sqlite/detect-path`,
+            connection,
+        );
+        return connectionTestStates;
+    };
+
     const testConnection = async (connection: Partial<RemoteConnection>) => {
-        let connectionStatus: ConnectionStatus[] = [
+        const connectionStatus: ConnectionStatus[] = [
             {
                 status: ConnectionTestStates.FAILED,
                 message: 'No connection provided',
@@ -27,48 +36,11 @@ const useRemoteConnection = () => {
             return connectionStatus;
         }
 
-        try {
-            await axiosInstance.post(`${import.meta.env.VITE_API_ROOT}/remote/test`, connection);
-            connectionStatus = [
-                {
-                    status: ConnectionTestStates.OK,
-                    message: 'Connection successful',
-                },
-                {
-                    status: ConnectionTestStates.OK,
-                    message: 'Remote folder path exists',
-                },
-            ];
-        } catch (error: unknown) {
-            if (axios.isAxiosError(error)) {
-                if (error.response && error.response.status >= 400 && error.response.status < 500) {
-                    connectionStatus = [
-                        {
-                            status: ConnectionTestStates.OK,
-                            message: 'Connection successful',
-                        },
-                        {
-                            status: ConnectionTestStates.FAILED,
-                            message: error.response?.data || 'Error connecting to remote folder',
-                        },
-                    ];
-                }
-                if (error.response && error.response.status >= 500) {
-                    connectionStatus = [
-                        {
-                            status: ConnectionTestStates.FAILED,
-                            message: 'Connection failed',
-                        },
-                        {
-                            status: ConnectionTestStates.FAILED,
-                            message: error.response?.data || 'Error connecting to remote folder',
-                        },
-                    ];
-                }
-            }
-        }
-
-        return connectionStatus;
+        const { data: connectionTestStates } = await axiosInstance.post(
+            `${import.meta.env.VITE_API_ROOT}/remote/test`,
+            connection,
+        );
+        return connectionTestStates;
     };
 
     const listRemoteFolders = async (connection?: RemoteConnection) => {
@@ -152,6 +124,7 @@ const useRemoteConnection = () => {
         syncRemoteFolder,
         listRemoteFolders,
         mountRemoteFolder,
+        fetchSqlitePath,
         persistentState,
         readRemoteFile,
     };

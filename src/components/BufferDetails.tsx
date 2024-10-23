@@ -13,28 +13,15 @@ import 'styles/components/BufferDetails.scss';
 import getDeallocationOperation from '../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../functions/getNextAllocationOperation';
 import { Operation, Tensor } from '../model/Graph';
+import isValidNumber from '../functions/isValidNumber';
+import parseMemoryConfig, { ShardSpec } from '../functions/parseMemoryConfig';
+import MemoryConfigRow from './MemoryConfigRow';
 
 interface BufferDetailsProps {
     tensor: TensorData;
     operations: OperationDescription[];
     className?: string;
 }
-
-interface ShardSpec {
-    grid: string;
-    shape: [number, number];
-    orientation: string;
-    halo: number;
-}
-
-const HEADER_LABELS = {
-    shard_spec: 'ShardSpec',
-    memory_layout: 'MemoryLayout',
-    grid: 'CoreRangeSet',
-    shape: 'Shape',
-    orientation: 'ShardOrientation',
-    halo: 'Halo',
-};
 
 function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
     const { address, dtype, layout, shape } = tensor;
@@ -49,7 +36,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                     <tr>
                         <th>Last used</th>
                         <td>
-                            {Number.isFinite(lastOperationId)
+                            {isValidNumber(lastOperationId)
                                 ? getLastOperation(lastOperationId, operations, tensor)
                                 : 'No consumers for this tensor'}
                         </td>
@@ -58,7 +45,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                     <tr>
                         <th>Deallocation</th>
                         <td>
-                            {Number.isFinite(deallocationOperationId) ? (
+                            {isValidNumber(deallocationOperationId) ? (
                                 <div>
                                     Deallocation found in{' '}
                                     <Link to={`${ROUTES.OPERATIONS}/${deallocationOperationId}`}>
@@ -85,12 +72,9 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                     </tr>
 
                     {/* This is stupid but Typescript is complaining otherwise */}
-                    {nextAllocationOperationId !== undefined &&
-                    Number.isFinite(nextAllocationOperationId) &&
-                    deallocationOperationId !== undefined &&
-                    Number.isFinite(deallocationOperationId) &&
-                    address !== null &&
-                    Number.isFinite(address) ? (
+                    {isValidNumber(nextAllocationOperationId) &&
+                    isValidNumber(deallocationOperationId) &&
+                    isValidNumber(address) ? (
                         <tr>
                             <th>Next allocation</th>
                             <td>
@@ -130,36 +114,11 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
 
                     {tensor?.memory_config
                         ? Object.entries(parseMemoryConfig(tensor.memory_config)).map(([key, value]) => (
-                              <tr key={key}>
-                                  {key === 'shard_spec' && value && typeof value !== 'string' ? (
-                                      <>
-                                          <th>{getHeaderLabel(key)}</th>
-                                          <td>
-                                              <table className='ttnn-table alt-two-tone-rows'>
-                                                  <tbody>
-                                                      {Object.entries(value as ShardSpec).map(
-                                                          ([innerKey, innerValue]) => (
-                                                              <tr key={innerKey}>
-                                                                  <th>
-                                                                      {getHeaderLabel(
-                                                                          innerKey as keyof typeof HEADER_LABELS,
-                                                                      )}
-                                                                  </th>
-                                                                  <td>{innerValue}</td>
-                                                              </tr>
-                                                          ),
-                                                      )}
-                                                  </tbody>
-                                              </table>
-                                          </td>
-                                      </>
-                                  ) : (
-                                      <>
-                                          <th>{getHeaderLabel(key as keyof typeof HEADER_LABELS)}</th>
-                                          <td>{value as string}</td>
-                                      </>
-                                  )}
-                              </tr>
+                              <MemoryConfigRow
+                                  key={key}
+                                  header={key}
+                                  value={value as string | ShardSpec}
+                              />
                           ))
                         : null}
 
@@ -171,43 +130,6 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
             </table>
         </>
     );
-}
-
-function parseMemoryConfig(string: string) {
-    const regex = /MemoryConfig\((.*)\)$/;
-    const match = string.match(regex);
-
-    if (match) {
-        const capturedString = match[1];
-
-        const memoryLayoutPattern = /memory_layout=([A-Za-z_:]+)/;
-        const shardSpecPattern =
-            /shard_spec=ShardSpec\(grid=\{(\[.*?\])\},shape=\{(\d+),\s*(\d+)\},orientation=ShardOrientation::([A-Z_]+),halo=(\d+)\)/;
-
-        const memoryLayoutMatch = capturedString.match(memoryLayoutPattern);
-        const shardSpecMatch = capturedString.match(shardSpecPattern);
-
-        const memoryLayout = memoryLayoutMatch ? memoryLayoutMatch[1] : null;
-        const shardSpec = shardSpecMatch
-            ? {
-                  grid: shardSpecMatch[1],
-                  shape: [parseInt(shardSpecMatch[2], 10), parseInt(shardSpecMatch[3], 10)],
-                  orientation: shardSpecMatch[4],
-                  halo: parseInt(shardSpecMatch[5], 10),
-              }
-            : null;
-
-        return {
-            memory_layout: memoryLayout,
-            shard_spec: shardSpec || 'std::nullopt',
-        };
-    }
-
-    return string;
-}
-
-function getHeaderLabel(key: keyof typeof HEADER_LABELS) {
-    return HEADER_LABELS[key];
 }
 
 function getLastOperation(lastOperationId: number, operations: Operation[], tensor: Tensor) {

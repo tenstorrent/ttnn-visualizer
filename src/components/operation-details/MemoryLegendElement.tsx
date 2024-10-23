@@ -4,7 +4,7 @@ import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { DeviceOperationLayoutTypes, DeviceOperationTypes, FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
-import { getBufferColor } from '../../functions/colorGenerator';
+import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatSize, prettyPrintAddress, toHex } from '../../functions/math';
 
 export const MemoryLegendElement: React.FC<{
@@ -49,14 +49,20 @@ export const MemoryLegendElement: React.FC<{
                 dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
             })}
             // eslint-disable-next-line react/jsx-props-no-spreading
-            {...(!chunk.empty ? { type: 'button', onClick: () => onLegendClick(chunk.address) } : {})}
+            {...(!chunk.empty ? { type: 'button', onClick: () => onLegendClick(chunk.address, chunk.tensorId) } : {})}
         >
             <div
                 className={classNames('memory-color-block', {
                     empty: chunk.empty,
                 })}
                 style={{
-                    ...(chunk.empty ? {} : { backgroundColor: getBufferColor(chunk.address + (colorVariance || 0)) }),
+                    ...(chunk.empty
+                        ? {}
+                        : {
+                              backgroundColor: chunk.tensorId
+                                  ? getTensorColor(chunk.tensorId)
+                                  : getBufferColor(chunk.address + (colorVariance || 0)),
+                          }),
                 }}
             />
             <div
