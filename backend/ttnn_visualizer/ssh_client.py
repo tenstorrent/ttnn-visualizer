@@ -1,9 +1,13 @@
+from typing import List, Optional
 import paramiko
 import os
 from pathlib import Path
 from paramiko.agent import Agent
 from paramiko.ssh_exception import SSHException
-from ttnn_visualizer.models import RemoteConnection
+
+from ttnn_visualizer.decorators import remote_exception_handler
+from ttnn_visualizer.models import RemoteConnection, StatusMessage
+from ttnn_visualizer.enums import ConnectionTestStates
 import logging
 
 logger = logging.getLogger(__name__)
@@ -37,6 +41,7 @@ def get_connection_args(remote_connection: RemoteConnection) -> dict:
     return {"key_filename": config["identityfile"].pop(), "look_for_keys": False}
 
 
+@remote_exception_handler
 def get_client(remote_connection: RemoteConnection) -> paramiko.SSHClient:
     ssh = initialize_ssh_client()
     connection_args = get_connection_args(remote_connection)

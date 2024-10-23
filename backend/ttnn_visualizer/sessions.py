@@ -1,10 +1,16 @@
 import json
 from logging import getLogger
+from typing import Optional
 
 from flask import request, jsonify, current_app
 
 from backend.ttnn_visualizer.utils import get_report_path
-from ttnn_visualizer.models import RemoteConnection, RemoteFolder, TabSession
+from ttnn_visualizer.models import (
+    RemoteConnection,
+    RemoteFolder,
+    TabSession,
+    TabSessionTable,
+)
 from ttnn_visualizer.extensions import db
 
 logger = getLogger(__name__)
@@ -13,8 +19,8 @@ logger = getLogger(__name__)
 def update_tab_session(
     tab_id,
     active_report_data,
-    remote_connection: RemoteConnection = None,
-    remote_folder: RemoteFolder = None,
+    remote_connection: Optional[RemoteConnection] = None,
+    remote_folder: Optional[RemoteFolder] = None,
 ):
     """
     Overwrite the active report for a given tab session or create a new session if one doesn't exist.
@@ -23,10 +29,12 @@ def update_tab_session(
     active_report = {"name": active_report_data.get("name")}
 
     # Query the database to find the existing tab session
-    session_data = TabSession.query.filter_by(tab_id=tab_id).first()
+    session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
     remote_folder_data = remote_folder.dict() if remote_folder else None
     remote_connection_data = remote_connection.dict() if remote_connection else None
-    report_path = get_report_path(active_report, current_app=current_app, remote_connection=remote_connection)
+    report_path = get_report_path(
+        active_report, current_app=current_app, remote_connection=remote_connection
+    )
 
     if session_data:
         session_data.report_path = report_path
@@ -36,7 +44,7 @@ def update_tab_session(
 
     else:
         # Create a new session entry
-        session_data = TabSession(
+        session_data = TabSessionTable(
             tab_id=tab_id,
             active_report=active_report,
             report_path=report_path,
@@ -48,7 +56,9 @@ def update_tab_session(
 
     db.session.commit()
 
-    current_app.logger.info(f"Session data for tab {tab_id}: {json.dumps(session_data.to_dict(), indent=4)}")
+    current_app.logger.info(
+        f"Session data for tab {tab_id}: {json.dumps(session_data.to_dict(), indent=4)}"
+    )
 
     return jsonify({"message": "Tab session updated with new active report"}), 200
 
@@ -61,11 +71,11 @@ def get_or_create_tab_session(
     Uses the TabSession model to manage session data.
     """
     # Query the database for the tab session
-    session_data = TabSession.query.filter_by(tab_id=tab_id).first()
+    session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
 
     # If session doesn't exist, initialize it
     if not session_data:
-        session_data = TabSession(
+        session_data = TabSessionTable(
             tab_id=tab_id, active_report={}, remote_connection=None
         )
         db.session.add(session_data)
