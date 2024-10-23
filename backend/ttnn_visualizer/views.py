@@ -5,7 +5,7 @@ from flask import Blueprint, Response
 
 from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.enums import ConnectionTestStates
-from ttnn_visualizer.exceptions import RemoteConnectionException, NoProjectsException
+from ttnn_visualizer.exceptions import RemoteConnectionException, RemoteSqliteException
 from ttnn_visualizer.models import (
     RemoteFolder,
     RemoteConnection,
@@ -445,11 +445,18 @@ def sync_remote_folder():
 def detect_sqlite_path():
     connection = request.json
     connection = RemoteConnection.model_validate(connection, strict=False)
-    path = get_sqlite_path(connection=connection)
-    if path:
+    try:
+        path = get_sqlite_path(connection=connection)
+        if path:
+            return StatusMessage(
+                status=ConnectionTestStates.OK.value, message=path
+            ).model_dump()
+    except RemoteSqliteException as e:
+        current_app.logger.error(f"Unable to detect SQLite3 path {str(e)}")
         return StatusMessage(
-            status=ConnectionTestStates.OK.value, message=path
-        ).model_dump()
+            status=ConnectionTestStates.FAILED.value,
+            message="Unable to detect SQLite3 path. See logs",
+        )
 
 
 @api.route("/remote/use", methods=["POST"])
