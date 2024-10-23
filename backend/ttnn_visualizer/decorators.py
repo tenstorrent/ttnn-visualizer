@@ -106,7 +106,7 @@ def remote_exception_handler(func):
                 message=f"{message}",
             )
         except IOError as err:
-            message = (f"Error opening remote folder {connection.path}: {str(err)}",)
+            message = f"Error opening remote folder {connection.path}: {str(err)}"
             if "Name or service not known" in str(err):
                 message = f"Unable to connect to {connection.host} - check hostname"
             raise RemoteConnectionException(
