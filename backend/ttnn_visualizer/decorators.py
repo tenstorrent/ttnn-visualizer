@@ -85,12 +85,11 @@ def remote_exception_handler(func):
 
         except RemoteSqliteException as err:
             current_app.logger.error(f"Remote Sqlite exception: {str(err)}")
-            message = "Error opening sqlite binary. See logs for details"
+            message = err.message
             if "No such file" in str(err):
                 message = "Unable to open SQLite binary, check path"
             raise RemoteConnectionException(
-                status=ConnectionTestStates.FAILED,
-                message=message,
+                status=ConnectionTestStates.FAILED, message=message
             )
         except IOError as err:
             message = f"Error opening remote folder {connection.path}: {str(err)}"
