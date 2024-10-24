@@ -136,24 +136,49 @@ def operation_detail(operation_id, session):
 def operation_history(session: TabSession):
 
     operation_history_filename = "operation_history.json"
-    operation_history_file = (
-        Path(str(session.report_path)).parent / operation_history_filename
-    )
-    if not operation_history_file.exists():
-        return []
-    with open(operation_history_file, "r") as file:
-        return json.load(file)
+    if session.remote_connection and session.remote_connection.useRemoteQuerying:
+        if not session.remote_folder:
+            return []
+        operation_history = read_remote_file(
+            remote_connection=session.remote_connection,
+            remote_path=Path(
+                session.remote_folder.remotePath, operation_history_filename
+            ),
+        )
+        if not operation_history:
+            return []
+        return json.loads(operation_history)
+    else:
+        operation_history_file = (
+            Path(str(session.report_path)).parent / operation_history_filename
+        )
+        if not operation_history_file.exists():
+            return []
+        with open(operation_history_file, "r") as file:
+            return json.load(file)
 
 
 @api.route("/config")
 @with_session
 @timer
 def get_config(session: TabSession):
-    config_file = Path(str(session.report_path)).parent.joinpath("config.json")
-    if not config_file.exists():
-        return {}
-    with open(config_file, "r") as file:
-        return json.load(file)
+
+    if session.remote_connection and session.remote_connection.useRemoteQuerying:
+        if not session.remote_folder:
+            return {}
+        config = read_remote_file(
+            remote_connection=session.remote_connection,
+            remote_path=Path(session.remote_folder.remotePath, "config.json"),
+        )
+        if not config:
+            return {}
+        return config
+    else:
+        config_file = Path(str(session.report_path)).parent.joinpath("config.json")
+        if not config_file.exists():
+            return {}
+        with open(config_file, "r") as file:
+            return json.load(file)
 
 
 @api.route("/tensors", methods=["GET"])
@@ -416,7 +441,7 @@ def test_remote_folder():
 def read_remote_folder():
     connection = RemoteConnection.model_validate(request.json, strict=False)
     try:
-        content = read_remote_file(connection)
+        content = read_remote_file(connection, remote_path=connection.path)
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
     return Response(status=200, response=content)
@@ -461,7 +486,7 @@ def detect_sqlite_path():
         return StatusMessage(
             status=ConnectionTestStates.FAILED.value,
             message="Unable to detect SQLite3 path. See logs",
-        )
+        ).model_dump()
 
 
 @api.route("/remote/use", methods=["POST"])
