@@ -132,12 +132,13 @@ def register_handlers(socketio_instance):
 
         tab_id = None
         # Find and remove the socket ID associated with this tabId
+        sid = getattr(request, "sid", "")
         for key, value in tab_clients.items():
 
-            if value == request.sid:
+            if value == sid:
                 tab_id = key
                 break
         if tab_id:
             leave_room(tab_id)
             del tab_clients[tab_id]
-            print(f"Client disconnected from tabId: {tab_id}, Socket ID: {request.sid}")
+            print(f"Client disconnected from tabId: {tab_id}, Socket ID: {sid}")
