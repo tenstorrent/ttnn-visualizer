@@ -1,7 +1,7 @@
 import dataclasses
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from logging import getLogger
@@ -24,17 +24,34 @@ class FileStatus(Enum):
 
 
 @dataclass
-class FileProgress:
+class BaseModel:
+    def to_dict(self) -> dict:
+        # Convert the dataclass to a dictionary and handle Enums.
+        return {
+            key: (value.value if isinstance(value, Enum) else value)
+            for key, value in asdict(self).items()
+        }
+
+
+@dataclass
+class FileProgress(BaseModel):
     current_file_name: str
     number_of_files: int
     percent_of_current: float
     finished_files: int
     status: FileStatus  # Use the FileStatus Enum
-    timestamp: str = datetime.utcnow().isoformat()
+    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
     def __post_init__(self):
-        self.status = FileStatus(self.status).value if self.status is not None else None
+        if isinstance(self.status, str):
+            self.status = FileStatus(self.status)
         self.percent_of_current = round(self.percent_of_current, 2)
+
+    def to_dict(self):
+        # Use asdict and manually handle enums to convert them to their value
+        data = asdict(self)
+        data["status"] = self.status.value if self.status else None
+        return data
 
 
 # For tracking connected clients subscriber ID
@@ -83,7 +100,7 @@ def emit_compression_progress(client, remote_tar_path, folder_size, sid):
             number_of_files=1,
             percent_of_current=percent_of_compression,
             finished_files=0,
-            status=FileStatus.COMPRESSING.value,
+            status=FileStatus.COMPRESSING,
         )
         emit_file_status(progress, tab_id=sid)
 
@@ -96,16 +113,14 @@ def register_handlers(socketio_instance):
     def handle_connect():
         from flask import request
 
+        sid = getattr(request, "sid", "")
+
         tab_id = request.args.get("tabId")
-        print(
-            f"Received tabId: {tab_id}, socket ID: {request.sid}"
-        )  # Log for debugging
+        print(f"Received tabId: {tab_id}, socket ID: {sid}")  # Log for debugging
 
         if tab_id:
             join_room(tab_id)  # Join the room identified by the tabId
-            tab_clients[tab_id] = (
-                request.sid
-            )  # Store the socket ID associated with this tabId
+            tab_clients[tab_id] = sid  # Store the socket ID associated with this tabId
             print(f"Joined room: {tab_id}")
         else:
             print("No tabId provided, disconnecting client.")
