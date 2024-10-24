@@ -12,6 +12,7 @@
     "flask:start": "PYTHONPATH=backend python -m ttnn_visualizer.app",
     "flask:start-debug": "DEBUG=true PYTHONPATH=backend python -m ttnn_visualizer.app",
     "flask:test": "PYTHONPATH=backend pytest backend/ttnn_visualizer/tests",
+    "flask:mypy": "PYTHONPATH=backend mypy backend/ttnn_visualizer",
     "build:wheel": "npm run build && python -m build --wheel",
     "compose:up": "docker-compose up web --build",
     "docker:build:ssh": "docker build docker/SSH --build-arg username=$(logname) -t local-ssh-image",
