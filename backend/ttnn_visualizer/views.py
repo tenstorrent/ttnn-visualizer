@@ -1,7 +1,7 @@
 import dataclasses
 import json
 
-from flask import Blueprint, Response
+from flask import Blueprint, Response, jsonify
 
 from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.enums import ConnectionTestStates
@@ -201,6 +201,11 @@ def buffer_detail(session: TabSession):
     if not address or not operation_id:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
+    if operation_id and str.isdigit(operation_id):
+        operation_id = int(operation_id)
+    else:
+        return Response(status=HTTPStatus.BAD_REQUEST)
+
     with DatabaseQueries(session) as db:
         buffer = db.query_next_buffer(operation_id, address)
         if not buffer:
@@ -305,7 +310,7 @@ def create_upload_files():
     # Validate necessary files
     if "db.sqlite" not in filenames or "config.json" not in filenames:
         return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
+            status=ConnectionTestStates.FAILED,
             message="Invalid project directory.",
         ).model_dump()
 
@@ -369,7 +374,7 @@ def create_upload_files():
         emit_file_status(final_progress, tab_id)
 
     return StatusMessage(
-        status=ConnectionTestStates.OK.value, message="Success."
+        status=ConnectionTestStates.OK, message="Success."
     ).model_dump()
 
 
@@ -451,7 +456,12 @@ def read_remote_folder():
 def sync_remote_folder():
     remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
     use_compression = current_app.config["COMPRESS_REMOTE_FILES"]
-    request_body = request.json
+    request_body = request.get_json()
+
+    # Check if request_body is None or not a dictionary
+    if not request_body or not isinstance(request_body, dict):
+        return jsonify({"error": "Invalid or missing JSON data"}), 400
+
     connection = request_body.get("connection")
     folder = request_body.get("folder")
     tab_id = request.args.get("tabId", None)
@@ -461,7 +471,7 @@ def sync_remote_folder():
     try:
         sync_test_folders(
             connection,
-            RemoteFolder(**folder),
+            RemoteFolder.model_validate(folder, strict=False),
             remote_dir,
             use_compression,
             sid=tab_id,
@@ -478,21 +488,21 @@ def detect_sqlite_path():
     try:
         path = get_sqlite_path(connection=connection)
         if path:
-            return StatusMessage(
-                status=ConnectionTestStates.OK.value, message=path
-            ).model_dump()
+            return StatusMessage(status=ConnectionTestStates.OK, message=path).dict()
     except RemoteSqliteException as e:
         current_app.logger.error(f"Unable to detect SQLite3 path {str(e)}")
         return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
+            status=ConnectionTestStates.FAILED,
             message="Unable to detect SQLite3 path. See logs",
-        ).model_dump()
+        ).dict()
+    return Response(status=HTTPStatus.BAD_REQUEST)
 
 
 @api.route("/remote/use", methods=["POST"])
 def use_remote_folder():
-    connection = request.json.get("connection", None)
-    folder = request.json.get("folder", None)
+    data = request.get_json(force=True)
+    connection = data.get("connection", None)
+    folder = data.get("folder", None)
     if not connection or not folder:
         return Response(status=HTTPStatus.BAD_REQUEST)
     connection = RemoteConnection.model_validate(connection, strict=False)
@@ -531,4 +541,4 @@ def health_check():
 @with_session
 def get_tab_session(session: TabSession):
     # Used to gate UI functions if no report is active
-    return session.dict()
+    return session.model_dump()
