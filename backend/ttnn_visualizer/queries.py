@@ -145,6 +145,7 @@ class DatabaseQueries:
 
     session: Optional[TabSession] = None
     ssh_client = None
+    query_runner: LocalQueryRunner | RemoteQueryRunner
 
     def __init__(self, session: Optional[TabSession] = None, connection=None):
         self.session = session
@@ -189,7 +190,7 @@ class DatabaseQueries:
         self, operation_id: int
     ) -> Optional[DeviceOperation]:
         if not self._check_table_exists("captured_graph"):
-            return []  # Return an empty list if the table does not exist
+            return None  # Return an empty list if the table does not exist
         query = "SELECT * FROM captured_graph WHERE operation_id = ?"
         rows = self.query_runner.execute_query(query, [operation_id])
         if rows:
@@ -240,7 +241,7 @@ class DatabaseQueries:
         return None
 
     def query_buffers(
-        self, buffer_type: Optional[str] = None
+        self, buffer_type: Optional[int] = None
     ) -> Generator[Buffer, None, None]:
         query = "SELECT * FROM buffers WHERE 1=1"
         params = []
