@@ -8,6 +8,9 @@ from logging import getLogger
 
 from flask_socketio import join_room, disconnect, leave_room
 
+from backend.ttnn_visualizer.utils import SerializeableDataclass
+
+
 logger = getLogger(__name__)
 
 
@@ -24,17 +27,7 @@ class FileStatus(Enum):
 
 
 @dataclass
-class BaseModel:
-    def to_dict(self) -> dict:
-        # Convert the dataclass to a dictionary and handle Enums.
-        return {
-            key: (value.value if isinstance(value, Enum) else value)
-            for key, value in asdict(self).items()
-        }
-
-
-@dataclass
-class FileProgress(BaseModel):
+class FileProgress(SerializeableDataclass):
     current_file_name: str
     number_of_files: int
     percent_of_current: float
@@ -43,8 +36,6 @@ class FileProgress(BaseModel):
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
     def __post_init__(self):
-        if isinstance(self.status, str):
-            self.status = FileStatus(self.status)
         self.percent_of_current = round(self.percent_of_current, 2)
 
     def to_dict(self):
