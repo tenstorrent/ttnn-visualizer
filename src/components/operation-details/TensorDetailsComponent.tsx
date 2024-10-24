@@ -102,7 +102,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         content={`Visualize tensor ${tensor.id}`}
                         placement={Position.TOP}
                     >
-                        {/* TODO: Fix nested button elements */}
                         <Button
                             icon={tensor.io === 'input' ? IconNames.FLOW_END : IconNames.FLOW_LINEAR}
                             minimal
