@@ -80,6 +80,9 @@ def extensions(app: flask.Flask):
     app.config["SESSION_TYPE"] = "sqlalchemy"
     app.config["SESSION_SQLALCHEMY"] = db
 
+    with app.app_context():
+        db.drop_all()
+
     if app.config["USE_WEBSOCKETS"]:
         register_handlers(socketio)
 
