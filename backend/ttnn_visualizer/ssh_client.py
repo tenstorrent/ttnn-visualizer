@@ -38,7 +38,7 @@ def get_connection_args(remote_connection: RemoteConnection) -> dict:
     if not config:
         raise SSHException(f"Host not found in SSH config {remote_connection.host}")
 
-    return {"key_filename": config["identityfile"].pop(), "look_for_keys": False}
+    return {"key_filename": config["identityfile"].pop(), "look_for_keys": False}  # type: ignore
 
 
 @remote_exception_handler
