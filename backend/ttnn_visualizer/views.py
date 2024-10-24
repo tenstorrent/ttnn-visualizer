@@ -136,13 +136,26 @@ def operation_detail(operation_id, session):
 def operation_history(session: TabSession):
 
     operation_history_filename = "operation_history.json"
-    operation_history_file = (
-        Path(str(session.report_path)).parent / operation_history_filename
-    )
-    if not operation_history_file.exists():
-        return []
-    with open(operation_history_file, "r") as file:
-        return json.load(file)
+    if session.remote_connection and session.remote_connection.useRemoteQuerying:
+        if not session.remote_folder:
+            return []
+        operation_history = read_remote_file(
+            remote_connection=session.remote_connection,
+            remote_path=Path(
+                session.remote_folder.remotePath, operation_history_filename
+            ),
+        )
+        if not operation_history:
+            return []
+        return json.loads(operation_history)
+    else:
+        operation_history_file = (
+            Path(str(session.report_path)).parent / operation_history_filename
+        )
+        if not operation_history_file.exists():
+            return []
+        with open(operation_history_file, "r") as file:
+            return json.load(file)
 
 
 @api.route("/config")
