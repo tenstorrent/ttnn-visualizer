@@ -1,10 +1,14 @@
+import os
 import re
+import zipfile
 
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import RemoteSqliteException
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.ssh_client import get_client
+
+MINIMUM_SQLITE_VERSION = "3.9.0"
 
 
 def find_sqlite_binary(connection):
@@ -36,6 +40,12 @@ def is_sqlite_executable(ssh_client, binary_path):
         stdout.channel.recv_exit_status()
         if error:
             raise Exception(f"Error while trying to run SQLite binary: {error}")
+
+        version = get_sqlite_version(output)
+        if not is_version_at_least(version, MINIMUM_SQLITE_VERSION):
+            raise Exception(
+                f"SQLite version {version} is below the required minimum of {MINIMUM_SQLITE_VERSION}."
+            )
 
         print(f"SQLite binary at {binary_path} is executable. Version: {version}")
         return True
