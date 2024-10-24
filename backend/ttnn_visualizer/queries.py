@@ -1,4 +1,3 @@
-import json
 from typing import Generator
 
 
@@ -68,10 +67,10 @@ class RemoteQueryRunner:
         self.session = session
 
         if (
-            not self.session.remote_connection
-            or not self.session.remote_connection.sqliteBinaryPath
-            or not self.session.remote_folder
-            or not self.session.remote_folder.remotePath
+            not session.remote_connection
+            or not session.remote_connection.sqliteBinaryPath
+            or not session.remote_folder
+            or not session.remote_folder.remotePath
         ):
             raise ValueError(
                 "Remote connections require remote path and sqliteBinaryPath"
@@ -95,10 +94,7 @@ class RemoteQueryRunner:
                 "Remote connections require remote path and sqliteBinaryPath"
             )
 
-        sqlite_binary = self.session.remote_connection.sqliteBinaryPath or "sqlite3"
-        remote_db_path = str(Path(self.session.remote_folder.remotePath, "db.sqlite"))
         formatted_query = query
-
         if params:
             # Properly quote string parameters for SQLite, adding single quotes where needed
             formatted_params = [
@@ -109,11 +105,16 @@ class RemoteQueryRunner:
                 *formatted_params
             )
 
-        command = f'{sqlite_binary} {remote_db_path} "{formatted_query}" -json'
+        command = (
+            f"{self.sqlite_binary} -header {self.remote_db_path} "
+            f'".mode csv" ".separator {self.column_delimiter}" "{formatted_query}"'
+        )
+
+        if not self.ssh_client:
+            raise Exception("SSH client required for remote querying")
+
         stdin, stdout, stderr = self.ssh_client.exec_command(command)
-        output = (
-            stdout.read().decode("utf-8").strip()
-        )  # Read, decode, and strip extra whitespace
+        output = stdout.read().decode("utf-8")
         error_output = stderr.read().decode("utf-8").strip()
 
         if error_output:
@@ -125,14 +126,61 @@ class RemoteQueryRunner:
         if not output.strip():
             return []
 
-        # Try to parse JSON output or fallback to line-based parsing
+        return self._parse_sqlite_output(output)
+
+    def _parse_sqlite_output(
+        self, output: str, delimiter: str = "|||"
+    ) -> List[Tuple[str, ...]]:
+        """
+        Parses the SQLite command output into a list of tuples using a custom delimiter.
+        Uses the header row to determine the number of columns, then parses the data accordingly.
+        """
+        rows_data = output.split("\r\n")
+
+        # The first row is the header.
+        header_row = rows_data[0]
+        header_columns = header_row.split(delimiter)
+        expected_columns = len(header_columns)
+
+        rows = []
+        for row_data in rows_data[1:]:
+            if not row_data.strip():
+                continue
+
+            fields = row_data.split(delimiter)
+
+            # Replace escaped characters and handle null values.
+            fields = [
+                self._convert_field(
+                    field.replace("\\n", "\n").replace("\\|", "|").strip()
+                )
+                for field in fields
+            ]
+
+            if len(fields) == expected_columns:
+                rows.append(tuple(fields))
+
+        return rows
+
+    def _convert_field(self, field: str) -> Optional[object]:
+        """
+        Converts a field to the appropriate type: `None` for empty fields,
+        `int` or `float` for numbers, and `str` for everything else.
+        """
+        if field == "":
+            return None  # Handle NULL values
+
+        # Try to convert to int or float if possible.
         try:
-            rows = json.loads(output)
-            return [tuple(row.values()) for row in rows]
-        except json.JSONDecodeError:
-            # If output is not JSON, fallback to parsing using a pipe as a delimiter
-            print("Output is not valid JSON, attempting manual parsing.")
-            return [tuple(line.split("|")) for line in output.splitlines()]
+            # If the field can be converted to an integer, return it as int.
+            if field.isdigit() or (field.startswith("-") and field[1:].isdigit()):
+                return int(field)
+            # If it looks like a float, convert to float.
+            float_value = float(field)
+            return float_value
+        except ValueError:
+            # If conversion fails, return the original string.
+            return field
 
     def close(self):
         if self.ssh_client:
