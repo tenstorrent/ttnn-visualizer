@@ -78,8 +78,10 @@ class RemoteQueryRunner:
             )
 
         self.ssh_client = self._get_ssh_client(session.remote_connection)
-        self.sqlite_binary = session.remote_connection.sqliteBinaryPath
-        self.remote_db_path = str(Path(session.remote_folder.remotePath, "db.sqlite"))
+        self.sqlite_binary = self.session.remote_connection.sqliteBinaryPath
+        self.remote_db_path = str(
+            Path(self.session.remote_folder.remotePath, "db.sqlite")
+        )
 
     def _get_ssh_client(self, remote_connection) -> paramiko.SSHClient:
         return get_client(remote_connection=remote_connection)
@@ -250,7 +252,7 @@ class DatabaseQueries:
             yield Buffer(*row)
 
     def query_buffers_by_operation_id(
-        self, operation_id: int, buffer_type: Optional[str] = None
+        self, operation_id: int, buffer_type: Optional[int] = None
     ) -> Generator[Buffer, None, None]:
         query = "SELECT * FROM buffers WHERE operation_id = ?"
         params = [operation_id]
