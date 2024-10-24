@@ -226,7 +226,7 @@ def check_remote_path_exists(remote_connection: RemoteConnection):
 def get_remote_folder_config_paths(remote_connection, ssh_client) -> List[str]:
     """Given a remote path, return a list of report config files."""
     remote_path = remote_connection.path
-    project_configs = []
+    project_configs: List[str] = []
     with ssh_client.open_sftp() as sftp:
         all_files = sftp.listdir_attr(remote_path)
         top_level_directories = filter(lambda e: S_ISDIR(e.st_mode), all_files)
@@ -234,7 +234,7 @@ def get_remote_folder_config_paths(remote_connection, ssh_client) -> List[str]:
             dirname = Path(remote_path, directory.filename)
             directory_files = sftp.listdir(str(dirname))
             if TEST_CONFIG_FILE in directory_files:
-                project_configs.append(Path(dirname, TEST_CONFIG_FILE))
+                project_configs.append(str(Path(dirname, TEST_CONFIG_FILE)))
     if not project_configs:
         error = f"No projects found at remote path: {remote_path}"
         logger.info(error)
