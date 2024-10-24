@@ -67,10 +67,10 @@ class RemoteQueryRunner:
         self.session = session
 
         if (
-            not session.remote_connection
-            or not session.remote_connection.sqliteBinaryPath
-            or not session.remote_folder
-            or not session.remote_folder.remotePath
+            not self.session.remote_connection
+            or not self.session.remote_connection.sqliteBinaryPath
+            or not self.session.remote_folder
+            or not self.session.remote_folder.remotePath
         ):
             raise ValueError(
                 "Remote connections require remote path and sqliteBinaryPath"
