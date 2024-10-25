@@ -59,5 +59,13 @@
             margin-bottom: 1px; // Offset needed because align-items center doesn't quite center it in the table cell
         }
     }
+
+    .column-filter {
+        margin: 0 5px;
+        height: 24px;
+        line-height: 24px;
+        position: relative;
+        bottom: 5px;
+    }
 }
 
