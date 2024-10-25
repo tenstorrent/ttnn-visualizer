@@ -2,7 +2,7 @@ import dataclasses
 import enum
 import json
 from json import JSONDecodeError
-from typing import Any, Optional
+from typing import Optional
 
 from pydantic import BaseModel, Field
 from sqlalchemy import Integer, Column, String, JSON
@@ -229,12 +229,12 @@ class TabSessionTable(db.Model):
                 else None
             ),
             remote_connection=(
-                RemoteConnection.parse_obj(self.remote_connection)
+                RemoteConnection.model_validate(self.remote_connection, strict=False)
                 if self.remote_connection is not None
                 else None
             ),
             remote_folder=(
-                RemoteFolder.parse_obj(self.remote_folder)
+                RemoteFolder.model_validate(self.remote_folder, strict=False)
                 if self.remote_folder is not None
                 else None
             ),
