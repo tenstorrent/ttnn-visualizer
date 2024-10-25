@@ -110,8 +110,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                         }))
                         .flat(),
                 )
-                .flat()
-                .slice(200, 210),
+                .flat(),
         [buffersByOperation, tensorListByOperation],
     );
 
@@ -291,7 +290,7 @@ const getCellContent = (
             filter={filters[key]}
         />
     ) : (
-        buffer[key]
+        textValue
     );
 };
 
