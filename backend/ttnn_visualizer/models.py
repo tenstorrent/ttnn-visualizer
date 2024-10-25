@@ -2,7 +2,7 @@ import dataclasses
 import enum
 import json
 from json import JSONDecodeError
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 from sqlalchemy import Integer, Column, String, JSON
@@ -148,7 +148,12 @@ class StackTrace(SerializeableDataclass):
 # Non Data Models
 
 
-class RemoteConnection(BaseModel):
+class SerializeableModel(BaseModel):
+    class Config:
+        use_enum_values = True
+
+
+class RemoteConnection(SerializeableModel):
     name: str
     username: str
     host: str
@@ -158,19 +163,16 @@ class RemoteConnection(BaseModel):
     useRemoteQuerying: bool = False
 
 
-class StatusMessage(BaseModel):
+class StatusMessage(SerializeableModel):
     status: ConnectionTestStates
     message: str
 
-    class Config:
-        use_enum_values = True
 
-
-class ActiveReport(BaseModel):
+class ActiveReport(SerializeableModel):
     name: str
 
 
-class RemoteFolder(BaseModel):
+class RemoteFolder(SerializeableModel):
     testName: str
     remotePath: str
     lastModified: int
