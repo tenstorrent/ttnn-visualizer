@@ -219,15 +219,22 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
 
     return tableFields ? (
         <HotkeysProvider>
-            <BlueprintTable
-                className='buffer-summary-table'
-                numRows={tableFields.length}
-                enableRowResizing={false}
-                cellRendererDependencies={[sortDirection, sortingColumn, tableFields, tableFields.length]}
-                columnWidths={[200, 120, 120, 120, 120, 100]}
-            >
-                {createColumns()}
-            </BlueprintTable>
+            <div className='buffer-summary-table'>
+                <p className='result-count'>
+                    {tableFields.length !== listOfBuffers.length
+                        ? `Showing ${tableFields.length} of ${listOfBuffers.length} buffers`
+                        : `Showing ${tableFields.length} buffers`}
+                </p>
+
+                <BlueprintTable
+                    numRows={tableFields.length}
+                    enableRowResizing={false}
+                    cellRendererDependencies={[sortDirection, sortingColumn, tableFields, tableFields.length]}
+                    columnWidths={[200, 120, 120, 120, 120, 100]}
+                >
+                    {createColumns()}
+                </BlueprintTable>
+            </div>
         </HotkeysProvider>
     ) : (
         <LoadingSpinner />

@@ -9,6 +9,11 @@
 .buffer-summary-table {
     display: inline-flex;
     height: 600px;
+    flex-direction: column;
+
+    .result-count {
+        text-align: right;
+    }
 
     .sortable-table-header {
         cursor: pointer;
