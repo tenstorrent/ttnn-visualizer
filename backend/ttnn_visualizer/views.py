@@ -488,13 +488,15 @@ def detect_sqlite_path():
     try:
         path = get_sqlite_path(connection=connection)
         if path:
-            return StatusMessage(status=ConnectionTestStates.OK, message=path).dict()
+            return StatusMessage(
+                status=ConnectionTestStates.OK, message=path
+            ).model_dump()
     except RemoteSqliteException as e:
         current_app.logger.error(f"Unable to detect SQLite3 path {str(e)}")
         return StatusMessage(
             status=ConnectionTestStates.FAILED,
             message="Unable to detect SQLite3 path. See logs",
-        ).dict()
+        ).model_dump()
     return Response(status=HTTPStatus.BAD_REQUEST)
 
 
