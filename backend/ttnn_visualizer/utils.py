@@ -40,6 +40,9 @@ def get_report_path(active_report, current_app, remote_connection=None):
     """
     Gets the report path for the given active_report object.
     :param active_report: Dictionary representing the active report.
+    :param current_app: Flask current application
+    :param remote_connection: Remote connection model instance
+
     :return: report_path as a string
     """
     database_file_name = current_app.config["SQLITE_DB_PATH"]
