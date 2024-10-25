@@ -1,6 +1,5 @@
 import dataclasses
 from collections import defaultdict
-from email.policy import default
 
 from ttnn_visualizer.models import BufferType, Operation
 

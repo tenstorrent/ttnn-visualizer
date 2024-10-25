@@ -21,8 +21,7 @@ from ttnn_visualizer.models import (
 )
 from ttnn_visualizer.ssh_client import get_client
 import sqlite3
-import dataclasses
-from typing import List, Optional, Tuple
+from typing import List, Optional
 from pathlib import Path
 import paramiko
 

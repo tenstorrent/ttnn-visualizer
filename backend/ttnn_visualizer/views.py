@@ -5,7 +5,7 @@ from flask import Blueprint, Response, jsonify
 
 from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.enums import ConnectionTestStates
-from ttnn_visualizer.exceptions import RemoteConnectionException, RemoteSqliteException
+from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.models import (
     RemoteFolder,
     RemoteConnection,
@@ -460,7 +460,6 @@ def sync_remote_folder():
     if not request_body or not isinstance(request_body, dict):
         return jsonify({"error": "Invalid or missing JSON data"}), 400
 
-    connection = request_body.get("connection")
     folder = request_body.get("folder")
     tab_id = request.args.get("tabId", None)
     connection = RemoteConnection.model_validate(

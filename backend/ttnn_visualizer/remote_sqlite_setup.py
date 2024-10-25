@@ -1,6 +1,4 @@
-import os
 import re
-import zipfile
 
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates

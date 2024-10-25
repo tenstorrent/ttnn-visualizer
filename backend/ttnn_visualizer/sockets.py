@@ -1,7 +1,6 @@
-import dataclasses
 import threading
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from logging import getLogger
