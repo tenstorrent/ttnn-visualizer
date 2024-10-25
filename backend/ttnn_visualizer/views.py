@@ -429,15 +429,13 @@ def test_remote_folder():
     # Test Sqlite binary path configuration
     if not has_failures() and connection.useRemoteQuerying:
         if not connection.sqliteBinaryPath:
-            add_status(
-                ConnectionTestStates.FAILED.value, "SQLite binary path not provided"
-            )
+            add_status(ConnectionTestStates.FAILED, "SQLite binary path not provided")
         else:
             try:
                 check_sqlite_path(connection)
-                add_status(ConnectionTestStates.OK.value, "SQLite binary found.")
+                add_status(ConnectionTestStates.OK, "SQLite binary found.")
             except RemoteConnectionException as e:
-                add_status(ConnectionTestStates.FAILED.value, e.message)
+                add_status(ConnectionTestStates.FAILED, e.message)
 
     return [status.model_dump() for status in statuses]
 
@@ -485,19 +483,25 @@ def sync_remote_folder():
 def detect_sqlite_path():
     connection = request.json
     connection = RemoteConnection.model_validate(connection, strict=False)
+    status_message = StatusMessage(
+        status=ConnectionTestStates.OK, message="Unable to Detect Path"
+    )
     try:
         path = get_sqlite_path(connection=connection)
         if path:
-            return StatusMessage(
-                status=ConnectionTestStates.OK, message=path
-            ).model_dump()
-    except RemoteSqliteException as e:
+            status_message = StatusMessage(status=ConnectionTestStates.OK, message=path)
+        else:
+            status_message = StatusMessage(
+                status=ConnectionTestStates.OK, message="Unable to Detect Path"
+            )
+    except RemoteConnectionException as e:
         current_app.logger.error(f"Unable to detect SQLite3 path {str(e)}")
-        return StatusMessage(
+        status_message = StatusMessage(
             status=ConnectionTestStates.FAILED,
             message="Unable to detect SQLite3 path. See logs",
-        ).model_dump()
-    return Response(status=HTTPStatus.BAD_REQUEST)
+        )
+    finally:
+        return status_message.model_dump()
 
 
 @api.route("/remote/use", methods=["POST"])
