@@ -4,6 +4,7 @@ import os
 import tarfile
 from pathlib import Path
 from stat import S_ISDIR
+import time
 from typing import List
 
 from threading import Thread
@@ -54,7 +55,7 @@ def walk_sftp_directory(sftp: SFTPClient, remote_path: str):
     """SFTP implementation of os.walk."""
     files, folders = [], []
     for f in sftp.listdir_attr(remote_path):
-        if S_ISDIR(f.st_mode):
+        if S_ISDIR(f.st_mode if f.st_mode else 0):
             folders.append(f.filename)
         else:
             files.append(f.filename)
@@ -117,7 +118,7 @@ def sync_files_and_directories(
             number_of_files=0,
             percent_of_current=100,
             finished_files=finished_files,
-            status=FileStatus.FINISHED.value,
+            status=FileStatus.FINISHED,
         )
 
         if current_app.config["USE_WEBSOCKETS"]:
@@ -162,7 +163,9 @@ def get_remote_folder_from_remote_config(
         return RemoteFolder(
             remotePath=str(Path(config_path).parent),
             testName=data["report_name"],
-            lastModified=attributes.st_mtime,
+            lastModified=(
+                int(attributes.st_mtime) if attributes.st_mtime else int(time.time())
+            ),
         )
 
 
@@ -223,7 +226,7 @@ def check_remote_path_exists(remote_connection: RemoteConnection):
 def get_remote_folder_config_paths(remote_connection, ssh_client) -> List[str]:
     """Given a remote path, return a list of report config files."""
     remote_path = remote_connection.path
-    project_configs = []
+    project_configs: List[str] = []
     with ssh_client.open_sftp() as sftp:
         all_files = sftp.listdir_attr(remote_path)
         top_level_directories = filter(lambda e: S_ISDIR(e.st_mode), all_files)
@@ -231,7 +234,7 @@ def get_remote_folder_config_paths(remote_connection, ssh_client) -> List[str]:
             dirname = Path(remote_path, directory.filename)
             directory_files = sftp.listdir(str(dirname))
             if TEST_CONFIG_FILE in directory_files:
-                project_configs.append(Path(dirname, TEST_CONFIG_FILE))
+                project_configs.append(str(Path(dirname, TEST_CONFIG_FILE)))
     if not project_configs:
         error = f"No projects found at remote path: {remote_path}"
         logger.info(error)

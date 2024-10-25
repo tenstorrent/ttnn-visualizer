@@ -135,7 +135,7 @@ def main():
     if run_command[-1] == "ttnn-visualizer":
         os.environ.setdefault("FLASK_ENV", "production")
 
-    config = Config()
+    config = cast(DefaultConfig, Config())
 
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"

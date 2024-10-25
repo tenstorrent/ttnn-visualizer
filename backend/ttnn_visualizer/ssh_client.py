@@ -1,4 +1,3 @@
-from typing import List, Optional
 import paramiko
 import os
 from pathlib import Path
@@ -6,8 +5,7 @@ from paramiko.agent import Agent
 from paramiko.ssh_exception import SSHException
 
 from ttnn_visualizer.decorators import remote_exception_handler
-from ttnn_visualizer.models import RemoteConnection, StatusMessage
-from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.models import RemoteConnection
 import logging
 
 logger = logging.getLogger(__name__)
@@ -38,7 +36,7 @@ def get_connection_args(remote_connection: RemoteConnection) -> dict:
     if not config:
         raise SSHException(f"Host not found in SSH config {remote_connection.host}")
 
-    return {"key_filename": config["identityfile"].pop(), "look_for_keys": False}
+    return {"key_filename": config["identityfile"].pop(), "look_for_keys": False}  # type: ignore
 
 
 @remote_exception_handler

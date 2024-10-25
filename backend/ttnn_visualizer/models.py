@@ -7,6 +7,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from sqlalchemy import Integer, Column, String, JSON
 
+from ttnn_visualizer.utils import SerializeableDataclass
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
 
@@ -20,14 +21,14 @@ class BufferType(enum.Enum):
 
 
 @dataclasses.dataclass
-class Operation:
+class Operation(SerializeableDataclass):
     operation_id: int
     name: str
     duration: float
 
 
 @dataclasses.dataclass
-class Device:
+class Device(SerializeableDataclass):
     device_id: int
     num_y_cores: int
     num_x_cores: int
@@ -49,7 +50,7 @@ class Device:
 
 
 @dataclasses.dataclass
-class DeviceOperation:
+class DeviceOperation(SerializeableDataclass):
     operation_id: int
     captured_graph: str
 
@@ -63,25 +64,20 @@ class DeviceOperation:
             self.captured_graph = captured_graph
 
         except JSONDecodeError:
-            self.captured_graph = []
+            self.captured_graph = json.dumps({})
 
 
 @dataclasses.dataclass
-class Buffer:
+class Buffer(SerializeableDataclass):
     operation_id: int
     device_id: int
     address: int
     max_size_per_bank: int
     buffer_type: BufferType
 
-    def __post_init__(self):
-        self.buffer_type = (
-            BufferType(self.buffer_type).value if self.buffer_type is not None else None
-        )
-
 
 @dataclasses.dataclass
-class BufferPage:
+class BufferPage(SerializeableDataclass):
     operation_id: int
     device_id: int
     address: int
@@ -93,21 +89,16 @@ class BufferPage:
     page_size: int
     buffer_type: BufferType
 
-    def __post_init__(self):
-        self.buffer_type = (
-            BufferType(self.buffer_type).value if self.buffer_type is not None else None
-        )
-
 
 @dataclasses.dataclass
-class ProducersConsumers:
+class ProducersConsumers(SerializeableDataclass):
     tensor_id: int
     producers: list[int]
     consumers: list[int]
 
 
 @dataclasses.dataclass
-class Tensor:
+class Tensor(SerializeableDataclass):
     tensor_id: int
     shape: str
     dtype: str
@@ -117,28 +108,23 @@ class Tensor:
     address: int
     buffer_type: BufferType
 
-    def __post_init__(self):
-        self.buffer_type = (
-            BufferType(self.buffer_type).value if self.buffer_type is not None else None
-        )
-
 
 @dataclasses.dataclass
-class InputTensor:
+class InputTensor(SerializeableDataclass):
     operation_id: int
     input_index: int
     tensor_id: int
 
 
 @dataclasses.dataclass
-class OutputTensor:
+class OutputTensor(SerializeableDataclass):
     operation_id: int
     output_index: int
     tensor_id: int
 
 
 @dataclasses.dataclass
-class TensorComparisonRecord:
+class TensorComparisonRecord(SerializeableDataclass):
     tensor_id: int
     golden_tensor_id: int
     matches: bool
@@ -147,14 +133,14 @@ class TensorComparisonRecord:
 
 
 @dataclasses.dataclass
-class OperationArgument:
+class OperationArgument(SerializeableDataclass):
     operation_id: int
     name: str
     value: str
 
 
 @dataclasses.dataclass
-class StackTrace:
+class StackTrace(SerializeableDataclass):
     operation_id: int
     stack_trace: str
 
@@ -162,7 +148,12 @@ class StackTrace:
 # Non Data Models
 
 
-class RemoteConnection(BaseModel):
+class SerializeableModel(BaseModel):
+    class Config:
+        use_enum_values = True
+
+
+class RemoteConnection(SerializeableModel):
     name: str
     username: str
     host: str
@@ -172,19 +163,16 @@ class RemoteConnection(BaseModel):
     useRemoteQuerying: bool = False
 
 
-class StatusMessage(BaseModel):
+class StatusMessage(SerializeableModel):
     status: ConnectionTestStates
     message: str
 
-    class Config:
-        use_enum_values = True
 
-
-class ActiveReport(BaseModel):
+class ActiveReport(SerializeableModel):
     name: str
 
 
-class RemoteFolder(BaseModel):
+class RemoteFolder(SerializeableModel):
     testName: str
     remotePath: str
     lastModified: int
@@ -241,12 +229,12 @@ class TabSessionTable(db.Model):
                 else None
             ),
             remote_connection=(
-                RemoteConnection.parse_obj(self.remote_connection)
+                RemoteConnection.model_validate(self.remote_connection, strict=False)
                 if self.remote_connection is not None
                 else None
             ),
             remote_folder=(
-                RemoteFolder.parse_obj(self.remote_folder)
+                RemoteFolder.model_validate(self.remote_folder, strict=False)
                 if self.remote_folder is not None
                 else None
             ),
