@@ -38,12 +38,6 @@ class FileProgress(SerializeableDataclass):
     def __post_init__(self):
         self.percent_of_current = round(self.percent_of_current, 2)
 
-    def to_dict(self):
-        # Use asdict and manually handle enums to convert them to their value
-        data = asdict(self)
-        data["status"] = self.status.value if self.status else None
-        return data
-
 
 # For tracking connected clients subscriber ID
 tab_clients = {}
@@ -61,7 +55,7 @@ def emit_file_status(progress: FileProgress, tab_id=None):
     def emit_now():
         global last_emit_time
         last_emit_time = time.time()
-        data = dataclasses.asdict(progress)
+        data = progress.to_dict()
         data.update({"tab_id": tab_id})
         socketio.emit(Messages.FILE_TRANSFER_PROGRESS, data, to=tab_id)
 
