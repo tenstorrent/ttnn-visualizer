@@ -7,7 +7,7 @@ from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.models import (
-    RemoteFolder,
+    RemoteReportFolder,
     RemoteConnection,
     StatusMessage,
     TabSession,
@@ -38,8 +38,8 @@ from ttnn_visualizer.sessions import (
 from ttnn_visualizer.sftp_operations import (
     sync_test_folders,
     read_remote_file,
-    check_remote_path_for_projects,
-    get_remote_test_folders,
+    check_remote_path_for_reports,
+    get_remote_report_folders,
     check_remote_path_exists,
 )
 from ttnn_visualizer.ssh_client import get_client
@@ -382,7 +382,7 @@ def create_upload_files():
 def get_remote_folders():
     connection = RemoteConnection.model_validate(request.json, strict=False)
     try:
-        remote_folders = get_remote_test_folders(
+        remote_folders = get_remote_report_folders(
             RemoteConnection.model_validate(connection, strict=False)
         )
         return [r.model_dump() for r in remote_folders]
@@ -422,7 +422,7 @@ def test_remote_folder():
     # Check for Project Configurations
     if not has_failures():
         try:
-            check_remote_path_for_projects(connection)
+            check_remote_path_for_reports(connection)
         except RemoteConnectionException as e:
             add_status(ConnectionTestStates.FAILED.value, e.message)
 
@@ -468,7 +468,7 @@ def sync_remote_folder():
     try:
         sync_test_folders(
             connection,
-            RemoteFolder.model_validate(folder, strict=False),
+            RemoteReportFolder.model_validate(folder, strict=False),
             remote_dir,
             use_compression,
             sid=tab_id,
@@ -511,7 +511,7 @@ def use_remote_folder():
     if not connection or not folder:
         return Response(status=HTTPStatus.BAD_REQUEST)
     connection = RemoteConnection.model_validate(connection, strict=False)
-    folder = RemoteFolder(**folder)
+    folder = RemoteReportFolder(**folder)
     report_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
     report_folder = Path(folder.remotePath).name
     connection_directory = Path(report_data_directory, connection.host, report_folder)
