@@ -6,18 +6,18 @@ import { FC, useEffect, useState } from 'react';
 
 import { AnchorButton, Button, FormGroup, Tooltip } from '@blueprintjs/core';
 
-import { useNavigate } from 'react-router';
 import { IconNames } from '@blueprintjs/icons';
-import { useQueryClient } from 'react-query';
 import { useAtom } from 'jotai';
-import useRemote from '../../hooks/useRemote';
-import AddRemoteConnection from './AddRemoteConnection';
-import RemoteFolderSelector from './RemoteFolderSelector';
-import RemoteConnectionSelector from './RemoteConnectionSelector';
-import ROUTES from '../../definitions/routes';
-import { reportLocationAtom } from '../../store/app';
+import { useQueryClient } from 'react-query';
+import { useNavigate } from 'react-router';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
+import ROUTES from '../../definitions/routes';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
+import useRemote from '../../hooks/useRemote';
+import { reportLocationAtom } from '../../store/app';
+import AddRemoteConnection from './AddRemoteConnection';
+import RemoteConnectionSelector from './RemoteConnectionSelector';
+import RemoteFolderSelector from './RemoteFolderSelector';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
@@ -241,9 +241,11 @@ const RemoteSyncConfigurator: FC = () => {
                                         remote.persistentState.selectedConnection,
                                     );
 
+                                    // TODO This should refresh the folders from the backend
+                                    // since the backend now keeps track of sync
                                     savedRemoteFolders.find(
                                         (f) => f.localPath === selectedRemoteFolder?.localPath,
-                                    )!.lastSynced = new Date().toISOString();
+                                    )!.lastSynced = new Date().getTime() / 1000;
 
                                     updateSavedRemoteFolders(
                                         remote.persistentState.selectedConnection,
