@@ -56,7 +56,7 @@ const remoteFolderRenderer =
         let statusIcon = (
             <Tooltip
                 content={`Fetching folder status, last sync: ${
-                    lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
+                    lastSynced ? formatter.format(new Date(lastSynced * 1000)) : 'Never'
                 }`}
             >
                 <Spinner size={16} />
@@ -68,7 +68,7 @@ const remoteFolderRenderer =
                 statusIcon = (
                     <Tooltip
                         content={`Folder is stale, last sync: ${
-                            lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
+                            lastSynced ? formatter.format(new Date(lastSynced * 1000)) : 'Never'
                         }`}
                     >
                         <Icon
@@ -81,7 +81,7 @@ const remoteFolderRenderer =
                 statusIcon = (
                     <Tooltip
                         content={`Folder is up to date, last sync: ${
-                            lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
+                            lastSynced ? formatter.format(new Date(lastSynced * 1000)) : 'Never'
                         }`}
                     >
                         <Icon

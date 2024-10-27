@@ -9,8 +9,8 @@ const isRemoteFolderOutdated = (folder: RemoteFolder) => {
         return true;
     }
 
-    const lastSynced = new Date(folder.lastSynced);
-    const lastModified = new Date(folder.lastModified);
+    const lastSynced = new Date(folder.lastSynced).getTime() / 1000;
+    const lastModified = new Date(folder.lastModified).getTime() / 1000;
 
     return lastModified > lastSynced;
 };
