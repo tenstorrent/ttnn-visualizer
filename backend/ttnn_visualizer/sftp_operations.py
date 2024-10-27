@@ -112,6 +112,9 @@ def sync_files_and_directories(
         # Start downloading from the root folder
         download_directory_contents(remote_folder, destination_dir)
 
+        # Create a .last-synced file in directory
+        update_last_synced(destination_dir)
+
         # Emit final status
         final_progress = FileProgress(
             current_file_name="",  # No specific file for the final status
@@ -272,6 +275,19 @@ def get_remote_report_folders(
     return remote_folder_data
 
 
+def update_last_synced(directory: Path) -> None:
+    """Creates a file called '.last-synced' with the current timestamp in the specified directory."""
+    # Convert directory to Path object and create .last-synced file path
+    last_synced_path = Path(directory) / ".last-synced"
+
+    # Get the current Unix timestamp
+    timestamp = int(time.time())
+
+    # Write the timestamp to the .last-synced file
+    with last_synced_path.open("w") as file:
+        file.write(str(timestamp))
+
+
 @remote_exception_handler
 def sync_remote_folders(
     remote_connection: RemoteConnection,
@@ -326,6 +342,9 @@ def sync_remote_folders(
             # Extract tar file
             with tarfile.open(local_tar_path, "r:gz") as tar:
                 tar.extractall(path=destination_dir)
+
+            # Update last synced
+            update_last_synced(destination_dir)
 
             os.remove(local_tar_path)
             client.exec_command(f"rm {remote_tar_path}")
