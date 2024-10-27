@@ -176,6 +176,7 @@ class RemoteReportFolder(SerializeableModel):
     testName: str
     remotePath: str
     lastModified: int
+    lastSynced: Optional[int] = None
 
 
 class TabSession(BaseModel):

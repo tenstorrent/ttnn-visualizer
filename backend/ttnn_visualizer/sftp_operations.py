@@ -12,6 +12,7 @@ from flask import current_app
 from paramiko.client import SSHClient
 from paramiko.sftp_client import SFTPClient
 
+from ttnn_visualizer.utils import update_last_synced
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.sockets import (
     FileProgress,
@@ -238,7 +239,7 @@ def find_folders_by_files(
 ) -> List[str]:
     """Given a remote path, return a list of top-level folders that contain any of the specified files."""
     matched_folders: List[str] = []
-
+    logger.info(f"Searching for ")
     with ssh_client.open_sftp() as sftp:
         all_files = sftp.listdir_attr(root_folder)
         top_level_directories = filter(lambda e: S_ISDIR(e.st_mode), all_files)
@@ -269,23 +270,12 @@ def get_remote_report_folders(
         raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
     remote_folder_data = []
     with client.open_sftp() as sftp:
-        for config in remote_config_paths:
-            remote_folder = get_remote_report_folder_from_config_path(sftp, config)
+        for config_path in remote_config_paths:
+            remote_folder = get_remote_report_folder_from_config_path(
+                sftp, str(Path(config_path).joinpath(TEST_CONFIG_FILE))
+            )
             remote_folder_data.append(remote_folder)
     return remote_folder_data
-
-
-def update_last_synced(directory: Path) -> None:
-    """Creates a file called '.last-synced' with the current timestamp in the specified directory."""
-    # Convert directory to Path object and create .last-synced file path
-    last_synced_path = Path(directory) / ".last-synced"
-
-    # Get the current Unix timestamp
-    timestamp = int(time.time())
-
-    # Write the timestamp to the .last-synced file
-    with last_synced_path.open("w") as file:
-        file.write(str(timestamp))
 
 
 @remote_exception_handler

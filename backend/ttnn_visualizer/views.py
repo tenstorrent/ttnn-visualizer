@@ -1,5 +1,6 @@
 import dataclasses
 import json
+from typing import List
 
 from flask import Blueprint, Response, jsonify
 
@@ -43,7 +44,7 @@ from ttnn_visualizer.sftp_operations import (
     check_remote_path_exists,
 )
 from ttnn_visualizer.ssh_client import get_client
-from ttnn_visualizer.utils import timer
+from ttnn_visualizer.utils import read_last_synced_file, timer
 
 logger = logging.getLogger(__name__)
 
@@ -382,9 +383,23 @@ def create_upload_files():
 def get_remote_folders():
     connection = RemoteConnection.model_validate(request.json, strict=False)
     try:
-        remote_folders = get_remote_report_folders(
+        remote_folders: List[RemoteReportFolder] = get_remote_report_folders(
             RemoteConnection.model_validate(connection, strict=False)
         )
+
+        for rf in remote_folders:
+            directory_name = Path(rf.remotePath).name
+            remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
+            local_path = (
+                Path(remote_data_directory)
+                .joinpath(connection.host)
+                .joinpath(directory_name)
+            )
+            logger.info(f"Checking last synced for {directory_name}")
+            rf.lastSynced = read_last_synced_file(str(local_path))
+            if not rf.lastSynced:
+                logger.info(f"{directory_name} not yet synced")
+
         return [r.model_dump() for r in remote_folders]
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)

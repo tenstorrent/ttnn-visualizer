@@ -3,8 +3,9 @@ import enum
 import logging
 from functools import wraps
 from pathlib import Path
+import time
 from timeit import default_timer
-from typing import Callable
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -65,3 +66,32 @@ def get_report_path(active_report, current_app, remote_connection=None):
         return target_path
     else:
         return ""
+
+
+def read_last_synced_file(directory: str) -> Optional[int]:
+    """Reads the '.last-synced' file in the specified directory and returns the timestamp as an integer, or None if not found."""
+    last_synced_path = Path(directory) / ".last-synced"
+
+    # Return None if the file does not exist
+    if not last_synced_path.exists():
+        return None
+
+    # Read and return the timestamp as an integer
+    with last_synced_path.open("r") as file:
+        timestamp = int(file.read().strip())
+
+    return timestamp
+
+
+def update_last_synced(directory: Path) -> None:
+    """Creates a file called '.last-synced' with the current timestamp in the specified directory."""
+    # Convert directory to Path object and create .last-synced file path
+    last_synced_path = Path(directory) / ".last-synced"
+
+    # Get the current Unix timestamp
+    timestamp = int(time.time())
+
+    # Write the timestamp to the .last-synced file
+    with last_synced_path.open("w") as file:
+        logger.info(f"Updating last synced for directory {directory}")
+        file.write(str(timestamp))
