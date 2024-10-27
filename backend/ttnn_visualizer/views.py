@@ -36,7 +36,7 @@ from ttnn_visualizer.sessions import (
     update_tab_session,
 )
 from ttnn_visualizer.sftp_operations import (
-    sync_test_folders,
+    sync_remote_folders,
     read_remote_file,
     check_remote_path_for_reports,
     get_remote_report_folders,
@@ -465,10 +465,11 @@ def sync_remote_folder():
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
     )
+    remote_folder = RemoteReportFolder.model_validate(folder, strict=False)
     try:
-        sync_test_folders(
+        sync_remote_folders(
             connection,
-            RemoteReportFolder.model_validate(folder, strict=False),
+            remote_folder.remotePath,
             remote_dir,
             use_compression,
             sid=tab_id,

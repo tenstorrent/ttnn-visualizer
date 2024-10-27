@@ -64,7 +64,7 @@ def walk_sftp_directory(sftp: SFTPClient, remote_path: str):
 
 @remote_exception_handler
 def sync_files_and_directories(
-    client, remote_folder: RemoteReportFolder, destination_dir: Path, sid=None
+    client, remote_folder: str, destination_dir: Path, sid=None
 ):
     """Download files and directories sequentially in one unified loop."""
     with client.open_sftp() as sftp:
@@ -110,7 +110,7 @@ def sync_files_and_directories(
                 download_directory_contents(remote_subdir, local_subdir)
 
         # Start downloading from the root folder
-        download_directory_contents(remote_folder.remotePath, destination_dir)
+        download_directory_contents(remote_folder, destination_dir)
 
         # Emit final status
         final_progress = FileProgress(
@@ -273,40 +273,36 @@ def get_remote_report_folders(
 
 
 @remote_exception_handler
-def sync_test_folders(
+def sync_remote_folders(
     remote_connection: RemoteConnection,
-    remote_folder: RemoteReportFolder,
+    remote_folder_path: str,
     path_prefix: str,
     use_compression: bool,
     sid=None,
 ):
     """Main function to sync test folders, handles both compressed and individual syncs."""
     client = get_client(remote_connection)
-    report_folder = Path(remote_folder.remotePath).name
+    report_folder = Path(remote_folder_path).name
     destination_dir = Path(
         REPORT_DATA_DIRECTORY, path_prefix, remote_connection.host, report_folder
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
 
-    check_permissions(client, remote_folder.remotePath)
+    check_permissions(client, remote_folder_path)
 
     if check_gzip_exists(client) and use_compression:
         try:
-            remote_tar_path = f"{remote_folder.remotePath}.tar.gz"
-            folder_size = calculate_folder_size(client, remote_folder.remotePath)
+            remote_tar_path = f"{remote_folder_path}.tar.gz"
+            folder_size = calculate_folder_size(client, remote_folder_path)
 
-            logger.info(
-                f"Beginning compression of remote folder {remote_folder.remotePath}"
-            )
+            logger.info(f"Beginning compression of remote folder {remote_folder_path}")
             # Emit compression progress in the background
             start_background_task(
                 emit_compression_progress, client, remote_tar_path, folder_size, sid
             )
 
             # Compress the folder
-            compress_command = (
-                f"tar -czf {remote_tar_path} -C {remote_folder.remotePath} ."
-            )
+            compress_command = f"tar -czf {remote_tar_path} -C {remote_folder_path} ."
             stdin, stdout, stderr = client.exec_command(compress_command)
             error = stderr.read().decode().strip()
             if error:
@@ -336,9 +332,9 @@ def sync_test_folders(
 
         except Exception as e:
             logger.error(f"Compression failed: {e}, falling back to individual sync.")
-            sync_files_and_directories(client, remote_folder, destination_dir, sid)
+            sync_files_and_directories(client, remote_folder_path, destination_dir, sid)
     else:
         if not use_compression:
             logger.info("Compression disabled. Syncing files individually")
         logger.info("gzip/tar not found, syncing files individually.")
-        sync_files_and_directories(client, remote_folder, destination_dir, sid)
+        sync_files_and_directories(client, remote_folder_path, destination_dir, sid)
