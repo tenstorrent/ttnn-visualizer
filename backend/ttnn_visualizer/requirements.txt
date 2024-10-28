@@ -14,3 +14,7 @@ gevent==24.10.2
 flask-session
 wheel
 build
+
+# Dev dependencies
+mypy
+types-paramiko

@@ -21,8 +21,7 @@ from ttnn_visualizer.models import (
 )
 from ttnn_visualizer.ssh_client import get_client
 import sqlite3
-import dataclasses
-from typing import List, Optional, Tuple
+from typing import List, Optional
 from pathlib import Path
 import paramiko
 
@@ -78,8 +77,10 @@ class RemoteQueryRunner:
             )
 
         self.ssh_client = self._get_ssh_client(session.remote_connection)
-        self.sqlite_binary = session.remote_connection.sqliteBinaryPath
-        self.remote_db_path = str(Path(session.remote_folder.remotePath, "db.sqlite"))
+        self.sqlite_binary = self.session.remote_connection.sqliteBinaryPath
+        self.remote_db_path = str(
+            Path(self.session.remote_folder.remotePath, "db.sqlite")
+        )
 
     def _get_ssh_client(self, remote_connection) -> paramiko.SSHClient:
         return get_client(remote_connection=remote_connection)
@@ -143,6 +144,7 @@ class DatabaseQueries:
 
     session: Optional[TabSession] = None
     ssh_client = None
+    query_runner: LocalQueryRunner | RemoteQueryRunner
 
     def __init__(self, session: Optional[TabSession] = None, connection=None):
         self.session = session
@@ -187,7 +189,7 @@ class DatabaseQueries:
         self, operation_id: int
     ) -> Optional[DeviceOperation]:
         if not self._check_table_exists("captured_graph"):
-            return []  # Return an empty list if the table does not exist
+            return None  # Return an empty list if the table does not exist
         query = "SELECT * FROM captured_graph WHERE operation_id = ?"
         rows = self.query_runner.execute_query(query, [operation_id])
         if rows:
@@ -238,7 +240,7 @@ class DatabaseQueries:
         return None
 
     def query_buffers(
-        self, buffer_type: Optional[str] = None
+        self, buffer_type: Optional[int] = None
     ) -> Generator[Buffer, None, None]:
         query = "SELECT * FROM buffers WHERE 1=1"
         params = []
@@ -250,7 +252,7 @@ class DatabaseQueries:
             yield Buffer(*row)
 
     def query_buffers_by_operation_id(
-        self, operation_id: int, buffer_type: Optional[str] = None
+        self, operation_id: int, buffer_type: Optional[int] = None
     ) -> Generator[Buffer, None, None]:
         query = "SELECT * FROM buffers WHERE operation_id = ?"
         params = [operation_id]

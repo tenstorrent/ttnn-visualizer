@@ -1,3 +1,5 @@
+import dataclasses
+import enum
 import logging
 from functools import wraps
 from pathlib import Path
@@ -9,6 +11,16 @@ logger = logging.getLogger(__name__)
 
 def str_to_bool(string_value):
     return string_value.lower() in ("yes", "true", "t", "1")
+
+
+@dataclasses.dataclass
+class SerializeableDataclass:
+    def to_dict(self) -> dict:
+        # Convert the dataclass to a dictionary and handle Enums.
+        return {
+            key: (value.value if isinstance(value, enum.Enum) else value)
+            for key, value in dataclasses.asdict(self).items()
+        }
 
 
 def timer(f: Callable):
@@ -28,6 +40,9 @@ def get_report_path(active_report, current_app, remote_connection=None):
     """
     Gets the report path for the given active_report object.
     :param active_report: Dictionary representing the active report.
+    :param current_app: Flask current application
+    :param remote_connection: Remote connection model instance
+
     :return: report_path as a string
     """
     database_file_name = current_app.config["SQLITE_DB_PATH"]

@@ -4,6 +4,7 @@ import os
 import tarfile
 from pathlib import Path
 from stat import S_ISDIR
+import time
 from typing import List
 
 from threading import Thread
@@ -50,23 +51,11 @@ def calculate_folder_size(client: SSHClient, folder_path: str) -> int:
     return int(size_info)
 
 
-def read_remote_config(sftp: SFTPClient, config_path: str) -> RemoteFolder:
-    """Read a remote config file and return RemoteFolder object."""
-    attributes = sftp.lstat(str(config_path))
-    with sftp.open(str(config_path), "rb") as config_file:
-        data = json.loads(config_file.read())
-        return RemoteFolder(
-            remotePath=str(Path(config_path).parent),
-            testName=data["report_name"],
-            lastModified=attributes.st_mtime,
-        )
-
-
 def walk_sftp_directory(sftp: SFTPClient, remote_path: str):
     """SFTP implementation of os.walk."""
     files, folders = [], []
     for f in sftp.listdir_attr(remote_path):
-        if S_ISDIR(f.st_mode):
+        if S_ISDIR(f.st_mode if f.st_mode else 0):
             folders.append(f.filename)
         else:
             files.append(f.filename)
@@ -129,7 +118,7 @@ def sync_files_and_directories(
             number_of_files=0,
             percent_of_current=100,
             finished_files=finished_files,
-            status=FileStatus.FINISHED.value,
+            status=FileStatus.FINISHED,
         )
 
         if current_app.config["USE_WEBSOCKETS"]:
@@ -164,19 +153,50 @@ def download_file_with_progress(
         raise
 
 
+def get_remote_folder_from_remote_config(
+    sftp: SFTPClient, config_path: str
+) -> RemoteFolder:
+    """Read a remote config file and return RemoteFolder object."""
+    attributes = sftp.lstat(str(config_path))
+    with sftp.open(str(config_path), "rb") as config_file:
+        data = json.loads(config_file.read())
+        return RemoteFolder(
+            remotePath=str(Path(config_path).parent),
+            testName=data["report_name"],
+            lastModified=(
+                int(attributes.st_mtime) if attributes.st_mtime else int(time.time())
+            ),
+        )
+
+
 @remote_exception_handler
-def read_remote_file(remote_connection):
+def read_remote_file(
+    remote_connection,
+    remote_path=None,
+):
     """Read a remote file."""
-    logger.info(f"Opening remote file {remote_connection.path}")
     ssh_client = get_client(remote_connection)
     with ssh_client.open_sftp() as sftp:
-        path = Path(remote_connection.path)
+        if remote_path:
+            path = remote_path
+        else:
+            path = Path(remote_connection.path)
+
+        logger.info(f"Opening remote file {path}")
         directory_path = str(path.parent)
         file_name = str(path.name)
-        sftp.chdir(path=directory_path)
-        with sftp.open(filename=file_name) as file:
-            content = file.read()
-            return content
+
+        try:
+            sftp.chdir(path=directory_path)
+            with sftp.open(filename=file_name) as file:
+                content = file.read()
+                return content
+        except FileNotFoundError:
+            logger.error(f"File not found: {path}")
+            return None
+        except IOError as e:
+            logger.error(f"Error reading remote file {path}: {e}")
+            return None
 
 
 @remote_exception_handler
@@ -206,7 +226,7 @@ def check_remote_path_exists(remote_connection: RemoteConnection):
 def get_remote_folder_config_paths(remote_connection, ssh_client) -> List[str]:
     """Given a remote path, return a list of report config files."""
     remote_path = remote_connection.path
-    project_configs = []
+    project_configs: List[str] = []
     with ssh_client.open_sftp() as sftp:
         all_files = sftp.listdir_attr(remote_path)
         top_level_directories = filter(lambda e: S_ISDIR(e.st_mode), all_files)
@@ -214,7 +234,7 @@ def get_remote_folder_config_paths(remote_connection, ssh_client) -> List[str]:
             dirname = Path(remote_path, directory.filename)
             directory_files = sftp.listdir(str(dirname))
             if TEST_CONFIG_FILE in directory_files:
-                project_configs.append(Path(dirname, TEST_CONFIG_FILE))
+                project_configs.append(str(Path(dirname, TEST_CONFIG_FILE)))
     if not project_configs:
         error = f"No projects found at remote path: {remote_path}"
         logger.info(error)
@@ -230,7 +250,9 @@ def get_remote_folders(
     remote_folder_data = []
     with ssh_client.open_sftp() as sftp:
         for config in remote_configs:
-            remote_folder_data.append(read_remote_config(sftp, config))
+            remote_folder_data.append(
+                get_remote_folder_from_remote_config(sftp, config)
+            )
     return remote_folder_data
 
 

@@ -1,6 +1,4 @@
-import os
 import re
-import zipfile
 
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
@@ -27,7 +25,7 @@ def find_sqlite_binary(connection):
     except Exception as e:
         raise RemoteSqliteException(
             message=f"Error finding SQLite binary: {str(e)}",
-            status=ConnectionTestStates.FAILED.value,
+            status=ConnectionTestStates.FAILED,
         )
 
 
@@ -86,6 +84,4 @@ def get_sqlite_path(connection: RemoteConnection):
         if path:
             return path
     except Exception as e:
-        raise RemoteSqliteException(
-            message=str(e), status=ConnectionTestStates.FAILED.value
-        )
+        raise RemoteSqliteException(message=str(e), status=ConnectionTestStates.FAILED)

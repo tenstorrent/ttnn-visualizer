@@ -1,12 +1,14 @@
-import dataclasses
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from logging import getLogger
 
 from flask_socketio import join_room, disconnect, leave_room
+
+from backend.ttnn_visualizer.utils import SerializeableDataclass
+
 
 logger = getLogger(__name__)
 
@@ -24,16 +26,15 @@ class FileStatus(Enum):
 
 
 @dataclass
-class FileProgress:
+class FileProgress(SerializeableDataclass):
     current_file_name: str
     number_of_files: int
     percent_of_current: float
     finished_files: int
     status: FileStatus  # Use the FileStatus Enum
-    timestamp: str = datetime.utcnow().isoformat()
+    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
     def __post_init__(self):
-        self.status = FileStatus(self.status).value if self.status is not None else None
         self.percent_of_current = round(self.percent_of_current, 2)
 
 
@@ -53,7 +54,7 @@ def emit_file_status(progress: FileProgress, tab_id=None):
     def emit_now():
         global last_emit_time
         last_emit_time = time.time()
-        data = dataclasses.asdict(progress)
+        data = progress.to_dict()
         data.update({"tab_id": tab_id})
         socketio.emit(Messages.FILE_TRANSFER_PROGRESS, data, to=tab_id)
 
@@ -83,7 +84,7 @@ def emit_compression_progress(client, remote_tar_path, folder_size, sid):
             number_of_files=1,
             percent_of_current=percent_of_compression,
             finished_files=0,
-            status=FileStatus.COMPRESSING.value,
+            status=FileStatus.COMPRESSING,
         )
         emit_file_status(progress, tab_id=sid)
 
@@ -96,16 +97,14 @@ def register_handlers(socketio_instance):
     def handle_connect():
         from flask import request
 
+        sid = getattr(request, "sid", "")
+
         tab_id = request.args.get("tabId")
-        print(
-            f"Received tabId: {tab_id}, socket ID: {request.sid}"
-        )  # Log for debugging
+        print(f"Received tabId: {tab_id}, socket ID: {sid}")  # Log for debugging
 
         if tab_id:
             join_room(tab_id)  # Join the room identified by the tabId
-            tab_clients[tab_id] = (
-                request.sid
-            )  # Store the socket ID associated with this tabId
+            tab_clients[tab_id] = sid  # Store the socket ID associated with this tabId
             print(f"Joined room: {tab_id}")
         else:
             print("No tabId provided, disconnecting client.")
@@ -117,12 +116,13 @@ def register_handlers(socketio_instance):
 
         tab_id = None
         # Find and remove the socket ID associated with this tabId
+        sid = getattr(request, "sid", "")
         for key, value in tab_clients.items():
 
-            if value == request.sid:
+            if value == sid:
                 tab_id = key
                 break
         if tab_id:
             leave_room(tab_id)
             del tab_clients[tab_id]
-            print(f"Client disconnected from tabId: {tab_id}, Socket ID: {request.sid}")
+            print(f"Client disconnected from tabId: {tab_id}, Socket ID: {sid}")

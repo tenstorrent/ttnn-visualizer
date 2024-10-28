@@ -1,11 +1,11 @@
 import dataclasses
 import json
 
-from flask import Blueprint, Response
+from flask import Blueprint, Response, jsonify
 
 from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.enums import ConnectionTestStates
-from ttnn_visualizer.exceptions import RemoteConnectionException, RemoteSqliteException
+from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.models import (
     RemoteFolder,
     RemoteConnection,
@@ -136,24 +136,49 @@ def operation_detail(operation_id, session):
 def operation_history(session: TabSession):
 
     operation_history_filename = "operation_history.json"
-    operation_history_file = (
-        Path(str(session.report_path)).parent / operation_history_filename
-    )
-    if not operation_history_file.exists():
-        return []
-    with open(operation_history_file, "r") as file:
-        return json.load(file)
+    if session.remote_connection and session.remote_connection.useRemoteQuerying:
+        if not session.remote_folder:
+            return []
+        operation_history = read_remote_file(
+            remote_connection=session.remote_connection,
+            remote_path=Path(
+                session.remote_folder.remotePath, operation_history_filename
+            ),
+        )
+        if not operation_history:
+            return []
+        return json.loads(operation_history)
+    else:
+        operation_history_file = (
+            Path(str(session.report_path)).parent / operation_history_filename
+        )
+        if not operation_history_file.exists():
+            return []
+        with open(operation_history_file, "r") as file:
+            return json.load(file)
 
 
 @api.route("/config")
 @with_session
 @timer
 def get_config(session: TabSession):
-    config_file = Path(str(session.report_path)).parent.joinpath("config.json")
-    if not config_file.exists():
-        return {}
-    with open(config_file, "r") as file:
-        return json.load(file)
+
+    if session.remote_connection and session.remote_connection.useRemoteQuerying:
+        if not session.remote_folder:
+            return {}
+        config = read_remote_file(
+            remote_connection=session.remote_connection,
+            remote_path=Path(session.remote_folder.remotePath, "config.json"),
+        )
+        if not config:
+            return {}
+        return config
+    else:
+        config_file = Path(str(session.report_path)).parent.joinpath("config.json")
+        if not config_file.exists():
+            return {}
+        with open(config_file, "r") as file:
+            return json.load(file)
 
 
 @api.route("/tensors", methods=["GET"])
@@ -174,6 +199,11 @@ def buffer_detail(session: TabSession):
     operation_id = request.args.get("operation_id")
 
     if not address or not operation_id:
+        return Response(status=HTTPStatus.BAD_REQUEST)
+
+    if operation_id and str.isdigit(operation_id):
+        operation_id = int(operation_id)
+    else:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
     with DatabaseQueries(session) as db:
@@ -280,7 +310,7 @@ def create_upload_files():
     # Validate necessary files
     if "db.sqlite" not in filenames or "config.json" not in filenames:
         return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
+            status=ConnectionTestStates.FAILED,
             message="Invalid project directory.",
         ).model_dump()
 
@@ -344,7 +374,7 @@ def create_upload_files():
         emit_file_status(final_progress, tab_id)
 
     return StatusMessage(
-        status=ConnectionTestStates.OK.value, message="Success."
+        status=ConnectionTestStates.OK, message="Success."
     ).model_dump()
 
 
@@ -399,15 +429,13 @@ def test_remote_folder():
     # Test Sqlite binary path configuration
     if not has_failures() and connection.useRemoteQuerying:
         if not connection.sqliteBinaryPath:
-            add_status(
-                ConnectionTestStates.FAILED.value, "SQLite binary path not provided"
-            )
+            add_status(ConnectionTestStates.FAILED, "SQLite binary path not provided")
         else:
             try:
                 check_sqlite_path(connection)
-                add_status(ConnectionTestStates.OK.value, "SQLite binary found.")
+                add_status(ConnectionTestStates.OK, "SQLite binary found.")
             except RemoteConnectionException as e:
-                add_status(ConnectionTestStates.FAILED.value, e.message)
+                add_status(ConnectionTestStates.FAILED, e.message)
 
     return [status.model_dump() for status in statuses]
 
@@ -416,7 +444,7 @@ def test_remote_folder():
 def read_remote_folder():
     connection = RemoteConnection.model_validate(request.json, strict=False)
     try:
-        content = read_remote_file(connection)
+        content = read_remote_file(connection, remote_path=connection.path)
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
     return Response(status=200, response=content)
@@ -426,8 +454,12 @@ def read_remote_folder():
 def sync_remote_folder():
     remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
     use_compression = current_app.config["COMPRESS_REMOTE_FILES"]
-    request_body = request.json
-    connection = request_body.get("connection")
+    request_body = request.get_json()
+
+    # Check if request_body is None or not a dictionary
+    if not request_body or not isinstance(request_body, dict):
+        return jsonify({"error": "Invalid or missing JSON data"}), 400
+
     folder = request_body.get("folder")
     tab_id = request.args.get("tabId", None)
     connection = RemoteConnection.model_validate(
@@ -436,7 +468,7 @@ def sync_remote_folder():
     try:
         sync_test_folders(
             connection,
-            RemoteFolder(**folder),
+            RemoteFolder.model_validate(folder, strict=False),
             remote_dir,
             use_compression,
             sid=tab_id,
@@ -450,24 +482,32 @@ def sync_remote_folder():
 def detect_sqlite_path():
     connection = request.json
     connection = RemoteConnection.model_validate(connection, strict=False)
+    status_message = StatusMessage(
+        status=ConnectionTestStates.OK, message="Unable to Detect Path"
+    )
     try:
         path = get_sqlite_path(connection=connection)
         if path:
-            return StatusMessage(
-                status=ConnectionTestStates.OK.value, message=path
-            ).model_dump()
-    except RemoteSqliteException as e:
+            status_message = StatusMessage(status=ConnectionTestStates.OK, message=path)
+        else:
+            status_message = StatusMessage(
+                status=ConnectionTestStates.OK, message="Unable to Detect Path"
+            )
+    except RemoteConnectionException as e:
         current_app.logger.error(f"Unable to detect SQLite3 path {str(e)}")
-        return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
+        status_message = StatusMessage(
+            status=ConnectionTestStates.FAILED,
             message="Unable to detect SQLite3 path. See logs",
         )
+    finally:
+        return status_message.model_dump()
 
 
 @api.route("/remote/use", methods=["POST"])
 def use_remote_folder():
-    connection = request.json.get("connection", None)
-    folder = request.json.get("folder", None)
+    data = request.get_json(force=True)
+    connection = data.get("connection", None)
+    folder = data.get("folder", None)
     if not connection or not folder:
         return Response(status=HTTPStatus.BAD_REQUEST)
     connection = RemoteConnection.model_validate(connection, strict=False)
@@ -506,4 +546,4 @@ def health_check():
 @with_session
 def get_tab_session(session: TabSession):
     # Used to gate UI functions if no report is active
-    return session.dict()
+    return session.model_dump()
