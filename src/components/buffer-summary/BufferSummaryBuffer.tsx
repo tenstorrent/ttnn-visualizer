@@ -1,9 +1,12 @@
+import classNames from 'classnames';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useState } from 'react';
+import { useAtom } from 'jotai';
 import { Buffer } from '../../model/APIData';
 import { formatSize, toHex } from '../../functions/math';
 import { HistoricalTensor } from '../../model/Graph';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
+import { selectedTensorAtom } from '../../store/app';
 
 interface BufferSummaryBufferProps {
     buffer: Buffer;
@@ -15,6 +18,8 @@ interface BufferSummaryBufferProps {
 function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBufferProps) {
     const [isHovered, setIsHovered] = useState<boolean>(false);
 
+    const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
+
     const styleProps = {
         width: `${size}%`,
         left: `${position}%`,
@@ -23,7 +28,7 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
 
     return (
         <div
-            className='buffer-data'
+            className={classNames({ 'is-selected': tensor?.id === selectedTensor }, 'buffer-data')}
             style={styleProps}
             onMouseEnter={() => setIsHovered(true)}
         >
@@ -42,9 +47,12 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
                     className='hover-target'
                 >
                     {/* Need this element for the onMouseLeave and therefore it needs the class to take up the correct space */}
-                    <div
+                    <button
+                        type='button'
+                        aria-label={`Select buffer ${buffer.address}`}
                         onMouseLeave={() => setIsHovered(false)}
                         className='hover-target'
+                        onClick={() => setSelectedTensor(tensor?.id === selectedTensor ? null : tensor?.id)}
                     />
                 </Tooltip>
             ) : null}

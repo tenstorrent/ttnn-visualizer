@@ -5,6 +5,7 @@
 import classNames from 'classnames';
 import { useMemo, useState } from 'react';
 import { HotkeysProvider, Icon } from '@blueprintjs/core';
+import { useAtomValue } from 'jotai';
 import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell } from '@blueprintjs/table';
 import { IconNames } from '@blueprintjs/icons';
 import { BuffersByOperationData } from '../../hooks/useAPI';
@@ -19,6 +20,7 @@ import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
 import { toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { BufferData } from '../../model/APIData';
+import { selectedTensorAtom } from '../../store/app';
 
 interface ColumnDefinition {
     name: string;
@@ -82,6 +84,7 @@ interface SummaryTableBuffer extends BufferData {
 function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useBuffersTable();
     const [filterQuery, setFilterQuery] = useState('');
+    const selectedTensor = useAtomValue(selectedTensorAtom);
 
     const listOfBuffers = useMemo(
         () =>
@@ -165,8 +168,24 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
             tensor_id: tensorListByOperation.get(buffer.operation_id)?.get(buffer.address)?.id,
         })) as [];
 
-        return [...sortTableFields(buffers)];
+        return [...sortTableFields(buffers)] as SummaryTableBuffer[];
     }, [listOfBuffers, sortTableFields, tensorListByOperation, filterQuery]);
+
+    const selectedRows = useMemo(() => {
+        if (!selectedTensor) {
+            return [];
+        }
+
+        const matchingBuffers = tableFields.reduce((arr: number[], buffer, index: number) => {
+            if (buffer?.tensor_id === selectedTensor) {
+                arr.push(index);
+            }
+
+            return arr;
+        }, []);
+
+        return matchingBuffers.map((index) => ({ rows: [index, index] }));
+    }, [tableFields, selectedTensor]);
 
     return tableFields ? (
         <>
@@ -184,6 +203,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     enableRowResizing={false}
                     cellRendererDependencies={[sortDirection, sortingColumn, tableFields, tableFields.length]}
                     columnWidths={[200, 120, 120, 120, 120, 100]}
+                    selectedRegions={selectedRows}
                 >
                     {createColumns()}
                 </BlueprintTable>
