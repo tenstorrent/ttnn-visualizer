@@ -69,6 +69,15 @@
             .title {
                 margin: 0;
             }
+
+            .tensix-details-header {
+                display: flex;
+                justify-content: flex-end;
+
+                svg {
+                    fill: $tt-white;
+                }
+            }
         }
     }
 }

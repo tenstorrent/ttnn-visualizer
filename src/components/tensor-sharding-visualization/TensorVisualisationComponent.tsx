@@ -180,17 +180,14 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                 {selectedTensix !== null && (
                     <div className='tensix-details'>
                         <div className='tensix-details-header'>
-                            <h4 className='title'>
-                                Tensix Details{' '}
-                                <Button
-                                    icon={IconNames.CROSS}
-                                    minimal
-                                    small
-                                    onClick={() => {
-                                        setSelectedTensix(null);
-                                    }}
-                                />
-                            </h4>
+                            <Button
+                                icon={IconNames.CROSS}
+                                minimal
+                                small
+                                onClick={() => {
+                                    setSelectedTensix(null);
+                                }}
+                            />
                         </div>
                         <div className='tensix-details-content'>
                             <MemoryPlotRenderer
@@ -205,7 +202,7 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                 onBufferClick={() => {}}
                                 configuration={{
                                     ...L1RenderConfiguration,
-                                    title: `Cropped L1 Address space for ${coordsByBankId[selectedTensix].y}-${coordsByBankId[selectedTensix].x}`,
+                                    title: `L1 address space for ${coordsByBankId[selectedTensix].y}-${coordsByBankId[selectedTensix].x}`,
                                 }}
                             />
                         </div>

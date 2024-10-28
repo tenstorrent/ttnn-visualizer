@@ -23,6 +23,12 @@
     &.empty-plot {
         opacity: 0.4;
     }
+
+    .plot-title {
+        font-weight: 500;
+        margin-bottom: -14px;
+        margin-top: 0;
+    }
 }
 
 .operation-details-component {
