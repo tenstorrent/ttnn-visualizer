@@ -4,7 +4,12 @@
 
 import axios from 'axios';
 import { ConnectionStatus, ConnectionTestStates } from '../definitions/ConnectionStatus';
-import { MountRemoteFolder, RemoteConnection, RemoteFolder, SyncRemoteFolder } from '../definitions/RemoteConnection';
+import {
+    MountRemoteFolder,
+    RemoteConnection,
+    RemoteFolder as RemoteReportFolder,
+    SyncRemoteFolder,
+} from '../definitions/RemoteConnection';
 import axiosInstance from '../libs/axiosInstance';
 import useAppConfig from './useAppConfig';
 
@@ -43,12 +48,12 @@ const useRemoteConnection = () => {
         return connectionTestStates;
     };
 
-    const listRemoteFolders = async (connection?: RemoteConnection) => {
+    const listRemoteReports = async (connection?: RemoteConnection) => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
 
-        const response = await axiosInstance.post<RemoteFolder[]>(
+        const response = await axiosInstance.post<RemoteReportFolder[]>(
             `${import.meta.env.VITE_API_ROOT}/remote/folder`,
             connection,
         );
@@ -56,7 +61,7 @@ const useRemoteConnection = () => {
         return response.data;
     };
 
-    const syncRemoteFolder = async (connection?: RemoteConnection, remoteFolder?: RemoteFolder) => {
+    const syncRemoteReport = async (connection?: RemoteConnection, remoteFolder?: RemoteReportFolder) => {
         if (!connection || !connection.host || !connection.port || !connection.path) {
             throw new Error('No connection provided');
         }
@@ -71,7 +76,7 @@ const useRemoteConnection = () => {
         });
     };
 
-    const mountRemoteFolder = async (connection: RemoteConnection, remoteFolder: RemoteFolder) => {
+    const mountRemoteReport = async (connection: RemoteConnection, remoteFolder: RemoteReportFolder) => {
         return axiosInstance.post<MountRemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/use`, {
             connection,
             folder: remoteFolder,
@@ -92,20 +97,20 @@ const useRemoteConnection = () => {
         set selectedConnection(connection: RemoteConnection | undefined) {
             setAppConfig('selectedConnection', JSON.stringify(connection ?? null));
         },
-        getSavedRemoteFolders: (connection?: RemoteConnection) => {
-            return JSON.parse(getAppConfig(`${connection?.name} - remoteFolders`) ?? '[]') as RemoteFolder[];
+        getSavedRemoteReports: (connection?: RemoteConnection) => {
+            return JSON.parse(getAppConfig(`${connection?.name} - remoteReports`) ?? '[]') as RemoteReportFolder[];
         },
-        setSavedRemoteFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
-            setAppConfig(`${connection?.name} - remoteFolders`, JSON.stringify(folders));
+        setSavedRemoteReports: (connection: RemoteConnection | undefined, reports: RemoteReportFolder[]) => {
+            setAppConfig(`${connection?.name} - remoteReports`, JSON.stringify(reports));
         },
         updateSavedRemoteFoldersConnection(oldConnection?: RemoteConnection, newConnection?: RemoteConnection) {
-            const folders = this.getSavedRemoteFolders(oldConnection);
+            const folders = this.getSavedRemoteReports(oldConnection);
 
-            this.deleteSavedRemoteFolders(oldConnection);
-            this.setSavedRemoteFolders(newConnection, folders);
+            this.deleteSavedRemoteReports(oldConnection);
+            this.setSavedRemoteReports(newConnection, folders);
         },
-        deleteSavedRemoteFolders: (connection?: RemoteConnection) => {
-            deleteAppConfig(`${connection?.name} - remoteFolders`);
+        deleteSavedRemoteReports: (connection?: RemoteConnection) => {
+            deleteAppConfig(`${connection?.name} - remoteReports`);
         },
     };
 
@@ -121,9 +126,9 @@ const useRemoteConnection = () => {
 
     return {
         testConnection,
-        syncRemoteFolder,
-        listRemoteFolders,
-        mountRemoteFolder,
+        syncRemoteReport,
+        listRemoteReports,
+        mountRemoteReport,
         fetchSqlitePath,
         persistentState,
         readRemoteFile,

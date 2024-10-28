@@ -24,7 +24,7 @@ const RemoteSyncConfigurator: FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [remoteFolderList, setRemoteFolders] = useState<RemoteFolder[]>(
-        remote.persistentState.getSavedRemoteFolders(remote.persistentState.selectedConnection),
+        remote.persistentState.getSavedRemoteReports(remote.persistentState.selectedConnection),
     );
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
 
@@ -36,9 +36,8 @@ const RemoteSyncConfigurator: FC = () => {
 
     const updateSelectedConnection = (connection: RemoteConnection) => {
         remote.persistentState.selectedConnection = connection;
-        setRemoteFolders(remote.persistentState.getSavedRemoteFolders(connection));
-
-        setSelectedRemoteFolder(remote.persistentState.getSavedRemoteFolders(connection)[0]);
+        setRemoteFolders(remote.persistentState.getSavedRemoteReports(connection));
+        setSelectedRemoteFolder(remote.persistentState.getSavedRemoteReports(connection)[0]);
     };
 
     const updateSavedRemoteFolders = (connection: RemoteConnection | undefined, updatedFolders: RemoteFolder[]) => {
@@ -46,7 +45,7 @@ const RemoteSyncConfigurator: FC = () => {
             return [];
         }
 
-        const savedFolders = remote.persistentState.getSavedRemoteFolders(connection);
+        const savedFolders = remote.persistentState.getSavedRemoteReports(connection);
         const mergedFolders = (updatedFolders ?? []).map((updatedFolder) => {
             const existingFolder = savedFolders?.find((f) => f.localPath === updatedFolder.localPath);
 
@@ -56,7 +55,7 @@ const RemoteSyncConfigurator: FC = () => {
             } as RemoteFolder;
         });
 
-        remote.persistentState.setSavedRemoteFolders(connection, mergedFolders);
+        remote.persistentState.setSavedRemoteReports(connection, mergedFolders);
         setRemoteFolders(mergedFolders);
 
         return mergedFolders;
@@ -74,7 +73,7 @@ const RemoteSyncConfigurator: FC = () => {
 
     const viewReport = async () => {
         if (remote.persistentState.selectedConnection && selectedRemoteFolder) {
-            const response = await remote.mountRemoteFolder(
+            const response = await remote.mountRemoteReport(
                 remote.persistentState.selectedConnection,
                 selectedRemoteFolder,
             );
@@ -101,7 +100,7 @@ const RemoteSyncConfigurator: FC = () => {
         (async () => {
             try {
                 setIsFetchingFolderStatus(true);
-                const updatedRemoteFolders = await remote.listRemoteFolders(remote.persistentState.selectedConnection);
+                const updatedRemoteFolders = await remote.listRemoteReports(remote.persistentState.selectedConnection);
 
                 setIsRemoteOffline(false);
                 updateSavedRemoteFolders(remote.persistentState.selectedConnection!, updatedRemoteFolders);
@@ -159,7 +158,7 @@ const RemoteSyncConfigurator: FC = () => {
 
                         updatedConnections.splice(findConnectionIndex(connection), 1);
                         remote.persistentState.savedConnectionList = updatedConnections;
-                        remote.persistentState.deleteSavedRemoteFolders(connection);
+                        remote.persistentState.deleteSavedRemoteReports(connection);
 
                         updateSelectedConnection(updatedConnections[0]);
                         setSelectedRemoteFolder(undefined);
@@ -169,7 +168,7 @@ const RemoteSyncConfigurator: FC = () => {
                             setIsFetchingFolderStatus(true);
                             updateSelectedConnection(connection);
 
-                            const fetchedRemoteFolders = await remote.listRemoteFolders(connection);
+                            const fetchedRemoteFolders = await remote.listRemoteReports(connection);
                             const updatedFolders = updateSavedRemoteFolders(connection, fetchedRemoteFolders);
 
                             setIsRemoteOffline(false);
@@ -184,7 +183,7 @@ const RemoteSyncConfigurator: FC = () => {
                         try {
                             setIsLoadingFolderList(true);
 
-                            const savedRemotefolders = await remote.listRemoteFolders(
+                            const savedRemotefolders = await remote.listRemoteReports(
                                 remote.persistentState.selectedConnection,
                             );
 
@@ -232,12 +231,12 @@ const RemoteSyncConfigurator: FC = () => {
                             onClick={async () => {
                                 try {
                                     setIsSyncingRemoteFolder(true);
-                                    await remote.syncRemoteFolder(
+                                    await remote.syncRemoteReport(
                                         remote.persistentState.selectedConnection,
                                         selectedRemoteFolder,
                                     );
 
-                                    const savedRemoteFolders = remote.persistentState.getSavedRemoteFolders(
+                                    const savedRemoteFolders = remote.persistentState.getSavedRemoteReports(
                                         remote.persistentState.selectedConnection,
                                     );
 
