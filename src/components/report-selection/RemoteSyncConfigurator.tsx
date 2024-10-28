@@ -231,7 +231,7 @@ const RemoteSyncConfigurator: FC = () => {
                             onClick={async () => {
                                 try {
                                     setIsSyncingRemoteFolder(true);
-                                    await remote.syncRemoteReport(
+                                    const { data: updatedFolder } = await remote.syncRemoteReport(
                                         remote.persistentState.selectedConnection,
                                         selectedRemoteFolder,
                                     );
@@ -240,11 +240,11 @@ const RemoteSyncConfigurator: FC = () => {
                                         remote.persistentState.selectedConnection,
                                     );
 
-                                    // TODO This should refresh the folders from the backend
-                                    // since the backend now keeps track of sync
-                                    savedRemoteFolders.find(
+                                    const updatedFolderIndex = savedRemoteFolders.findIndex(
                                         (f) => f.localPath === selectedRemoteFolder?.localPath,
-                                    )!.lastSynced = new Date().getTime() / 1000;
+                                    );
+
+                                    savedRemoteFolders[updatedFolderIndex] = updatedFolder;
 
                                     updateSavedRemoteFolders(
                                         remote.persistentState.selectedConnection,

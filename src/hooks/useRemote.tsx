@@ -8,7 +8,6 @@ import {
     MountRemoteFolder,
     RemoteConnection,
     RemoteFolder as RemoteReportFolder,
-    SyncRemoteFolder,
 } from '../definitions/RemoteConnection';
 import axiosInstance from '../libs/axiosInstance';
 import useAppConfig from './useAppConfig';
@@ -70,7 +69,7 @@ const useRemoteConnection = () => {
             throw new Error('No remote folder provided');
         }
 
-        return axiosInstance.post<SyncRemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
+        return axiosInstance.post<RemoteReportFolder>(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
             connection,
             folder: remoteFolder,
         });

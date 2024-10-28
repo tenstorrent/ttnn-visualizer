@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import time
 from typing import List
 
 from flask import Blueprint, Response, jsonify
@@ -491,7 +492,9 @@ def sync_remote_folder():
         )
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
-    return Response(status=HTTPStatus.OK)
+
+    remote_folder.lastSynced = int(time.time())
+    return remote_folder.model_dump()
 
 
 @api.route("/remote/sqlite/detect-path", methods=["POST"])
