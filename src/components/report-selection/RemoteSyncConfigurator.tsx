@@ -93,6 +93,7 @@ const RemoteSyncConfigurator: FC = () => {
         !isLoadingFolderList &&
         remoteFolderList?.length > 0 &&
         selectedRemoteFolder &&
+        selectedRemoteFolder?.lastSynced &&
         !isRemoteFolderOutdated(selectedRemoteFolder) &&
         reportLocation === 'remote';
 
@@ -101,9 +102,12 @@ const RemoteSyncConfigurator: FC = () => {
             try {
                 setIsFetchingFolderStatus(true);
                 const updatedRemoteFolders = await remote.listRemoteReports(remote.persistentState.selectedConnection);
-
                 setIsRemoteOffline(false);
                 updateSavedRemoteFolders(remote.persistentState.selectedConnection!, updatedRemoteFolders);
+                const updatedSelectedFolder = updatedRemoteFolders.find(
+                    (f) => f.remotePath === selectedRemoteFolder?.remotePath,
+                );
+                setSelectedRemoteFolder(updatedSelectedFolder);
             } catch {
                 setIsRemoteOffline(true);
             } finally {
@@ -250,8 +254,7 @@ const RemoteSyncConfigurator: FC = () => {
                                         remote.persistentState.selectedConnection,
                                         savedRemoteFolders,
                                     );
-
-                                    setSelectedRemoteFolder(selectedRemoteFolder);
+                                    setSelectedRemoteFolder(savedRemoteFolders[updatedFolderIndex]);
                                 } catch {
                                     // eslint-disable-next-line no-alert
                                     alert('Unable to sync remote folder');
@@ -268,7 +271,7 @@ const RemoteSyncConfigurator: FC = () => {
                         onClick={viewReport}
                         icon={IconNames.EYE_OPEN}
                     >
-                        View report
+                        {selectedRemoteFolder?.lastSynced}
                     </Button>
                 </RemoteFolderSelector>
             </FormGroup>
