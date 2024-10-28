@@ -110,7 +110,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                         }))
                         .flat(),
                 )
-                .flat(),
+                .flat() as SummaryTableBuffer[],
         [buffersByOperation, tensorListByOperation],
     );
 
@@ -193,19 +193,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                 const isFilteredOut = Object.entries(filters)
                     .filter(([_key, filterValue]) => String(filterValue).length)
                     .some(([key, filterValue]) => {
-                        let bufferValue = String(buffer[key as COLUMN_KEYS]);
-
-                        if (key === 'operation_id') {
-                            bufferValue = `${buffer.operation_id} - ${buffer.operation_name}`;
-                        }
-
-                        if (key === 'tensor_id' && buffer[key]) {
-                            bufferValue = `Tensor ${buffer[key]}`;
-                        }
-
-                        if (key === 'address') {
-                            bufferValue = buffer.hexAddress;
-                        }
+                        const bufferValue = getCellText(buffer, key as COLUMN_KEYS);
 
                         return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
                     });
@@ -231,6 +219,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     enableRowResizing={false}
                     cellRendererDependencies={[sortDirection, sortingColumn, tableFields, tableFields.length]}
                     columnWidths={[200, 120, 120, 120, 120, 100]}
+                    getCellClipboardData={(row, col) => getCellText(tableFields[row], COLUMNS[col].key)}
                 >
                     {createColumns()}
                 </BlueprintTable>
@@ -240,6 +229,28 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         <LoadingSpinner />
     );
 }
+
+const getCellText = (buffer: SummaryTableBuffer, key: COLUMN_KEYS) => {
+    let textValue = buffer[key].toString();
+
+    if (key === 'tensor_id') {
+        textValue = buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : '';
+    }
+
+    if (key === 'operation_id') {
+        textValue = `${buffer.operation_id} - ${buffer.operation_name}`;
+    }
+
+    if (key === 'buffer_type') {
+        textValue = BufferTypeLabel[buffer.buffer_type];
+    }
+
+    if (key === 'address') {
+        textValue = buffer.hexAddress;
+    }
+
+    return textValue;
+};
 
 const createCell =
     (key: COLUMN_KEYS, tableFields: SummaryTableBuffer[], filters: Record<COLUMN_KEYS, string>) =>
@@ -252,11 +263,9 @@ const getCellContent = (
     filters: Record<COLUMN_KEYS, string>,
 ) => {
     const buffer = tableFields[rowIndex] as SummaryTableBuffer;
-    let textValue = buffer[key].toString();
+    const textValue = getCellText(buffer, key);
 
     if (key === 'tensor_id') {
-        textValue = buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : '';
-
         return (
             <div className='operation-cell'>
                 <div
@@ -277,18 +286,6 @@ const getCellContent = (
                 />
             </div>
         );
-    }
-
-    if (key === 'operation_id') {
-        textValue = `${buffer.operation_id} - ${buffer.operation_name}`;
-    }
-
-    if (key === 'buffer_type') {
-        textValue = BufferTypeLabel[buffer.buffer_type];
-    }
-
-    if (key === 'address') {
-        textValue = buffer.hexAddress;
     }
 
     return COLUMNS.find((column) => column.key === key)?.filterable ? (
