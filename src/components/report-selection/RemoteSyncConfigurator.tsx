@@ -93,7 +93,6 @@ const RemoteSyncConfigurator: FC = () => {
         !isLoadingFolderList &&
         remoteFolderList?.length > 0 &&
         selectedRemoteFolder &&
-        selectedRemoteFolder?.lastSynced &&
         !isRemoteFolderOutdated(selectedRemoteFolder) &&
         reportLocation === 'remote';
 
