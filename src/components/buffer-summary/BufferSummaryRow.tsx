@@ -3,7 +3,6 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 import 'styles/components/BufferSummaryRow.scss';
-import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { HistoricalTensor } from '../../model/Graph';
 import BufferSummaryBuffer from './BufferSummaryBuffer';
 import { Buffer } from '../../model/APIData';
@@ -41,17 +40,13 @@ function BufferSummaryRow({
                 const size = (buffer.size / computedMemorySize) * SCALE;
                 const position = ((buffer.address - memoryStart) / computedMemorySize) * SCALE;
                 const tensor = tensorList.get(buffer.address);
-                const tensorStyleProps = {
-                    width: `${size}%`,
-                    left: `${position}%`,
-                    backgroundColor: tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address),
-                };
 
                 return (
                     <BufferSummaryBuffer
                         key={`${operationId}-${buffer.address}`}
-                        bufferData={buffer}
-                        style={tensorStyleProps}
+                        buffer={buffer}
+                        size={size}
+                        position={position}
                         tensor={tensor}
                     />
                 );

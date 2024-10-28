@@ -3,32 +3,36 @@ import { useState } from 'react';
 import { Buffer } from '../../model/APIData';
 import { formatSize, toHex } from '../../functions/math';
 import { HistoricalTensor } from '../../model/Graph';
+import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 
 interface BufferSummaryBufferProps {
-    bufferData: Buffer;
-    style: {
-        width: string;
-        left: string;
-        backgroundColor?: string;
-    };
+    buffer: Buffer;
+    size: number;
+    position: number;
     tensor?: HistoricalTensor;
 }
 
-function BufferSummaryBuffer({ bufferData, style, tensor }: BufferSummaryBufferProps) {
+function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBufferProps) {
     const [isHovered, setIsHovered] = useState<boolean>(false);
+
+    const styleProps = {
+        width: `${size}%`,
+        left: `${position}%`,
+        backgroundColor: tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address),
+    };
 
     return (
         <div
             className='buffer-data'
-            style={style}
+            style={styleProps}
             onMouseEnter={() => setIsHovered(true)}
         >
             {isHovered ? (
                 <Tooltip
                     content={
                         <div>
-                            {bufferData.address} ({toHex(bufferData.address)})<br />
-                            Size: {formatSize(bufferData.size)}
+                            {buffer.address} ({toHex(buffer.address)})<br />
+                            Size: {formatSize(buffer.size)}
                             <br />
                             {tensor?.id ? `Tensor ${tensor.id}` : ''}
                         </div>
