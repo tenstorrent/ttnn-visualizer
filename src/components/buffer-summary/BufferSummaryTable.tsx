@@ -3,10 +3,10 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { HotkeysProvider, Icon } from '@blueprintjs/core';
 import { useAtomValue } from 'jotai';
-import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell } from '@blueprintjs/table';
+import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Region, Table2 } from '@blueprintjs/table';
 import { IconNames } from '@blueprintjs/icons';
 import { BuffersByOperationData } from '../../hooks/useAPI';
 import { BufferTypeLabel } from '../../model/BufferType';
@@ -85,6 +85,8 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useBuffersTable();
     const [filterQuery, setFilterQuery] = useState('');
     const selectedTensor = useAtomValue(selectedTensorAtom);
+
+    const tableRef = useRef<Table2 | null>(null);
 
     const listOfBuffers = useMemo(
         () =>
@@ -184,7 +186,11 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
             return arr;
         }, []);
 
-        return matchingBuffers.map((index) => ({ rows: [index, index] }));
+        if (tableRef?.current?.scrollToRegion) {
+            tableRef.current.scrollToRegion({ rows: [matchingBuffers[0], matchingBuffers[0]] });
+        }
+
+        return matchingBuffers.map((index) => ({ rows: [index, index] })) as Region[];
     }, [tableFields, selectedTensor]);
 
     return tableFields ? (
@@ -204,6 +210,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     cellRendererDependencies={[sortDirection, sortingColumn, tableFields, tableFields.length]}
                     columnWidths={[200, 120, 120, 120, 120, 100]}
                     selectedRegions={selectedRows}
+                    ref={tableRef}
                 >
                     {createColumns()}
                 </BlueprintTable>
