@@ -53,9 +53,21 @@
                 border: 1px solid $tt-black;
                 background-color: $tt-grey-2;
 
+                &.selected {
+                    border-color: $tt-tensix-selected;
+                }
+
                 &.empty-tensix {
                     opacity: 0.3;
                 }
+            }
+        }
+
+        .tensix-details {
+            padding: 5px 0;
+
+            .title {
+                margin: 0;
             }
         }
     }

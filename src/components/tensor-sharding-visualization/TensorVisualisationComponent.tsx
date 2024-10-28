@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button, Card, Overlay2 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { PlotData } from 'plotly.js';
+import classNames from 'classnames';
 import { BufferType } from '../../model/BufferType';
 import { useBufferPages, useDevices } from '../../hooks/useAPI';
 import '../../scss/components/TensorVisualizationComponent.scss';
@@ -9,6 +11,9 @@ import { BufferPage } from '../../model/APIData';
 import SVGBufferRenderer from './SVGBufferRenderer';
 import { HistoricalTensor } from '../../model/Graph';
 import { getTensorColor } from '../../functions/colorGenerator';
+import getChartData, { pageDataToChunkArray } from '../../functions/getChartData';
+import { L1RenderConfiguration } from '../../definitions/PlotConfigurations';
+import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 
 export interface TensorVisualisationComponentProps {
     title: string;
@@ -49,6 +54,8 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
     const { data } = useBufferPages(operationId, address, bufferType);
     const { data: devices } = useDevices();
 
+    const [selectedTensix, setSelectedTensix] = useState<number | null>(null);
+    const [chartData, setChartData] = useState<Partial<PlotData>[]>([]);
     if (!data || !devices) {
         return (
             <span className='tensor-visualisation-loader'>
@@ -138,15 +145,25 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                         }}
                     >
                         {coordsByBankId.map((coords, index) => (
+                            // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
                             <div
                                 // eslint-disable-next-line react/no-array-index-key
                                 key={index}
-                                className='tensix'
+                                className={classNames('tensix', { selected: selectedTensix === index })}
                                 style={{
                                     width: `${tensixSize}px`,
                                     height: `${tensixHeight}px`,
                                     gridColumn: coords.x + 1,
                                     gridRow: coords.y + 1,
+                                }}
+                                onClick={() => {
+                                    setSelectedTensix(index);
+                                    setChartData(
+                                        getChartData(
+                                            pageDataToChunkArray(buffersByBankId[index]),
+                                            (id) => tensorByAddress?.get(id) || null,
+                                        ),
+                                    );
                                 }}
                             >
                                 <SVGBufferRenderer
@@ -160,6 +177,40 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                         ))}
                     </div>
                 </div>
+                {selectedTensix !== null && (
+                    <div className='tensix-details'>
+                        <div className='tensix-details-header'>
+                            <h4 className='title'>
+                                Tensix Details{' '}
+                                <Button
+                                    icon={IconNames.CROSS}
+                                    minimal
+                                    small
+                                    onClick={() => {
+                                        setSelectedTensix(null);
+                                    }}
+                                />
+                            </h4>
+                        </div>
+                        <div className='tensix-details-content'>
+                            <MemoryPlotRenderer
+                                title={`Detailed L1 Report for ${coordsByBankId[selectedTensix].y}-${
+                                    coordsByBankId[selectedTensix].x
+                                }`}
+                                className={classNames('detailed-l1-memory-renderer, l1-memory-renderer', {})}
+                                isZoomedIn
+                                plotZoomRange={[memStart, memSize]}
+                                chartDataList={[chartData]}
+                                memorySize={memSize}
+                                onBufferClick={() => {}}
+                                configuration={{
+                                    ...L1RenderConfiguration,
+                                    title: `Cropped L1 Address space for ${coordsByBankId[selectedTensix].y}-${coordsByBankId[selectedTensix].x}`,
+                                }}
+                            />
+                        </div>
+                    </div>
+                )}
             </Card>
         </Overlay2>
     );
