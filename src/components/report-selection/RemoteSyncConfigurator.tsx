@@ -270,7 +270,7 @@ const RemoteSyncConfigurator: FC = () => {
                         onClick={viewReport}
                         icon={IconNames.EYE_OPEN}
                     >
-                        {selectedRemoteFolder?.lastSynced}
+                        View Report
                     </Button>
                 </RemoteFolderSelector>
             </FormGroup>
