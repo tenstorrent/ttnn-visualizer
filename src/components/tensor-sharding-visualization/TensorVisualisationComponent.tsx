@@ -167,7 +167,7 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                 }}
                             >
                                 <SVGBufferRenderer
-                                    width={tensixSize}
+                                    width={tensixSize - 2}
                                     height={tensixHeight}
                                     data={buffersByBankId[index]}
                                     memorySize={memSize}
