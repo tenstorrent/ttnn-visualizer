@@ -233,7 +233,6 @@ def check_remote_path_exists(remote_connection: RemoteConnection):
         )
 
 
-@remote_exception_handler
 def find_folders_by_files(
     ssh_client, root_folder: str, file_names: List[str]
 ) -> List[str]:
