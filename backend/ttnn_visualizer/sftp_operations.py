@@ -21,7 +21,7 @@ from ttnn_visualizer.sockets import (
 )
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.exceptions import NoProjectsException, RemoteConnectionException
-from ttnn_visualizer.models import RemoteConnection, RemoteFolder
+from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
 from ttnn_visualizer.ssh_client import check_gzip_exists, check_permissions, get_client
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ def walk_sftp_directory(sftp: SFTPClient, remote_path: str):
 
 @remote_exception_handler
 def sync_files_and_directories(
-    client, remote_folder: RemoteFolder, destination_dir: Path, sid=None
+    client, remote_folder: str, destination_dir: Path, sid=None
 ):
     """Download files and directories sequentially in one unified loop."""
     with client.open_sftp() as sftp:
@@ -153,14 +153,14 @@ def download_file_with_progress(
         raise
 
 
-def get_remote_folder_from_remote_config(
+def get_remote_report_folder_from_config_path(
     sftp: SFTPClient, config_path: str
-) -> RemoteFolder:
+) -> RemoteReportFolder:
     """Read a remote config file and return RemoteFolder object."""
     attributes = sftp.lstat(str(config_path))
     with sftp.open(str(config_path), "rb") as config_file:
         data = json.loads(config_file.read())
-        return RemoteFolder(
+        return RemoteReportFolder(
             remotePath=str(Path(config_path).parent),
             testName=data["report_name"],
             lastModified=(
@@ -200,10 +200,17 @@ def read_remote_file(
 
 
 @remote_exception_handler
-def check_remote_path_for_projects(remote_connection):
+def check_remote_path_for_reports(remote_connection):
     """Check the remote path for config files."""
     ssh_client = get_client(remote_connection)
-    get_remote_folder_config_paths(remote_connection, ssh_client)
+    remote_config_paths = find_folders_by_files(
+        ssh_client, remote_connection.path, [TEST_CONFIG_FILE]
+    )
+    if not remote_config_paths:
+        raise NoProjectsException(
+            message="No projects found at path", status=ConnectionTestStates.FAILED
+        )
+    return True
 
 
 @remote_exception_handler
@@ -223,86 +230,80 @@ def check_remote_path_exists(remote_connection: RemoteConnection):
 
 
 @remote_exception_handler
-def get_remote_folder_config_paths(remote_connection, ssh_client) -> List[str]:
-    """Given a remote path, return a list of report config files."""
-    remote_path = remote_connection.path
-    project_configs: List[str] = []
+def find_folders_by_files(
+    ssh_client, root_folder: str, file_names: List[str]
+) -> List[str]:
+    """Given a remote path, return a list of top-level folders that contain any of the specified files."""
+    matched_folders: List[str] = []
     with ssh_client.open_sftp() as sftp:
-        all_files = sftp.listdir_attr(remote_path)
+        all_files = sftp.listdir_attr(root_folder)
         top_level_directories = filter(lambda e: S_ISDIR(e.st_mode), all_files)
+
         for directory in top_level_directories:
-            dirname = Path(remote_path, directory.filename)
+            dirname = Path(root_folder, directory.filename)
             directory_files = sftp.listdir(str(dirname))
-            if TEST_CONFIG_FILE in directory_files:
-                project_configs.append(str(Path(dirname, TEST_CONFIG_FILE)))
-    if not project_configs:
-        error = f"No projects found at remote path: {remote_path}"
-        logger.info(error)
-        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
-    return project_configs
+
+            # Check if any of the specified file names exist in the directory
+            if any(file_name in directory_files for file_name in file_names):
+                matched_folders.append(str(dirname))
+
+    return matched_folders
 
 
 @remote_exception_handler
-def get_remote_folders(
-    ssh_client: SSHClient, remote_configs: List[str]
-) -> List[RemoteFolder]:
-    """Return a list of RemoteFolder objects."""
-    remote_folder_data = []
-    with ssh_client.open_sftp() as sftp:
-        for config in remote_configs:
-            remote_folder_data.append(
-                get_remote_folder_from_remote_config(sftp, config)
-            )
-    return remote_folder_data
-
-
-@remote_exception_handler
-def get_remote_test_folders(remote_connection: RemoteConnection) -> List[RemoteFolder]:
+def get_remote_report_folders(
+    remote_connection: RemoteConnection,
+) -> List[RemoteReportFolder]:
     """Return a list of remote folders containing a config.json file."""
     client = get_client(remote_connection)
-    remote_config_paths = get_remote_folder_config_paths(remote_connection, client)
+    remote_config_paths = find_folders_by_files(
+        client, remote_connection.path, [TEST_CONFIG_FILE]
+    )
     if not remote_config_paths:
         error = f"No projects found at {remote_connection.path}"
         logger.info(error)
         raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
-    return get_remote_folders(client, remote_config_paths)
+    remote_folder_data = []
+    with client.open_sftp() as sftp:
+        for config_path in remote_config_paths:
+            remote_folder = get_remote_report_folder_from_config_path(
+                sftp, str(Path(config_path).joinpath(TEST_CONFIG_FILE))
+            )
+            remote_folder_data.append(remote_folder)
+    return remote_folder_data
 
 
 @remote_exception_handler
-def sync_test_folders(
+def sync_remote_folders(
     remote_connection: RemoteConnection,
-    remote_folder: RemoteFolder,
+    remote_folder_path: str,
     path_prefix: str,
     use_compression: bool,
     sid=None,
 ):
     """Main function to sync test folders, handles both compressed and individual syncs."""
     client = get_client(remote_connection)
-    report_folder = Path(remote_folder.remotePath).name
+    report_folder = Path(remote_folder_path).name
     destination_dir = Path(
         REPORT_DATA_DIRECTORY, path_prefix, remote_connection.host, report_folder
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
 
-    check_permissions(client, remote_folder.remotePath)
+    check_permissions(client, remote_folder_path)
 
     if check_gzip_exists(client) and use_compression:
         try:
-            remote_tar_path = f"{remote_folder.remotePath}.tar.gz"
-            folder_size = calculate_folder_size(client, remote_folder.remotePath)
+            remote_tar_path = f"{remote_folder_path}.tar.gz"
+            folder_size = calculate_folder_size(client, remote_folder_path)
 
-            logger.info(
-                f"Beginning compression of remote folder {remote_folder.remotePath}"
-            )
+            logger.info(f"Beginning compression of remote folder {remote_folder_path}")
             # Emit compression progress in the background
             start_background_task(
                 emit_compression_progress, client, remote_tar_path, folder_size, sid
             )
 
             # Compress the folder
-            compress_command = (
-                f"tar -czf {remote_tar_path} -C {remote_folder.remotePath} ."
-            )
+            compress_command = f"tar -czf {remote_tar_path} -C {remote_folder_path} ."
             stdin, stdout, stderr = client.exec_command(compress_command)
             error = stderr.read().decode().strip()
             if error:
@@ -332,9 +333,9 @@ def sync_test_folders(
 
         except Exception as e:
             logger.error(f"Compression failed: {e}, falling back to individual sync.")
-            sync_files_and_directories(client, remote_folder, destination_dir, sid)
+            sync_files_and_directories(client, remote_folder_path, destination_dir, sid)
     else:
         if not use_compression:
             logger.info("Compression disabled. Syncing files individually")
         logger.info("gzip/tar not found, syncing files individually.")
-        sync_files_and_directories(client, remote_folder, destination_dir, sid)
+        sync_files_and_directories(client, remote_folder_path, destination_dir, sid)
