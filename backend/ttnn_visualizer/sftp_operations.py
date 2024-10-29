@@ -12,6 +12,7 @@ from flask import current_app
 from paramiko.client import SSHClient
 from paramiko.sftp_client import SFTPClient
 
+from ttnn_visualizer.utils import update_last_synced
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.sockets import (
     FileProgress,
@@ -110,7 +111,10 @@ def sync_files_and_directories(
                 download_directory_contents(remote_subdir, local_subdir)
 
         # Start downloading from the root folder
-        download_directory_contents(remote_folder.remotePath, destination_dir)
+        download_directory_contents(remote_folder, destination_dir)
+
+        # Create a .last-synced file in directory
+        update_last_synced(destination_dir)
 
         # Emit final status
         final_progress = FileProgress(
@@ -327,6 +331,9 @@ def sync_remote_folders(
             # Extract tar file
             with tarfile.open(local_tar_path, "r:gz") as tar:
                 tar.extractall(path=destination_dir)
+
+            # Update last synced
+            update_last_synced(destination_dir)
 
             os.remove(local_tar_path)
             client.exec_command(f"rm {remote_tar_path}")
