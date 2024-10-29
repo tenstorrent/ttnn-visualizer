@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { useMemo, useRef, useState } from 'react';
-import { useAtomValue } from 'jotai';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAtom } from 'jotai';
 import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Region, Table2 } from '@blueprintjs/table';
 import { HotkeysProvider, Icon, InputGroup } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -87,7 +87,8 @@ interface SummaryTableBuffer extends BufferData {
 
 function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useBuffersTable();
-    const selectedTensor = useAtomValue(selectedTensorAtom);
+    const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
+    const [userSelectedRegions, setUserSelectedRegions] = useState<Region[]>([]);
 
     const tableRef = useRef<Table2 | null>(null);
     const filterableColumnKeys = useMemo(
@@ -210,7 +211,22 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         return [...sortTableFields(filteredTableFields as [])] as SummaryTableBuffer[];
     }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters]);
 
-    const selectedRows = useMemo(() => {
+    useEffect(() => {
+        if (selectedTensor) {
+            setUserSelectedRegions([]);
+        }
+    }, [selectedTensor]);
+
+    const handleSelection = (regions: Region[]) => {
+        setUserSelectedRegions(regions);
+        setSelectedTensor(null);
+    };
+
+    const selectedRegions = useMemo(() => {
+        if (userSelectedRegions.length) {
+            return userSelectedRegions;
+        }
+
         if (!selectedTensor) {
             return [];
         }
@@ -223,12 +239,12 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
             return arr;
         }, []);
 
-        if (tableRef?.current?.scrollToRegion) {
+        if (tableRef?.current?.scrollToRegion && matchingBuffers.length) {
             tableRef.current.scrollToRegion({ rows: [matchingBuffers[0], matchingBuffers[0]] });
         }
 
         return matchingBuffers.map((index) => ({ rows: [index, index] })) as Region[];
-    }, [tableFields, selectedTensor]);
+    }, [tableFields, selectedTensor, userSelectedRegions]);
 
     return tableFields ? (
         <HotkeysProvider>
@@ -244,7 +260,8 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     enableRowResizing={false}
                     cellRendererDependencies={[sortDirection, sortingColumn, tableFields, tableFields.length]}
                     columnWidths={[200, 120, 120, 120, 120, 100]}
-                    selectedRegions={selectedRows}
+                    selectedRegions={selectedRegions}
+                    onSelection={handleSelection}
                     ref={tableRef}
                     getCellClipboardData={(row, col) => getCellText(tableFields[row], COLUMNS[col].key)}
                 >
