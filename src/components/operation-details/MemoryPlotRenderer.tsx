@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import tinycolor from 'tinycolor2';
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
 import { PlotConfiguration, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
 import { selectedAddressAtom } from '../../store/app';
+import { getDimmedColour, getLightlyDimmedColour } from '../../functions/colour';
 
 export interface MemoryPlotRendererProps {
     chartDataList: Partial<PlotData>[][];
@@ -96,8 +96,8 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
                 }
 
                 const originalColour = chartData[index].marker?.color as string;
-                const lightlyDimmedColour = tinycolor(originalColour).desaturate(15).darken(5).toString();
-                const dimmedColour = tinycolor(originalColour).desaturate(40).darken(15).toString();
+                const lightlyDimmedColour = getLightlyDimmedColour(originalColour);
+                const dimmedColour = getDimmedColour(originalColour);
 
                 if (selectedAddress) {
                     data.marker.color =

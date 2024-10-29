@@ -1,4 +1,3 @@
-import classNames from 'classnames';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useState } from 'react';
 import { useAtom } from 'jotai';
@@ -7,6 +6,7 @@ import { formatSize, toHex } from '../../functions/math';
 import { HistoricalTensor } from '../../model/Graph';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { selectedTensorAtom } from '../../store/app';
+import { getDimmedColour } from '../../functions/colour';
 
 interface BufferSummaryBufferProps {
     buffer: Buffer;
@@ -20,15 +20,18 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
 
     const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
 
+    const originalColour = tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address);
+    const dimmedColour = originalColour ? getDimmedColour(originalColour) : '#000';
+
     const styleProps = {
         width: `${size}%`,
         left: `${position}%`,
-        backgroundColor: tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address),
+        backgroundColor: selectedTensor && selectedTensor !== tensor?.id ? dimmedColour : originalColour,
     };
 
     return (
         <div
-            className={classNames({ 'is-selected': tensor?.id === selectedTensor }, 'buffer-data')}
+            className='buffer-data'
             style={styleProps}
             onMouseEnter={() => setIsHovered(true)}
         >
