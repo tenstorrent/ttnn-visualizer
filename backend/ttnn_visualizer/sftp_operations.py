@@ -210,7 +210,7 @@ def check_remote_path_for_reports(remote_connection):
     remote_config_paths = find_folders_by_files(
         ssh_client, remote_connection.path, [TEST_CONFIG_FILE]
     )
-    if not len(remote_config_paths):
+    if not remote_config_paths:
         raise NoProjectsException(
             message="No projects found at path", status=ConnectionTestStates.FAILED
         )
