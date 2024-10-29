@@ -114,6 +114,11 @@ const RemoteSyncConfigurator: FC = () => {
                         setSelectedRemoteFolder(updatedSelectedFolder);
                     }
                 }
+
+                // Set initial report location after sync if none is set
+                if (!reportLocation) {
+                    setReportLocation('remote');
+                }
             } catch {
                 setIsRemoteOffline(true);
             } finally {
