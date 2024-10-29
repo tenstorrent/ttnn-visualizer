@@ -272,7 +272,7 @@ const RemoteSyncConfigurator: FC = () => {
                         onClick={viewReport}
                         icon={IconNames.EYE_OPEN}
                     >
-                        View Report
+                        View report
                     </Button>
                 </RemoteFolderSelector>
             </FormGroup>
