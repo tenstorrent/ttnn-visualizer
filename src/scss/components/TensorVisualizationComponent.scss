@@ -53,8 +53,34 @@
                 border: 1px solid $tt-black;
                 background-color: $tt-grey-2;
 
+                &:hover {
+                    transition: border-color 100ms linear;
+                    border-color: $tt-yellow-tint-2;
+                }
+
+                &.active {
+                    border-color: $tt-tensix-active;
+                }
+
                 &.empty-tensix {
                     opacity: 0.3;
+                }
+            }
+        }
+
+        .tensix-details {
+            padding: 5px 0;
+
+            .title {
+                margin: 0;
+            }
+
+            .tensix-details-header {
+                display: flex;
+                justify-content: flex-end;
+
+                svg {
+                    fill: $tt-white;
                 }
             }
         }

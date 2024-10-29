@@ -1,5 +1,6 @@
 import React from 'react';
 import { BufferPage } from '../../model/APIData';
+import { pageDataToChunkArray } from '../../functions/getChartData';
 
 interface SVGBufferRendererProps {
     width: number;
@@ -17,16 +18,7 @@ const SVGBufferRenderer: React.FC<SVGBufferRendererProps> = ({
     memoryStart,
 }: SVGBufferRendererProps) => {
     const ratio = width / (memorySize - memoryStart);
-    const mergedRangeByAddress: Map<number, { start: number; end: number; color: string | undefined }> = new Map();
-
-    data.forEach((page: BufferPage) => {
-        const { address } = page;
-        const defaultRange = { start: Infinity, end: 0, color: page.color };
-        const currentRange = mergedRangeByAddress.get(address) || defaultRange;
-        currentRange.start = Math.min(currentRange.start, page.page_address);
-        currentRange.end = Math.max(currentRange.end, page.page_address + page.page_size);
-        mergedRangeByAddress.set(address, currentRange);
-    });
+    const mergedRange = pageDataToChunkArray(data);
 
     return (
         <svg
@@ -34,13 +26,13 @@ const SVGBufferRenderer: React.FC<SVGBufferRendererProps> = ({
             height={height}
         >
             <g>
-                {Array.from(mergedRangeByAddress.entries()).map(([address, range]) => {
+                {mergedRange.map((range) => {
                     return (
                         <rect
-                            key={address}
-                            x={ratio * (range.start - memoryStart)}
+                            key={range.address}
+                            x={ratio * (range.address - memoryStart)}
                             y={0}
-                            width={ratio * (range.end - range.start)}
+                            width={ratio * range.size}
                             height={height}
                             fill={range.color || 'red'}
                         />

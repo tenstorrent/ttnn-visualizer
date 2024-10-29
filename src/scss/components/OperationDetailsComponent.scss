@@ -4,6 +4,33 @@
 
 @use '../definitions/colours' as *;
 
+.dram-memory-renderer,
+.l1-memory-renderer {
+    .memory-plot {
+        width: 100%;
+    }
+
+    &.circular-buffers {
+        margin-bottom: 5px;
+    }
+
+    &.identical-plot {
+        .memory-plot {
+            opacity: 0.5;
+        }
+    }
+
+    &.empty-plot {
+        opacity: 0.4;
+    }
+
+    .plot-title {
+        font-weight: 500;
+        margin-bottom: -14px;
+        margin-top: 0;
+    }
+}
+
 .operation-details-component {
     .outside-click {
         background-color: rgb(255 0 0 / 47%);
@@ -28,27 +55,6 @@
 
     .zoom-controls {
         margin-bottom: 0;
-    }
-
-    .dram-memory-renderer,
-    .l1-memory-renderer {
-        .memory-plot {
-            width: 100%;
-        }
-
-        &.circular-buffers {
-            margin-bottom: 5px;
-        }
-
-        &.identical-plot {
-            .memory-plot {
-                opacity: 0.5;
-            }
-        }
-
-        &.empty-plot {
-            opacity: 0.4;
-        }
     }
 
     .dram-memory-renderer {

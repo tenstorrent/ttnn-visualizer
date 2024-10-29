@@ -3,7 +3,6 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { PlotData } from 'plotly.js';
-import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
 import { formatSize, toHex } from '../functions/math';
 import {
     BufferData,
@@ -20,6 +19,7 @@ import { BufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { HistoricalTensor, Tensor } from './Graph';
 import { PlotDataOverrides } from '../definitions/PlotConfigurations';
+import getChartData from '../functions/getChartData';
 
 export class OperationDetails implements Partial<OperationDetailsData> {
     id: number;
@@ -187,64 +187,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
     }
 
     private getChartData(memory: Chunk[], overrides?: PlotDataOverrides): Partial<PlotData>[] {
-        return memory.map((chunk) => {
-            const { address, size } = chunk;
-            const tensor = this.getTensorForAddress(address);
-            const tensorColor = getTensorColor(tensor?.id);
-            let color;
-            if (overrides?.color) {
-                color = overrides?.color;
-            } else {
-                color =
-                    tensorColor !== undefined ? tensorColor : getBufferColor(address + (overrides?.colorVariance || 0));
-            }
-
-            return {
-                x: [address + size / 2],
-                y: [1],
-                type: 'bar',
-                width: [size],
-                marker: {
-                    color,
-                    line: {
-                        width: 0,
-                        opacity: 0,
-                        simplify: false,
-                    },
-                },
-                memoryData: {
-                    address,
-                    size,
-                    tensor,
-                },
-                hoverinfo: 'none',
-                hovertemplate:
-                    overrides?.hovertemplate !== undefined
-                        ? overrides?.hovertemplate
-                        : `
-<span style="color:${color};font-size:20px;">&#9632;</span>
-${address} (${toHex(address)}) <br>Size: ${formatSize(size)}
-${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
-<extra></extra>`,
-
-                hoverlabel: {
-                    align: 'right',
-                    bgcolor: 'white',
-                    padding: {
-                        t: 10,
-                        b: 10,
-                        l: 10,
-                        r: 10,
-                    },
-
-                    font: {
-                        color: 'black',
-                        weight: 'bold',
-                        size: 14,
-                    },
-                },
-            };
-        });
+        return getChartData(memory, this.getTensorForAddress.bind(this), overrides);
     }
 
     get memorySizeL1(): number {
