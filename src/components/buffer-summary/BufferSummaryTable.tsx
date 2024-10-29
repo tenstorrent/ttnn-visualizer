@@ -4,9 +4,9 @@
 
 import classNames from 'classnames';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useAtom } from 'jotai';
-import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Region, Table2 } from '@blueprintjs/table';
-import { HotkeysProvider, Icon, InputGroup } from '@blueprintjs/core';
+import { useAtomValue } from 'jotai';
+import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Table2 } from '@blueprintjs/table';
+import { Checkbox, HotkeysProvider, Icon, InputGroup } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { BuffersByOperationData } from '../../hooks/useAPI';
 import { BufferTypeLabel } from '../../model/BufferType';
@@ -87,8 +87,9 @@ interface SummaryTableBuffer extends BufferData {
 
 function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useBuffersTable();
-    const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
-    const [userSelectedRegions, setUserSelectedRegions] = useState<Region[]>([]);
+    const selectedTensor = useAtomValue(selectedTensorAtom);
+    const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
+    const [showOnlySelected, setShowOnlySelected] = useState(false);
 
     const tableRef = useRef<Table2 | null>(null);
     const filterableColumnKeys = useMemo(
@@ -135,7 +136,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         <Column
             key={key}
             name={label}
-            cellRenderer={createCell(key, tableFields, filters)}
+            cellRenderer={createCell(key, tableFields, filters, selectedRows)}
             columnHeaderCellRenderer={() => createCellHeader(key, label)}
         />
     );
@@ -194,6 +195,10 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     const tableFields = useMemo(() => {
         let filteredTableFields = listOfBuffers;
 
+        if (showOnlySelected) {
+            filteredTableFields = listOfBuffers.filter((buffer) => buffer.tensor_id === selectedTensor);
+        }
+
         if (areFiltersActive(filters) && filterableColumnKeys) {
             filteredTableFields = listOfBuffers.filter((buffer) => {
                 const isFilteredOut = Object.entries(filters)
@@ -209,22 +214,19 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         }
 
         return [...sortTableFields(filteredTableFields as [])] as SummaryTableBuffer[];
-    }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters]);
+    }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters, selectedTensor, showOnlySelected]);
 
     useEffect(() => {
         if (selectedTensor) {
-            setUserSelectedRegions([]);
+            setUserSelectedRows([]);
+        } else {
+            setShowOnlySelected(false);
         }
     }, [selectedTensor]);
 
-    const handleSelection = (regions: Region[]) => {
-        setUserSelectedRegions(regions);
-        setSelectedTensor(null);
-    };
-
-    const selectedRegions = useMemo(() => {
-        if (userSelectedRegions.length) {
-            return userSelectedRegions;
+    const selectedRows = useMemo(() => {
+        if (userSelectedRows.length) {
+            return userSelectedRows;
         }
 
         if (!selectedTensor) {
@@ -243,25 +245,34 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
             tableRef.current.scrollToRegion({ rows: [matchingBuffers[0], matchingBuffers[0]] });
         }
 
-        return matchingBuffers.map((index) => ({ rows: [index, index] })) as Region[];
-    }, [tableFields, selectedTensor, userSelectedRegions]);
+        return matchingBuffers;
+    }, [tableFields, selectedTensor, userSelectedRows]);
 
     return tableFields ? (
         <HotkeysProvider>
             <div className='buffer-summary-table'>
-                <p className='result-count'>
-                    {tableFields.length !== listOfBuffers.length
-                        ? `Showing ${tableFields.length} of ${listOfBuffers.length} buffers`
-                        : `Showing ${tableFields.length} buffers`}
-                </p>
+                <div className='aside-container'>
+                    <Checkbox
+                        checked={showOnlySelected}
+                        onChange={() => setShowOnlySelected(!showOnlySelected)}
+                        disabled={selectedTensor === null}
+                    >
+                        Show selected tensor rows ({selectedRows.length})
+                    </Checkbox>
+                    <p className='result-count'>
+                        {tableFields.length !== listOfBuffers.length
+                            ? `Showing ${tableFields.length} of ${listOfBuffers.length} buffers`
+                            : `Showing ${tableFields.length} buffers`}
+                    </p>
+                </div>
 
                 <BlueprintTable
                     numRows={tableFields.length}
                     enableRowResizing={false}
                     cellRendererDependencies={[sortDirection, sortingColumn, tableFields, tableFields.length]}
                     columnWidths={[200, 120, 120, 120, 120, 100]}
-                    selectedRegions={selectedRegions}
-                    onSelection={handleSelection}
+                    // selectedRegions={selectedRegions}
+                    // onSelection={handleSelection}
                     ref={tableRef}
                     getCellClipboardData={(row, col) => getCellText(tableFields[row], COLUMNS[col].key)}
                 >
@@ -297,8 +308,17 @@ const getCellText = (buffer: SummaryTableBuffer, key: COLUMN_KEYS) => {
 };
 
 const createCell =
-    (key: COLUMN_KEYS, tableFields: SummaryTableBuffer[], filters: Record<COLUMN_KEYS, string>) =>
-    (rowIndex: number) => <Cell>{getCellContent(key, rowIndex, tableFields, filters)}</Cell>;
+    (
+        key: COLUMN_KEYS,
+        tableFields: SummaryTableBuffer[],
+        filters: Record<COLUMN_KEYS, string>,
+        selectedRows: number[],
+    ) =>
+    (rowIndex: number) => (
+        <Cell className={classNames({ 'row-is-active': selectedRows.includes(rowIndex) })}>
+            {getCellContent(key, rowIndex, tableFields, filters)}
+        </Cell>
+    );
 
 const getCellContent = (
     key: COLUMN_KEYS,
