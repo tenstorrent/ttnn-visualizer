@@ -239,7 +239,6 @@ def find_folders_by_files(
 ) -> List[str]:
     """Given a remote path, return a list of top-level folders that contain any of the specified files."""
     matched_folders: List[str] = []
-    logger.info(f"Searching for ")
     with ssh_client.open_sftp() as sftp:
         all_files = sftp.listdir_attr(root_folder)
         top_level_directories = filter(lambda e: S_ISDIR(e.st_mode), all_files)
