@@ -49,12 +49,11 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
                     // Need this class to override some Blueprint styling
                     className='hover-target'
                 >
-                    {/* Need this element for the onMouseLeave and therefore it needs the class to take up the correct space */}
                     <button
                         type='button'
                         aria-label={`Select buffer ${buffer.address}`}
                         onMouseLeave={() => setIsHovered(false)}
-                        className='hover-target'
+                        className='buffer-button'
                         onClick={() => setSelectedTensor(tensor?.id === selectedTensor ? null : tensor?.id)}
                     />
                 </Tooltip>
