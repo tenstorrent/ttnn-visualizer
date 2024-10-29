@@ -145,11 +145,11 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                         }}
                     >
                         {coordsByBankId.map((coords, index) => (
-                            // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
-                            <div
+                            <button
+                                type='button'
                                 // eslint-disable-next-line react/no-array-index-key
                                 key={index}
-                                className={classNames('tensix', { selected: selectedTensix === index })}
+                                className={classNames('tensix', { active: selectedTensix === index })}
                                 style={{
                                     width: `${tensixSize}px`,
                                     height: `${tensixHeight}px`,
@@ -173,7 +173,7 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                     memorySize={memSize}
                                     memoryStart={memStart}
                                 />
-                            </div>
+                            </button>
                         ))}
                     </div>
                 </div>
@@ -194,7 +194,7 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                 title={`Detailed L1 Report for ${coordsByBankId[selectedTensix].y}-${
                                     coordsByBankId[selectedTensix].x
                                 }`}
-                                className={classNames('detailed-l1-memory-renderer, l1-memory-renderer', {})}
+                                className='detailed-l1-memory-renderer l1-memory-renderer'
                                 isZoomedIn
                                 plotZoomRange={[memStart, memSize]}
                                 chartDataList={[chartData]}

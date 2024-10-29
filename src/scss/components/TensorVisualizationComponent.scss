@@ -53,8 +53,8 @@
                 border: 1px solid $tt-black;
                 background-color: $tt-grey-2;
 
-                &.selected {
-                    border-color: $tt-tensix-selected;
+                &.active {
+                    border-color: $tt-tensix-active;
                 }
 
                 &.empty-tensix {
