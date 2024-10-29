@@ -6,18 +6,18 @@ import { FC, useEffect, useState } from 'react';
 
 import { AnchorButton, Button, FormGroup, Tooltip } from '@blueprintjs/core';
 
-import { useNavigate } from 'react-router';
 import { IconNames } from '@blueprintjs/icons';
-import { useQueryClient } from 'react-query';
 import { useAtom } from 'jotai';
-import useRemote from '../../hooks/useRemote';
-import AddRemoteConnection from './AddRemoteConnection';
-import RemoteFolderSelector from './RemoteFolderSelector';
-import RemoteConnectionSelector from './RemoteConnectionSelector';
-import ROUTES from '../../definitions/routes';
-import { reportLocationAtom } from '../../store/app';
+import { useQueryClient } from 'react-query';
+import { useNavigate } from 'react-router';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
+import ROUTES from '../../definitions/routes';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
+import useRemote from '../../hooks/useRemote';
+import { reportLocationAtom } from '../../store/app';
+import AddRemoteConnection from './AddRemoteConnection';
+import RemoteConnectionSelector from './RemoteConnectionSelector';
+import RemoteFolderSelector from './RemoteFolderSelector';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
@@ -26,7 +26,7 @@ const RemoteSyncConfigurator: FC = () => {
     const [remoteFolderList, setRemoteFolders] = useState<RemoteFolder[]>(
         remote.persistentState.getSavedRemoteFolders(remote.persistentState.selectedConnection),
     );
-    const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
+    const [_, setReportLocation] = useAtom(reportLocationAtom);
 
     const [isSyncingRemoteFolder, setIsSyncingRemoteFolder] = useState(false);
     const [isLoadingFolderList, setIsLoadingFolderList] = useState(false);
@@ -94,8 +94,7 @@ const RemoteSyncConfigurator: FC = () => {
         !isLoadingFolderList &&
         remoteFolderList?.length > 0 &&
         selectedRemoteFolder &&
-        !isRemoteFolderOutdated(selectedRemoteFolder) &&
-        reportLocation === 'remote';
+        !isRemoteFolderOutdated(selectedRemoteFolder);
 
     useEffect(() => {
         (async () => {
@@ -113,11 +112,6 @@ const RemoteSyncConfigurator: FC = () => {
                     if (updatedSelectedFolder) {
                         setSelectedRemoteFolder(updatedSelectedFolder);
                     }
-                }
-
-                // Set initial report location after sync if none is set
-                if (!reportLocation) {
-                    setReportLocation('remote');
                 }
             } catch {
                 setIsRemoteOffline(true);
