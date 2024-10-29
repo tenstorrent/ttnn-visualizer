@@ -105,6 +105,15 @@ const RemoteSyncConfigurator: FC = () => {
 
                 setIsRemoteOffline(false);
                 updateSavedRemoteFolders(remote.persistentState.selectedConnection!, updatedRemoteFolders);
+                // Update existing folder
+                if (selectedRemoteFolder) {
+                    const updatedSelectedFolder = updatedRemoteFolders.find(
+                        (f) => f.remotePath === selectedRemoteFolder?.remotePath,
+                    );
+                    if (updatedSelectedFolder) {
+                        setSelectedRemoteFolder(updatedSelectedFolder);
+                    }
+                }
             } catch {
                 setIsRemoteOffline(true);
             } finally {
