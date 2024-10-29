@@ -10,6 +10,9 @@ from typing import Callable, Optional
 logger = logging.getLogger(__name__)
 
 
+LAST_SYNCED_FILE_NAME = ".last-synced"
+
+
 def str_to_bool(string_value):
     return string_value.lower() in ("yes", "true", "t", "1")
 
@@ -70,7 +73,7 @@ def get_report_path(active_report, current_app, remote_connection=None):
 
 def read_last_synced_file(directory: str) -> Optional[int]:
     """Reads the '.last-synced' file in the specified directory and returns the timestamp as an integer, or None if not found."""
-    last_synced_path = Path(directory) / ".last-synced"
+    last_synced_path = Path(directory) / LAST_SYNCED_FILE_NAME
 
     # Return None if the file does not exist
     if not last_synced_path.exists():
@@ -86,7 +89,7 @@ def read_last_synced_file(directory: str) -> Optional[int]:
 def update_last_synced(directory: Path) -> None:
     """Creates a file called '.last-synced' with the current timestamp in the specified directory."""
     # Convert directory to Path object and create .last-synced file path
-    last_synced_path = Path(directory) / ".last-synced"
+    last_synced_path = Path(directory) / LAST_SYNCED_FILE_NAME
 
     # Get the current Unix timestamp
     timestamp = int(time.time())
