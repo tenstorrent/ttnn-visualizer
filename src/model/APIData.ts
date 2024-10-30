@@ -113,6 +113,8 @@ export interface ColoredChunk extends Chunk {
 export interface FragmentationEntry extends Chunk {
     empty?: boolean;
     largestEmpty?: boolean;
+    bufferType?: 'CB' | undefined;
+    colorVariance?: number | undefined;
 }
 
 export interface ReportMetaData {
