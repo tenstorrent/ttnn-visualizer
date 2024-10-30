@@ -19,7 +19,7 @@ export interface RemoteFolder {
     remotePath: string;
     localPath: string;
     lastModified: number;
-    lastSynced?: string;
+    lastSynced?: number;
 }
 
 export interface SyncRemoteFolder {
