@@ -113,13 +113,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 ),
             )
             .flat(),
-        // ...cbMemory.map(
-        //     (c) =>
-        //         ({
-        //             ...c,
-        //             type: 'CB',
-        //         }) as FragmentationEntry,
-        // ),
     ].sort((a, b) => a.address - b.address);
 
     if (l1Small.condensedChart[0] !== undefined) {
