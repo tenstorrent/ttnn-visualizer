@@ -7,7 +7,7 @@ from flask import request, jsonify, current_app
 from ttnn_visualizer.utils import get_report_path
 from ttnn_visualizer.models import (
     RemoteConnection,
-    RemoteFolder,
+    RemoteReportFolder,
     TabSessionTable,
 )
 from ttnn_visualizer.extensions import db
@@ -19,7 +19,7 @@ def update_tab_session(
     tab_id,
     active_report_data,
     remote_connection: Optional[RemoteConnection] = None,
-    remote_folder: Optional[RemoteFolder] = None,
+    remote_folder: Optional[RemoteReportFolder] = None,
 ):
     """
     Overwrite the active report for a given tab session or create a new session if one doesn't exist.
@@ -29,8 +29,10 @@ def update_tab_session(
 
     # Query the database to find the existing tab session
     session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
-    remote_folder_data = remote_folder.dict() if remote_folder else None
-    remote_connection_data = remote_connection.dict() if remote_connection else None
+    remote_folder_data = remote_folder.model_dump() if remote_folder else None
+    remote_connection_data = (
+        remote_connection.model_dump() if remote_connection else None
+    )
     report_path = get_report_path(
         active_report, current_app=current_app, remote_connection=remote_connection
     )

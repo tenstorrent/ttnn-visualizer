@@ -18,6 +18,8 @@ export const expandedTensorsAtom = atom<number[]>([]);
 export const selectedAddressAtom = atom<number | null>(null);
 export const isL1ActiveAtom = atom<boolean>(true);
 export const isDramActiveAtom = atom<boolean>(false);
+// BufferSummary
+export const selectedTensorAtom = atom<number | null>();
 
 // This atom stores the file transfer progress data in localStorage (or sessionStorage)
 export const fileTransferProgressAtom = atom({

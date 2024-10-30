@@ -12,6 +12,7 @@ import getDeallocationOperation from '../../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../../functions/getNextAllocationOperation';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
+import 'styles/components/TensorDetailsComponent.scss';
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
@@ -37,34 +38,30 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
     const [overlayOpen, setOverlayOpen] = useState(false);
 
-    const openTensorVisualization = (e: React.MouseEvent<HTMLElement>) => {
-        e.stopPropagation();
-        setOverlayOpen(true);
-        return false;
-    };
-
     return (
         <div
             className={classNames('tensor-item', {
                 dimmed: tensor.address !== selectedAddress && selectedAddress !== null,
             })}
         >
-            <button
-                type='button'
-                className='tensor-name'
-                onClick={() => onTensorClick(tensor.address, tensor.id)}
-            >
-                <div
-                    className={classNames('memory-color-block', {
-                        'empty-tensor': tensor.address === null,
-                    })}
-                    style={{
-                        backgroundColor: getTensorColor(tensor.id),
-                    }}
-                />
-                <h4>Tensor ID: {tensor.id}</h4>
+            <div className='tensor-header'>
+                <button
+                    type='button'
+                    className='tensor-name'
+                    onClick={() => onTensorClick(tensor.address, tensor.id)}
+                >
+                    <div
+                        className={classNames('memory-color-block', {
+                            'empty-tensor': tensor.address === null,
+                        })}
+                        style={{
+                            backgroundColor: getTensorColor(tensor.id),
+                        }}
+                    />
+                    <h4>Tensor ID: {tensor.id}</h4>
 
-                <span className='format-numbers monospace'>{prettyPrintAddress(tensor.address, memorySize)}</span>
+                    <span className='format-numbers monospace'>{prettyPrintAddress(tensor.address, memorySize)}</span>
+                </button>
 
                 {isValidNumber(deallocationOperationId) && operations ? (
                     <Tooltip
@@ -110,7 +107,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                             minimal
                             small
                             intent={Intent.SUCCESS}
-                            onClick={(e) => openTensorVisualization(e)}
+                            onClick={() => setOverlayOpen(true)}
                         />
                     </Tooltip>
                 )}
@@ -126,7 +123,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         tensorId={tensor.id}
                     />
                 )}
-            </button>
+            </div>
 
             <div className='tensor-meta'>
                 {tensor.buffer_type !== null && <p>Buffer type: {BufferTypeLabel[tensor.buffer_type]}</p>}

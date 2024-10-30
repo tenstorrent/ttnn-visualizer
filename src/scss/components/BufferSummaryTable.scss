@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+@use '../definitions/colours' as *;
 
 .buffer-summary-filter {
     margin-bottom: 20px;
@@ -9,6 +10,17 @@
 .buffer-summary-table {
     display: inline-flex;
     height: 600px;
+    flex-direction: column;
+
+    .aside-container {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+    }
+
+    .result-count {
+        text-align: right;
+    }
 
     .sortable-table-header {
         cursor: pointer;
@@ -58,6 +70,18 @@
             height: 12px;
             margin-bottom: 1px; // Offset needed because align-items center doesn't quite center it in the table cell
         }
+    }
+
+    .column-filter {
+        margin: 0 5px;
+        height: 24px;
+        line-height: 24px;
+        position: relative;
+        bottom: 5px;
+    }
+
+    .row-is-active {
+        background-color: $tt-slate-accent;
     }
 }
 

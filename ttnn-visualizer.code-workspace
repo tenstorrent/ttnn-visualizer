@@ -29,4 +29,12 @@
             "yref",
         ],
     },
+    "extensions": {
+        "recommendations": [
+            "esbenp.prettier-vscode",
+            "stylelint.vscode-stylelint",
+            "dbaeumer.vscode-eslint",
+            "gruntfuggly.todo-tree",
+        ],
+    },
 }

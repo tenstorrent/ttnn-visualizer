@@ -99,6 +99,21 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const dramMemoryReport: FragmentationEntry[] = [...dramMemory].sort((a, b) => a.address - b.address);
+    const memoryReportWithCB: FragmentationEntry[] = [
+        ...memoryReport,
+        ...details.deviceOperations
+            .map((op, i) =>
+                op.cbList.map(
+                    (cb) =>
+                        ({
+                            ...cb,
+                            bufferType: 'CB',
+                            colorVariance: i,
+                        }) as FragmentationEntry,
+                ),
+            )
+            .flat(),
+    ].sort((a, b) => a.address - b.address);
 
     if (l1Small.condensedChart[0] !== undefined) {
         l1Small.condensedChart[0].marker!.color = CONDENSED_PLOT_CHUNK_COLOR;
@@ -441,16 +456,29 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         'lengthy-legend': memoryReport.length > MAX_LEGEND_LENGTH,
                                     })}
                                 >
-                                    {memoryReport.map((chunk) => (
-                                        <MemoryLegendElement
-                                            chunk={chunk}
-                                            key={chunk.address}
-                                            memSize={memorySizeL1}
-                                            selectedTensorAddress={selectedAddress}
-                                            operationDetails={details}
-                                            onLegendClick={onLegendClick}
-                                        />
-                                    ))}
+                                    {showCircularBuffer &&
+                                        memoryReportWithCB.map((chunk) => (
+                                            <MemoryLegendElement
+                                                chunk={chunk}
+                                                key={chunk.address}
+                                                memSize={memorySizeL1}
+                                                selectedTensorAddress={selectedAddress}
+                                                operationDetails={details}
+                                                onLegendClick={chunk.bufferType === 'CB' ? null : onLegendClick}
+                                                colorVariance={chunk.colorVariance}
+                                            />
+                                        ))}
+                                    {!showCircularBuffer &&
+                                        memoryReport.map((chunk) => (
+                                            <MemoryLegendElement
+                                                chunk={chunk}
+                                                key={chunk.address}
+                                                memSize={memorySizeL1}
+                                                selectedTensorAddress={selectedAddress}
+                                                operationDetails={details}
+                                                onLegendClick={onLegendClick}
+                                            />
+                                        ))}
                                 </div>
                             </>
                         )}

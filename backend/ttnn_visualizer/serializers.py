@@ -1,6 +1,5 @@
 import dataclasses
 from collections import defaultdict
-from email.policy import default
 
 from ttnn_visualizer.models import BufferType, Operation
 
@@ -38,10 +37,8 @@ def serialize_operations(
 
         inputs = inputs_dict[operation.operation_id]
         outputs = outputs_dict[operation.operation_id]
-        arguments = [
-            dataclasses.asdict(a) for a in arguments_dict[operation.operation_id]
-        ]
-        operation_data = dataclasses.asdict(operation)
+        arguments = [a.to_dict() for a in arguments_dict[operation.operation_id]]
+        operation_data = operation.to_dict()
         operation_data["id"] = operation.operation_id
         operation_device_operations = device_operations_dict.get(
             operation.operation_id, []
@@ -69,7 +66,7 @@ def serialize_inputs_outputs(inputs, outputs, producers_consumers, tensors_dict)
         values_dict = defaultdict(list)
         for value in values:
             tensor = tensors_dict.get(value.tensor_id)
-            tensor_dict = dataclasses.asdict(tensor)
+            tensor_dict = tensor.to_dict()
             pc = producers_consumers_dict.get(value.tensor_id)
             value_dict = dataclasses.asdict(value)
             value_dict.pop("tensor_id", None)
@@ -106,7 +103,6 @@ def serialize_buffer_pages(buffer_pages):
             page_data["buffer_type"] = page_data["buffer_type"].value
 
     return buffer_pages_list
-    
 
 
 def serialize_operation(
@@ -127,11 +123,11 @@ def serialize_operation(
         inputs, outputs, producers_consumers, tensors_dict
     )
 
-    buffer_list = [dataclasses.asdict(buffer) for buffer in buffers]
+    buffer_list = [buffer.to_dict() for buffer in buffers]
 
     l1_sizes = [d.worker_l1_size for d in devices]
-    arguments_data = [dataclasses.asdict(argument) for argument in operation_arguments]
-    operation_data = dataclasses.asdict(operation)
+    arguments_data = [argument.to_dict() for argument in operation_arguments]
+    operation_data = operation.to_dict()
     operation_data["id"] = operation.operation_id
 
     inputs_data = inputs_dict.get(operation.operation_id)
