@@ -275,7 +275,7 @@ const RemoteSyncConfigurator: FC = () => {
                     )}
 
                     <Button
-                        disabled={!isUsingRemoteQuerying && !isRemoteReportMounted}
+                        disabled={isLoadingFolderList || (!isUsingRemoteQuerying && !isRemoteReportMounted)}
                         onClick={viewReport}
                         icon={IconNames.EYE_OPEN}
                     >
