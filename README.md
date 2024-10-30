@@ -103,11 +103,9 @@ Before running the application ensure that your keys are added to the agent (`ss
 **REQUIREMENTS**
 
 ```
-glibc=>2.28.0 (`ldd --version`)
-sqlite3=>3.38.0 (`sqlite3 --version`)
+glibc=>2.17 (`ldd --version`)
+sqlite3=>3.9.0 (`sqlite3 --version`)
 ```
-
-
 
 If your machine already has SQLite3 installed you can simply use the path provided by the command `which sqlite3`.
 
@@ -182,8 +180,6 @@ sqlite3 --version
 ```
 
 This command should output the version of SQLite, confirming the installation was successful.
-
-
 
 ## Troubleshooting
 

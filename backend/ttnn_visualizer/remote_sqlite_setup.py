@@ -6,7 +6,7 @@ from ttnn_visualizer.exceptions import RemoteSqliteException
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.ssh_client import get_client
 
-MINIMUM_SQLITE_VERSION = "3.38.0"
+MINIMUM_SQLITE_VERSION = "3.9.0"
 
 
 def find_sqlite_binary(connection):
