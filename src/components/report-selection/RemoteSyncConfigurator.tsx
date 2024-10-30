@@ -6,18 +6,18 @@ import { FC, useEffect, useState } from 'react';
 
 import { AnchorButton, Button, FormGroup, Tooltip } from '@blueprintjs/core';
 
-import { useNavigate } from 'react-router';
 import { IconNames } from '@blueprintjs/icons';
-import { useQueryClient } from 'react-query';
 import { useAtom } from 'jotai';
-import useRemote from '../../hooks/useRemote';
-import AddRemoteConnection from './AddRemoteConnection';
-import RemoteFolderSelector from './RemoteFolderSelector';
-import RemoteConnectionSelector from './RemoteConnectionSelector';
-import ROUTES from '../../definitions/routes';
-import { reportLocationAtom } from '../../store/app';
+import { useQueryClient } from 'react-query';
+import { useNavigate } from 'react-router';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
+import ROUTES from '../../definitions/routes';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
+import useRemote from '../../hooks/useRemote';
+import { reportLocationAtom } from '../../store/app';
+import AddRemoteConnection from './AddRemoteConnection';
+import RemoteConnectionSelector from './RemoteConnectionSelector';
+import RemoteFolderSelector from './RemoteFolderSelector';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
@@ -26,7 +26,7 @@ const RemoteSyncConfigurator: FC = () => {
     const [remoteFolderList, setRemoteFolders] = useState<RemoteFolder[]>(
         remote.persistentState.getSavedRemoteFolders(remote.persistentState.selectedConnection),
     );
-    const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
+    const [_, setReportLocation] = useAtom(reportLocationAtom);
 
     const [isSyncingRemoteFolder, setIsSyncingRemoteFolder] = useState(false);
     const [isLoadingFolderList, setIsLoadingFolderList] = useState(false);
@@ -94,8 +94,7 @@ const RemoteSyncConfigurator: FC = () => {
         !isLoadingFolderList &&
         remoteFolderList?.length > 0 &&
         selectedRemoteFolder &&
-        !isRemoteFolderOutdated(selectedRemoteFolder) &&
-        reportLocation === 'remote';
+        (isUsingRemoteQuerying || !isRemoteFolderOutdated(selectedRemoteFolder));
 
     useEffect(() => {
         (async () => {
@@ -105,6 +104,15 @@ const RemoteSyncConfigurator: FC = () => {
 
                 setIsRemoteOffline(false);
                 updateSavedRemoteFolders(remote.persistentState.selectedConnection!, updatedRemoteFolders);
+                // Update existing folder
+                if (selectedRemoteFolder) {
+                    const updatedSelectedFolder = updatedRemoteFolders.find(
+                        (f) => f.remotePath === selectedRemoteFolder?.remotePath,
+                    );
+                    if (updatedSelectedFolder) {
+                        setSelectedRemoteFolder(updatedSelectedFolder);
+                    }
+                }
             } catch {
                 setIsRemoteOffline(true);
             } finally {
@@ -218,52 +226,56 @@ const RemoteSyncConfigurator: FC = () => {
                         setSelectedRemoteFolder(folder);
                     }}
                 >
-                    <Tooltip content='Sync remote folder'>
-                        <AnchorButton
-                            icon={IconNames.REFRESH}
-                            loading={isSyncingRemoteFolder}
-                            disabled={
-                                isSyncingRemoteFolder ||
-                                isUsingRemoteQuerying ||
-                                isLoadingFolderList ||
-                                !selectedRemoteFolder ||
-                                remoteFolderList?.length === 0
-                            }
-                            onClick={async () => {
-                                try {
-                                    setIsSyncingRemoteFolder(true);
-                                    await remote.syncRemoteFolder(
-                                        remote.persistentState.selectedConnection,
-                                        selectedRemoteFolder,
-                                    );
-
-                                    const savedRemoteFolders = remote.persistentState.getSavedRemoteFolders(
-                                        remote.persistentState.selectedConnection,
-                                    );
-
-                                    savedRemoteFolders.find(
-                                        (f) => f.localPath === selectedRemoteFolder?.localPath,
-                                    )!.lastSynced = new Date().toISOString();
-
-                                    updateSavedRemoteFolders(
-                                        remote.persistentState.selectedConnection,
-                                        savedRemoteFolders,
-                                    );
-
-                                    setSelectedRemoteFolder(selectedRemoteFolder);
-                                } catch {
-                                    // eslint-disable-next-line no-alert
-                                    alert('Unable to sync remote folder');
-                                } finally {
-                                    setIsSyncingRemoteFolder(false);
-                                    setReportLocation('remote');
+                    {!isUsingRemoteQuerying && (
+                        <Tooltip content='Sync remote folder'>
+                            <AnchorButton
+                                icon={IconNames.REFRESH}
+                                loading={isSyncingRemoteFolder}
+                                disabled={
+                                    isSyncingRemoteFolder ||
+                                    isUsingRemoteQuerying ||
+                                    isLoadingFolderList ||
+                                    !selectedRemoteFolder ||
+                                    remoteFolderList?.length === 0
                                 }
-                            }}
-                        />
-                    </Tooltip>
+                                onClick={async () => {
+                                    try {
+                                        setIsSyncingRemoteFolder(true);
+                                        const { data: updatedFolder } = await remote.syncRemoteFolder(
+                                            remote.persistentState.selectedConnection,
+                                            selectedRemoteFolder,
+                                        );
+
+                                        const savedRemoteFolders = remote.persistentState.getSavedRemoteFolders(
+                                            remote.persistentState.selectedConnection,
+                                        );
+
+                                        const updatedFolderIndex = savedRemoteFolders.findIndex(
+                                            (f) => f.localPath === selectedRemoteFolder?.localPath,
+                                        );
+
+                                        savedRemoteFolders[updatedFolderIndex] = updatedFolder;
+
+                                        updateSavedRemoteFolders(
+                                            remote.persistentState.selectedConnection,
+                                            savedRemoteFolders,
+                                        );
+
+                                        setSelectedRemoteFolder(savedRemoteFolders[updatedFolderIndex]);
+                                    } catch {
+                                        // eslint-disable-next-line no-alert
+                                        alert('Unable to sync remote folder');
+                                    } finally {
+                                        setIsSyncingRemoteFolder(false);
+                                        setReportLocation('remote');
+                                    }
+                                }}
+                            />
+                        </Tooltip>
+                    )}
 
                     <Button
-                        disabled={!isUsingRemoteQuerying && !isRemoteReportMounted}
+                        disabled={!isRemoteReportMounted}
                         onClick={viewReport}
                         icon={IconNames.EYE_OPEN}
                     >

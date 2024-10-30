@@ -172,10 +172,11 @@ class ActiveReport(SerializeableModel):
     name: str
 
 
-class RemoteFolder(SerializeableModel):
+class RemoteReportFolder(SerializeableModel):
     testName: str
     remotePath: str
     lastModified: int
+    lastSynced: Optional[int] = None
 
 
 class TabSession(BaseModel):
@@ -183,7 +184,7 @@ class TabSession(BaseModel):
     report_path: Optional[str] = None
     active_report: Optional[ActiveReport] = None
     remote_connection: Optional[RemoteConnection] = None
-    remote_folder: Optional[RemoteFolder] = None
+    remote_folder: Optional[RemoteReportFolder] = None
 
 
 class TabSessionTable(db.Model):
@@ -234,7 +235,7 @@ class TabSessionTable(db.Model):
                 else None
             ),
             remote_folder=(
-                RemoteFolder.model_validate(self.remote_folder, strict=False)
+                RemoteReportFolder.model_validate(self.remote_folder, strict=False)
                 if self.remote_folder is not None
                 else None
             ),
