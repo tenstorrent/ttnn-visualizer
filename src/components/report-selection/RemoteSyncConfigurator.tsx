@@ -94,7 +94,7 @@ const RemoteSyncConfigurator: FC = () => {
         !isLoadingFolderList &&
         remoteFolderList?.length > 0 &&
         selectedRemoteFolder &&
-        !isRemoteFolderOutdated(selectedRemoteFolder);
+        (isUsingRemoteQuerying || !isRemoteFolderOutdated(selectedRemoteFolder));
 
     useEffect(() => {
         (async () => {
@@ -275,7 +275,7 @@ const RemoteSyncConfigurator: FC = () => {
                     )}
 
                     <Button
-                        disabled={isLoadingFolderList || (!isUsingRemoteQuerying && !isRemoteReportMounted)}
+                        disabled={!isRemoteReportMounted}
                         onClick={viewReport}
                         icon={IconNames.EYE_OPEN}
                     >
