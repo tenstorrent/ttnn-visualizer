@@ -271,8 +271,6 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     enableRowResizing={false}
                     cellRendererDependencies={[sortDirection, sortingColumn, tableFields, tableFields.length]}
                     columnWidths={[200, 120, 120, 120, 120, 100]}
-                    // selectedRegions={selectedRegions}
-                    // onSelection={handleSelection}
                     ref={tableRef}
                     getCellClipboardData={(row, col) => getCellText(tableFields[row], COLUMNS[col].key)}
                 >
