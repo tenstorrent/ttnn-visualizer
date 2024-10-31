@@ -322,7 +322,7 @@ def compare_tensors_endpoint(tensor_id1, tensor_id2, session: TabSession):
             diff_json = compare_tensors(tensor1, tensor2)
 
             # Return the difference as a JSON response
-            return json.dumps({"tensor_diff": diff_json}, indent=4)
+            return {"tensor_diff": diff_json}
 
         except RemoteConnectionException:
             return Response(status=HTTPStatus.NOT_FOUND)
