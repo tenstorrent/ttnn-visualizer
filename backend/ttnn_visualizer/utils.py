@@ -29,6 +29,20 @@ class SerializeableDataclass:
         }
 
 
+def compare_tensors(tensor1, tensor2):
+    """Compare two tensors and return their absolute difference."""
+    if tensor1.size() != tensor2.size():
+        raise ValueError("Tensors must have the same shape to be compared")
+
+    # Compute the absolute difference
+    diff_tensor = torch.abs(tensor1 - tensor2)
+
+    # Convert the tensor to a JSON-serializable format
+    diff_serializable = diff_tensor.tolist()  # Convert to a list for JSON
+
+    return diff_serializable
+
+
 def make_torch_json_serializable(data):
     """Recursively convert PyTorch tensors and complex data structures to JSON-serializable types."""
     if isinstance(data, torch.Tensor):
