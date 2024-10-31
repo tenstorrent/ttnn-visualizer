@@ -51,6 +51,7 @@ from ttnn_visualizer.utils import (
     read_last_synced_file,
     timer,
     make_torch_json_serializable,
+    compare_tensors,
 )
 
 logger = logging.getLogger(__name__)
@@ -301,6 +302,43 @@ def read_tensor(tensor_id, session: TabSession):
             return torch_json
         except RemoteConnectionException:
             return Response(status=HTTPStatus.NOT_FOUND)
+
+
+@api.route("/compare-tensors/<tensor_id1>/<tensor_id2>", methods=["GET"])
+@with_session
+def compare_tensors_endpoint(tensor_id1, tensor_id2, session: TabSession):
+    if session.remote_connection:
+        try:
+            report_path = session.remote_folder.remotePath
+            tensors_folder = Path(report_path).joinpath("tensors")
+
+            tensor_file_name1 = f"{tensor_id1}.pt"
+            tensor_file_name2 = f"{tensor_id2}.pt"
+
+            # Read the content of both tensors from the remote connection
+            content1 = read_remote_file(
+                session.remote_connection, Path(tensors_folder, tensor_file_name1)
+            )
+            content2 = read_remote_file(
+                session.remote_connection, Path(tensors_folder, tensor_file_name2)
+            )
+
+            # Load tensors from the content buffers
+            buffer1 = io.BytesIO(content1)
+            buffer2 = io.BytesIO(content2)
+            tensor1 = torch.load(buffer1)
+            tensor2 = torch.load(buffer2)
+
+            # Compare tensors and get the difference as JSON
+            diff_json = compare_tensors(tensor1, tensor2)
+
+            # Return the difference as a JSON response
+            return json.dumps({"tensor_diff": diff_json}, indent=4)
+
+        except RemoteConnectionException:
+            return Response(status=HTTPStatus.NOT_FOUND)
+        except ValueError as e:
+            return Response(str(e), status=HTTPStatus.BAD_REQUEST)
 
 
 @api.route("/operation-buffers/<operation_id>", methods=["GET"])
