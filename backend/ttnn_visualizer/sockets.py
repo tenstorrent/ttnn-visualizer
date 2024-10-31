@@ -7,6 +7,7 @@ from logging import getLogger
 
 from flask_socketio import join_room, disconnect, leave_room
 
+from ttnn_visualizer.extensions import socketio
 from ttnn_visualizer.utils import SerializeableDataclass
 
 
@@ -56,7 +57,8 @@ def emit_file_status(progress: FileProgress, tab_id=None):
         last_emit_time = time.time()
         data = progress.to_dict()
         data.update({"tab_id": tab_id})
-        socketio.emit(Messages.FILE_TRANSFER_PROGRESS, data, to=tab_id)
+        if socketio is not None and hasattr(socketio, "emit"):
+            socketio.emit(Messages.FILE_TRANSFER_PROGRESS, data, to=tab_id)
 
     # Cancel any existing debounce timer if it exists and is still active
     if debounce_timer and isinstance(debounce_timer, threading.Timer):
@@ -69,24 +71,6 @@ def emit_file_status(progress: FileProgress, tab_id=None):
         # Set a new debounce timer
         debounce_timer = threading.Timer(debounce_delay, emit_now)
         debounce_timer.start()
-
-
-def emit_compression_progress(client, remote_tar_path, folder_size, sid):
-    """Emit progress during the compression."""
-    compressed_size = 0
-    while compressed_size < folder_size:
-        stdin, stdout, stderr = client.exec_command(f"du -sb {remote_tar_path}")
-        compressed_size_str = stdout.read().decode().strip().split("\t")[0]
-        compressed_size = int(compressed_size_str)
-        percent_of_compression = (compressed_size / folder_size) * 100
-        progress = FileProgress(
-            current_file_name=remote_tar_path,
-            number_of_files=1,
-            percent_of_current=percent_of_compression,
-            finished_files=0,
-            status=FileStatus.COMPRESSING,
-        )
-        emit_file_status(progress, tab_id=sid)
 
 
 def register_handlers(socketio_instance):
