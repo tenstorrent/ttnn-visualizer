@@ -7,6 +7,8 @@ import time
 from timeit import default_timer
 from typing import Callable, Optional
 
+import torch
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,6 +27,20 @@ class SerializeableDataclass:
             key: (value.value if isinstance(value, enum.Enum) else value)
             for key, value in dataclasses.asdict(self).items()
         }
+
+
+def make_torch_json_serializable(data):
+    """Recursively convert PyTorch tensors and complex data structures to JSON-serializable types."""
+    if isinstance(data, torch.Tensor):
+        return data.tolist()  # Convert tensor to list
+    elif isinstance(data, dict):
+        return {key: make_torch_json_serializable(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [make_torch_json_serializable(item) for item in data]
+    elif isinstance(data, tuple):
+        return tuple(make_torch_json_serializable(item) for item in data)
+    else:
+        return data  # Return the data as is if it's already JSON-serializable
 
 
 def timer(f: Callable):
