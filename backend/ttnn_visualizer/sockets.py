@@ -7,7 +7,6 @@ from logging import getLogger
 
 from flask_socketio import join_room, disconnect, leave_room
 
-from ttnn_visualizer.extensions import socketio
 from ttnn_visualizer.utils import SerializeableDataclass
 
 
