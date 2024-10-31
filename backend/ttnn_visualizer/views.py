@@ -469,7 +469,6 @@ def read_remote_folder():
 @api.route("/remote/sync", methods=["POST"])
 def sync_remote_folder():
     remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
-    use_compression = current_app.config["COMPRESS_REMOTE_FILES"]
     request_body = request.get_json()
 
     # Check if request_body is None or not a dictionary
@@ -487,7 +486,7 @@ def sync_remote_folder():
             connection,
             remote_folder.remotePath,
             remote_dir,
-            use_compression,
+            exclude_patterns=[r"/tensors(/|$)"],
             sid=tab_id,
         )
     except RemoteConnectionException as e:

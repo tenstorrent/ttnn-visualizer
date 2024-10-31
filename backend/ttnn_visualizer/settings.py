@@ -10,7 +10,6 @@ class DefaultConfig(object):
     DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))
     TESTING = False
     PRINT_ENV = True
-    COMPRESS_REMOTE_FILES = False
 
     # Path Settings
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
