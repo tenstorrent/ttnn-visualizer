@@ -1,8 +1,10 @@
 import dataclasses
+import io
 import json
 import time
 from typing import List
 
+import torch
 from flask import Blueprint, Response, jsonify
 
 from ttnn_visualizer.decorators import with_session
@@ -45,7 +47,11 @@ from ttnn_visualizer.sftp_operations import (
     check_remote_path_exists,
 )
 from ttnn_visualizer.ssh_client import get_client
-from ttnn_visualizer.utils import read_last_synced_file, timer
+from ttnn_visualizer.utils import (
+    read_last_synced_file,
+    timer,
+    make_torch_json_serializable,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -265,6 +271,25 @@ def get_operations_buffers(session: TabSession):
         buffers = list(db.query_buffers(buffer_type=buffer_type))
         operations = list(db.query_operations())
         return serialize_operations_buffers(operations, buffers)
+
+
+@api.route("/read-tensor/<tensor_id>", methods=["GET"])
+@with_session
+def read_tensor(tensor_id, session: TabSession):
+    if session.remote_connection:
+        try:
+            report_path = session.remote_folder.remotePath
+            tensors_folder = Path(report_path).joinpath("tensors")
+            tensor_file_name = f"{tensor_id}.pt"
+            content = read_remote_file(
+                session.remote_connection, Path(tensors_folder, tensor_file_name)
+            )
+            buffer = io.BytesIO(content)
+            model = torch.load(buffer)
+            torch_json = make_torch_json_serializable(model)
+            return torch_json
+        except RemoteConnectionException:
+            return Response(status=HTTPStatus.NOT_FOUND)
 
 
 @api.route("/operation-buffers/<operation_id>", methods=["GET"])
