@@ -97,13 +97,14 @@ const RemoteSyncConfigurator: FC = () => {
         (isUsingRemoteQuerying || !isRemoteFolderOutdated(selectedRemoteFolder));
 
     useEffect(() => {
-        (async () => {
+        const fetchFolderStatus = async () => {
             try {
                 setIsFetchingFolderStatus(true);
                 const updatedRemoteFolders = await remote.listRemoteFolders(remote.persistentState.selectedConnection);
 
                 setIsRemoteOffline(false);
                 updateSavedRemoteFolders(remote.persistentState.selectedConnection!, updatedRemoteFolders);
+
                 // Update existing folder
                 if (selectedRemoteFolder) {
                     const updatedSelectedFolder = updatedRemoteFolders.find(
@@ -118,10 +119,14 @@ const RemoteSyncConfigurator: FC = () => {
             } finally {
                 setIsFetchingFolderStatus(false);
             }
-        })();
+        };
+
+        // Call the async function
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        fetchFolderStatus();
+
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
     return (
         <>
             <FormGroup
