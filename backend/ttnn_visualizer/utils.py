@@ -1,6 +1,8 @@
 import dataclasses
 import enum
+import io
 import logging
+import pickle
 from functools import wraps
 from pathlib import Path
 import time
@@ -41,6 +43,21 @@ def compare_tensors(tensor1, tensor2):
     diff_serializable = diff_tensor.tolist()  # Convert to a list for JSON
 
     return diff_serializable
+
+
+def read_remote_tensor(remote_connection, remote_folder, tensor_id):
+    report_path = remote_folder.remotePath
+    tensors_folder = Path(report_path).joinpath("tensors")
+    tensor_file_name = f"{tensor_id}.pt"
+    from ttnn_visualizer.sftp_operations import read_remote_file
+
+    tensor_content = read_remote_file(
+        remote_connection, Path(tensors_folder, tensor_file_name)
+    )
+    if tensor_content:
+        buffer = io.BytesIO(tensor_content)
+        model = torch.load(buffer, map_location="cpu")
+        return model
 
 
 def make_torch_json_serializable(data):
