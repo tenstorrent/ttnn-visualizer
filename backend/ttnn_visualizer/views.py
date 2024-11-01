@@ -577,7 +577,7 @@ def use_remote_folder():
     if not connection or not folder:
         return Response(status=HTTPStatus.BAD_REQUEST)
     connection = RemoteConnection.model_validate(connection, strict=False)
-    folder = RemoteReportFolder(**folder)
+    folder = RemoteReportFolder.model_validate(folder, strict=False)
     report_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
     report_folder = Path(folder.remotePath).name
     connection_directory = Path(report_data_directory, connection.host, report_folder)
