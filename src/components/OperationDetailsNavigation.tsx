@@ -54,6 +54,10 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
     return (
         <nav className='operation-details-navigation'>
             <ButtonGroup className='button-group'>
+                <Button
+                    icon={IconNames.Graph}
+                    onClick={() => navigate(`${ROUTES.GRAPHTREE}/${operationId}`)}
+                />
                 <Tooltip
                     content={previousOperation ? `${previousOperation?.id} ${previousOperation?.name}` : ''}
                     placement={PopoverPosition.TOP}

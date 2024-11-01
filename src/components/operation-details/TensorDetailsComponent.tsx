@@ -48,7 +48,9 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 <button
                     type='button'
                     className='tensor-name'
-                    onClick={() => onTensorClick(tensor.address, tensor.id)}
+                    onClick={() => {
+                        onTensorClick(tensor.address, tensor.id);
+                    }}
                 >
                     <div
                         className={classNames('memory-color-block', {

@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
+@use '../definitions/colours' as *;
+
+.operation-graph-component {
+    .operation-graph-nav {
+        display: inline-flex;
+        place-content: center space-between;
+        gap: 10px;
+        align-items: center;
+    }
+}
