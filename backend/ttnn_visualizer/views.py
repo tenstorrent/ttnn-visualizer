@@ -1,11 +1,15 @@
 import dataclasses
 import io
 import json
+import logging
 import time
+from http import HTTPStatus
+from pathlib import Path
 from typing import List
 
 import torch
 from flask import Blueprint, Response, jsonify
+from flask import request, current_app
 
 from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.enums import ConnectionTestStates
@@ -18,15 +22,6 @@ from ttnn_visualizer.models import (
 )
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path, check_sqlite_path
-from ttnn_visualizer.sockets import (
-    FileProgress,
-    emit_file_status,
-    FileStatus,
-)
-from flask import request, current_app
-from pathlib import Path
-from http import HTTPStatus
-import logging
 from ttnn_visualizer.serializers import (
     serialize_operations,
     serialize_tensors,
@@ -46,12 +41,18 @@ from ttnn_visualizer.sftp_operations import (
     get_remote_report_folders,
     check_remote_path_exists,
 )
+from ttnn_visualizer.sockets import (
+    FileProgress,
+    emit_file_status,
+    FileStatus,
+)
 from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.utils import (
     read_last_synced_file,
     timer,
     make_torch_json_serializable,
     compare_tensors,
+    read_remote_tensor,
 )
 
 logger = logging.getLogger(__name__)
@@ -290,55 +291,41 @@ def get_operations_buffers(session: TabSession):
 def read_tensor(tensor_id, session: TabSession):
     if session.remote_connection:
         try:
-            report_path = session.remote_folder.remotePath
-            tensors_folder = Path(report_path).joinpath("tensors")
-            tensor_file_name = f"{tensor_id}.pt"
-            content = read_remote_file(
-                session.remote_connection, Path(tensors_folder, tensor_file_name)
-            )
-            buffer = io.BytesIO(content)
-            model = torch.load(buffer)
-            torch_json = make_torch_json_serializable(model)
-            return torch_json
+            if session.remote_folder and session.remote_folder.remotePath:
+                model = read_remote_tensor(
+                    session.remote_connection, session.remote_folder, tensor_id
+                )
+                return make_torch_json_serializable(model)
         except RemoteConnectionException:
             return Response(status=HTTPStatus.NOT_FOUND)
+    return Response(status=HTTPStatus.NOT_FOUND)
 
 
 @api.route("/compare-tensors/<tensor_id1>/<tensor_id2>", methods=["GET"])
 @with_session
-def compare_tensors_endpoint(tensor_id1, tensor_id2, session: TabSession):
+def compare_tensor(tensor_id1, tensor_id2, session: TabSession):
     if session.remote_connection:
         try:
-            report_path = session.remote_folder.remotePath
-            tensors_folder = Path(report_path).joinpath("tensors")
+            if session.remote_folder and session.remote_folder.remotePath:
+                tensor_1 = read_remote_tensor(
+                    session.remote_connection, session.remote_folder, tensor_id1
+                )
+                tensor_2 = read_remote_tensor(
+                    session.remote_connection, session.remote_folder, tensor_id2
+                )
 
-            tensor_file_name1 = f"{tensor_id1}.pt"
-            tensor_file_name2 = f"{tensor_id2}.pt"
+                if tensor_1 is not None and tensor_2 is not None:
+                    # Compare tensors and get the difference as JSON
+                    diff_json = compare_tensors(tensor_1, tensor_2)
 
-            # Read the content of both tensors from the remote connection
-            content1 = read_remote_file(
-                session.remote_connection, Path(tensors_folder, tensor_file_name1)
-            )
-            content2 = read_remote_file(
-                session.remote_connection, Path(tensors_folder, tensor_file_name2)
-            )
-
-            # Load tensors from the content buffers
-            buffer1 = io.BytesIO(content1)
-            buffer2 = io.BytesIO(content2)
-            tensor1 = torch.load(buffer1)
-            tensor2 = torch.load(buffer2)
-
-            # Compare tensors and get the difference as JSON
-            diff_json = compare_tensors(tensor1, tensor2)
-
-            # Return the difference as a JSON response
-            return {"tensor_diff": diff_json}
+                    # Return the difference as a JSON response
+                    return diff_json
 
         except RemoteConnectionException:
             return Response(status=HTTPStatus.NOT_FOUND)
         except ValueError as e:
             return Response(str(e), status=HTTPStatus.BAD_REQUEST)
+    return Response(status=HTTPStatus.NOT_FOUND)
 
 
 @api.route("/operation-buffers/<operation_id>", methods=["GET"])
