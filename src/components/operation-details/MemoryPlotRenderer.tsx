@@ -3,7 +3,7 @@ import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
 import { PlotConfiguration, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
-import { selectedAddressAtom } from '../../store/app';
+import { selectedAddressAtom, showHexAtom } from '../../store/app';
 import { getDimmedColour, getLightlyDimmedColour } from '../../functions/colour';
 
 export interface MemoryPlotRendererProps {
@@ -18,7 +18,6 @@ export interface MemoryPlotRendererProps {
 }
 
 const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
-    //
     chartDataList,
     isZoomedIn,
     memorySize,
@@ -28,6 +27,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     plotZoomRange,
     configuration,
 }) => {
+    const showHex = useAtomValue(showHexAtom);
     const chartData = useMemo(() => chartDataList.flat(), [chartDataList]);
 
     const selectedAddress = useAtomValue(selectedAddressAtom);
@@ -36,6 +36,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     const [augmentedChart, setAugmentedChart] = useState<Partial<PlotData>[]>(structuredClone(chartData));
 
     const range = isZoomedIn ? plotZoomRange : [0, memorySize];
+    const tickFormat = showHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: 'd' };
 
     const layout: Partial<Layout> = {
         height: configuration.height,
@@ -46,10 +47,10 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             showgrid: true,
             fixedrange: true,
             zeroline: false,
-            tickformat: 'd',
             color: 'white',
             gridcolor: configuration.gridColour || '#999',
             side: configuration.xAxis?.side || 'bottom',
+            ...tickFormat,
         },
         yaxis: {
             range: [0, 1],
