@@ -71,7 +71,7 @@ function BufferSummary() {
         <div className='buffer-summary'>
             <Helmet title='Buffer summary' />
 
-            <h1 className='page-title'>All buffers by operation</h1>
+            <h1 className='page-title'>All L1 buffers by operation</h1>
 
             <ButtonGroup className='sticky-nav'>
                 <AnchorButton
