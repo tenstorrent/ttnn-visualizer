@@ -13,7 +13,7 @@ export const formatSize = (number: number): string => {
 
 export const prettyPrintAddress = (address: number | null, memorySize: number): string => {
     if (address === null) {
-        return '0'.padStart(memorySize.toString().length, '0');
+        return 'NULL';
     }
 
     return address.toString().padStart(memorySize.toString().length, '0');
