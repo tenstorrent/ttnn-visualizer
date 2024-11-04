@@ -40,12 +40,11 @@
         }
 
         .sort-icon {
-            display: none;
             right: 5px;
             top: calc(50% - 8px);
             position: absolute;
             padding-left: 25px;
-
+            opacity: 0.2;
 
             &.is-active {
                 display: block;
