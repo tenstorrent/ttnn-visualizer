@@ -7,6 +7,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch } from '@blueprintjs/core';
 import { Link } from 'react-router-dom';
+import { useAtom } from 'jotai';
 import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
 import { BuffersByOperationData, useDevices } from '../../hooks/useAPI';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
@@ -16,6 +17,7 @@ import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/routes';
 import isValidNumber from '../../functions/isValidNumber';
 import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
+import { showHexAtom } from '../../store/app';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -30,6 +32,7 @@ interface BufferSummaryPlotRendererProps {
 function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }: BufferSummaryPlotRendererProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const [showHex, setShowHex] = useAtom(showHexAtom);
     const [isZoomedIn, setIsZoomedIn] = useState(false);
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const scrollElementRef = useRef(null);
@@ -85,6 +88,14 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                 checked={isZoomedIn}
                 onChange={() => {
                     setIsZoomedIn(!isZoomedIn);
+                }}
+            />
+
+            <Switch
+                label='Hexadecimal'
+                checked={showHex}
+                onChange={() => {
+                    setShowHex(!showHex);
                 }}
             />
 
