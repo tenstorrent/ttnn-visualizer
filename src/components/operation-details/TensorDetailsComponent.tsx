@@ -60,7 +60,9 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     />
                     <h4>Tensor ID: {tensor.id}</h4>
 
-                    <span className='format-numbers monospace'>{prettyPrintAddress(tensor.address, memorySize)}</span>
+                    <span className={classNames('format-numbers monospace', { em: tensor.address === null })}>
+                        {prettyPrintAddress(tensor.address, memorySize)}
+                    </span>
                 </button>
 
                 {isValidNumber(deallocationOperationId) && operations ? (
