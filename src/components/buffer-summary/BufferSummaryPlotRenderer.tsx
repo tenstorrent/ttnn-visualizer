@@ -18,6 +18,7 @@ import ROUTES from '../../definitions/routes';
 import isValidNumber from '../../functions/isValidNumber';
 import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
 import { showHexAtom } from '../../store/app';
+import GlobalSwitch from '../GlobalSwitch';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -91,8 +92,8 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                 }}
             />
 
-            <Switch
-                label='Hexadecimal'
+            <GlobalSwitch
+                label='Hex axis labels'
                 checked={showHex}
                 onChange={() => {
                     setShowHex(!showHex);

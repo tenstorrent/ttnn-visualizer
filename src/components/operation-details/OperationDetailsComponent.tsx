@@ -34,6 +34,7 @@ import TensorDetailsComponent from './TensorDetailsComponent';
 import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
+import GlobalSwitch from '../GlobalSwitch';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -312,8 +313,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 }}
                             />
 
-                            <Switch
-                                label='Hexadecimal'
+                            <GlobalSwitch
+                                label='Hex axis labels'
                                 checked={showHex}
                                 onChange={() => {
                                     setShowHex(!showHex);
