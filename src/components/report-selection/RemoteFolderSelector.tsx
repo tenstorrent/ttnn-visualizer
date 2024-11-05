@@ -9,6 +9,7 @@ import { FC, type PropsWithChildren } from 'react';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemoteConnection from '../../hooks/useRemote';
+import { isEqual } from '../../functions/math';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
@@ -44,7 +45,11 @@ const filterFolders =
     };
 
 const remoteFolderRenderer =
-    (syncingFolderList: boolean, connection?: RemoteConnection): ItemRenderer<RemoteFolder> =>
+    (
+        syncingFolderList: boolean,
+        selectedFolder?: RemoteFolder,
+        connection?: RemoteConnection,
+    ): ItemRenderer<RemoteFolder> =>
     (folder, { handleClick, modifiers }) => {
         const { persistentState } = useRemoteConnection();
 
@@ -103,7 +108,7 @@ const remoteFolderRenderer =
         return (
             <MenuItem
                 className='remote-folder-item'
-                active={modifiers.active}
+                active={isEqual(selectedFolder, folder)}
                 disabled={modifiers.disabled}
                 key={`${formatRemoteFolderName(folder, connection, persistentState.selectedConnection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
@@ -145,7 +150,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
             <Select
                 className='remote-folder-select'
                 items={remoteFolderList ?? []}
-                itemRenderer={remoteFolderRenderer(updatingFolderList, remoteConnection)}
+                itemRenderer={remoteFolderRenderer(updatingFolderList, remoteFolder, remoteConnection)}
                 filterable
                 itemPredicate={filterFolders(remoteConnection, persistentState.selectedConnection)}
                 noResults={
