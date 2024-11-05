@@ -197,7 +197,7 @@ def read_remote_file(
     ssh_client = get_client(remote_connection)
     with ssh_client.open_sftp() as sftp:
         if remote_path:
-            path = remote_path
+            path = Path(remote_path)
         else:
             path = Path(remote_connection.path)
 
