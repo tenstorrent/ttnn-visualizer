@@ -6,9 +6,16 @@
 
 .global-switch {
     &.bp5-control.bp5-switch {
-        &.primary input:checked ~ .bp5-control-indicator {
-            background-color: $tt-green-tint-1;
+        &.primary {
+            input:checked ~ .bp5-control-indicator {
+                background-color: $tt-green-tint-1;
+            }
+
+            input:checked:not(:disabled):active ~ .bp5-control-indicator {
+                background-color: $tt-green;
+            }
         }
+
 
         // Add further Intents here as needed
     }
