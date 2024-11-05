@@ -2,40 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import React, { FC, useState } from 'react';
 import { AnchorButton, Button, MenuItem, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ItemRenderer, Select } from '@blueprintjs/select';
-import { FC, useState } from 'react';
+import { ItemRendererProps, Select } from '@blueprintjs/select';
 import RemoteConnectionDialog from './RemoteConnectionDialog';
 import { RemoteConnection } from '../../definitions/RemoteConnection';
-
-const formatConnectionString = (connection?: RemoteConnection) => {
-    if (!connection) {
-        return '(No connection)';
-    }
-
-    return `${connection.name} - ssh://${connection.host}:${connection.port}/${connection.path.replace(/^\//gi, '')}`;
-};
-
-const filterRemoteConnections = (query: string, connection: RemoteConnection) => {
-    return formatConnectionString(connection).toLowerCase().includes(query.toLowerCase());
-};
-
-const renderRemoteConnection: ItemRenderer<RemoteConnection> = (connection, { handleClick, modifiers }) => {
-    if (!modifiers.matchesPredicate) {
-        return null;
-    }
-
-    return (
-        <MenuItem
-            active={modifiers.active}
-            disabled={modifiers.disabled}
-            key={formatConnectionString(connection)}
-            onClick={handleClick}
-            text={formatConnectionString(connection)}
-        />
-    );
-};
+import { isEqual } from '../../functions/math';
 
 interface RemoteConnectionSelectorProps {
     connectionList: RemoteConnection[];
@@ -68,7 +41,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
             <Select
                 className='remote-connection-select'
                 items={connectionList}
-                itemRenderer={renderRemoteConnection}
+                itemRenderer={(item, itemProps) => renderRemoteConnection(item, itemProps, selectedConnection)}
                 disabled={disabled}
                 filterable
                 itemPredicate={filterRemoteConnections}
@@ -125,6 +98,44 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                 onClick={() => onSyncRemoteFolderList(selectedConnection)}
             />
         </div>
+    );
+};
+
+const formatConnectionString = (connection?: RemoteConnection) => {
+    if (!connection) {
+        return '(No connection)';
+    }
+
+    return `${connection.name} - ssh://${connection.host}:${connection.port}/${connection.path.replace(/^\//gi, '')}`;
+};
+
+const filterRemoteConnections = (query: string, connection: RemoteConnection) => {
+    return formatConnectionString(connection).toLowerCase().includes(query.toLowerCase());
+};
+
+type RenderRemoteConnectionProps<T> = (
+    item: T,
+    itemProps: ItemRendererProps,
+    selectedItem: T,
+) => React.JSX.Element | null;
+
+const renderRemoteConnection: RenderRemoteConnectionProps<RemoteConnection> = (
+    connection,
+    { handleClick, modifiers },
+    selectedConnection,
+) => {
+    if (!modifiers.matchesPredicate) {
+        return null;
+    }
+
+    return (
+        <MenuItem
+            active={isEqual(connection, selectedConnection)}
+            disabled={modifiers.disabled}
+            key={formatConnectionString(connection)}
+            onClick={handleClick}
+            text={formatConnectionString(connection)}
+        />
     );
 };
 
