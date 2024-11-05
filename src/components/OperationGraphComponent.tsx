@@ -113,6 +113,7 @@ const OperationGraph: React.FC<{
                         keyboard: true,
                         dragView: true,
                         zoomView: true,
+                        zoomSpeed: 0.2,
                     },
                     physics: {
                         enabled: false,
