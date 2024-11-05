@@ -10,18 +10,6 @@ import RemoteConnectionDialog from './RemoteConnectionDialog';
 import { RemoteConnection } from '../../definitions/RemoteConnection';
 import { isEqual } from '../../functions/math';
 
-const formatConnectionString = (connection?: RemoteConnection) => {
-    if (!connection) {
-        return '(No connection)';
-    }
-
-    return `${connection.name} - ssh://${connection.host}:${connection.port}/${connection.path.replace(/^\//gi, '')}`;
-};
-
-const filterRemoteConnections = (query: string, connection: RemoteConnection) => {
-    return formatConnectionString(connection).toLowerCase().includes(query.toLowerCase());
-};
-
 interface RemoteConnectionSelectorProps {
     connectionList: RemoteConnection[];
     connection?: RemoteConnection;
@@ -111,6 +99,18 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
             />
         </div>
     );
+};
+
+const formatConnectionString = (connection?: RemoteConnection) => {
+    if (!connection) {
+        return '(No connection)';
+    }
+
+    return `${connection.name} - ssh://${connection.host}:${connection.port}/${connection.path.replace(/^\//gi, '')}`;
+};
+
+const filterRemoteConnections = (query: string, connection: RemoteConnection) => {
+    return formatConnectionString(connection).toLowerCase().includes(query.toLowerCase());
 };
 
 type RenderRemoteConnectionProps<T> = (
