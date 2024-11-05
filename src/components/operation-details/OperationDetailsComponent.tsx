@@ -493,10 +493,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             </>
                         )}
 
-                        {selectedAddress &&
-                        selectedTensorId &&
-                        (details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.L1 ||
-                            details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.L1_SMALL) ? (
+                        {selectedTensorId ? (
                             <ProducerConsumersData
                                 selectedTensor={selectedTensorId}
                                 details={details}
