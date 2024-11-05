@@ -60,8 +60,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [isL1Active, setIsL1Active] = useAtom(isL1ActiveAtom);
     const [isDramActive, setIsDramActive] = useAtom(isDramActiveAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
-    const [selectedTensorId, setSelectedTensorId] = useState<number | null>(null);
-    const [toastId, setToastId] = useState<number | null>(null);
+    const [selectedTensorId, setSelectedTensorId] = useState<number>();
+    const [toastId, setToastId] = useState<number>();
     const [tensixFullVisualisationOpen, setTensixFullVisualisationOpen] = useState(false);
     const [tensixIOVisualisationOpen, setTensixIOVisualisationOpen] = useState(false);
 
@@ -70,7 +70,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
         if (toastId) {
             toast.dismiss(toastId);
-            setToastId(null);
+            setToastId(undefined);
         }
     };
 
@@ -177,10 +177,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
     }
 
-    const updateBufferFocus = (address: number, tensorId?: number): void => {
-        setSelectedAddress(address);
-        setSelectedTensorId(tensorId ?? null);
-        createToast(address);
+    const updateBufferFocus = (address?: number, tensorId?: number): void => {
+        setSelectedAddress(address ?? null);
+        setSelectedTensorId(tensorId);
+        createToast(address, tensorId);
     };
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
@@ -198,35 +198,31 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         updateBufferFocus(address, tensor?.id);
     };
 
-    const onTensorClick = (address: number | null, tensorId: number): void => {
-        if (address) {
-            updateBufferFocus(address, tensorId);
-        }
+    const onTensorClick = (address?: number, tensorId?: number): void => {
+        updateBufferFocus(address, tensorId);
     };
 
     const onLegendClick = (address: number, tensorId?: number) => {
         updateBufferFocus(address, tensorId);
     };
 
-    const createToast = (address: number) => {
+    const createToast = (address?: number, tensorId?: number) => {
         if (toastId) {
             toast.dismiss(toastId);
         }
-
-        const tensor = details.getTensorForAddress(address);
-        const tensorId = tensor?.id;
 
         const toastInstance = toast(
             <ToastTensorMessage
                 tensorId={tensorId}
                 address={address}
-                colour={getTensorColor(tensorId) || getBufferColor(address)}
+                // eslint-disable-next-line no-nested-ternary
+                colour={tensorId ? getTensorColor(tensorId) : address ? getBufferColor(address) : 'black'}
             />,
             {
                 position: 'bottom-right',
                 hideProgressBar: true,
                 closeOnClick: true,
-                onClick: () => setToastId(null),
+                onClick: () => setToastId(undefined),
                 theme: 'light',
             },
         ) as number;
