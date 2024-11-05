@@ -60,8 +60,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [isL1Active, setIsL1Active] = useAtom(isL1ActiveAtom);
     const [isDramActive, setIsDramActive] = useAtom(isDramActiveAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
-    const [selectedTensorId, setSelectedTensorId] = useState<number>();
-    const [toastId, setToastId] = useState<number>();
+    const [selectedTensorId, setSelectedTensorId] = useState<number | null>(null);
+    const [toastId, setToastId] = useState<number | null>(null);
     const [tensixFullVisualisationOpen, setTensixFullVisualisationOpen] = useState(false);
     const [tensixIOVisualisationOpen, setTensixIOVisualisationOpen] = useState(false);
 
@@ -70,7 +70,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
         if (toastId) {
             toast.dismiss(toastId);
-            setToastId(undefined);
+            setToastId(null);
         }
     };
 
@@ -179,7 +179,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const updateBufferFocus = (address?: number, tensorId?: number): void => {
         setSelectedAddress(address ?? null);
-        setSelectedTensorId(tensorId);
+        setSelectedTensorId(tensorId ?? null);
         createToast(address, tensorId);
     };
 
@@ -211,18 +211,23 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             toast.dismiss(toastId);
         }
 
+        let colour = getTensorColor(tensorId);
+
+        if (address && !colour) {
+            colour = getBufferColor(address);
+        }
+
         const toastInstance = toast(
             <ToastTensorMessage
                 tensorId={tensorId}
                 address={address}
-                // eslint-disable-next-line no-nested-ternary
-                colour={tensorId ? getTensorColor(tensorId) : address ? getBufferColor(address) : 'black'}
+                colour={colour}
             />,
             {
                 position: 'bottom-right',
                 hideProgressBar: true,
                 closeOnClick: true,
-                onClick: () => setToastId(undefined),
+                onClick: () => setToastId(null),
                 theme: 'light',
             },
         ) as number;
