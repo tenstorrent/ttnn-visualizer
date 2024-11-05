@@ -45,7 +45,10 @@ from ttnn_visualizer.sftp_operations import (
     check_remote_path_exists,
 )
 from ttnn_visualizer.ssh_client import get_client
-from ttnn_visualizer.utils import read_last_synced_file, timer
+from ttnn_visualizer.utils import (
+    read_last_synced_file,
+    timer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -303,22 +306,77 @@ def get_devices(session: TabSession):
 )
 def create_upload_files():
     """Handle file uploads and emit progress for each file."""
+
+    def validate_uploaded_report_files(files):
+        """Ensure specific files exist and have only one parent folder in their paths."""
+        found_files = set()
+        report_files = {"db.sqlite", "config.json"}
+
+        for file in files:
+            file_path = Path(file.filename)
+            if file_path.name in report_files:
+                found_files.add(file_path.name)
+                # Check that the file path has exactly one parent folder
+                if (
+                    len(file_path.parents) != 2
+                ):  # `2` means one parent folder plus the file itself
+                    logger.warning(
+                        f"File {file.filename} is not under a single parent folder."
+                    )
+                    return False
+
+        # Check if all specific files are found
+        missing_files = report_files - found_files
+        if missing_files:
+            logger.warning(f"Missing required files: {', '.join(missing_files)}")
+            return False
+
+        return True
+
+    def emit_file_progress(
+        current_file_name, total_files, processed_files, percent, status, tab_id
+    ):
+        """Emit progress for a specific file."""
+        progress = FileProgress(
+            current_file_name=current_file_name,
+            number_of_files=total_files,
+            percent_of_current=percent,
+            finished_files=processed_files,
+            status=status,
+        )
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(progress, tab_id)
+
+    def emit_final_file_progress(total_files, processed_files, tab_id):
+        """Emit final progress status after all files are processed."""
+        final_progress = FileProgress(
+            current_file_name="",
+            number_of_files=total_files,
+            percent_of_current=100,
+            finished_files=processed_files,
+            status=FileStatus.FINISHED,
+        )
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(final_progress, tab_id)
+
+    def get_report_name_from_files(files):
+        """Extract the report name from the first file and return the report directory path."""
+        unsplit_report_name = str(files[0].filename)
+        report_name = unsplit_report_name.split("/")[0]
+
+        return report_name
+
     files = request.files.getlist("files")
-    local_dir = current_app.config["LOCAL_DATA_DIRECTORY"]
-    filenames = [Path(str(f.filename)).name for f in files]
 
-    logger.info(f"Received files: {filenames}")
-
-    # Validate necessary files
-    if "db.sqlite" not in filenames or "config.json" not in filenames:
+    if not validate_uploaded_report_files(files):
         return StatusMessage(
             status=ConnectionTestStates.FAILED,
             message="Invalid project directory.",
         ).model_dump()
 
-    unsplit_report_name = str(files[0].filename)
-    report_name = unsplit_report_name.split("/")[0]
-    report_directory = Path(local_dir)
+    report_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
+    report_name = get_report_name_from_files(files)
+
     logger.info(f"Writing report files to {report_directory}/{report_name}")
 
     total_files = len(files)
@@ -329,7 +387,7 @@ def create_upload_files():
         current_file_name = str(file.filename)
         logger.info(f"Processing file: {current_file_name}")
 
-        destination_file = Path(report_directory, Path(str(current_file_name)))
+        destination_file = Path(report_directory).joinpath((str(current_file_name)))
         logger.info(f"Writing file to {destination_file}")
 
         # Create the directory if it doesn't exist
@@ -339,41 +397,31 @@ def create_upload_files():
             )
             destination_file.parent.mkdir(exist_ok=True, parents=True)
 
-        # Emit 0% progress at the start
-        progress = FileProgress(
-            current_file_name=current_file_name,
-            number_of_files=total_files,
-            percent_of_current=0,
-            finished_files=processed_files,
-            status=FileStatus.DOWNLOADING,
+        # Emit progress on each file save
+        emit_file_progress(
+            current_file_name,
+            total_files,
+            processed_files,
+            0,
+            FileStatus.DOWNLOADING,
+            tab_id,
         )
-        if current_app.config["USE_WEBSOCKETS"]:
-            emit_file_status(progress, tab_id)
 
-        # Save the file locally
         file.save(destination_file)
 
-        # Emit 100% progress after file is saved
         processed_files += 1
-        progress.percent_of_current = 100
-        progress.finished_files = processed_files
-        if current_app.config["USE_WEBSOCKETS"]:
-            emit_file_status(progress, tab_id)
+        emit_file_progress(
+            current_file_name,
+            total_files,
+            processed_files,
+            100,
+            FileStatus.DOWNLOADING,
+            tab_id,
+        )
 
     # Update the session after all files are uploaded
     update_tab_session(tab_id=tab_id, active_report_data={"name": report_name})
-
-    # Emit final success status after all files are processed
-    final_progress = FileProgress(
-        current_file_name="",
-        number_of_files=total_files,
-        percent_of_current=100,
-        finished_files=processed_files,
-        status=FileStatus.FINISHED,
-    )
-
-    if current_app.config["USE_WEBSOCKETS"]:
-        emit_file_status(final_progress, tab_id)
+    emit_final_file_progress(total_files, processed_files, tab_id)
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
@@ -469,7 +517,6 @@ def read_remote_folder():
 @api.route("/remote/sync", methods=["POST"])
 def sync_remote_folder():
     remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
-    use_compression = current_app.config["COMPRESS_REMOTE_FILES"]
     request_body = request.get_json()
 
     # Check if request_body is None or not a dictionary
@@ -487,7 +534,7 @@ def sync_remote_folder():
             connection,
             remote_folder.remotePath,
             remote_dir,
-            use_compression,
+            exclude_patterns=[r"/tensors(/|$)"],
             sid=tab_id,
         )
     except RemoteConnectionException as e:
@@ -530,7 +577,7 @@ def use_remote_folder():
     if not connection or not folder:
         return Response(status=HTTPStatus.BAD_REQUEST)
     connection = RemoteConnection.model_validate(connection, strict=False)
-    folder = RemoteReportFolder(**folder)
+    folder = RemoteReportFolder.model_validate(folder, strict=False)
     report_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
     report_folder = Path(folder.remotePath).name
     connection_directory = Path(report_data_directory, connection.host, report_folder)

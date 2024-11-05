@@ -13,7 +13,6 @@ import {
     Switch,
     Tooltip,
 } from '@blueprintjs/core';
-import { useState } from 'react';
 import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
 import ConnectionTestMessage from '../components/report-selection/ConnectionTestMessage';
@@ -22,22 +21,22 @@ import ProgressBar from '../components/ProgressBar';
 import SearchField from '../components/SearchField';
 import 'styles/routes/Styleguide.scss';
 import LoadingSpinner from '../components/LoadingSpinner';
-import FileStatusOverlay from '../components/FileStatusOverlay';
+import GlobalSwitch from '../components/GlobalSwitch';
 
 const FORM_GROUP = {
     label: 'Form label',
     subLabel: 'Sub label here',
 };
 
-const FILE_DOWNLOAD_STATUS = {
-    currentFileName: 'foo.tar.gz',
-    numberOfFiles: 12,
-    percentOfCurrent: 49,
-    finishedFiles: 6,
-};
+// const FILE_DOWNLOAD_STATUS = {
+//     currentFileName: 'foo.tar.gz',
+//     numberOfFiles: 12,
+//     percentOfCurrent: 49,
+//     finishedFiles: 6,
+// };
 
 export default function Operations() {
-    const [showProgressOverlay, setShowProgressOverlay] = useState(false);
+    // const [showProgressOverlay, setShowProgressOverlay] = useState(false);
 
     return (
         <>
@@ -390,6 +389,17 @@ export default function Operations() {
                     onChange={() => {}}
                     checked
                 />
+
+                <GlobalSwitch
+                    label='Global switch'
+                    onChange={() => {}}
+                    checked={false}
+                />
+                <GlobalSwitch
+                    label='Global switch'
+                    onChange={() => {}}
+                    checked
+                />
             </FormGroup>
 
             <h3>Components</h3>
@@ -417,7 +427,8 @@ export default function Operations() {
                 />
             </div>
 
-            <div className='container'>
+            {/* TODO: Get these working again */}
+            {/* <div className='container'>
                 <Button
                     onClick={() => setShowProgressOverlay(true)}
                     intent={Intent.PRIMARY}
@@ -426,12 +437,11 @@ export default function Operations() {
                 </Button>
 
                 <FileStatusOverlay
-                    isOpen={showProgressOverlay}
-                    onClose={() => setShowProgressOverlay(false)}
-                    fileStatus={FILE_DOWNLOAD_STATUS}
+                    open={showProgressOverlay}
+                    progress={FILE_DOWNLOAD_STATUS}
                     canEscapeKeyClose
                 />
-            </div>
+            </div> */}
 
             <div className='container'>
                 <p>Connection message</p>

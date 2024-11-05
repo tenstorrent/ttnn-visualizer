@@ -27,13 +27,14 @@ import {
 } from '../../definitions/PlotConfigurations';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import OperationArguments from '../OperationArguments';
-import { isDramActiveAtom, isL1ActiveAtom, selectedAddressAtom } from '../../store/app';
+import { isDramActiveAtom, isL1ActiveAtom, selectedAddressAtom, showHexAtom } from '../../store/app';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
 import TensorDetailsComponent from './TensorDetailsComponent';
 import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
+import GlobalSwitch from '../GlobalSwitch';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -48,6 +49,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
     const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
+    const [showHex, setShowHex] = useAtom(showHexAtom);
     const {
         operationDetails: { data: operationDetails, isLoading, status },
     } = useOperationDetails(operationId);
@@ -308,6 +310,14 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 disabled={cbChartDataByOperation.size === 0}
                                 onChange={() => {
                                     setShowCircularBuffer(!showCircularBuffer);
+                                }}
+                            />
+
+                            <GlobalSwitch
+                                label='Hex axis labels'
+                                checked={showHex}
+                                onChange={() => {
+                                    setShowHex(!showHex);
                                 }}
                             />
                         </div>

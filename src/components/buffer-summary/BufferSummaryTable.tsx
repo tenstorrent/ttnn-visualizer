@@ -32,6 +32,7 @@ enum COLUMN_HEADERS {
     operation_id = 'Operation',
     tensor_id = 'Tensor Id',
     address = 'Address',
+    hexAddress = 'Address (hex)',
     size = 'Size',
     buffer_type = 'Buffer Type',
     device_id = 'Device Id',
@@ -55,6 +56,12 @@ const COLUMNS: ColumnDefinition[] = [
     {
         name: COLUMN_HEADERS.address,
         key: 'address',
+        sortable: true,
+        filterable: true,
+    },
+    {
+        name: COLUMN_HEADERS.hexAddress,
+        key: 'hexAddress',
         sortable: true,
         filterable: true,
     },
@@ -86,7 +93,7 @@ interface SummaryTableBuffer extends BufferData {
 }
 
 function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
-    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useBuffersTable();
+    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useBuffersTable(COLUMNS[0].key);
     const selectedTensor = useAtomValue(selectedTensorAtom);
     const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
     const [showOnlySelected, setShowOnlySelected] = useState(false);
@@ -270,7 +277,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     numRows={tableFields.length}
                     enableRowResizing={false}
                     cellRendererDependencies={[sortDirection, sortingColumn, tableFields, tableFields.length]}
-                    columnWidths={[200, 120, 120, 120, 120, 100]}
+                    columnWidths={[200, 120, 120, 140, 120, 120, 100]}
                     ref={tableRef}
                     getCellClipboardData={(row, col) => getCellText(tableFields[row], COLUMNS[col].key)}
                 >
@@ -296,10 +303,6 @@ const getCellText = (buffer: SummaryTableBuffer, key: COLUMN_KEYS) => {
 
     if (key === 'buffer_type') {
         textValue = BufferTypeLabel[buffer.buffer_type];
-    }
-
-    if (key === 'address') {
-        textValue = buffer.hexAddress;
     }
 
     return textValue;

@@ -75,6 +75,7 @@ const LocalFolderOptions: FC = () => {
             connectionStatus.message = 'Selected directory does not contain a valid report.';
         }
 
+        queryClient.clear();
         setLocalUploadLabel(`${files.length} files uploaded`);
         setIsUploading(false);
         setFolderStatus(connectionStatus);
@@ -82,6 +83,7 @@ const LocalFolderOptions: FC = () => {
     };
 
     const viewOperation = () => {
+        // keeping this here temporarily until proven otherwise
         queryClient.clear();
 
         navigate(ROUTES.OPERATIONS);
