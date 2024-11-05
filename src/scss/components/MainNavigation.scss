@@ -53,7 +53,9 @@
         &.buffers-button {
             @include button-styles($tt-buffers, $tt-buffers-active, 'small-square');
         }
+
+        &.graph-button {
+            @include button-styles($tt-graph, $tt-graph-active, 'graph');
+        }
     }
 }
-
-

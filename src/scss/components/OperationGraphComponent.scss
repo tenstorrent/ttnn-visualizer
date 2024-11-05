@@ -5,10 +5,27 @@
 @use '../definitions/colours' as *;
 
 .operation-graph-component {
+    .operation-graph-header {
+        display: flex;
+        justify-content: flex-start;
+        align-items: flex-start;
+        gap: 20px;
+    }
+
     .operation-graph-nav {
         display: inline-flex;
         place-content: center space-between;
         gap: 10px;
         align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .slider-wrapper {
+        width: 250px;
+        padding-left: 5px;
+
+        .bp5-label {
+            margin-bottom: 5px;
+        }
     }
 }

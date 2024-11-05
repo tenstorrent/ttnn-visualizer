@@ -3,10 +3,10 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Network } from 'vis-network';
+import { Edge, Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
-import { Button, PopoverPosition, Slider, Tooltip } from '@blueprintjs/core';
+import { Button, Label, PopoverPosition, Slider, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { OperationDescription } from '../model/APIData';
@@ -26,19 +26,22 @@ const OperationGraph: React.FC<{
     const [scale, setScale] = useState(1);
     const edges = operationList.flatMap((op) =>
         op.outputs.flatMap((tensor) =>
-            tensor.consumers.map((consumerId) => ({
-                from: op.id,
-                to: consumerId,
-                arrows: 'to',
-                label: `${tensor.id}`,
-            })),
+            tensor.consumers.map(
+                (consumerId) =>
+                    ({
+                        from: op.id,
+                        to: consumerId,
+                        arrows: 'to',
+                        label: `${tensor.id}`,
+                    }) as Edge,
+            ),
         ),
     );
 
     const connectedNodeIds = new Set<number>();
     edges.forEach(({ from, to }) => {
-        connectedNodeIds.add(from);
-        connectedNodeIds.add(to);
+        connectedNodeIds.add(from as number);
+        connectedNodeIds.add(to as number);
     });
 
     const nodes = new DataSet(
@@ -133,6 +136,11 @@ const OperationGraph: React.FC<{
                 }
             });
             networkRef.current.on('click', (params) => {
+                if (params.edges.length > 0) {
+                    const edgeId = params.edges[0];
+                    const edge = edges.find((e) => e.id === edgeId);
+                    focusOnNode((edge?.to as number) || null);
+                }
                 if (params.nodes.length > 0) {
                     navigate(`${ROUTES.OPERATIONS}/${params.nodes[0]}`);
                 }
@@ -220,26 +228,34 @@ const OperationGraph: React.FC<{
                             icon={IconNames.ArrowLeft}
                             onClick={() => focusOnNode(getPreviousOperationId(currentOperationId))}
                             disabled={getPreviousOperationId(currentOperationId) === null}
+                            outlined
                         />
                     </Tooltip>
                     <Tooltip
                         placement={PopoverPosition.TOP}
                         content={`Center on ${currentOperationId}`}
                     >
-                        <Button onClick={() => focusOnNode(currentOperationId)}>{currentOperationId}</Button>
+                        <Button
+                            outlined
+                            onClick={() => focusOnNode(currentOperationId)}
+                        >
+                            {currentOperationId}
+                        </Button>
                     </Tooltip>
                     <Tooltip
                         placement={PopoverPosition.TOP}
                         content={`Go to next operation ${getNextOperationId(currentOperationId)}`}
                     >
                         <Button
+                            outlined
                             icon={IconNames.ArrowRight}
                             onClick={() => focusOnNode(getNextOperationId(currentOperationId))}
                             disabled={getNextOperationId(currentOperationId) === null}
                         />
                     </Tooltip>
                 </div>
-                <div style={{ width: '250px' }}>
+                <div className='slider-wrapper'>
+                    <Label>Scale</Label>
                     <Slider
                         min={0.1}
                         max={3}
@@ -254,10 +270,13 @@ const OperationGraph: React.FC<{
             </div>
             <div
                 ref={containerRef}
-                style={{ width: '100%', height: 'calc(100vh - 200px)' }}
+                style={{ width: '100%', height: 'calc(100vh - 180px)' }}
             />
             <div>
-                <aside>Click on a node to see operation details</aside>
+                <aside>
+                    Scroll to zoom. Drag to pan. Click a node to see operation details. Click an edge to focus on the
+                    connected node.
+                </aside>
             </div>
         </div>
     );

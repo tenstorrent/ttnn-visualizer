@@ -74,7 +74,7 @@ function MainNavigation() {
                     // disabled={!tabSession?.active_report}
                     minimal
                     large
-                    className='buffers-button'
+                    className='graph-button'
                 />
             </Navbar.Group>
         </Navbar>

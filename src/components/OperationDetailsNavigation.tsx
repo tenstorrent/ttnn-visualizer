@@ -52,12 +52,19 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
     }, [navigateToPreviousOperation, navigateToNextOperation, previousOperation, nextOperation]);
 
     return (
-        <nav className='operation-details-navigation'>
+        <nav className='operation-details-navigation navbar'>
             <ButtonGroup className='button-group'>
-                <Button
-                    icon={IconNames.Graph}
-                    onClick={() => navigate(`${ROUTES.GRAPHTREE}/${operationId}`)}
-                />
+                <Tooltip
+                    content='View operations graph'
+                    placement={PopoverPosition.TOP}
+                >
+                    <Button
+                        icon={IconNames.Graph}
+                        onClick={() => navigate(`${ROUTES.GRAPHTREE}/${operationId}`)}
+                        outlined
+                        className='graph-button'
+                    />
+                </Tooltip>
                 <Tooltip
                     content={previousOperation ? `${previousOperation?.id} ${previousOperation?.name}` : ''}
                     placement={PopoverPosition.TOP}
