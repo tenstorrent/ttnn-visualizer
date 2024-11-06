@@ -477,7 +477,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                                 memSize={memorySizeL1}
                                                 selectedTensorAddress={selectedAddress}
                                                 operationDetails={details}
-                                                onLegendClick={chunk.bufferType === 'CB' ? null : onLegendClick}
+                                                onLegendClick={onLegendClick}
                                                 colorVariance={chunk.colorVariance}
                                             />
                                         ))}
