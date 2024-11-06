@@ -3,7 +3,7 @@ import { toHex } from '../../functions/math';
 
 interface ToastTensorMessageProps {
     tensorId?: number;
-    address: number;
+    address?: number;
     colour?: string;
 }
 
@@ -17,7 +17,7 @@ const ToastTensorMessage = ({ tensorId, address, colour }: ToastTensorMessagePro
         <strong>
             {tensorId ? `Tensor ${tensorId}` : 'Buffer'}
             <span className='light'>{' at '}</span>
-            {toHex(address)}
+            {address ? toHex(address) : 'NULL'}
             <span className='light'>{' selected'}</span>
         </strong>
     </div>
