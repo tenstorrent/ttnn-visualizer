@@ -9,6 +9,10 @@
     font-family: monospace;
 }
 
+.em {
+    font-style: italic;
+}
+
 // Using !important to override some 3rd party CSS
 .no-toast-animation {
     /* stylelint-disable-next-line declaration-no-important */
@@ -88,4 +92,12 @@ $row-background: $tt-grey-2;
             $tt-red-accent 7px
         );
     }
+}
+
+.graph-tree-loader {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 80vh;
 }

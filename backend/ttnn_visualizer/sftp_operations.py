@@ -1,11 +1,10 @@
 import json
 import logging
-import os
-import tarfile
+import re
 from pathlib import Path
 from stat import S_ISDIR
 import time
-from typing import List
+from typing import List, Optional
 
 from threading import Thread
 from flask import current_app
@@ -17,13 +16,12 @@ from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.sockets import (
     FileProgress,
     FileStatus,
-    emit_compression_progress,
     emit_file_status,
 )
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.exceptions import NoProjectsException, RemoteConnectionException
 from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
-from ttnn_visualizer.ssh_client import check_gzip_exists, check_permissions, get_client
+from ttnn_visualizer.ssh_client import get_client
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +61,20 @@ def walk_sftp_directory(sftp: SFTPClient, remote_path: str):
     return files, folders
 
 
+def is_excluded(file_path, exclude_patterns):
+    """Check if the file matches any exclusion pattern."""
+    return any(re.search(pattern, file_path) for pattern in exclude_patterns)
+
+
 @remote_exception_handler
 def sync_files_and_directories(
-    client, remote_folder: str, destination_dir: Path, sid=None
+    client, remote_folder: str, destination_dir: Path, exclude_patterns=None, sid=None
 ):
     """Download files and directories sequentially in one unified loop."""
+    exclude_patterns = (
+        exclude_patterns or []
+    )  # Default to an empty list if not provided
+
     with client.open_sftp() as sftp:
         # Ensure the destination directory exists
         destination_dir.mkdir(parents=True, exist_ok=True)
@@ -102,12 +109,23 @@ def sync_files_and_directories(
             for index, file in enumerate(files, start=1):
                 remote_file_path = f"{remote_dir}/{file}"
                 local_file_path = Path(local_dir, file)
+
+                # Skip files that match any exclusion pattern
+                if is_excluded(remote_file_path, exclude_patterns):
+                    logger.info(f"Skipping {remote_file_path} (excluded by pattern)")
+                    continue
+
                 download_file(remote_file_path, local_file_path, index)
 
             # Recursively handle subdirectories
             for folder in folders:
                 remote_subdir = f"{remote_dir}/{folder}"
                 local_subdir = local_dir / folder
+                if is_excluded(remote_subdir, exclude_patterns):
+                    logger.info(
+                        f"Skipping directory {remote_subdir} (excluded by pattern)"
+                    )
+                    continue
                 download_directory_contents(remote_subdir, local_subdir)
 
         # Start downloading from the root folder
@@ -146,9 +164,6 @@ def download_file_with_progress(
                 status=FileStatus.DOWNLOADING,
             )
 
-            if current_app.config["USE_WEBSOCKETS"]:
-                emit_file_status(progress, sid)
-
         # Perform the download
         sftp.get(remote_path, str(local_path), callback=download_progress_callback)
 
@@ -182,7 +197,7 @@ def read_remote_file(
     ssh_client = get_client(remote_connection)
     with ssh_client.open_sftp() as sftp:
         if remote_path:
-            path = remote_path
+            path = Path(remote_path)
         else:
             path = Path(remote_connection.path)
 
@@ -281,7 +296,7 @@ def sync_remote_folders(
     remote_connection: RemoteConnection,
     remote_folder_path: str,
     path_prefix: str,
-    use_compression: bool,
+    exclude_patterns: Optional[List[str]] = None,
     sid=None,
 ):
     """Main function to sync test folders, handles both compressed and individual syncs."""
@@ -292,56 +307,6 @@ def sync_remote_folders(
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
 
-    check_permissions(client, remote_folder_path)
-
-    if check_gzip_exists(client) and use_compression:
-        try:
-            remote_tar_path = f"{remote_folder_path}.tar.gz"
-            folder_size = calculate_folder_size(client, remote_folder_path)
-
-            logger.info(f"Beginning compression of remote folder {remote_folder_path}")
-            # Emit compression progress in the background
-            start_background_task(
-                emit_compression_progress, client, remote_tar_path, folder_size, sid
-            )
-
-            # Compress the folder
-            compress_command = f"tar -czf {remote_tar_path} -C {remote_folder_path} ."
-            stdin, stdout, stderr = client.exec_command(compress_command)
-            error = stderr.read().decode().strip()
-            if error:
-                raise Exception("Compression failed")
-
-            local_tar_path = Path(destination_dir, f"{report_folder}.tar.gz")
-            logger.info(f"Downloading compressed folder: {local_tar_path}")
-
-            # Download compressed folder in the background
-            with client.open_sftp() as sftp:
-                start_background_task(
-                    download_file_with_progress,
-                    sftp,
-                    remote_tar_path,
-                    local_tar_path,
-                    sid,
-                    1,
-                    0,
-                )
-
-            # Extract tar file
-            with tarfile.open(local_tar_path, "r:gz") as tar:
-                tar.extractall(path=destination_dir)
-
-            # Update last synced
-            update_last_synced(destination_dir)
-
-            os.remove(local_tar_path)
-            client.exec_command(f"rm {remote_tar_path}")
-
-        except Exception as e:
-            logger.error(f"Compression failed: {e}, falling back to individual sync.")
-            sync_files_and_directories(client, remote_folder_path, destination_dir, sid)
-    else:
-        if not use_compression:
-            logger.info("Compression disabled. Syncing files individually")
-        logger.info("gzip/tar not found, syncing files individually.")
-        sync_files_and_directories(client, remote_folder_path, destination_dir, sid)
+    sync_files_and_directories(
+        client, remote_folder_path, destination_dir, exclude_patterns, sid
+    )

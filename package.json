@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualzer",
   "private": true,
-  "version": "0.8.1",
+  "version": "0.9.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -38,7 +38,9 @@
     "react-router-dom": "^6.23.1",
     "react-toastify": "^10.0.5",
     "socket.io-client": "^4.8.0",
-    "tinycolor2": "^1.6.0"
+    "tinycolor2": "^1.6.0",
+    "vis-data": "^7.1.9",
+    "vis-network": "^9.1.9"
   },
   "devDependencies": {
     "@blueprintjs/node-build-scripts": "^9.2.1",

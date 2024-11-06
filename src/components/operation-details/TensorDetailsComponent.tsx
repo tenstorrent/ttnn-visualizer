@@ -18,7 +18,7 @@ export interface TensorDetailsComponentProps {
     tensor: TensorData;
     selectedAddress: number | null;
     memorySize: number;
-    onTensorClick: (address: number | null, tensorId: number) => void;
+    onTensorClick: (address?: number, tensorId?: number) => void;
     operationId: number;
     zoomRange: [number, number];
 }
@@ -48,7 +48,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 <button
                     type='button'
                     className='tensor-name'
-                    onClick={() => onTensorClick(tensor.address, tensor.id)}
+                    onClick={() => onTensorClick(tensor.address ?? undefined, tensor.id)}
                 >
                     <div
                         className={classNames('memory-color-block', {
@@ -60,7 +60,9 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     />
                     <h4>Tensor ID: {tensor.id}</h4>
 
-                    <span className='format-numbers monospace'>{prettyPrintAddress(tensor.address, memorySize)}</span>
+                    <span className={classNames('format-numbers monospace', { em: tensor.address === null })}>
+                        {prettyPrintAddress(tensor.address, memorySize)}
+                    </span>
                 </button>
 
                 {isValidNumber(deallocationOperationId) && operations ? (

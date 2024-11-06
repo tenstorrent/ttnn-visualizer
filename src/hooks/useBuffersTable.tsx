@@ -35,8 +35,8 @@ const sortDesc = (a: SortingValue, b: SortingValue) => {
     return a < b ? 1 : -1;
 };
 
-const useBuffersTable = () => {
-    const [sortingColumn, setSortingColumn] = useState<string>('');
+const useBuffersTable = (defaultSortingKey: string) => {
+    const [sortingColumn, setSortingColumn] = useState<string>(defaultSortingKey);
     const [sortDirection, setSortDirection] = useState<SortingDirection>(SortingDirection.DESC);
 
     const sortTableFields = useCallback(

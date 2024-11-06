@@ -5,6 +5,7 @@
 import { Helmet } from 'react-helmet-async';
 import { useSetAtom } from 'jotai';
 import { useEffect } from 'react';
+import { toast } from 'react-toastify';
 import OperationList from '../components/OperationList';
 import { useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom } from '../store/app';
@@ -19,6 +20,9 @@ export default function Operations() {
             setMeta(report.data);
         }
     }, [report, setMeta]);
+
+    // Dismiss any toasts that are open
+    toast.dismiss();
 
     return (
         <>

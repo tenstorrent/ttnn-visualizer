@@ -12,7 +12,7 @@ export const MemoryLegendElement: React.FC<{
     memSize: number;
     selectedTensorAddress: number | null;
     operationDetails: OperationDetails;
-    onLegendClick: ((selectedTensorAddress: number, tensorId?: number | undefined) => void) | null;
+    onLegendClick: (selectedTensorAddress: number, tensorId?: number | undefined) => void;
     colorVariance?: number | undefined; // color uniqueness for the CB color
     bufferType?: DeviceOperationTypes;
     layout?: DeviceOperationLayoutTypes;
@@ -27,7 +27,7 @@ export const MemoryLegendElement: React.FC<{
     bufferType,
     layout,
 }) => {
-    const Component = chunk.empty || onLegendClick === null ? 'div' : 'button';
+    const Component = chunk.empty ? 'div' : 'button';
     const emptyChunkLabel = (
         <>
             Empty space{' '}
@@ -45,11 +45,11 @@ export const MemoryLegendElement: React.FC<{
         <Component
             key={chunk.address}
             className={classNames('legend-item', {
-                button: !chunk.empty && onLegendClick !== null,
+                button: !chunk.empty,
                 dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
             })}
             // eslint-disable-next-line react/jsx-props-no-spreading
-            {...(!chunk.empty && onLegendClick !== null
+            {...(!chunk.empty
                 ? {
                       type: 'button',
                       onClick: () => onLegendClick(chunk.address, chunk.tensorId),
@@ -58,7 +58,7 @@ export const MemoryLegendElement: React.FC<{
         >
             <div
                 className={classNames('memory-color-block', {
-                    empty: chunk.empty || onLegendClick === null,
+                    empty: chunk.empty,
                 })}
                 style={{
                     ...(chunk.empty
