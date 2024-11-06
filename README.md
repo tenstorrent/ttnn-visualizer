@@ -5,6 +5,7 @@ A tool for visualizing the Tenstorrent Neural Network (TTNN) model.
 <!-- TOC start -->
 
 - [Running Application](#running-application)
+   * [Prerequisites](#prerequisites)
    * [Installing as Wheel](#installing-as-wheel)
    * [Downloading Docker Image](#downloading-docker-image)
       + [Running Image](#running-image)
@@ -35,8 +36,19 @@ A tool for visualizing the Tenstorrent Neural Network (TTNN) model.
 <!-- TOC --><a name="running-application"></a>
 ## Running Application
 
+<!-- TOC --><a name="prerequisites"></a>
+### Prerequisites
+
+Visualizer requires a preexisting report generated. Please refer to
+[TT-Metallium](https://docs.tenstorrent.com/tt-metalium/latest/installing.html),
+[TT-NN](https://docs.tenstorrent.com/ttnn/latest/ttnn/get_started.html) and
+[TT-NN models](https://docs.tenstorrent.com/ttnn/latest/tt_metal_models/get_started.html#running-an-example-model)
+on how to run models and generate reports.
+
 <!-- TOC --><a name="installing-as-wheel"></a>
 ### Installing as Wheel
+
+Application is meant to run on user local system and has python requirement of 3.12.
 
 Download the wheel file from the [releases page](https://github.com/tenstorrent/ttnn-visualizer/releases) and install using `pip install release_name.whl`. After installation
 simply run `ttnn-visualizer` to start the application.
