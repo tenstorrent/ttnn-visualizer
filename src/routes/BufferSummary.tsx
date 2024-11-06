@@ -7,6 +7,7 @@ import { AnchorButton, ButtonGroup, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useSetAtom } from 'jotai';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'react-toastify';
 import { BuffersByOperationData, useBuffers, useOperationsList, useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom } from '../store/app';
 import 'styles/components/BufferSummary.scss';
@@ -31,6 +32,8 @@ function BufferSummary() {
     const [activeSection, setActiveSection] = useState(SECTION_IDS.PLOT);
     const { data: buffersByOperation } = useBuffers(BufferType.L1);
     const { data: operationsList } = useOperationsList();
+
+    toast.dismiss();
 
     // Needs to be in a useEffect to avoid a bad setState call
     useEffect(() => {
