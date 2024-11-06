@@ -492,16 +492,16 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             />
                                         ))}
                                 </div>
+
+                                {selectedTensorId && memory.some((mem) => mem.tensorId === selectedTensorId) ? (
+                                    <ProducerConsumersData
+                                        selectedTensor={selectedTensorId}
+                                        details={details}
+                                        operationId={operationId}
+                                    />
+                                ) : null}
                             </>
                         )}
-
-                        {selectedTensorId ? (
-                            <ProducerConsumersData
-                                selectedTensor={selectedTensorId}
-                                details={details}
-                                operationId={operationId}
-                            />
-                        ) : null}
 
                         {isDramActive && (
                             <>
@@ -562,18 +562,16 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         />
                                     ))}
                                 </div>
+
+                                {selectedTensorId && dramMemory.some((dram) => dram.tensorId === selectedTensorId) ? (
+                                    <ProducerConsumersData
+                                        selectedTensor={selectedTensorId}
+                                        details={details}
+                                        operationId={operationId}
+                                    />
+                                ) : null}
                             </>
                         )}
-
-                        {selectedAddress &&
-                        selectedTensorId &&
-                        details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.DRAM ? (
-                            <ProducerConsumersData
-                                selectedTensor={selectedTensorId}
-                                details={details}
-                                operationId={operationId}
-                            />
-                        ) : null}
 
                         <hr />
 

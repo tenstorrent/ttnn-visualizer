@@ -16,6 +16,14 @@
             display: none;
         }
 
+        .list {
+            padding-left: 0;
+            list-style: none;
+            margin: 0;
+            max-height: 325px;
+            overflow: auto;
+        }
+
         .title {
             font-size: 18px;
             display: inline-flex;
