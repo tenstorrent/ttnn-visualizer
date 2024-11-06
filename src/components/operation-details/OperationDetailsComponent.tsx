@@ -67,6 +67,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const onClickOutside = () => {
         setSelectedAddress(null);
+        setSelectedTensorId(null);
 
         if (toastId) {
             toast.dismiss(toastId);
@@ -265,7 +266,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
 
             <div className='operation-details-component'>
-                {selectedAddress && (
+                {(selectedAddress || selectedTensorId) && (
                     // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
                     <div
                         className='outside-click'
