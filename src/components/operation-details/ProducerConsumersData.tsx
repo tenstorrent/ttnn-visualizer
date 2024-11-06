@@ -12,7 +12,7 @@ import { OperationDetails } from '../../model/OperationDetails';
 import 'styles/components/ProducerConsumersData.scss';
 
 interface ProducerConsumersDataProps {
-    selectedTensor: number;
+    selectedTensor: number | null;
     details: OperationDetails;
     operationId: number;
 }

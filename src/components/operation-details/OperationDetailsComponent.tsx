@@ -431,8 +431,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             }}
                                         />
                                         {[...cbChartDataByOperation.entries()].map(
-                                            ([{ name: deviceOperationName }, plotData]) => (
-                                                <>
+                                            ([{ name: deviceOperationName }, plotData], index) => (
+                                                // eslint-disable-next-line react/no-array-index-key
+                                                <Fragment key={index}>
                                                     <h3 className='circular-buffers-plot-title'>
                                                         <Icon
                                                             className='operation-icon'
@@ -457,7 +458,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                                         configuration={CBRenderConfiguration}
                                                         onBufferClick={onBufferClick}
                                                     />
-                                                </>
+                                                </Fragment>
                                             ),
                                         )}
                                     </>
@@ -493,7 +494,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         ))}
                                 </div>
 
-                                {selectedTensorId && memory.some((mem) => mem.tensorId === selectedTensorId) ? (
+                                {(selectedTensorId && details.inputs.some((input) => input.id === selectedTensorId)) ||
+                                (selectedTensorId &&
+                                    details.outputs.some((output) => output.id === selectedTensorId)) ||
+                                (selectedAddress &&
+                                    (details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.L1 ||
+                                        details.getTensorForAddress(selectedAddress)?.buffer_type ===
+                                            BufferType.L1_SMALL)) ? (
                                     <ProducerConsumersData
                                         selectedTensor={selectedTensorId}
                                         details={details}
@@ -563,7 +570,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     ))}
                                 </div>
 
-                                {selectedTensorId && dramMemory.some((dram) => dram.tensorId === selectedTensorId) ? (
+                                {(selectedTensorId && details.inputs.some((input) => input.id === selectedTensorId)) ||
+                                (selectedTensorId &&
+                                    details.outputs.some((output) => output.id === selectedTensorId)) ||
+                                (selectedAddress &&
+                                    details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.DRAM) ? (
                                     <ProducerConsumersData
                                         selectedTensor={selectedTensorId}
                                         details={details}
