@@ -8,6 +8,19 @@
 .l1-memory-renderer {
     .memory-plot {
         width: 100%;
+        margin-right: 10px;
+
+        &.js-plotly-plot {
+            .plotly .main-svg {
+                left: -8px;
+            }
+
+            &.show-hex {
+                .plotly .main-svg {
+                    left: -16px;
+                }
+            }
+        }
     }
 
     &.circular-buffers {
