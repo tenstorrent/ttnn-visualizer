@@ -20,6 +20,8 @@ interface ProducerConsumersDataProps {
 function ProducerConsumersData({ selectedTensor, details, operationId }: ProducerConsumersDataProps) {
     const outsideRefs = useRef<HTMLElement[]>([]);
 
+    const { producers, consumers } = details.getTensorProducerConsumer(selectedTensor);
+
     function assignRef(el: HTMLElement | null, index: number) {
         if (el) {
             outsideRefs.current[index] = el;
@@ -30,11 +32,13 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
         <div className='plot-tensor-details'>
             <div
                 ref={(el) => assignRef(el, 5)}
-                className={classNames('producer-consumer', { hidden: selectedTensor === null })}
+                className={classNames('producer-consumer', {
+                    hidden: selectedTensor === null,
+                })}
             >
                 <div
                     className={classNames('title', {
-                        hidden: details.getTensorProducerConsumer(selectedTensor).producers.length === 0,
+                        hidden: producers.length === 0,
                     })}
                 >
                     <Icon
@@ -43,29 +47,34 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
                     />
                     Producers
                 </div>
-                {details.getTensorProducerConsumer(selectedTensor).producers.map((op) => (
-                    <div
-                        key={op.id}
-                        className='operation-link'
-                    >
-                        {operationId === op.id ? (
-                            <span className='selected-tensor'>
-                                {op.id} {op.name}
-                            </span>
-                        ) : (
-                            <Link
-                                to={`${ROUTES.OPERATIONS}/${op.id}`}
-                                className={classNames('', { current: operationId === op.id })}
+
+                {producers.length > 0 && (
+                    <ul className={classNames('list')}>
+                        {producers.map((op) => (
+                            <li
+                                key={op.id}
+                                className='operation-link'
                             >
-                                {op.id} {op.name}
-                            </Link>
-                        )}
-                    </div>
-                ))}
+                                {operationId === op.id ? (
+                                    <span className='selected-tensor'>
+                                        {op.id} {op.name}
+                                    </span>
+                                ) : (
+                                    <Link
+                                        to={`${ROUTES.OPERATIONS}/${op.id}`}
+                                        className={classNames('', { current: operationId === op.id })}
+                                    >
+                                        {op.id} {op.name}
+                                    </Link>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                )}
 
                 <div
                     className={classNames('title', {
-                        hidden: details.getTensorProducerConsumer(selectedTensor).consumers.length === 0,
+                        hidden: consumers.length === 0,
                     })}
                 >
                     <Icon
@@ -75,25 +84,30 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
                     />{' '}
                     Consumers
                 </div>
-                {details.getTensorProducerConsumer(selectedTensor).consumers.map((op) => (
-                    <div
-                        key={op.id}
-                        className='operation-link'
-                    >
-                        {operationId === op.id ? (
-                            <span className='selected-tensor'>
-                                {op.id} {op.name}
-                            </span>
-                        ) : (
-                            <Link
-                                to={`${ROUTES.OPERATIONS}/${op.id}`}
-                                className={classNames('', { current: operationId === op.id })}
+
+                {consumers.length > 0 && (
+                    <ul className={classNames('list')}>
+                        {consumers.map((op) => (
+                            <li
+                                key={op.id}
+                                className='operation-link'
                             >
-                                {op.id} {op.name}
-                            </Link>
-                        )}
-                    </div>
-                ))}
+                                {operationId === op.id ? (
+                                    <span className='selected-tensor'>
+                                        {op.id} {op.name}
+                                    </span>
+                                ) : (
+                                    <Link
+                                        to={`${ROUTES.OPERATIONS}/${op.id}`}
+                                        className={classNames('', { current: operationId === op.id })}
+                                    >
+                                        {op.id} {op.name}
+                                    </Link>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                )}
             </div>
         </div>
     );
