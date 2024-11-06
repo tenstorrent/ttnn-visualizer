@@ -7,9 +7,13 @@
 .operation-graph-component {
     .operation-graph-header {
         display: flex;
+        flex-direction: column;
         justify-content: flex-start;
         align-items: flex-start;
         gap: 20px;
+        z-index: 1;
+        position: fixed;
+        background-color: rgba($tt-grey-2, 0.6);
     }
 
     .operation-graph-nav {
@@ -17,7 +21,6 @@
         place-content: center space-between;
         gap: 10px;
         align-items: center;
-        margin-bottom: 20px;
     }
 
     .slider-wrapper {
