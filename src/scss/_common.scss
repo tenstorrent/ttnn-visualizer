@@ -93,3 +93,11 @@ $row-background: $tt-grey-2;
         );
     }
 }
+
+.graph-tree-loader {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 80vh;
+}

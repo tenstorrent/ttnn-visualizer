@@ -8,6 +8,7 @@ const ROUTES = Object.freeze({
     TENSORS: '/tensors',
     BUFFERS: '/buffer-summary',
     STYLEGUIDE: '/styleguide',
+    GRAPHTREE: '/graphtree',
 });
 
 export default ROUTES;
