@@ -67,6 +67,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const onClickOutside = () => {
         setSelectedAddress(null);
+        setSelectedTensorId(null);
 
         if (toastId) {
             toast.dismiss(toastId);
@@ -177,10 +178,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
     }
 
-    const updateBufferFocus = (address: number, tensorId?: number): void => {
-        setSelectedAddress(address);
+    const updateBufferFocus = (address?: number, tensorId?: number): void => {
+        setSelectedAddress(address ?? null);
         setSelectedTensorId(tensorId ?? null);
-        createToast(address);
+        createToast(address, tensorId);
     };
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
@@ -198,29 +199,30 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         updateBufferFocus(address, tensor?.id);
     };
 
-    const onTensorClick = (address: number | null, tensorId: number): void => {
-        if (address) {
-            updateBufferFocus(address, tensorId);
-        }
+    const onTensorClick = (address?: number, tensorId?: number): void => {
+        updateBufferFocus(address, tensorId);
     };
 
     const onLegendClick = (address: number, tensorId?: number) => {
         updateBufferFocus(address, tensorId);
     };
 
-    const createToast = (address: number) => {
+    const createToast = (address?: number, tensorId?: number) => {
         if (toastId) {
             toast.dismiss(toastId);
         }
 
-        const tensor = details.getTensorForAddress(address);
-        const tensorId = tensor?.id;
+        let colour = getTensorColor(tensorId);
+
+        if (address && !colour) {
+            colour = getBufferColor(address);
+        }
 
         const toastInstance = toast(
             <ToastTensorMessage
                 tensorId={tensorId}
                 address={address}
-                colour={getTensorColor(tensorId) || getBufferColor(address)}
+                colour={colour}
             />,
             {
                 position: 'bottom-right',
@@ -264,7 +266,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
 
             <div className='operation-details-component'>
-                {selectedAddress && (
+                {(selectedAddress || selectedTensorId) && (
                     // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
                     <div
                         className='outside-click'
@@ -429,8 +431,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             }}
                                         />
                                         {[...cbChartDataByOperation.entries()].map(
-                                            ([{ name: deviceOperationName }, plotData]) => (
-                                                <>
+                                            ([{ name: deviceOperationName }, plotData], index) => (
+                                                // eslint-disable-next-line react/no-array-index-key
+                                                <Fragment key={index}>
                                                     <h3 className='circular-buffers-plot-title'>
                                                         <Icon
                                                             className='operation-icon'
@@ -455,7 +458,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                                         configuration={CBRenderConfiguration}
                                                         onBufferClick={onBufferClick}
                                                     />
-                                                </>
+                                                </Fragment>
                                             ),
                                         )}
                                     </>
@@ -474,7 +477,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                                 memSize={memorySizeL1}
                                                 selectedTensorAddress={selectedAddress}
                                                 operationDetails={details}
-                                                onLegendClick={chunk.bufferType === 'CB' ? null : onLegendClick}
+                                                onLegendClick={onLegendClick}
                                                 colorVariance={chunk.colorVariance}
                                             />
                                         ))}
@@ -490,19 +493,22 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             />
                                         ))}
                                 </div>
+
+                                {(selectedTensorId && details.inputs.some((input) => input.id === selectedTensorId)) ||
+                                (selectedTensorId &&
+                                    details.outputs.some((output) => output.id === selectedTensorId)) ||
+                                (selectedAddress &&
+                                    (details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.L1 ||
+                                        details.getTensorForAddress(selectedAddress)?.buffer_type ===
+                                            BufferType.L1_SMALL)) ? (
+                                    <ProducerConsumersData
+                                        selectedTensor={selectedTensorId}
+                                        details={details}
+                                        operationId={operationId}
+                                    />
+                                ) : null}
                             </>
                         )}
-
-                        {selectedAddress &&
-                        selectedTensorId &&
-                        (details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.L1 ||
-                            details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.L1_SMALL) ? (
-                            <ProducerConsumersData
-                                selectedTensor={selectedTensorId}
-                                details={details}
-                                operationId={operationId}
-                            />
-                        ) : null}
 
                         {isDramActive && (
                             <>
@@ -563,18 +569,20 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         />
                                     ))}
                                 </div>
+
+                                {(selectedTensorId && details.inputs.some((input) => input.id === selectedTensorId)) ||
+                                (selectedTensorId &&
+                                    details.outputs.some((output) => output.id === selectedTensorId)) ||
+                                (selectedAddress &&
+                                    details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.DRAM) ? (
+                                    <ProducerConsumersData
+                                        selectedTensor={selectedTensorId}
+                                        details={details}
+                                        operationId={operationId}
+                                    />
+                                ) : null}
                             </>
                         )}
-
-                        {selectedAddress &&
-                        selectedTensorId &&
-                        details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.DRAM ? (
-                            <ProducerConsumersData
-                                selectedTensor={selectedTensorId}
-                                details={details}
-                                operationId={operationId}
-                            />
-                        ) : null}
 
                         <hr />
 
