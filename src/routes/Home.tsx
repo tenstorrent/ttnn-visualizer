@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import { toast } from 'react-toastify';
 import { Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import LocalFolderSelector from '../components/report-selection/LocalFolderSelector';
@@ -9,6 +10,9 @@ import RemoteSyncConfigurator from '../components/report-selection/RemoteSyncCon
 import 'styles/routes/Home.scss';
 
 function Home() {
+    // Dismiss any toasts that are open
+    toast.dismiss();
+
     return (
         <div className='splash-screen home'>
             <div className='folder-picker-options'>
