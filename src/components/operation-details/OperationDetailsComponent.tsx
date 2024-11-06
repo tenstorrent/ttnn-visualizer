@@ -241,6 +241,16 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         .map((tensor) => tensor.address)
         .join(',');
 
+    const l1InputsOutputs = details.inputs
+        .filter((input) => input.buffer_type === BufferType.L1)
+        .concat(details.outputs.filter((output) => output.buffer_type === BufferType.L1))
+        .concat(details.inputs.filter((input) => input.buffer_type === BufferType.L1_SMALL))
+        .concat(details.outputs.filter((output) => output.buffer_type === BufferType.L1_SMALL));
+
+    const dramInputOutputs = details.inputs
+        .filter((input) => input.buffer_type === BufferType.DRAM)
+        .concat(details.outputs.filter((output) => output.buffer_type === BufferType.DRAM));
+
     // TODO: keeping this as a reminder. this wont work properly while we pick tensor by address only, an only for a specific operation
     // const onPreviousBufferClick = (event: Readonly<PlotMouseEvent>): void => {
     //     const { address } = previousMemory[event.points[0].curveNumber];
@@ -494,9 +504,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         ))}
                                 </div>
 
-                                {(selectedTensorId && details.inputs.some((input) => input.id === selectedTensorId)) ||
-                                (selectedTensorId &&
-                                    details.outputs.some((output) => output.id === selectedTensorId)) ||
+                                {(selectedTensorId &&
+                                    l1InputsOutputs.some((tensor) => tensor.id === selectedTensorId)) ||
                                 (selectedAddress &&
                                     (details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.L1 ||
                                         details.getTensorForAddress(selectedAddress)?.buffer_type ===
@@ -570,9 +579,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     ))}
                                 </div>
 
-                                {(selectedTensorId && details.inputs.some((input) => input.id === selectedTensorId)) ||
-                                (selectedTensorId &&
-                                    details.outputs.some((output) => output.id === selectedTensorId)) ||
+                                {(selectedTensorId &&
+                                    dramInputOutputs.some((tensor) => tensor.id === selectedTensorId)) ||
                                 (selectedAddress &&
                                     details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.DRAM) ? (
                                     <ProducerConsumersData
