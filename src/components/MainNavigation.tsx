@@ -71,7 +71,7 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.GRAPHTREE)}
                     active={window.location.pathname === ROUTES.GRAPHTREE}
                     icon={IconNames.GRAPH}
-                    // disabled={!tabSession?.active_report}
+                    disabled={!tabSession?.active_report}
                     minimal
                     large
                     className='graph-button'
