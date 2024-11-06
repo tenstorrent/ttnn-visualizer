@@ -33,7 +33,8 @@ function BufferSummary() {
     const { data: buffersByOperation } = useBuffers(BufferType.L1);
     const { data: operationsList } = useOperationsList();
 
-    toast.dismiss();
+    // Dismiss any toasts that are open
+    useEffect(() => toast.dismiss(), []);
 
     // Needs to be in a useEffect to avoid a bad setState call
     useEffect(() => {

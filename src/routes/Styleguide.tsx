@@ -16,6 +16,7 @@ import {
 import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
 import { toast } from 'react-toastify';
+import { useEffect } from 'react';
 import ConnectionTestMessage from '../components/report-selection/ConnectionTestMessage';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import ProgressBar from '../components/ProgressBar';
@@ -40,7 +41,7 @@ export default function Operations() {
     // const [showProgressOverlay, setShowProgressOverlay] = useState(false);
 
     // Dismiss any toasts that are open
-    toast.dismiss();
+    useEffect(() => toast.dismiss(), []);
 
     return (
         <>

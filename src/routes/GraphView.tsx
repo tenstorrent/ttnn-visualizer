@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams } from 'react-router';
 
@@ -16,7 +16,7 @@ const GraphView: React.FC = () => {
     const { operationId } = useParams<{ operationId?: string }>();
 
     // Dismiss any toasts that are open
-    toast.dismiss();
+    useEffect(() => toast.dismiss(), []);
 
     return (
         <>

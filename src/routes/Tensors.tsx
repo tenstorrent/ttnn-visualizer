@@ -15,7 +15,7 @@ export default function Tensors() {
     const setMeta = useSetAtom(reportMetaAtom);
 
     // Dismiss any toasts that are open
-    toast.dismiss();
+    useEffect(() => toast.dismiss(), []);
 
     // Needs to be in a useEffect to avoid a bad setState call
     useEffect(() => {

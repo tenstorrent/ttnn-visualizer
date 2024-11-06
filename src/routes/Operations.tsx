@@ -22,7 +22,7 @@ export default function Operations() {
     }, [report, setMeta]);
 
     // Dismiss any toasts that are open
-    toast.dismiss();
+    useEffect(() => toast.dismiss(), []);
 
     return (
         <>
