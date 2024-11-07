@@ -2,52 +2,97 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
+@use 'sass:color';
 @use '../definitions/colours' as *;
 
+$list-color: $tt-purple-shade;
+
 .plot-tensor-details {
-    display: inline-grid;
-    grid-template-columns: 1fr auto;
-    align-items: start;
-    gap: 25px;
-    margin-left: 20px;
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 60px;
+    right: 20px;
+    z-index: 10;
+
+    // padding: 10px;
+    background-color: $tt-black;
+    border-radius: 6px;
+
+    .close-button {
+        position: absolute;
+        top: -10px;
+        right: -10px;
+    }
+
+    .producer-consumer-container {
+        &.is-collapsed {
+            overflow: hidden;
+            width: 0;
+        }
+
+        &.bg3 {
+            .producer-consumer {
+                background-color: color.adjust($list-color, $lightness: -5%);
+
+                &:first-child {
+                    background-color: $list-color;
+                }
+            }
+        }
+    }
 
     .producer-consumer {
+        width: 240px;
+        padding: 8px 16px;
+        border-radius: 0 0 6px 6px;
+
+
+        &:first-child {
+            border-radius: 6px 6px 0 0;
+        }
+
         &.hidden {
             display: none;
         }
+    }
 
-        .list {
-            padding-left: 0;
-            list-style: none;
-            margin: 0;
-            max-height: 325px;
-            overflow: auto;
+    .list {
+        list-style: none;
+        margin: 0;
+        overflow: auto;
+        padding-left: 0;
+        padding-right: 10px;
+    }
+
+    .title {
+        font-size: 18px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+
+        &.hidden {
+            display: none;
         }
+    }
 
-        .title {
-            font-size: 18px;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
+    .warning-icon {
+        position: relative;
+        bottom: 2px;
+    }
 
-            &.hidden {
-                display: none;
-            }
-        }
+    .operation-link {
+        margin-left: #{14px + 8px}; // icon width + gap
+        margin-bottom: 3px;
+    }
 
-        .operation-link {
-            margin-left: #{14px + 8px}; // icon width + gap
-            margin-bottom: 3px;
-        }
+    .selected-tensor {
+        color: $tt-white;
 
-        .selected-tensor {
-            color: $tt-white;
-
-            &::before {
-                display: inline-block;
-                content: '\2714'; // checkmark
-                margin-right: 5px;
-            }
+        &::before {
+            display: inline-block;
+            content: '\2714'; // checkmark
+            margin-right: 5px;
         }
     }
 }
