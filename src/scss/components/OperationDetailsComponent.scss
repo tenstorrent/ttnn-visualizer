@@ -8,6 +8,18 @@
 .l1-memory-renderer {
     .memory-plot {
         width: 100%;
+        margin-right: 10px;
+
+        &.js-plotly-plot {
+            .xaxislayer-above {
+                // Fixes the issue where the first x-axis tick is not visible (thanks Plotly)
+                .xtick:first-child text {
+                    /* stylelint-disable-next-line declaration-no-important */
+                    opacity: 1 !important; // Need this to overwrite inline style
+                    text-anchor: start;
+                }
+            }
+        }
     }
 
     &.circular-buffers {
