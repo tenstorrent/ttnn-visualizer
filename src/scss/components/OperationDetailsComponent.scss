@@ -73,14 +73,6 @@
         }
     }
 
-    .plot-tensor-details {
-        display: inline-grid;
-        grid-template-columns: 1fr auto;
-        align-items: start;
-        gap: 25px;
-        position: relative;
-    }
-
     .producer-consumer {
         &.hidden {
             display: none;
