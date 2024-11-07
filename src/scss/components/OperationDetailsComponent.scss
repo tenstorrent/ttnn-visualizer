@@ -11,13 +11,12 @@
         margin-right: 10px;
 
         &.js-plotly-plot {
-            .plotly .main-svg {
-                left: -8px;
-            }
-
-            &.show-hex {
-                .plotly .main-svg {
-                    left: -16px;
+            .xaxislayer-above {
+                // Fixes the issue where the first x-axis tick is not visible (thanks Plotly)
+                .xtick:first-child text {
+                    /* stylelint-disable-next-line declaration-no-important */
+                    opacity: 1 !important; // Need this to overwrite inline style
+                    text-anchor: start;
                 }
             }
         }

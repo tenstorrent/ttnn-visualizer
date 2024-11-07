@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
-import classNames from 'classnames';
 import { PlotConfiguration, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
 import { selectedAddressAtom, showHexAtom } from '../../store/app';
 import { getDimmedColour, getLightlyDimmedColour } from '../../functions/colour';
@@ -49,7 +48,6 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             fixedrange: true,
             zeroline: false,
             color: 'white',
-            automargin: true,
             gridcolor: configuration.gridColour || '#999',
             side: configuration.xAxis?.side || 'bottom',
             ...tickFormat,
@@ -130,7 +128,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             {title ? <h3 className='plot-title'>{title}</h3> : null}
 
             <Plot
-                className={classNames('memory-plot', { 'show-hex': showHex })}
+                className='memory-plot'
                 data={augmentedChart}
                 layout={layout}
                 config={config}
