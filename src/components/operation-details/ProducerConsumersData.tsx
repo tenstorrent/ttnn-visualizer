@@ -23,26 +23,42 @@ interface ProducerConsumersDataProps {
 }
 
 function ProducerConsumersData({ selectedTensor, details, operationId }: ProducerConsumersDataProps) {
+    const [isCollapsed, setIsCollapsed] = useState(selectedTensor === null);
+
+    if (!selectedTensor) {
+        return null;
+    }
+
     const { id: tensorId, address } = selectedTensor;
     const { producers, consumers } = details.getTensorProducerConsumer(tensorId);
-    const [isCollapsed, setIsCollapsed] = useState(selectedTensor === null);
 
     return (
         <aside className='plot-tensor-details'>
-            <div className={classNames('producer-consumer-container', { 'is-collapsed': isCollapsed })}>
+            <div className='producer-consumer-container'>
                 <div className='header'>
-                    <div
-                        className={classNames('memory-color-block', { 'empty-tensor': address === null })}
-                        style={{
-                            backgroundColor: tensorId ? getTensorColor(tensorId) : '',
-                        }}
+                    <div className='tensor-title'>
+                        <div
+                            className={classNames('memory-color-block', { 'empty-tensor': address === null })}
+                            style={{
+                                backgroundColor: tensorId ? getTensorColor(tensorId) : '',
+                            }}
+                        />
+
+                        <h3 className='tensor-id'>Tensor {tensorId}</h3>
+                    </div>
+
+                    <Button
+                        onClick={() => setIsCollapsed(!isCollapsed)}
+                        className='close-button'
+                        rightIcon={isCollapsed ? IconNames.CARET_DOWN : IconNames.CARET_RIGHT}
+                        minimal
+                        small
                     />
-                    <h3 className='tensor-id'>Tensor {tensorId}</h3>
                 </div>
 
                 <div
                     className={classNames('producer-consumer', {
-                        hidden: selectedTensor === null || producers.length === 0,
+                        hidden: selectedTensor === null || producers.length === 0 || isCollapsed,
                     })}
                 >
                     <div className='title'>
@@ -88,7 +104,7 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
 
                 <div
                     className={classNames('producer-consumer', {
-                        hidden: selectedTensor === null || consumers.length === 0,
+                        hidden: selectedTensor === null || consumers.length === 0 || isCollapsed,
                     })}
                 >
                     <div className='title'>
@@ -132,13 +148,6 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
                     )}
                 </div>
             </div>
-            <Button
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                className='close-button'
-                outlined
-                text={isCollapsed ? 'Producers/Consumers' : ''}
-                rightIcon={isCollapsed ? IconNames.CARET_RIGHT : IconNames.CARET_DOWN}
-            />
         </aside>
     );
 }

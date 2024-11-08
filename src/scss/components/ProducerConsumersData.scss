@@ -23,8 +23,16 @@ $icon-gap: 8px;
     .header {
         display: flex;
         align-items: center;
-        padding: 8px 16px;
+        justify-content: space-between;
+        padding: 4px 8px 4px 16px;
         gap: $icon-gap;
+    }
+
+    .tensor-title {
+        display: flex;
+        flex-grow: 1;
+        gap: $icon-gap;
+        align-items: center;
     }
 
     .tensor-id {
@@ -32,21 +40,11 @@ $icon-gap: 8px;
         margin: 0;
     }
 
-    .close-button {
-        position: absolute;
-        top: -10px;
-        right: -10px;
-    }
-
     .producer-consumer-container {
-        &.is-collapsed {
-            overflow: hidden;
-            width: 0;
-        }
+        width: 240px;
     }
 
     .producer-consumer {
-        width: 240px;
         padding: 8px 16px;
         background-color: color.adjust($list-color, $lightness: -5%);
 
