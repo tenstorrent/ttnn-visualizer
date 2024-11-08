@@ -236,10 +236,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         setToastId(toastInstance);
     };
 
-    const inputOutputAddressList: string = details.inputs
-        .concat(details.outputs)
-        .map((tensor) => tensor.address)
-        .join(',');
+    const inputOutputList = details.inputs.concat(details.outputs);
+    const inputOutputAddressList: string = inputOutputList.map((tensor) => tensor.address).join(',');
 
     // TODO: keeping this as a reminder. this wont work properly while we pick tensor by address only, an only for a specific operation
     // const onPreviousBufferClick = (event: Readonly<PlotMouseEvent>): void => {
@@ -327,6 +325,17 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {!isL1Active && !isDramActive && (
                             <p className='no-buffer-type-selected'>No buffer types selected.</p>
                         )}
+
+                        {selectedTensorId ? (
+                            <ProducerConsumersData
+                                selectedTensor={
+                                    inputOutputList.find((t) => t.id === selectedTensorId) ||
+                                    details.getTensorForAddress(selectedAddress ?? 0)
+                                }
+                                details={details}
+                                operationId={operationId}
+                            />
+                        ) : null}
 
                         {isL1Active && (
                             <>
@@ -493,20 +502,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             />
                                         ))}
                                 </div>
-
-                                {(selectedTensorId && details.inputs.some((input) => input.id === selectedTensorId)) ||
-                                (selectedTensorId &&
-                                    details.outputs.some((output) => output.id === selectedTensorId)) ||
-                                (selectedAddress &&
-                                    (details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.L1 ||
-                                        details.getTensorForAddress(selectedAddress)?.buffer_type ===
-                                            BufferType.L1_SMALL)) ? (
-                                    <ProducerConsumersData
-                                        selectedTensor={selectedTensorId}
-                                        details={details}
-                                        operationId={operationId}
-                                    />
-                                ) : null}
                             </>
                         )}
 
@@ -569,18 +564,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         />
                                     ))}
                                 </div>
-
-                                {(selectedTensorId && details.inputs.some((input) => input.id === selectedTensorId)) ||
-                                (selectedTensorId &&
-                                    details.outputs.some((output) => output.id === selectedTensorId)) ||
-                                (selectedAddress &&
-                                    details.getTensorForAddress(selectedAddress)?.buffer_type === BufferType.DRAM) ? (
-                                    <ProducerConsumersData
-                                        selectedTensor={selectedTensorId}
-                                        details={details}
-                                        operationId={operationId}
-                                    />
-                                ) : null}
                             </>
                         )}
 
@@ -724,7 +707,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 <div className='arguments-wrapper'>
                                     <OperationArguments operation={operation} />
 
-                                    {/* TODO: we shouldnt be rendering this raw but lets keep this commented out for debug purposes for now */}
+                                    {/* TODO: we shouldn't be rendering this raw but lets keep this commented out for debug purposes for now */}
                                     {/* {operation?.device_operations && ( */}
                                     {/*    <DeviceOperations deviceOperations={operation.device_operations} /> */}
                                     {/* )} */}

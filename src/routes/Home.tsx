@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import { useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -11,7 +12,7 @@ import 'styles/routes/Home.scss';
 
 function Home() {
     // Dismiss any toasts that are open
-    toast.dismiss();
+    useEffect(() => toast.dismiss(), []);
 
     return (
         <div className='splash-screen home'>

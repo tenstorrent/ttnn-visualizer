@@ -37,7 +37,7 @@ const FORM_GROUP = {
 //     finishedFiles: 6,
 // };
 
-export default function Operations() {
+export default function Styleguide() {
     // const [showProgressOverlay, setShowProgressOverlay] = useState(false);
 
     // Dismiss any toasts that are open

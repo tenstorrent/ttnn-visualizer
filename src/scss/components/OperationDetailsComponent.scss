@@ -85,36 +85,6 @@
         }
     }
 
-    .plot-tensor-details {
-        display: inline-grid;
-        grid-template-columns: 1fr auto;
-        align-items: start;
-        gap: 25px;
-        position: relative;
-    }
-
-    .producer-consumer {
-        &.hidden {
-            display: none;
-        }
-
-        .title {
-            font-size: 18px;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-
-            &.hidden {
-                display: none;
-            }
-        }
-
-        .operation-link {
-            margin-left: #{14px + 8px}; // icon width + gap
-            margin-bottom: 3px;
-        }
-    }
-
     .device-operations {
         display: inline-flex;
         flex-direction: column;

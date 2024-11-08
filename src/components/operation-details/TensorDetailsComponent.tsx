@@ -13,6 +13,7 @@ import getNextAllocationOperation from '../../functions/getNextAllocationOperati
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
 import 'styles/components/TensorDetailsComponent.scss';
+import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
@@ -83,6 +84,19 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         <Icon
                             icon={IconNames.WARNING_SIGN}
                             intent={Intent.WARNING}
+                        />
+                    </Tooltip>
+                )}
+
+                {(tensor.consumers.length > MAX_NUM_CONSUMERS || tensor.producers.length > MAX_NUM_CONSUMERS) && (
+                    <Tooltip
+                        content='Unusually high number of consumers'
+                        position={PopoverPosition.TOP}
+                        className='warning-icon'
+                    >
+                        <Icon
+                            icon={IconNames.ISSUE}
+                            intent={Intent.DANGER}
                         />
                     </Tooltip>
                 )}
