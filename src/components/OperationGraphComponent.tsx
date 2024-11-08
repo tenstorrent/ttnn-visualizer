@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Edge, Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
@@ -13,8 +13,6 @@ import { OperationDescription } from '../model/APIData';
 import ROUTES from '../definitions/routes';
 import '../scss/components/OperationGraphComponent.scss';
 import LoadingSpinner from './LoadingSpinner';
-// eslint-disable-next-line import/default
-import GraphWorker from '../graphWorker?worker';
 
 type OperationList = OperationDescription[];
 
@@ -27,12 +25,49 @@ const OperationGraph: React.FC<{
     const networkRef = useRef<Network | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [scale, setScale] = useState(1);
-    const [nodes, setNodes] = useState<DataSet<{ id: number; label: string; shape: string }> | null>(null);
 
     const focusNodeId = operationId !== undefined ? operationId : operationList[0].id ?? 0;
     const [currentOperationId, setCurrentOperationId] = useState<number>(operationId ?? 0);
     const currentOpIdRef = useRef<number>(currentOperationId);
 
+    const edges = useMemo(
+        () =>
+            operationList.flatMap((op) =>
+                op.outputs.flatMap((tensor) =>
+                    tensor.consumers.map(
+                        (consumerId) =>
+                            ({
+                                from: op.id,
+                                to: consumerId,
+                                arrows: 'to',
+                                label: `${tensor.id}`,
+                            }) as Edge,
+                    ),
+                ),
+            ),
+        [operationList],
+    );
+
+    const connectedNodeIds = useMemo(() => {
+        const ids = new Set<number>();
+        edges.forEach(({ from, to }) => {
+            ids.add(from as number);
+            ids.add(to as number);
+        });
+        return ids;
+    }, [edges]);
+
+    const nodes = useMemo(() => {
+        return new DataSet(
+            operationList
+                .filter((op) => connectedNodeIds.has(op.id))
+                .map((op) => ({
+                    id: op.id,
+                    label: `${op.id} ${op.name}`,
+                    shape: 'box',
+                })),
+        );
+    }, [operationList, connectedNodeIds]);
     const updateScale = useCallback(
         (newScale: number) => {
             const limitedScale = Math.min(newScale, 3);
@@ -41,25 +76,17 @@ const OperationGraph: React.FC<{
         },
         [networkRef],
     );
-
     useEffect(() => {
         setIsLoading(true);
-        const worker = new GraphWorker();
-        worker.postMessage({ operationList });
 
-        worker.onmessage = (event) => {
-            const { edges, nodes: rawNodes } = event.data;
-
+        setTimeout(() => {
             if (containerRef.current) {
                 requestAnimationFrame(() => {
-                    const nodeDataSet = new DataSet(rawNodes);
-                    setNodes(nodeDataSet as DataSet<{ id: number; label: string; shape: string }>);
-
                     networkRef.current = new Network(
                         containerRef.current!,
                         {
-                            nodes: nodeDataSet as DataSet<{ id: number; label: string; shape: string }>,
-                            edges: edges as Edge[],
+                            nodes,
+                            edges,
                         },
                         {
                             nodes: {
@@ -118,9 +145,9 @@ const OperationGraph: React.FC<{
                     networkRef.current.on('click', (params) => {
                         if (params.edges.length > 0) {
                             const edgeId = params.edges[0];
-                            const edge = edges.find((e: { id: number }) => e.id === edgeId);
+                            const edge = edges.find((e) => e.id === edgeId);
 
-                            if ((edge.to as number) === currentOpIdRef.current) {
+                            if ((edge?.to as number) === currentOpIdRef.current) {
                                 // ability to navigate back if we are clicking on the input tensor to current
                                 focusOnNode((edge?.from as number) || null);
                             } else {
@@ -173,10 +200,9 @@ const OperationGraph: React.FC<{
                     });
                 });
             }
-        };
+        });
 
         return () => {
-            worker.terminate();
             networkRef.current?.off('zoom');
             networkRef.current?.off('click');
             networkRef.current?.off('dragEnd');
