@@ -79,6 +79,7 @@ const OperationGraph: React.FC<{
     useEffect(() => {
         setIsLoading(true);
 
+        // allow the ui to render loading state before initializing the graph
         setTimeout(() => {
             if (containerRef.current) {
                 requestAnimationFrame(() => {
