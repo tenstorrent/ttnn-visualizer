@@ -28,9 +28,9 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
         <div className='plot-tensor-details'>
             <div className={classNames('producer-consumer-container bg3', { 'is-collapsed': isCollapsed })}>
                 <div
-                    // ref={(el) => assignRef(el, 5)}
                     className={classNames('producer-consumer', {
-                        hidden: selectedTensor === null,
+                        hidden: selectedTensor === null || producers.length === 0,
+                        'is-single': consumers.length === 0,
                     })}
                 >
                     <div className='title'>
@@ -75,9 +75,9 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
                 </div>
 
                 <div
-                    // ref={(el) => assignRef(el, 5)}
                     className={classNames('producer-consumer', {
-                        hidden: selectedTensor === null,
+                        hidden: selectedTensor === null || consumers.length === 0,
+                        'is-single': producers.length === 0,
                     })}
                 >
                     <div className='title'>

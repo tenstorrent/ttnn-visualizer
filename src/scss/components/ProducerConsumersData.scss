@@ -6,6 +6,7 @@
 @use '../definitions/colours' as *;
 
 $list-color: $tt-purple-shade;
+$border-radius: 6px;
 
 .plot-tensor-details {
     display: flex;
@@ -15,7 +16,7 @@ $list-color: $tt-purple-shade;
     right: 20px;
     z-index: 10;
     background-color: $tt-black;
-    border-radius: 6px;
+    border-radius: $border-radius;
     box-shadow: 6px 6px 8px 0 rgb(0 0 0 / 25%);
 
     .close-button {
@@ -44,11 +45,14 @@ $list-color: $tt-purple-shade;
     .producer-consumer {
         width: 240px;
         padding: 8px 16px;
-        border-radius: 0 0 6px 6px;
-
+        border-radius: 0 0 $border-radius $border-radius;
 
         &:first-child {
-            border-radius: 6px 6px 0 0;
+            border-radius: $border-radius $border-radius 0 0;
+        }
+
+        &.is-single {
+            border-radius: $border-radius;
         }
 
         &.hidden {
