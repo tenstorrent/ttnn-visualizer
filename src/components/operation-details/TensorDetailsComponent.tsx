@@ -91,7 +91,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 {(tensor.consumers.length > PRODUCER_CONSUMER_LIMIT ||
                     tensor.producers.length > PRODUCER_CONSUMER_LIMIT) && (
                     <Tooltip
-                        content='This tensor has a high number of producers or consumers'
+                        content='Unusually high number of producers or consumers'
                         position={PopoverPosition.TOP}
                         className='warning-icon'
                     >

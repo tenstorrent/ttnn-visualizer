@@ -11,6 +11,7 @@ import ROUTES from '../../definitions/routes';
 import { OperationDetails } from '../../model/OperationDetails';
 import 'styles/components/ProducerConsumersData.scss';
 import { PRODUCER_CONSUMER_LIMIT } from '../../definitions/ProducersConsumers';
+import { getTensorColor } from '../../functions/colorGenerator';
 
 const ITEM_HEIGHT = 16; // Height in px
 
@@ -23,14 +24,24 @@ interface ProducerConsumersDataProps {
 function ProducerConsumersData({ selectedTensor, details, operationId }: ProducerConsumersDataProps) {
     const { producers, consumers } = details.getTensorProducerConsumer(selectedTensor);
     const [isCollapsed, setIsCollapsed] = useState(selectedTensor === null);
+    const isAddressNull = selectedTensor && details.getTensorById(selectedTensor)?.address === null;
 
     return (
-        <div className='plot-tensor-details'>
-            <div className={classNames('producer-consumer-container bg3', { 'is-collapsed': isCollapsed })}>
+        <aside className='plot-tensor-details'>
+            <div className={classNames('producer-consumer-container', { 'is-collapsed': isCollapsed })}>
+                <div className='header'>
+                    <div
+                        className={classNames('memory-color-block', { 'empty-tensor': isAddressNull })}
+                        style={{
+                            backgroundColor: selectedTensor ? getTensorColor(selectedTensor) : '',
+                        }}
+                    />
+                    <h3 className='tensor-id'>Tensor {selectedTensor}</h3>
+                </div>
+
                 <div
                     className={classNames('producer-consumer', {
                         hidden: selectedTensor === null || producers.length === 0,
-                        'is-single': consumers.length === 0,
                     })}
                 >
                     <div className='title'>
@@ -38,7 +49,7 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
                             size={14}
                             icon={IconNames.EXPORT}
                         />
-                        Producers
+                        Producers ({producers.length})
                     </div>
 
                     {producers.length > 0 && (
@@ -77,7 +88,6 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
                 <div
                     className={classNames('producer-consumer', {
                         hidden: selectedTensor === null || consumers.length === 0,
-                        'is-single': producers.length === 0,
                     })}
                 >
                     <div className='title'>
@@ -85,7 +95,7 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
                             size={14}
                             icon={IconNames.IMPORT}
                         />{' '}
-                        Consumers
+                        Consumers ({consumers.length})
                     </div>
 
                     {consumers.length > 0 && (
@@ -121,15 +131,14 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
                     )}
                 </div>
             </div>
-
             <Button
                 onClick={() => setIsCollapsed(!isCollapsed)}
                 className='close-button'
                 outlined
                 text={isCollapsed ? 'Producers/Consumers' : ''}
-                rightIcon={isCollapsed ? IconNames.DRAWER_RIGHT_FILLED : IconNames.DRAWER_LEFT_FILLED}
+                rightIcon={isCollapsed ? IconNames.CARET_RIGHT : IconNames.CARET_DOWN}
             />
-        </div>
+        </aside>
     );
 }
 

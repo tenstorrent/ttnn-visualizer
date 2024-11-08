@@ -6,7 +6,8 @@
 @use '../definitions/colours' as *;
 
 $list-color: $tt-purple-shade;
-$border-radius: 6px;
+$border-radius: 2px;
+$icon-gap: 8px;
 
 .plot-tensor-details {
     display: flex;
@@ -15,9 +16,21 @@ $border-radius: 6px;
     top: 60px;
     right: 20px;
     z-index: 10;
-    background-color: $tt-black;
+    background-color: color.adjust($list-color, $lightness: 0%);
     border-radius: $border-radius;
     box-shadow: 6px 6px 8px 0 rgb(0 0 0 / 25%);
+
+    .header {
+        display: flex;
+        align-items: center;
+        padding: 8px 16px;
+        gap: $icon-gap;
+    }
+
+    .tensor-id {
+        font-size: 14px;
+        margin: 0;
+    }
 
     .close-button {
         position: absolute;
@@ -30,29 +43,16 @@ $border-radius: 6px;
             overflow: hidden;
             width: 0;
         }
-
-        &.bg3 {
-            .producer-consumer {
-                background-color: color.adjust($list-color, $lightness: -5%);
-
-                &:first-child {
-                    background-color: $list-color;
-                }
-            }
-        }
     }
 
     .producer-consumer {
         width: 240px;
         padding: 8px 16px;
-        border-radius: 0 0 $border-radius $border-radius;
+        background-color: color.adjust($list-color, $lightness: -5%);
 
-        &:first-child {
-            border-radius: $border-radius $border-radius 0 0;
-        }
-
-        &.is-single {
-            border-radius: $border-radius;
+        &:last-child {
+            background-color: color.adjust($list-color, $lightness: -10%);
+            border-radius: 0 0 $border-radius $border-radius;
         }
 
         &.hidden {
@@ -69,10 +69,10 @@ $border-radius: 6px;
     }
 
     .title {
-        font-size: 18px;
+        font-size: 14px;
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: $icon-gap;
 
         &.hidden {
             display: none;

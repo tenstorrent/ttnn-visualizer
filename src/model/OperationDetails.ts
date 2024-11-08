@@ -203,6 +203,10 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         return tensorData;
     }
 
+    getTensorById(id: number): TensorData | HistoricalTensor | undefined {
+        return this.tensorList.find((tensor) => tensor.id === id);
+    }
+
     getTensorProducerConsumer(id: number | null) {
         if (id === null) {
             return { producers: [], consumers: [] };
