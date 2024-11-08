@@ -13,11 +13,12 @@ import 'styles/components/ProducerConsumersData.scss';
 import { PRODUCER_CONSUMER_LIMIT } from '../../definitions/ProducersConsumers';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { TensorData } from '../../model/APIData';
+import { HistoricalTensor } from '../../model/Graph';
 
 const ITEM_HEIGHT = 16; // Height in px
 
 interface ProducerConsumersDataProps {
-    selectedTensor: TensorData;
+    selectedTensor: TensorData | HistoricalTensor | null;
     details: OperationDetails;
     operationId: number;
 }

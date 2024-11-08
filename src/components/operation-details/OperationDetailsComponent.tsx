@@ -328,7 +328,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                         {selectedTensorId ? (
                             <ProducerConsumersData
-                                selectedTensor={inputOutputList.find((tensor) => tensor.id === selectedTensorId)}
+                                selectedTensor={
+                                    inputOutputList.find((t) => t.id === selectedTensorId) ||
+                                    details.getTensorForAddress(selectedAddress ?? 0)
+                                }
                                 details={details}
                                 operationId={operationId}
                             />
