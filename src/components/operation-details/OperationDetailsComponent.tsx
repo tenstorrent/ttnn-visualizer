@@ -236,10 +236,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         setToastId(toastInstance);
     };
 
-    const inputOutputAddressList: string = details.inputs
-        .concat(details.outputs)
-        .map((tensor) => tensor.address)
-        .join(',');
+    const inputOutputList = details.inputs.concat(details.outputs);
+    const inputOutputAddressList: string = inputOutputList.map((tensor) => tensor.address).join(',');
 
     // TODO: keeping this as a reminder. this wont work properly while we pick tensor by address only, an only for a specific operation
     // const onPreviousBufferClick = (event: Readonly<PlotMouseEvent>): void => {
@@ -330,7 +328,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                         {selectedTensorId ? (
                             <ProducerConsumersData
-                                selectedTensor={selectedTensorId}
+                                selectedTensor={inputOutputList.find((tensor) => tensor.id === selectedTensorId)}
                                 details={details}
                                 operationId={operationId}
                             />

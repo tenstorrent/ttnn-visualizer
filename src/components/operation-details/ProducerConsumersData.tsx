@@ -12,31 +12,32 @@ import { OperationDetails } from '../../model/OperationDetails';
 import 'styles/components/ProducerConsumersData.scss';
 import { PRODUCER_CONSUMER_LIMIT } from '../../definitions/ProducersConsumers';
 import { getTensorColor } from '../../functions/colorGenerator';
+import { Tensor } from '../../model/Graph';
 
 const ITEM_HEIGHT = 16; // Height in px
 
 interface ProducerConsumersDataProps {
-    selectedTensor: number | null;
+    selectedTensor: Tensor;
     details: OperationDetails;
     operationId: number;
 }
 
 function ProducerConsumersData({ selectedTensor, details, operationId }: ProducerConsumersDataProps) {
-    const { producers, consumers } = details.getTensorProducerConsumer(selectedTensor);
+    const { id: tensorId, address } = selectedTensor;
+    const { producers, consumers } = details.getTensorProducerConsumer(tensorId);
     const [isCollapsed, setIsCollapsed] = useState(selectedTensor === null);
-    const isAddressNull = selectedTensor && details.getTensorById(selectedTensor)?.address === null;
 
     return (
         <aside className='plot-tensor-details'>
             <div className={classNames('producer-consumer-container', { 'is-collapsed': isCollapsed })}>
                 <div className='header'>
                     <div
-                        className={classNames('memory-color-block', { 'empty-tensor': isAddressNull })}
+                        className={classNames('memory-color-block', { 'empty-tensor': address === null })}
                         style={{
-                            backgroundColor: selectedTensor ? getTensorColor(selectedTensor) : '',
+                            backgroundColor: tensorId ? getTensorColor(tensorId) : '',
                         }}
                     />
-                    <h3 className='tensor-id'>Tensor {selectedTensor}</h3>
+                    <h3 className='tensor-id'>Tensor {tensorId}</h3>
                 </div>
 
                 <div
