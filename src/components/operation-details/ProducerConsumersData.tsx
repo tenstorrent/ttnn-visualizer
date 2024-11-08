@@ -10,7 +10,7 @@ import { IconNames } from '@blueprintjs/icons';
 import ROUTES from '../../definitions/routes';
 import { OperationDetails } from '../../model/OperationDetails';
 import 'styles/components/ProducerConsumersData.scss';
-import { PRODUCER_CONSUMER_LIMIT } from '../../definitions/ProducersConsumers';
+import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { TensorData } from '../../model/APIData';
 import { HistoricalTensor } from '../../model/Graph';
@@ -67,7 +67,7 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
                             size={14}
                             icon={IconNames.EXPORT}
                         />
-                        Producers ({producers.length})
+                        Producers
                     </div>
 
                     {producers.length > 0 && (
@@ -75,8 +75,8 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
                             className={classNames('list')}
                             style={{
                                 maxHeight:
-                                    producers.length > PRODUCER_CONSUMER_LIMIT
-                                        ? `${PRODUCER_CONSUMER_LIMIT * ITEM_HEIGHT}px`
+                                    producers.length > MAX_NUM_CONSUMERS
+                                        ? `${MAX_NUM_CONSUMERS * ITEM_HEIGHT}px`
                                         : 'none',
                             }}
                         >
@@ -121,8 +121,8 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
                             className={classNames('list')}
                             style={{
                                 maxHeight:
-                                    consumers.length > PRODUCER_CONSUMER_LIMIT
-                                        ? `${PRODUCER_CONSUMER_LIMIT * ITEM_HEIGHT * 1.2}px`
+                                    consumers.length > MAX_NUM_CONSUMERS
+                                        ? `${MAX_NUM_CONSUMERS * ITEM_HEIGHT * 1.2}px`
                                         : 'none',
                             }}
                         >

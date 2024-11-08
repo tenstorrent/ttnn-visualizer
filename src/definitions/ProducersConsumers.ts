@@ -1,1 +1,1 @@
-export const PRODUCER_CONSUMER_LIMIT = 6;
+export const MAX_NUM_CONSUMERS = 6;
