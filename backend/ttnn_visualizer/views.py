@@ -305,6 +305,32 @@ def get_devices(session: TabSession):
 def create_upload_files():
     """Handle file uploads and emit progress for each file."""
 
+    def emit_file_progress(
+        current_file_name, total_files, processed_files, percent, status, tab_id
+    ):
+        """Emit progress for a specific file."""
+        progress = FileProgress(
+            current_file_name=current_file_name,
+            number_of_files=total_files,
+            percent_of_current=percent,
+            finished_files=processed_files,
+            status=status,
+        )
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(progress, tab_id)
+
+    def emit_final_file_progress(total_files, processed_files, tab_id):
+        """Emit final progress status after all files are processed."""
+        final_progress = FileProgress(
+            current_file_name="",
+            number_of_files=total_files,
+            percent_of_current=100,
+            finished_files=processed_files,
+            status=FileStatus.FINISHED,
+        )
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(final_progress, tab_id)
+
     def validate_uploaded_report_files(files):
         """Ensure specific files exist and have only one parent folder in their paths."""
         found_files = set()
@@ -339,6 +365,7 @@ def create_upload_files():
         return report_name
 
     files = request.files.getlist("files")
+    tab_id = request.args.get("tabId")
 
     if not validate_uploaded_report_files(files):
         return StatusMessage(
@@ -352,27 +379,37 @@ def create_upload_files():
     logger.info(f"Writing report files to {report_directory}/{report_name}")
 
     total_files = len(files)
-    progress = {"overall": 0}
 
     def generate():
-        for index, file in enumerate(files):
+
+        for index, file in enumerate(files, start=1):
             current_file_name = str(file.filename)
             logger.info(f"Processing file: {current_file_name}")
 
             destination_file = Path(report_directory).joinpath((str(current_file_name)))
             logger.info(f"Writing file to {destination_file}")
 
-            # Create the directory if it doesn't exist
             if not destination_file.parent.exists():
                 logger.info(
                     f"{destination_file.parent.name} does not exist. Creating directory"
                 )
                 destination_file.parent.mkdir(exist_ok=True, parents=True)
             file.save(destination_file)
+            emit_file_progress(
+                current_file_name,
+                total_files,
+                index,
+                100,
+                FileStatus.DOWNLOADING,
+                tab_id,
+            )
 
         final_message = StatusMessage(
             status=ConnectionTestStates.OK, message="Success."
         ).model_dump()
+
+        emit_final_file_progress(total_files, total_files, tab_id)
+
         yield json.dumps(final_message)
 
     # Stream progress to the client as the files are being uploaded
