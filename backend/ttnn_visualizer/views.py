@@ -368,27 +368,7 @@ def create_upload_files():
                     f"{destination_file.parent.name} does not exist. Creating directory"
                 )
                 destination_file.parent.mkdir(exist_ok=True, parents=True)
-                # Track bytes written for this file
-                bytes_written = 0
-                file_size = file.content_length or 0
-
-                with open(destination_file, "wb") as f:
-                    while chunk := file.stream.read(
-                        4096
-                    ):  # Adjust chunk size as needed
-                        f.write(chunk)
-                        bytes_written += len(chunk)
-
-                        # Calculate file-specific progress
-                        percent_of_current = (
-                            (bytes_written / file_size) * 100 if file_size else 100
-                        )
-
-                        # Calculate overall progress based on completed files
-                        overall_progress = ((index - 1) / total_files) * 100 + (
-                            percent_of_current / total_files
-                        )
-                        progress["overall"] = overall_progress
+            file.save(destination_file)
 
         final_message = StatusMessage(
             status=ConnectionTestStates.OK, message="Success."
