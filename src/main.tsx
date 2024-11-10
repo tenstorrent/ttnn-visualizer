@@ -2,24 +2,24 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import { FocusStyleManager, OverlaysProvider } from '@blueprintjs/core';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { RouterProvider, createBrowserRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from 'react-query';
-import { FocusStyleManager, OverlaysProvider } from '@blueprintjs/core';
-import './index.scss';
 import { HelmetProvider } from 'react-helmet-async';
-import ErrorPage from './error-page';
+import { QueryClient, QueryClientProvider } from 'react-query';
+import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import Layout from './components/Layout';
-import Home from './routes/Home';
-import Operations from './routes/Operations';
-import OperationDetails from './routes/OperationDetails';
-import Styleguide from './routes/Styleguide';
 import ROUTES from './definitions/routes';
-import Tensors from './routes/Tensors';
-import BufferSummary from './routes/BufferSummary';
+import ErrorPage from './error-page';
+import './index.scss';
 import { SocketProvider } from './libs/SocketProvider';
+import BufferSummary from './routes/BufferSummary';
 import GraphView from './routes/GraphView';
+import Home from './routes/Home';
+import OperationDetails from './routes/OperationDetails';
+import Operations from './routes/Operations';
+import Styleguide from './routes/Styleguide';
+import Tensors from './routes/Tensors';
 
 const router = createBrowserRouter([
     {
@@ -70,15 +70,16 @@ const queryClient = new QueryClient({
     },
 });
 ReactDOM.createRoot(document.getElementById('root')!).render(
-    <QueryClientProvider client={queryClient}>
-        <HelmetProvider>
-            <React.StrictMode>
-                <SocketProvider>
+    <SocketProvider>
+
+        <QueryClientProvider client={queryClient}>
+            <HelmetProvider>
+                <React.StrictMode>
                     <OverlaysProvider>
                         <RouterProvider router={router} />
                     </OverlaysProvider>
-                </SocketProvider>
-            </React.StrictMode>
-        </HelmetProvider>
-    </QueryClientProvider>,
+                </React.StrictMode>
+            </HelmetProvider>
+        </QueryClientProvider>,
+    </SocketProvider>
 );

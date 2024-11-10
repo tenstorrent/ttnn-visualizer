@@ -4,7 +4,7 @@
 
 import { Button, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ChangeEvent, type FC, useEffect, useState } from 'react';
+import { ChangeEvent, type FC, useContext, useEffect, useState } from 'react';
 
 import { useAtom } from 'jotai';
 import { useQueryClient } from 'react-query';
@@ -13,6 +13,7 @@ import 'styles/components/FolderPicker.scss';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
+import { SocketContext } from '../../libs/SocketProvider';
 import { FileStatus } from '../../model/APIData';
 import { reportLocationAtom } from '../../store/app';
 import FileStatusOverlay from '../FileStatusOverlay';
@@ -35,6 +36,7 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const { uploadDirectory } = useContext(SocketContext)
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
 
     const { uploadLocalFolder } = useLocalConnection();
@@ -63,26 +65,27 @@ const LocalFolderOptions: FC = () => {
         setIsUploading(true);
 
         setLocalUploadLabel(`${files.length} files selected.`);
-        const response = await uploadLocalFolder(files);
+        uploadDirectory(files)
+        // const response = await uploadLocalFolder(files);
 
-        if (response.status !== 200) {
-            connectionStatus.status = ConnectionTestStates.FAILED;
-            connectionStatus.message = 'Unable to upload selected directory.';
-        }
+        // if (response.status !== 200) {
+        //     connectionStatus.status = ConnectionTestStates.FAILED;
+        //     connectionStatus.message = 'Unable to upload selected directory.';
+        // }
 
-        // Streaming response requires casting string to JSON
-        const responseData = JSON.parse(response.data)
+        // // Streaming response requires casting string to JSON
+        // const responseData = JSON.parse(response.data)
 
-        if (responseData.status !== ConnectionTestStates.OK) {
-            connectionStatus.status = ConnectionTestStates.FAILED;
-            connectionStatus.message = 'Selected directory does not contain a valid report.';
-        }
+        // if (responseData.status !== ConnectionTestStates.OK) {
+        //     connectionStatus.status = ConnectionTestStates.FAILED;
+        //     connectionStatus.message = 'Selected directory does not contain a valid report.';
+        // }
 
-        queryClient.clear();
-        setLocalUploadLabel(`${files.length} files uploaded`);
-        setIsUploading(false);
-        setFolderStatus(connectionStatus);
-        setReportLocation('local');
+        // queryClient.clear();
+        // setLocalUploadLabel(`${files.length} files uploaded`);
+        // setIsUploading(false);
+        // setFolderStatus(connectionStatus);
+        // setReportLocation('local');
     };
 
     const viewOperation = () => {

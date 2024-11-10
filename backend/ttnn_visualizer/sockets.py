@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -5,6 +6,7 @@ from datetime import datetime
 from enum import Enum
 from logging import getLogger
 
+from flask import current_app
 from flask_socketio import join_room, disconnect, leave_room
 
 from ttnn_visualizer.utils import SerializeableDataclass
@@ -45,6 +47,8 @@ tab_clients = {}
 debounce_timer = None
 debounce_delay = 0.5  # Delay in seconds (adjust as needed)
 last_emit_time = 0
+
+file_chunks = {}
 
 
 def emit_file_status(progress: FileProgress, tab_id=None):
@@ -109,3 +113,49 @@ def register_handlers(socketio_instance):
             leave_room(tab_id)
             del tab_clients[tab_id]
             print(f"Client disconnected from tabId: {tab_id}, Socket ID: {sid}")
+
+    @socketio.on("upload-report")
+    def handle_upload_report(data):
+
+        directory = data.get("directory")
+        file_name = data.get("fileName")
+        chunk = data.get("chunk")
+        is_last_chunk = data.get("isLastChunk")
+        target_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
+
+        if not (directory and file_name and chunk is not None):
+            return {"error": "Invalid data received"}
+
+        # Create a unique key for the file being uploaded
+        file_key = f"{directory}/{file_name}"
+
+        # Initialize storage for this file if not already present
+        if file_key not in file_chunks:
+            file_chunks[file_key] = []
+
+        # Append the chunk to this file's list of chunks
+        file_chunks[file_key].append(chunk)
+
+        if is_last_chunk:
+            # Once all chunks are received, combine and save the file
+            save_path = os.path.join(
+                target_directory, file_name
+            )  # Includes relative path
+            print(f"Writing file: {save_path}")
+            os.makedirs(
+                os.path.dirname(save_path), exist_ok=True
+            )  # Ensure directories exist
+
+            # Write the combined chunks to the file
+            with open(save_path, "wb") as f:
+                for chunk in file_chunks[file_key]:
+                    f.write(chunk)
+
+            # Cleanup the file chunks from memory
+            del file_chunks[file_key]
+
+            print(f"File {file_name} saved successfully at {save_path}")
+            return {"status": "File uploaded successfully"}
+
+        # Return success for each chunk received
+        return {"status": "Chunk received"}

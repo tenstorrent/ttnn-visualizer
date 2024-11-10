@@ -3,9 +3,9 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 import React, { useContext, useEffect, useState } from 'react';
+import { getOrCreateTabId } from '../libs/axiosInstance';
 import { SocketContext, SocketContextType } from '../libs/SocketProvider';
 import { FileProgress, FileStatus } from '../model/APIData';
-import { getOrCreateTabId } from '../libs/axiosInstance';
 
 interface FileTransferStatusWrapperProps {
     children: (fileProgress: FileProgress) => React.ReactNode;
@@ -21,7 +21,7 @@ const FileStatusWrapper: React.FC<FileTransferStatusWrapperProps> = ({ children 
     });
 
     const [tabId] = useState(getOrCreateTabId());
-    const socket = useContext<SocketContextType>(SocketContext);
+    const { socket } = useContext<SocketContextType>(SocketContext);
 
     useEffect(() => {
         if (!socket) {
