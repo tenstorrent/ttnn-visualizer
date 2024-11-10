@@ -6,17 +6,17 @@ import { Button, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
-import 'styles/components/FolderPicker.scss';
-import { useNavigate } from 'react-router';
-import { useQueryClient } from 'react-query';
 import { useAtom } from 'jotai';
+import { useQueryClient } from 'react-query';
+import { useNavigate } from 'react-router';
+import 'styles/components/FolderPicker.scss';
+import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
-import { reportLocationAtom } from '../../store/app';
-import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import FileStatusWrapper from '../FileStatusOverlayWrapper';
-import FileStatusOverlay from '../FileStatusOverlay';
 import { FileStatus } from '../../model/APIData';
+import { reportLocationAtom } from '../../store/app';
+import FileStatusOverlay from '../FileStatusOverlay';
+import FileStatusWrapper from '../FileStatusOverlayWrapper';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -70,7 +70,10 @@ const LocalFolderOptions: FC = () => {
             connectionStatus.message = 'Unable to upload selected directory.';
         }
 
-        if (response.data.status !== ConnectionTestStates.OK) {
+        // Streaming response requires casting string to JSON
+        const responseData = JSON.parse(response.data)
+
+        if (responseData.status !== ConnectionTestStates.OK) {
             connectionStatus.status = ConnectionTestStates.FAILED;
             connectionStatus.message = 'Selected directory does not contain a valid report.';
         }
