@@ -13,29 +13,20 @@ export interface UploadProgress {
 const useLocalConnection = () => {
     const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
 
+    const uploadUrl = `${import.meta.env.VITE_API_ROOT}/local/upload`;
     const uploadLocalFolder = async (files: FileList) => {
         const formData = new FormData();
         Array.from(files).forEach((f) => {
             formData.append('files', f);
         });
 
-        return axiosInstance
-            .post(`${import.meta.env.VITE_API_ROOT}/local/upload`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-                onUploadProgress(uploadStatus) {
-                    setUploadProgress({
-                        // uploadStatus.total could be zero with certain requests, but it's not a problem at the moment for us
-                        // https://github.com/axios/axios/issues/1591
-                        progress: (uploadStatus.loaded * 100) / uploadStatus.total!,
-                        estimated: uploadStatus.estimated,
-                    });
-                },
-            })
-            .finally(() => {
-                setUploadProgress(null);
-            });
+        // Return a Promise that resolves with the final message after all files are uploaded
+        return axiosInstance.post(uploadUrl, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+            responseType: 'stream', // Enable streaming response
+        });
     };
 
     return {

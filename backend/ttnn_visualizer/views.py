@@ -21,7 +21,7 @@ from ttnn_visualizer.sockets import (
     emit_file_status,
     FileStatus,
 )
-from flask import request, current_app
+from flask import request, current_app, stream_with_context
 from pathlib import Path
 from http import HTTPStatus
 import logging
@@ -300,9 +300,7 @@ def get_devices(session: TabSession):
 
 @api.route(
     "/local/upload",
-    methods=[
-        "POST",
-    ],
+    methods=["POST", "GET"],
 )
 def create_upload_files():
     """Handle file uploads and emit progress for each file."""
@@ -333,32 +331,6 @@ def create_upload_files():
 
         return True
 
-    def emit_file_progress(
-        current_file_name, total_files, processed_files, percent, status, tab_id
-    ):
-        """Emit progress for a specific file."""
-        progress = FileProgress(
-            current_file_name=current_file_name,
-            number_of_files=total_files,
-            percent_of_current=percent,
-            finished_files=processed_files,
-            status=status,
-        )
-        if current_app.config["USE_WEBSOCKETS"]:
-            emit_file_status(progress, tab_id)
-
-    def emit_final_file_progress(total_files, processed_files, tab_id):
-        """Emit final progress status after all files are processed."""
-        final_progress = FileProgress(
-            current_file_name="",
-            number_of_files=total_files,
-            percent_of_current=100,
-            finished_files=processed_files,
-            status=FileStatus.FINISHED,
-        )
-        if current_app.config["USE_WEBSOCKETS"]:
-            emit_file_status(final_progress, tab_id)
-
     def get_report_name_from_files(files):
         """Extract the report name from the first file and return the report directory path."""
         unsplit_report_name = str(files[0].filename)
@@ -380,52 +352,51 @@ def create_upload_files():
     logger.info(f"Writing report files to {report_directory}/{report_name}")
 
     total_files = len(files)
-    processed_files = 0
-    tab_id = request.args.get("tabId")
+    progress = {"overall": 0}
 
-    for index, file in enumerate(files):
-        current_file_name = str(file.filename)
-        logger.info(f"Processing file: {current_file_name}")
+    def generate():
+        for index, file in enumerate(files):
+            current_file_name = str(file.filename)
+            logger.info(f"Processing file: {current_file_name}")
 
-        destination_file = Path(report_directory).joinpath((str(current_file_name)))
-        logger.info(f"Writing file to {destination_file}")
+            destination_file = Path(report_directory).joinpath((str(current_file_name)))
+            logger.info(f"Writing file to {destination_file}")
 
-        # Create the directory if it doesn't exist
-        if not destination_file.parent.exists():
-            logger.info(
-                f"{destination_file.parent.name} does not exist. Creating directory"
-            )
-            destination_file.parent.mkdir(exist_ok=True, parents=True)
+            # Create the directory if it doesn't exist
+            if not destination_file.parent.exists():
+                logger.info(
+                    f"{destination_file.parent.name} does not exist. Creating directory"
+                )
+                destination_file.parent.mkdir(exist_ok=True, parents=True)
+                # Track bytes written for this file
+                bytes_written = 0
+                file_size = file.content_length or 0
 
-        # Emit progress on each file save
-        emit_file_progress(
-            current_file_name,
-            total_files,
-            processed_files,
-            0,
-            FileStatus.DOWNLOADING,
-            tab_id,
-        )
+                with open(destination_file, "wb") as f:
+                    while chunk := file.stream.read(
+                        4096
+                    ):  # Adjust chunk size as needed
+                        f.write(chunk)
+                        bytes_written += len(chunk)
 
-        file.save(destination_file)
+                        # Calculate file-specific progress
+                        percent_of_current = (
+                            (bytes_written / file_size) * 100 if file_size else 100
+                        )
 
-        processed_files += 1
-        emit_file_progress(
-            current_file_name,
-            total_files,
-            processed_files,
-            100,
-            FileStatus.DOWNLOADING,
-            tab_id,
-        )
+                        # Calculate overall progress based on completed files
+                        overall_progress = ((index - 1) / total_files) * 100 + (
+                            percent_of_current / total_files
+                        )
+                        progress["overall"] = overall_progress
 
-    # Update the session after all files are uploaded
-    update_tab_session(tab_id=tab_id, active_report_data={"name": report_name})
-    emit_final_file_progress(total_files, processed_files, tab_id)
+        final_message = StatusMessage(
+            status=ConnectionTestStates.OK, message="Success."
+        ).model_dump()
+        yield json.dumps(final_message)
 
-    return StatusMessage(
-        status=ConnectionTestStates.OK, message="Success."
-    ).model_dump()
+    # Stream progress to the client as the files are being uploaded
+    return Response(stream_with_context(generate()), content_type="application/json")
 
 
 @api.route("/remote/folder", methods=["POST"])
