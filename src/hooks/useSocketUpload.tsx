@@ -1,23 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Socket } from 'socket.io-client';
-
-export enum FileStatus {
-    DOWNLOADING = 'DOWNLOADING',
-    FAILED = 'FAILED',
-    COMPRESSING = 'COMPRESSING',
-    FINISHED = 'FINISHED',
-    STARTED = 'STARTED',
-    INACTIVE = 'INACTIVE',
-}
-
-export interface FileProgress {
-    currentFileName: string;
-    numberOfFiles: number;
-    percentOfCurrent: number;
-    finishedFiles: number;
-    status: FileStatus;
-    timestamp?: string;
-}
+import { FileProgress, FileStatus } from '../model/APIData';
 
 interface UseSocketUploadProps {
     socket: Socket;
@@ -84,7 +67,7 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                                         ...prev,
                                         currentFileName: fullRelativePath,
                                         percentOfCurrent,
-                                        status: percentOfCurrent === 100 ? FileStatus.FINISHED : FileStatus.DOWNLOADING,
+                                        status: percentOfCurrent === 100 ? FileStatus.FINISHED : FileStatus.UPLOADING,
                                     }));
                                 }
 
@@ -116,11 +99,13 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
             // eslint-disable-next-line promise/catch-or-return
             Promise.all(Array.from(files).map(processFile)).then(() => {
                 setIsUploading(false);
-                setProgress((prev) => ({
-                    ...prev,
-                    status: FileStatus.FINISHED,
-                    finishedFiles: prev.numberOfFiles,
-                }));
+                setProgress((prev: FileProgress) => {
+                    return {
+                        ...prev,
+                        status: FileStatus.FINISHED,
+                        finishedFiles: prev.numberOfFiles,
+                    };
+                });
                 // eslint-disable-next-line promise/always-return
                 if (onUploadFinished) {
                     onUploadFinished({ directoryName: topLevelDirectory });

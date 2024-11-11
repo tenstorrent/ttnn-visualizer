@@ -35,11 +35,22 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
+    const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
     const { mountLocalFolder } = useLocal();
     const { socket } = useContext(SocketContext);
+
     const { data: tabSession, refetch: refetchSession } = useQuery('tabSession', {
         queryFn: fetchTabSession,
         initialData: null,
+        onSuccess: (data) => {
+            if (data?.active_report && !data.remote_connection && !data.remote_folder) {
+                setFolderStatus({
+                    status: ConnectionTestStates.OK,
+                    message: `Report ${data.active_report.name} Uploaded`,
+                });
+            }
+        },
     });
 
     const onUploadComplete = async ({ directoryName }: { directoryName: string }) => {
@@ -49,11 +60,23 @@ const LocalFolderOptions: FC = () => {
 
     const { uploadDirectory, progress, isUploading } = useSocketUpload({ socket, onUploadFinished: onUploadComplete });
 
-    const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
-    const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
-
     const isLocalReportMounted =
         tabSession?.active_report && !tabSession.remote_connection && !tabSession.remote_folder;
+
+    const checkRequiredFiles = (files: FileList): boolean => {
+        const requiredFiles = ['db.sqlite', 'config.json'];
+        const fileSet = new Set<string>();
+
+        Array.from(files).forEach((file) => {
+            const pathParts = file.webkitRelativePath.split('/');
+            if (pathParts.length === 2) {
+                // Top-level files should have exactly 2 parts in their path
+                fileSet.add(pathParts[1]); // Add the file name to the set
+            }
+        });
+
+        return requiredFiles.every((file) => fileSet.has(file));
+    };
 
     /**
      * This is a temporrary solution until we support Safari
@@ -61,14 +84,19 @@ const LocalFolderOptions: FC = () => {
     const ua = navigator.userAgent.toLowerCase();
     const isSafari = ua.includes('safari') && !ua.includes('chrome') && !ua.includes('android');
 
-    const handleDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
+    const handleDirectoryOpen = (e: ChangeEvent<HTMLInputElement>) => {
         // TODO Validate files before sending
         if (!e.target.files) {
             return;
         }
         const { files } = e.target;
-        setLocalUploadLabel(`${files.length} files selected.`);
-        uploadDirectory(files);
+
+        if (!checkRequiredFiles(files)) {
+            setFolderStatus({ status: ConnectionTestStates.FAILED, message: 'Invalid report directory' });
+        } else {
+            setLocalUploadLabel(`${files.length} files selected.`);
+            uploadDirectory(files);
+        }
     };
 
     const viewOperation = () => {
@@ -125,9 +153,12 @@ const LocalFolderOptions: FC = () => {
                     <FileStatusOverlay
                         open={
                             isUploading ||
-                            [FileStatus.DOWNLOADING, FileStatus.COMPRESSING, FileStatus.STARTED].includes(
-                                progress?.status,
-                            )
+                            [
+                                FileStatus.DOWNLOADING,
+                                FileStatus.COMPRESSING,
+                                FileStatus.STARTED,
+                                FileStatus.UPLOADING,
+                            ].includes(progress?.status)
                         }
                         progress={progress}
                     />
