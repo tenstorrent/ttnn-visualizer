@@ -35,6 +35,10 @@
         overflow-y: auto;
         position: relative;
 
+        &.scroll-lock {
+            overflow-y: unset;
+        }
+
         &::before,
         &::after {
             content: '';
