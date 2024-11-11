@@ -8,17 +8,14 @@ import classNames from 'classnames';
 import { IconNames } from '@blueprintjs/icons';
 import { toast } from 'react-toastify';
 import { useAtom } from 'jotai';
-import { FragmentationEntry } from '../../model/APIData';
-import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
 import {
-    CBRenderConfiguration,
     CONDENSED_PLOT_CHUNK_COLOR,
-    L1RenderConfiguration,
+    MAX_LEGEND_LENGTH,
     PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
 import { MemoryLegendElement } from './MemoryLegendElement';
@@ -33,19 +30,14 @@ import GlobalSwitch from '../GlobalSwitch';
 import TensorDetailsList from './TensorDetailsList';
 import { BufferType } from '../../model/BufferType';
 import DRAMPlots from './DRAMPlots';
+import L1Plots from './L1Plots';
 
 interface OperationDetailsProps {
     operationId: number;
 }
-
-const MEMORY_ZOOM_PADDING_RATIO = 0.01;
-
-const MAX_LEGEND_LENGTH = 20;
-
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const { data: operations } = useOperationsList();
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
-    const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const {
@@ -92,26 +84,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const l1Small = details.memoryData(BufferType.L1_SMALL);
 
-    const { chartData, memory, fragmentation, cbChartData, cbChartDataByOperation } = details.memoryData();
-    const { chartData: previousChartData, memory: previousMemory } = previousDetails.memoryData();
-
-    const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
-
-    const memoryReportWithCB: FragmentationEntry[] = [
-        ...memoryReport,
-        ...details.deviceOperations
-            .map((op, i) =>
-                op.cbList.map(
-                    (cb) =>
-                        ({
-                            ...cb,
-                            bufferType: 'CB',
-                            colorVariance: i,
-                        }) as FragmentationEntry,
-                ),
-            )
-            .flat(),
-    ].sort((a, b) => a.address - b.address);
+    const { memory, cbChartDataByOperation } = details.memoryData();
+    const { memory: previousMemory } = previousDetails.memoryData();
 
     if (l1Small.condensedChart[0] !== undefined) {
         l1Small.condensedChart[0].marker!.color = CONDENSED_PLOT_CHUNK_COLOR;
@@ -132,20 +106,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             ? previousMemory[previousMemory.length - 1].address + previousMemory[previousMemory.length - 1].size
             : 0,
     );
-
-    const cbZoomStart = details.deviceOperations
-        .map((op) => op.cbList.map((cb) => cb.address))
-        .flat()
-        .sort((a, b) => a - b)[0];
-
-    const cbZoomEnd = details.deviceOperations
-        .map((op) => op.cbList.map((cd) => cd.address + cd.size))
-        .flat()
-        .sort((a, b) => a - b)
-        .reverse()[0];
-
-    const MEMORY_PADDING_CB = (cbZoomEnd - cbZoomStart) * MEMORY_ZOOM_PADDING_RATIO;
-    const MEMORY_PADDING_L1 = (plotZoomRangeEnd - plotZoomRangeStart) * MEMORY_ZOOM_PADDING_RATIO;
 
     if (plotZoomRangeEnd < plotZoomRangeStart) {
         plotZoomRangeStart = 0;
@@ -358,116 +318,16 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     )}
                                 </h3>
 
-                                <MemoryPlotRenderer
-                                    title='Previous Summarized L1 Report'
-                                    className={classNames('l1-memory-renderer', {
-                                        'empty-plot': previousChartData.length === 0,
-                                    })}
-                                    plotZoomRange={[
-                                        plotZoomRangeStart - MEMORY_PADDING_L1,
-                                        plotZoomRangeEnd + MEMORY_PADDING_L1,
-                                    ]}
-                                    chartDataList={[previousChartData]}
-                                    isZoomedIn={zoomedInViewMainMemory}
-                                    memorySize={memorySizeL1}
-                                    configuration={L1RenderConfiguration}
-                                />
-
-                                <MemoryPlotRenderer
-                                    title='Current Summarized L1 Report'
-                                    className={classNames('l1-memory-renderer', {
-                                        'empty-plot':
-                                            chartData.length === 0 &&
-                                            cbChartDataByOperation.size === 0 &&
-                                            l1Small.memory.length === 0,
-                                    })}
-                                    isZoomedIn={zoomedInViewMainMemory}
-                                    plotZoomRange={[
-                                        plotZoomRangeStart - MEMORY_PADDING_L1,
-                                        plotZoomRangeEnd + MEMORY_PADDING_L1,
-                                    ]}
-                                    chartDataList={[
-                                        cbChartData,
-                                        chartData,
-                                        l1Small.memory.length > 0 ? l1Small.condensedChart : [],
-                                    ]}
-                                    memorySize={memorySizeL1}
+                                <L1Plots
+                                    operationDetails={details}
+                                    previousOperationDetails={previousDetails}
+                                    zoomedInViewMainMemory={zoomedInViewMainMemory}
+                                    plotZoomRangeStart={plotZoomRangeStart}
+                                    plotZoomRangeEnd={plotZoomRangeEnd}
+                                    showCircularBuffer={showCircularBuffer}
                                     onBufferClick={onBufferClick}
-                                    configuration={L1RenderConfiguration}
+                                    onLegendClick={onLegendClick}
                                 />
-                                {showCircularBuffer && cbChartDataByOperation.size > 0 && (
-                                    <>
-                                        <h3>Device Operations</h3>
-                                        <Switch
-                                            label='Circular Buffers zoom'
-                                            checked={zoomedInViewCBMemory}
-                                            onChange={() => {
-                                                setZoomedInViewCBMemory(!zoomedInViewCBMemory);
-                                            }}
-                                        />
-                                        {[...cbChartDataByOperation.entries()].map(
-                                            ([{ name: deviceOperationName }, plotData], index) => (
-                                                // eslint-disable-next-line react/no-array-index-key
-                                                <Fragment key={index}>
-                                                    <h3 className='circular-buffers-plot-title'>
-                                                        <Icon
-                                                            className='operation-icon'
-                                                            size={13}
-                                                            intent={Intent.SUCCESS}
-                                                            icon={IconNames.CUBE_ADD}
-                                                        />{' '}
-                                                        <span>{deviceOperationName}</span>
-                                                    </h3>
-                                                    <MemoryPlotRenderer
-                                                        title=''
-                                                        className={classNames('l1-memory-renderer circular-buffers', {
-                                                            'empty-plot': plotData.length === 0,
-                                                        })}
-                                                        chartDataList={[plotData]}
-                                                        plotZoomRange={[
-                                                            cbZoomStart - MEMORY_PADDING_CB,
-                                                            cbZoomEnd + MEMORY_PADDING_CB,
-                                                        ]}
-                                                        isZoomedIn={zoomedInViewCBMemory}
-                                                        memorySize={memorySizeL1}
-                                                        configuration={CBRenderConfiguration}
-                                                        onBufferClick={onBufferClick}
-                                                    />
-                                                </Fragment>
-                                            ),
-                                        )}
-                                    </>
-                                )}
-
-                                <div
-                                    className={classNames('legend', {
-                                        'lengthy-legend': memoryReport.length > MAX_LEGEND_LENGTH,
-                                    })}
-                                >
-                                    {showCircularBuffer &&
-                                        memoryReportWithCB.map((chunk) => (
-                                            <MemoryLegendElement
-                                                chunk={chunk}
-                                                key={chunk.address}
-                                                memSize={memorySizeL1}
-                                                selectedTensorAddress={selectedAddress}
-                                                operationDetails={details}
-                                                onLegendClick={onLegendClick}
-                                                colorVariance={chunk.colorVariance}
-                                            />
-                                        ))}
-                                    {!showCircularBuffer &&
-                                        memoryReport.map((chunk) => (
-                                            <MemoryLegendElement
-                                                chunk={chunk}
-                                                key={chunk.address}
-                                                memSize={memorySizeL1}
-                                                selectedTensorAddress={selectedAddress}
-                                                operationDetails={details}
-                                                onLegendClick={onLegendClick}
-                                            />
-                                        ))}
-                                </div>
                             </>
                         )}
 
@@ -476,10 +336,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 <h3>DRAM</h3>
 
                                 <DRAMPlots
-                                    details={details}
-                                    previousDetails={previousDetails}
+                                    operationDetails={details}
+                                    previousOperationDetails={previousDetails}
                                     zoomedInViewMainMemory={zoomedInViewMainMemory}
-                                    maxLegendLength={MAX_LEGEND_LENGTH}
                                     onDramBufferClick={onDramBufferClick}
                                     onDramDeltaClick={onDramDeltaClick}
                                     onLegendClick={onLegendClick}

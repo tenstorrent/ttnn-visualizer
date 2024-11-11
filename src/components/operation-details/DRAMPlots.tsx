@@ -4,7 +4,7 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { isEqual } from '../../functions/math';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
-import { DRAMRenderConfiguration, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
+import { DRAMRenderConfiguration, MAX_LEGEND_LENGTH, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
 import { FragmentationEntry } from '../../model/APIData';
 import { BufferType } from '../../model/BufferType';
 import { OperationDetails } from '../../model/OperationDetails';
@@ -13,27 +13,27 @@ import { selectedAddressAtom } from '../../store/app';
 const DRAM_PADDING_RATIO = 0.9998;
 
 interface DramPlotProps {
-    details: OperationDetails;
-    previousDetails: OperationDetails;
+    operationDetails: OperationDetails;
+    previousOperationDetails: OperationDetails;
     zoomedInViewMainMemory: boolean;
-    maxLegendLength: number;
     onDramBufferClick: (event: Readonly<PlotMouseEventCustom>) => void;
     onDramDeltaClick: (event: Readonly<PlotMouseEventCustom>) => void;
     onLegendClick: (address: number, tensorId?: number) => void;
 }
 
 function DRAMPlots({
-    details,
-    previousDetails,
+    operationDetails,
+    previousOperationDetails,
     zoomedInViewMainMemory,
-    maxLegendLength,
     onDramBufferClick,
     onDramDeltaClick,
     onLegendClick,
 }: DramPlotProps) {
     const selectedAddress = useAtomValue(selectedAddressAtom);
-    const { chartData: dramData, memory: dramMemory } = details.memoryData(BufferType.DRAM);
-    const { chartData: previousDramData, memory: previousDramMemory } = previousDetails.memoryData(BufferType.DRAM);
+    const { chartData: dramData, memory: dramMemory } = operationDetails.memoryData(BufferType.DRAM);
+    const { chartData: previousDramData, memory: previousDramMemory } = previousOperationDetails.memoryData(
+        BufferType.DRAM,
+    );
 
     const dramHasntChanged = isEqual(dramMemory, previousDramMemory);
 
@@ -45,7 +45,7 @@ function DRAMPlots({
     const reverseDramDelta = previousDramMemory.filter(
         (chunk) => !dramMemoryReport.find((c) => c.address === chunk.address),
     );
-    const dramDeltaObject = details.getMemoryDelta(dramDelta, reverseDramDelta);
+    const dramDeltaObject = operationDetails.getMemoryDelta(dramDelta, reverseDramDelta);
 
     let dramPlotZoomRangeStart =
         Math.min(dramMemory[0]?.address || DRAM_MEMORY_SIZE, previousDramMemory[0]?.address || DRAM_MEMORY_SIZE) *
@@ -111,7 +111,7 @@ function DRAMPlots({
 
             <div
                 className={classNames('legend', {
-                    'lengthy-legend': dramMemoryReport.length > maxLegendLength,
+                    'lengthy-legend': dramMemoryReport.length > MAX_LEGEND_LENGTH,
                 })}
             >
                 {dramMemoryReport.map((chunk) => (
@@ -120,7 +120,7 @@ function DRAMPlots({
                         key={chunk.address}
                         memSize={DRAM_MEMORY_SIZE}
                         selectedTensorAddress={selectedAddress}
-                        operationDetails={details}
+                        operationDetails={operationDetails}
                         onLegendClick={onLegendClick}
                     />
                 ))}

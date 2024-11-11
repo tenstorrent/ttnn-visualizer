@@ -38,7 +38,7 @@ const TensorList = () => {
     const { data: fetchedTensors, error, isLoading } = useTensors(deviceId);
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
-  const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
+    const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [filterQuery, setFilterQuery] = useState('');
     const [memoryLeakCount, setMemoryLeakCount] = useState(0);
     const [filteredTensorList, setFilteredTensorList] = useState<TensorData[]>([]);

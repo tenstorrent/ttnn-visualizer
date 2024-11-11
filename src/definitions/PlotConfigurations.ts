@@ -34,6 +34,8 @@ export const CBRenderConfiguration = {
     title: '',
 } as PlotConfiguration;
 
+export const MAX_LEGEND_LENGTH = 20;
+
 export const BufferSummaryAxisConfiguration = {
     height: 615,
     margin: {
