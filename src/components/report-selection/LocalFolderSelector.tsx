@@ -39,7 +39,6 @@ const LocalFolderOptions: FC = () => {
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
     const { mountLocalFolder } = useLocal();
     const { socket } = useContext(SocketContext);
-
     const { data: tabSession, refetch: refetchSession } = useQuery('tabSession', {
         queryFn: fetchTabSession,
         initialData: null,
@@ -55,7 +54,7 @@ const LocalFolderOptions: FC = () => {
 
     const onUploadComplete = async ({ directoryName }: { directoryName: string }) => {
         await mountLocalFolder({ reportFolder: directoryName });
-        await refetchSession();
+        await queryClient.invalidateQueries('tabSession');
     };
 
     const { uploadDirectory, progress, isUploading } = useSocketUpload({ socket, onUploadFinished: onUploadComplete });

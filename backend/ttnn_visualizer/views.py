@@ -446,7 +446,7 @@ def use_local_folder():
     report_folder = data.get("reportFolder")
 
     tab_id = request.args.get("tabId")
-    current_app.logger.info(f"Setting active report for {tab_id}")
+    current_app.logger.info(f"Setting active report for {tab_id} - {report_folder}")
 
     update_tab_session(
         tab_id=tab_id,

@@ -124,44 +124,51 @@ def register_handlers(socketio_instance):
             del tab_clients[tab_id]
             print(f"Client disconnected from tabId: {tab_id}, Socket ID: {sid}")
 
+    from flask import current_app
+    import os
+
     @socketio.on("upload-report")
     def handle_upload_report(data):
         local_data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
         directory = data.get("directory")
-        file_name = data.get("fileName")
+        file_name = data.get("fileName")  # Full relative path from client
         chunk = data.get("chunk")
         is_last_chunk = data.get("isLastChunk")
 
+        # Validate data
         if not (directory and file_name and chunk is not None):
             return {"error": "Invalid data received"}
 
-        file_key = f"{directory}/{file_name}"
+        # Extract just the file name from file_name (in case it includes subdirectories)
+        relative_path = os.path.relpath(file_name, start=directory)
+        file_key = f"{directory}/{relative_path}"
 
-        # Initialize file_chunks[file_key] if it's the start of a new upload
-        if file_key not in file_chunks or is_last_chunk:
+        # Initialize storage for chunks if this is the first chunk
+        if file_key not in file_chunks:
             file_chunks[file_key] = []
 
+        # Append chunk to the list for this file
         file_chunks[file_key].append(chunk)
 
-        # Write the file when the last chunk is received
+        # Write and clear chunks if this is the last chunk
         if is_last_chunk:
             save_path = os.path.join(local_data_directory, file_key)
 
             logger.info(f"Writing file: {save_path}")
 
-            # Ensure the directory exists
+            # Ensure the directory structure exists
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
-            # Write chunks to the file in binary mode to overwrite any existing file
+            # Write the accumulated chunks to the file
             with open(save_path, "wb") as f:
                 for chunk in file_chunks[file_key]:
                     f.write(chunk)
 
-            # Clear the chunks from memory after writing
+            # Clear stored chunks for the file after saving
             del file_chunks[file_key]
 
             logger.info(f"File {file_name} saved successfully at {save_path}")
             return {"status": "File uploaded successfully"}
 
-        # Return success for each chunk received
+        # Confirm chunk received if not the last one
         return {"status": "Chunk received"}

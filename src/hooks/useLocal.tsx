@@ -12,6 +12,7 @@ export interface UploadProgress {
 
 const useLocalConnection = () => {
     const mountLocalFolder = async ({ reportFolder }: { reportFolder: string }) => {
+        console.info(`Setting local report to ${reportFolder}`);
         return axiosInstance.post<MountRemoteFolder>(`${import.meta.env.VITE_API_ROOT}/local/use`, {
             reportFolder,
         });

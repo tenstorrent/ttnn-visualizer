@@ -7,7 +7,7 @@ interface UseSocketUploadProps {
     onUploadFinished?: ({ directoryName }: { directoryName: string }) => void;
 }
 
-const CHUNK_SIZE = 1024 * 1024; // Adjust chunk size as needed
+const CHUNK_SIZE = 1024 * 64; // 64KB
 const UPDATE_INTERVAL = 1000; // 1-second interval for progress updates
 
 const useSocketUpload = (props: UseSocketUploadProps) => {
@@ -57,18 +57,21 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
 
                         reader.onload = (event) => {
                             if (event.target?.result) {
+                                const isLastChunk = offset + CHUNK_SIZE >= file.size;
+
                                 socket.emit('upload-report', {
                                     directory: topLevelDirectory,
                                     fileName: fullRelativePath,
                                     chunk: event.target.result,
-                                    isLastChunk: offset + CHUNK_SIZE >= file.size,
+                                    isLastChunk,
                                 });
 
                                 offset += CHUNK_SIZE;
                                 currentFileRef.current.percentOfCurrent = Math.min((offset / file.size) * 100, 100);
 
-                                if (offset < file.size) {
-                                    setTimeout(readChunk, 10); // Small delay to avoid overloading
+                                if (!isLastChunk) {
+                                    // Delay to avoid overwhelming the server
+                                    setTimeout(readChunk, 10);
                                 } else {
                                     resolve(); // Resolve when the entire file is uploaded
                                 }
@@ -103,7 +106,6 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                 }, UPDATE_INTERVAL);
 
                 for (const file of Array.from(files)) {
-                    // eslint-disable-next-line no-await-in-loop
                     await processFile(file);
                     setProgress((prev) => ({
                         ...prev,
@@ -128,7 +130,6 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
 
             await uploadFilesSequentially(); // Await the uploadFilesSequentially function
 
-            // eslint-disable-next-line consistent-return
             return () => clearInterval(updateTimer); // Ensure cleanup in case of component unmount
         },
         [socket, onUploadFinished],
