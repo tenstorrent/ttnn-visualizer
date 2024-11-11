@@ -44,5 +44,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         };
     }, []);
 
+    // TODO Ask David about this
+    // eslint-disable-next-line react/jsx-no-constructed-context-values
     return <SocketContext.Provider value={{ socket }}>{children}</SocketContext.Provider>;
 };

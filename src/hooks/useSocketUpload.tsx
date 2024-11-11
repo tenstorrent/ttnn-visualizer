@@ -7,7 +7,7 @@ interface UseSocketUploadProps {
     onUploadFinished?: ({ directoryName }: { directoryName: string }) => void;
 }
 
-const CHUNK_SIZE = 1024 * 128; // Adjust chunk size as needed
+const CHUNK_SIZE = 1024 * 64; // Adjust chunk size as needed
 
 const useSocketUpload = (props: UseSocketUploadProps) => {
     const { socket, onUploadFinished } = props;
@@ -36,9 +36,10 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                 status: FileStatus.STARTED,
             });
 
+            // Process each file sequentially in chunks
             const processFile = (file: File): Promise<void> => {
                 let offset = 0;
-                const fullRelativePath = file.webkitRelativePath; // Keep subdirectory structure
+                const fullRelativePath = file.webkitRelativePath;
 
                 return new Promise((resolve) => {
                     const readChunk = () => {
@@ -49,15 +50,14 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                             if (event.target?.result) {
                                 socket.emit('upload-report', {
                                     directory: topLevelDirectory,
-                                    fileName: fullRelativePath, // Include full relative path
+                                    fileName: fullRelativePath,
                                     chunk: event.target.result,
                                     isLastChunk: offset + CHUNK_SIZE >= file.size,
                                 });
 
                                 offset += CHUNK_SIZE;
                                 const percentOfCurrent = Math.min((offset / file.size) * 100, 100);
-                                console.info(percentOfCurrent);
-                                // Update progress state only at specific intervals (e.g., every 10% to minimize rerenders)
+
                                 setProgress((prev) => {
                                     if (
                                         percentOfCurrent - prev.percentOfCurrent >= 2 ||
@@ -75,7 +75,7 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                                 });
 
                                 if (offset < file.size) {
-                                    setTimeout(() => readChunk(), 10); // Delay before reading the next chunk
+                                    setTimeout(readChunk, 10); // Small delay to avoid overloading
                                 } else {
                                     resolve(); // Resolve when the entire file is uploaded
                                 }
@@ -88,7 +88,7 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                                 ...prev,
                                 status: FileStatus.FAILED,
                             }));
-                            resolve(); // Continue processing other files even if there's an error
+                            resolve(); // Resolve to continue processing other files even if there is an error
                         };
 
                         reader.readAsArrayBuffer(slice);
@@ -98,18 +98,22 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                 });
             };
 
-            // Process all files, then handle completion
-            Promise.all(Array.from(files).map(processFile)).then(() => {
+            // Process each file in sequence
+            const uploadFilesSequentially = async () => {
+                for (const file of Array.from(files)) {
+                    await processFile(file);
+                    setProgress((prev) => ({
+                        ...prev,
+                        finishedFiles: prev.finishedFiles + 1,
+                    }));
+                }
                 setIsUploading(false);
-                setProgress((prev) => ({
-                    ...prev,
-                    status: FileStatus.FINISHED,
-                    finishedFiles: prev.numberOfFiles,
-                }));
                 if (onUploadFinished) {
                     onUploadFinished({ directoryName: topLevelDirectory });
                 }
-            });
+            };
+
+            uploadFilesSequentially();
         },
         [socket, onUploadFinished],
     );
