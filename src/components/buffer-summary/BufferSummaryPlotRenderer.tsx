@@ -44,7 +44,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
         [buffersByOperation],
     );
 
-    // Will need refactoring to handle multiple devices
+    // TODO: Multi device support
     const memorySize = !isLoadingDevices && devices ? devices[0].worker_l1_size : 0;
 
     const zoomedMemorySize = useMemo(() => {
