@@ -126,7 +126,6 @@ def register_handlers(socketio_instance):
 
     @socketio.on("upload-report")
     def handle_upload_report(data):
-
         local_data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
         directory = data.get("directory")
         file_name = data.get("fileName")
@@ -138,22 +137,27 @@ def register_handlers(socketio_instance):
 
         file_key = f"{directory}/{file_name}"
 
-        if file_key not in file_chunks:
+        # Initialize file_chunks[file_key] if it's the start of a new upload
+        if file_key not in file_chunks or is_last_chunk:
             file_chunks[file_key] = []
 
         file_chunks[file_key].append(chunk)
 
+        # Write the file when the last chunk is received
         if is_last_chunk:
-            save_path = os.path.join(local_data_directory, file_name)
+            save_path = os.path.join(local_data_directory, file_key)
 
             logger.info(f"Writing file: {save_path}")
 
+            # Ensure the directory exists
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
+            # Write chunks to the file in binary mode to overwrite any existing file
             with open(save_path, "wb") as f:
                 for chunk in file_chunks[file_key]:
                     f.write(chunk)
 
+            # Clear the chunks from memory after writing
             del file_chunks[file_key]
 
             logger.info(f"File {file_name} saved successfully at {save_path}")
