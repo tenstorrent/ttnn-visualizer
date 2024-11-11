@@ -6,6 +6,7 @@ from datetime import datetime
 from enum import Enum
 from logging import getLogger
 
+from flask import current_app
 from flask_socketio import join_room, disconnect, leave_room
 
 from ttnn_visualizer.utils import SerializeableDataclass
@@ -126,6 +127,7 @@ def register_handlers(socketio_instance):
     @socketio.on("upload-report")
     def handle_upload_report(data):
 
+        local_data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
         directory = data.get("directory")
         file_name = data.get("fileName")
         chunk = data.get("chunk")
@@ -142,7 +144,7 @@ def register_handlers(socketio_instance):
         file_chunks[file_key].append(chunk)
 
         if is_last_chunk:
-            save_path = os.path.join("/tmp", file_name)
+            save_path = os.path.join(local_data_directory, file_name)
 
             logger.info(f"Writing file: {save_path}")
 

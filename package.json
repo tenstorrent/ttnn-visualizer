@@ -28,6 +28,7 @@
     "@types/tinycolor2": "^1.4.6",
     "axios": "^1.7.2",
     "jotai": "^2.9.1",
+    "lodash.debounce": "^4.0.8",
     "normalize.css": "^8.0.1",
     "plotly.js": "^2.33.0",
     "react": "^18.2.0",
@@ -45,6 +46,7 @@
   },
   "devDependencies": {
     "@blueprintjs/node-build-scripts": "^9.2.1",
+    "@types/lodash.debounce": "^4.0.9",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
     "@types/react-plotly.js": "^2.6.3",

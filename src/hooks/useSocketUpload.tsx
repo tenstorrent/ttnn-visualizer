@@ -7,12 +7,10 @@ interface UseSocketUploadProps {
     onUploadFinished?: ({ directoryName }: { directoryName: string }) => void;
 }
 
-const CHUNK_SIZE = 1024 * 64; // Adjust chunk size as needed
+const CHUNK_SIZE = 1024 * 128; // Adjust chunk size as needed
 
 const useSocketUpload = (props: UseSocketUploadProps) => {
-    console.info(props.socket?.connected);
-    const { socket } = props;
-    const onUploadFinished = props?.onUploadFinished;
+    const { socket, onUploadFinished } = props;
     const [isUploading, setIsUploading] = useState(false);
     const [progress, setProgress] = useState<FileProgress>({
         currentFileName: '',
@@ -27,7 +25,7 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
             if (files.length === 0) {
                 return;
             }
-            socket.emit('ping', { message: 'transferingFiles' });
+            socket.emit('ping', { message: 'transferringFiles' });
             const topLevelDirectory = files[0].webkitRelativePath.split('/')[0];
             setIsUploading(true);
             setProgress({
@@ -40,7 +38,7 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
 
             const processFile = (file: File): Promise<void> => {
                 let offset = 0;
-                const fullRelativePath = file.webkitRelativePath;
+                const fullRelativePath = file.webkitRelativePath; // Keep subdirectory structure
 
                 return new Promise((resolve) => {
                     const readChunk = () => {
@@ -51,27 +49,33 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                             if (event.target?.result) {
                                 socket.emit('upload-report', {
                                     directory: topLevelDirectory,
-                                    fileName: fullRelativePath,
+                                    fileName: fullRelativePath, // Include full relative path
                                     chunk: event.target.result,
                                     isLastChunk: offset + CHUNK_SIZE >= file.size,
                                 });
 
                                 offset += CHUNK_SIZE;
                                 const percentOfCurrent = Math.min((offset / file.size) * 100, 100);
-
+                                console.info(percentOfCurrent);
                                 // Update progress state only at specific intervals (e.g., every 10% to minimize rerenders)
-                                if (percentOfCurrent - progress.percentOfCurrent >= 10 || percentOfCurrent === 100) {
-                                    setProgress((prev) => ({
-                                        ...prev,
-                                        currentFileName: fullRelativePath,
-                                        percentOfCurrent,
-                                        status: percentOfCurrent === 100 ? FileStatus.FINISHED : FileStatus.UPLOADING,
-                                    }));
-                                }
+                                setProgress((prev) => {
+                                    if (
+                                        percentOfCurrent - prev.percentOfCurrent >= 2 ||
+                                        percentOfCurrent === 100 ||
+                                        prev.currentFileName !== fullRelativePath
+                                    ) {
+                                        return {
+                                            ...prev,
+                                            currentFileName: fullRelativePath,
+                                            percentOfCurrent,
+                                            status: FileStatus.UPLOADING,
+                                        };
+                                    }
+                                    return prev; // Return the previous state if no update is necessary
+                                });
 
                                 if (offset < file.size) {
-                                    // readChunk();
-                                    setTimeout(readChunk, 500); // Delay before reading the next chunk
+                                    setTimeout(() => readChunk(), 10); // Delay before reading the next chunk
                                 } else {
                                     resolve(); // Resolve when the entire file is uploaded
                                 }
@@ -84,7 +88,7 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                                 ...prev,
                                 status: FileStatus.FAILED,
                             }));
-                            resolve(); // Resolve to continue processing other files even if there is an error
+                            resolve(); // Continue processing other files even if there's an error
                         };
 
                         reader.readAsArrayBuffer(slice);
@@ -94,23 +98,20 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                 });
             };
 
-            // eslint-disable-next-line promise/catch-or-return
+            // Process all files, then handle completion
             Promise.all(Array.from(files).map(processFile)).then(() => {
                 setIsUploading(false);
-                setProgress((prev: FileProgress) => {
-                    return {
-                        ...prev,
-                        status: FileStatus.FINISHED,
-                        finishedFiles: prev.numberOfFiles,
-                    };
-                });
-                // eslint-disable-next-line promise/always-return
+                setProgress((prev) => ({
+                    ...prev,
+                    status: FileStatus.FINISHED,
+                    finishedFiles: prev.numberOfFiles,
+                }));
                 if (onUploadFinished) {
                     onUploadFinished({ directoryName: topLevelDirectory });
                 }
             });
         },
-        [progress.percentOfCurrent],
+        [socket, onUploadFinished],
     );
 
     return { isUploading, uploadDirectory, progress };
