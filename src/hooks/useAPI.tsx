@@ -30,12 +30,14 @@ export const fetchBufferPages = async (
     operationId: number,
     address?: number | string,
     bufferType?: BufferType,
+    deviceId?: number,
 ): Promise<BufferPage[]> => {
     const response = await axiosInstance.get<BufferPage[]>(`/api/buffer-pages`, {
         params: {
             operation_id: operationId,
             address,
             buffer_type: bufferType,
+            deviceId,
         },
     });
     return response.data;
@@ -195,9 +197,14 @@ export const useReportMeta = () => {
     return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
 };
 
-export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
-    return useQuery<BufferPage[], AxiosError>(['get-buffer-pages', operationId, address, bufferType], () =>
-        fetchBufferPages(operationId, address, bufferType),
+export const useBufferPages = (
+    operationId: number,
+    address?: number | string,
+    bufferType?: BufferType,
+    deviceId?: number,
+) => {
+    return useQuery<BufferPage[], AxiosError>(['get-buffer-pages', operationId, address, bufferType, deviceId], () =>
+        fetchBufferPages(operationId, address, bufferType, deviceId),
     );
 };
 

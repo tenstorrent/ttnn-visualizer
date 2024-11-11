@@ -108,6 +108,7 @@ function BufferSummary() {
                         <BufferSummaryPlotRenderer
                             buffersByOperation={buffersByOperation}
                             tensorListByOperation={tensorListByOperation}
+                            deviceId={deviceId}
                         />
                     </div>
 
