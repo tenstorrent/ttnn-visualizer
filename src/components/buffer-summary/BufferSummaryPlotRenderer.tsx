@@ -28,9 +28,14 @@ const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 interface BufferSummaryPlotRendererProps {
     buffersByOperation: BuffersByOperationData[];
     tensorListByOperation: HistoricalTensorsByOperation;
+    deviceId: number;
 }
 
-function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }: BufferSummaryPlotRendererProps) {
+function BufferSummaryPlotRenderer({
+    buffersByOperation,
+    tensorListByOperation,
+    deviceId,
+}: BufferSummaryPlotRendererProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
@@ -44,8 +49,8 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
         [buffersByOperation],
     );
 
-    // Will need refactoring to handle multiple devices
-    const memorySize = !isLoadingDevices && devices ? devices[0].worker_l1_size : 0;
+    // TODO: Multi device support
+    const memorySize = !isLoadingDevices && devices ? devices[deviceId].worker_l1_size : 0;
 
     const zoomedMemorySize = useMemo(() => {
         let minValue: undefined | number;
