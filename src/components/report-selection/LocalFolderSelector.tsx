@@ -4,20 +4,20 @@
 
 import { Button, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ChangeEvent, type FC, useContext, useEffect, useState } from 'react';
+import { ChangeEvent, type FC, useContext, useState } from 'react';
 
-import { useAtom } from 'jotai';
-import { useQueryClient } from 'react-query';
+import { useQuery, useQueryClient } from 'react-query';
 import { useNavigate } from 'react-router';
 import 'styles/components/FolderPicker.scss';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import ROUTES from '../../definitions/routes';
-import useLocalConnection from '../../hooks/useLocal';
 import { SocketContext } from '../../libs/SocketProvider';
 import { FileStatus } from '../../model/APIData';
-import { reportLocationAtom } from '../../store/app';
 import FileStatusOverlay from '../FileStatusOverlay';
 import FileStatusWrapper from '../FileStatusOverlayWrapper';
+import useSocketUpload from '../../hooks/useSocketUpload';
+import useLocal from '../../hooks/useLocal';
+import { fetchTabSession } from '../../hooks/useAPI';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -36,15 +36,25 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const { uploadDirectory } = useContext(SocketContext)
-    const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
+    const { mountLocalFolder } = useLocal();
+    const { socket } = useContext(SocketContext);
+    const { data: tabSession, refetch: refetchSession } = useQuery('tabSession', {
+        queryFn: fetchTabSession,
+        initialData: null,
+    });
 
-    const { uploadLocalFolder } = useLocalConnection();
+    const onUploadComplete = async ({ directoryName }: { directoryName: string }) => {
+        await mountLocalFolder({ reportFolder: directoryName });
+        await refetchSession();
+    };
+
+    const { uploadDirectory, progress, isUploading } = useSocketUpload({ socket, onUploadFinished: onUploadComplete });
+
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
-    const [isUploading, setIsUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
 
-    const isLocalReportMounted = !isUploading && reportLocation === 'local';
+    const isLocalReportMounted =
+        tabSession?.active_report && !tabSession.remote_connection && !tabSession.remote_folder;
 
     /**
      * This is a temporrary solution until we support Safari
@@ -53,56 +63,20 @@ const LocalFolderOptions: FC = () => {
     const isSafari = ua.includes('safari') && !ua.includes('chrome') && !ua.includes('android');
 
     const handleDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
+        // TODO Validate files before sending
         if (!e.target.files) {
             return;
         }
         const { files } = e.target;
-        const connectionStatus: ConnectionStatus = {
-            status: ConnectionTestStates.OK,
-            message: 'Files uploaded successfully',
-        };
-
-        setIsUploading(true);
-
         setLocalUploadLabel(`${files.length} files selected.`);
-        uploadDirectory(files)
-        // const response = await uploadLocalFolder(files);
-
-        // if (response.status !== 200) {
-        //     connectionStatus.status = ConnectionTestStates.FAILED;
-        //     connectionStatus.message = 'Unable to upload selected directory.';
-        // }
-
-        // // Streaming response requires casting string to JSON
-        // const responseData = JSON.parse(response.data)
-
-        // if (responseData.status !== ConnectionTestStates.OK) {
-        //     connectionStatus.status = ConnectionTestStates.FAILED;
-        //     connectionStatus.message = 'Selected directory does not contain a valid report.';
-        // }
-
-        // queryClient.clear();
-        // setLocalUploadLabel(`${files.length} files uploaded`);
-        // setIsUploading(false);
-        // setFolderStatus(connectionStatus);
-        // setReportLocation('local');
+        uploadDirectory(files);
     };
 
     const viewOperation = () => {
         // keeping this here temporarily until proven otherwise
         queryClient.clear();
-
         navigate(ROUTES.OPERATIONS);
     };
-
-    useEffect(() => {
-        if (isUploading) {
-            setFolderStatus({
-                status: ConnectionTestStates.PROGRESS,
-                message: 'Files uploading...',
-            });
-        }
-    }, [isUploading]);
 
     return (
         <>
@@ -155,10 +129,10 @@ const LocalFolderOptions: FC = () => {
                                 open={
                                     isUploading ||
                                     [FileStatus.DOWNLOADING, FileStatus.COMPRESSING, FileStatus.STARTED].includes(
-                                        fileProgress?.status,
+                                        progress?.status,
                                     )
                                 }
-                                progress={fileProgress}
+                                progress={progress}
                             />
                         )}
                     </FileStatusWrapper>

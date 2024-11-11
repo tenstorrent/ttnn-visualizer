@@ -4,7 +4,7 @@ import { Socket, io } from 'socket.io-client';
 import { getOrCreateTabId } from './axiosInstance';
 
 // Define the type for the socket
-export type SocketContextType = { socket: Socket, uploadDirectory: any }
+export type SocketContextType = { socket: Socket; uploadDirectory: any };
 
 // Initialize the socket connection (replace with your backend URL)
 const socket = io(`http://localhost:8000?tabId=${getOrCreateTabId()}`);
@@ -47,7 +47,9 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     const CHUNK_SIZE = 64 * 1024; // 64 KB per chunk
 
     const uploadDirectory = useCallback((files: File[]) => {
-        if (files.length === 0) return;
+        if (files.length === 0) {
+            return;
+        }
 
         const topLevelDirectory = files[0].webkitRelativePath.split('/')[0];
 
@@ -60,7 +62,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
                 reader.onload = (event) => {
                     if (event.target?.result) {
-                        // Emit the chunk to the server
                         socket.emit('upload-report', {
                             directory: topLevelDirectory,
                             fileName: fullRelativePath,
@@ -89,10 +90,5 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         });
     }, []);
 
-
-    return (
-        <SocketContext.Provider value={{ socket, uploadDirectory }}>
-            {children}
-        </SocketContext.Provider>
-    );
+    return <SocketContext.Provider value={{ socket, uploadDirectory }}>{children}</SocketContext.Provider>;
 };

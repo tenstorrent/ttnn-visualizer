@@ -126,32 +126,24 @@ def register_handlers(socketio_instance):
         if not (directory and file_name and chunk is not None):
             return {"error": "Invalid data received"}
 
-        # Create a unique key for the file being uploaded
         file_key = f"{directory}/{file_name}"
 
-        # Initialize storage for this file if not already present
         if file_key not in file_chunks:
             file_chunks[file_key] = []
 
-        # Append the chunk to this file's list of chunks
         file_chunks[file_key].append(chunk)
 
         if is_last_chunk:
-            # Once all chunks are received, combine and save the file
-            save_path = os.path.join(
-                target_directory, file_name
-            )  # Includes relative path
-            print(f"Writing file: {save_path}")
-            os.makedirs(
-                os.path.dirname(save_path), exist_ok=True
-            )  # Ensure directories exist
+            save_path = os.path.join(target_directory, file_name)
 
-            # Write the combined chunks to the file
+            print(f"Writing file: {save_path}")
+
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
             with open(save_path, "wb") as f:
                 for chunk in file_chunks[file_key]:
                     f.write(chunk)
 
-            # Cleanup the file chunks from memory
             del file_chunks[file_key]
 
             print(f"File {file_name} saved successfully at {save_path}")
