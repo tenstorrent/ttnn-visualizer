@@ -12,16 +12,12 @@ import { FragmentationEntry } from '../../model/APIData';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
-import { isEqual } from '../../functions/math';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
-import { BufferType } from '../../model/BufferType';
-import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 import {
     CBRenderConfiguration,
     CONDENSED_PLOT_CHUNK_COLOR,
-    DRAMRenderConfiguration,
     L1RenderConfiguration,
     PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
@@ -35,13 +31,15 @@ import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
 import GlobalSwitch from '../GlobalSwitch';
 import TensorDetailsList from './TensorDetailsList';
+import { BufferType } from '../../model/BufferType';
+import DRAMPlots from './DRAMPlots';
 
 interface OperationDetailsProps {
     operationId: number;
 }
 
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
-const DRAM_PADDING_RATIO = 0.9998;
+
 const MAX_LEGEND_LENGTH = 20;
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
@@ -97,11 +95,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { chartData, memory, fragmentation, cbChartData, cbChartDataByOperation } = details.memoryData();
     const { chartData: previousChartData, memory: previousMemory } = previousDetails.memoryData();
 
-    const { chartData: dramData, memory: dramMemory } = details.memoryData(BufferType.DRAM);
-    const { chartData: previousDramData, memory: previousDramMemory } = previousDetails.memoryData(BufferType.DRAM);
-
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
-    const dramMemoryReport: FragmentationEntry[] = [...dramMemory].sort((a, b) => a.address - b.address);
+
     const memoryReportWithCB: FragmentationEntry[] = [
         ...memoryReport,
         ...details.deviceOperations
@@ -155,27 +150,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     if (plotZoomRangeEnd < plotZoomRangeStart) {
         plotZoomRangeStart = 0;
         plotZoomRangeEnd = memorySizeL1;
-    }
-
-    let dramPlotZoomRangeStart =
-        Math.min(dramMemory[0]?.address || DRAM_MEMORY_SIZE, previousDramMemory[0]?.address || DRAM_MEMORY_SIZE) *
-        DRAM_PADDING_RATIO;
-
-    let dramPlotZoomRangeEnd =
-        Math.max(
-            dramMemory.length > 0
-                ? dramMemory[dramMemory.length - 1].address + dramMemory[dramMemory.length - 1].size
-                : 0,
-            previousDramMemory.length > 0
-                ? previousDramMemory[previousDramMemory.length - 1].address +
-                      previousDramMemory[previousDramMemory.length - 1].size
-                : 0,
-        ) *
-        (1 / DRAM_PADDING_RATIO);
-
-    if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
-        dramPlotZoomRangeStart = 0;
-        dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
     }
 
     const updateBufferFocus = (address?: number, tensorId?: number): void => {
@@ -244,17 +218,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     //     const { address } = previousMemory[event.points[0].curveNumber];
     //     setSelectedTensorAddress(address);
     // };
-
-    const dramHasntChanged = isEqual(dramMemory, previousDramMemory);
-
-    const dramDelta = dramMemoryReport.filter(
-        (chunk) => !chunk.empty && !previousDramMemory.find((c) => c.address === chunk.address),
-    );
-    const reverseDramDelta = previousDramMemory.filter(
-        (chunk) => !dramMemoryReport.find((c) => c.address === chunk.address),
-    );
-
-    const dramDeltaObject = details.getMemoryDelta(dramDelta, reverseDramDelta);
 
     return (
         <>
@@ -512,61 +475,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             <>
                                 <h3>DRAM</h3>
 
-                                <MemoryPlotRenderer
-                                    title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
-                                    className={classNames('dram-memory-renderer', {
-                                        'empty-plot': previousDramData.length === 0,
-                                        'identical-plot': dramHasntChanged,
-                                    })}
-                                    plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
-                                    chartDataList={[previousDramData]}
-                                    isZoomedIn={zoomedInViewMainMemory}
-                                    memorySize={DRAM_MEMORY_SIZE}
-                                    configuration={DRAMRenderConfiguration}
+                                <DRAMPlots
+                                    details={details}
+                                    previousDetails={previousDetails}
+                                    zoomedInViewMainMemory={zoomedInViewMainMemory}
+                                    maxLegendLength={MAX_LEGEND_LENGTH}
+                                    onDramBufferClick={onDramBufferClick}
+                                    onDramDeltaClick={onDramDeltaClick}
+                                    onLegendClick={onLegendClick}
                                 />
-
-                                <MemoryPlotRenderer
-                                    title='Current Summarized DRAM Report'
-                                    className={classNames('dram-memory-renderer', {
-                                        'empty-plot': dramData.length === 0,
-                                    })}
-                                    plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
-                                    chartDataList={[dramData]}
-                                    isZoomedIn={zoomedInViewMainMemory}
-                                    memorySize={DRAM_MEMORY_SIZE}
-                                    onBufferClick={onDramBufferClick}
-                                    configuration={DRAMRenderConfiguration}
-                                />
-
-                                <MemoryPlotRenderer
-                                    title='DRAM Delta (difference between current and previous operation)'
-                                    className={classNames('dram-memory-renderer', {
-                                        'empty-plot': dramDeltaObject.chartData.length === 0,
-                                    })}
-                                    plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
-                                    chartDataList={[dramDeltaObject.chartData]}
-                                    isZoomedIn={zoomedInViewMainMemory}
-                                    memorySize={DRAM_MEMORY_SIZE}
-                                    onBufferClick={onDramDeltaClick}
-                                    configuration={DRAMRenderConfiguration}
-                                />
-
-                                <div
-                                    className={classNames('legend', {
-                                        'lengthy-legend': dramMemoryReport.length > MAX_LEGEND_LENGTH,
-                                    })}
-                                >
-                                    {dramMemoryReport.map((chunk) => (
-                                        <MemoryLegendElement
-                                            chunk={chunk}
-                                            key={chunk.address}
-                                            memSize={DRAM_MEMORY_SIZE}
-                                            selectedTensorAddress={selectedAddress}
-                                            operationDetails={details}
-                                            onLegendClick={onLegendClick}
-                                        />
-                                    ))}
-                                </div>
                             </>
                         )}
 
