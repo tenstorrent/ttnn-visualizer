@@ -416,7 +416,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         'empty-plot':
                                             chartData.length === 0 &&
                                             cbChartDataByOperation.size === 0 &&
-                                            l1Small.memory.length > 0,
+                                            l1Small.memory.length === 0,
                                     })}
                                     isZoomedIn={zoomedInViewMainMemory}
                                     plotZoomRange={[
