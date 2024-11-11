@@ -95,6 +95,7 @@ const LocalFolderOptions: FC = () => {
             setFolderStatus({ status: ConnectionTestStates.FAILED, message: 'Invalid report directory' });
         } else {
             setLocalUploadLabel(`${files.length} files selected.`);
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
             uploadDirectory(files);
         }
     };

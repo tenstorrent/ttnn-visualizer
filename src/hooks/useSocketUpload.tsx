@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Socket } from 'socket.io-client';
 import { FileProgress, FileStatus } from '../model/APIData';
 
@@ -8,6 +8,7 @@ interface UseSocketUploadProps {
 }
 
 const CHUNK_SIZE = 1024 * 64; // Adjust chunk size as needed
+const UPDATE_INTERVAL = 1000; // 1-second interval for progress updates
 
 const useSocketUpload = (props: UseSocketUploadProps) => {
     const { socket, onUploadFinished } = props;
@@ -20,11 +21,17 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
         status: FileStatus.INACTIVE,
     });
 
+    const currentFileRef = useRef<{ fileName: string; percentOfCurrent: number }>({
+        fileName: '',
+        percentOfCurrent: 0,
+    });
+
     const uploadDirectory = useCallback(
-        (files: FileList) => {
+        async (files: FileList) => {
             if (files.length === 0) {
                 return;
             }
+
             socket.emit('ping', { message: 'transferringFiles' });
             const topLevelDirectory = files[0].webkitRelativePath.split('/')[0];
             setIsUploading(true);
@@ -36,10 +43,13 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                 status: FileStatus.STARTED,
             });
 
-            // Process each file sequentially in chunks
-            const processFile = (file: File): Promise<void> => {
+            let updateTimer: number; // Use number for browser compatibility
+
+            const processFile = async (file: File): Promise<void> => {
                 let offset = 0;
                 const fullRelativePath = file.webkitRelativePath;
+
+                currentFileRef.current.fileName = fullRelativePath;
 
                 return new Promise((resolve) => {
                     const readChunk = () => {
@@ -56,23 +66,7 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                                 });
 
                                 offset += CHUNK_SIZE;
-                                const percentOfCurrent = Math.min((offset / file.size) * 100, 100);
-
-                                setProgress((prev) => {
-                                    if (
-                                        percentOfCurrent - prev.percentOfCurrent >= 2 ||
-                                        percentOfCurrent === 100 ||
-                                        prev.currentFileName !== fullRelativePath
-                                    ) {
-                                        return {
-                                            ...prev,
-                                            currentFileName: fullRelativePath,
-                                            percentOfCurrent,
-                                            status: FileStatus.UPLOADING,
-                                        };
-                                    }
-                                    return prev; // Return the previous state if no update is necessary
-                                });
+                                currentFileRef.current.percentOfCurrent = Math.min((offset / file.size) * 100, 100);
 
                                 if (offset < file.size) {
                                     setTimeout(readChunk, 10); // Small delay to avoid overloading
@@ -98,25 +92,48 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                 });
             };
 
-            // Process each file in sequence
             const uploadFilesSequentially = async () => {
+                // Set up a timer to update the UI every 1 second
+                updateTimer = setInterval(() => {
+                    setProgress((prev) => ({
+                        ...prev,
+                        status: FileStatus.UPLOADING,
+                        currentFileName: currentFileRef.current.fileName,
+                        percentOfCurrent: currentFileRef.current.percentOfCurrent,
+                    }));
+                }, UPDATE_INTERVAL);
+
                 for (const file of Array.from(files)) {
+                    // eslint-disable-next-line no-await-in-loop
                     await processFile(file);
                     setProgress((prev) => ({
                         ...prev,
                         finishedFiles: prev.finishedFiles + 1,
                     }));
                 }
+
+                clearInterval(updateTimer); // Clear interval after all files are processed
                 setIsUploading(false);
+
                 if (onUploadFinished) {
                     onUploadFinished({ directoryName: topLevelDirectory });
                 }
             };
 
-            uploadFilesSequentially();
+            await uploadFilesSequentially(); // Await the uploadFilesSequentially function
+
+            // eslint-disable-next-line consistent-return
+            return () => clearInterval(updateTimer); // Ensure cleanup in case of component unmount
         },
         [socket, onUploadFinished],
     );
+
+    useEffect(() => {
+        // Cleanup when the component unmounts if uploading
+        return () => {
+            setIsUploading(false);
+        };
+    }, []);
 
     return { isUploading, uploadDirectory, progress };
 };
