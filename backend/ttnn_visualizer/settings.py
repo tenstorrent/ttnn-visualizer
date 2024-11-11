@@ -10,7 +10,7 @@ class DefaultConfig(object):
     DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))
     TESTING = False
     PRINT_ENV = True
-
+    MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20 MB
     # Path Settings
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")

@@ -7,4 +7,6 @@ flask_static_digest = FlaskStaticDigest()
 # Initialize Flask SQLAlchemy
 db = SQLAlchemy()
 
-socketio = SocketIO(cors_allowed_origins="*", async_mode="gevent")
+socketio = SocketIO(
+    cors_allowed_origins="*", async_mode="gevent", max_http_buffer_size=20 * 1024 * 1024
+)

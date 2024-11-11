@@ -8,6 +8,7 @@ interface UseSocketUploadProps {
 }
 
 const CHUNK_SIZE = 1024 * 64; // 64KB
+
 const UPDATE_INTERVAL = 1000; // 1-second interval for progress updates
 
 const useSocketUpload = (props: UseSocketUploadProps) => {
@@ -31,8 +32,6 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
             if (files.length === 0) {
                 return;
             }
-
-            socket.emit('ping', { message: 'transferringFiles' });
             const topLevelDirectory = files[0].webkitRelativePath.split('/')[0];
             setIsUploading(true);
             setProgress({
