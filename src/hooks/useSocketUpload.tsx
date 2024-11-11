@@ -7,7 +7,7 @@ interface UseSocketUploadProps {
     onUploadFinished?: ({ directoryName }: { directoryName: string }) => void;
 }
 
-const CHUNK_SIZE = 1024 * 64; // Adjust chunk size as needed
+const CHUNK_SIZE = 1024 * 1024; // Adjust chunk size as needed
 const UPDATE_INTERVAL = 1000; // 1-second interval for progress updates
 
 const useSocketUpload = (props: UseSocketUploadProps) => {
