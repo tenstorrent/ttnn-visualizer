@@ -33,8 +33,9 @@ const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo element
 const TensorList = () => {
     const location = useLocation();
     const navigate = useNavigate();
+    const deviceId = 0;
     const { data: operations } = useOperationsList();
-    const { data: fetchedTensors, error, isLoading } = useTensors();
+    const { data: fetchedTensors, error, isLoading } = useTensors(deviceId);
     const scrollElementRef = useRef(null);
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [filterQuery, setFilterQuery] = useState('');
