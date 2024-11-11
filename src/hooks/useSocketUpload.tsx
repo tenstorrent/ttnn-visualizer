@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Socket } from 'socket.io-client';
 import { FileProgress, FileStatus } from '../model/APIData';
 
@@ -10,9 +10,9 @@ interface UseSocketUploadProps {
 const CHUNK_SIZE = 1024 * 64; // Adjust chunk size as needed
 
 const useSocketUpload = (props: UseSocketUploadProps) => {
+    console.info(props.socket?.connected);
     const { socket } = props;
     const onUploadFinished = props?.onUploadFinished;
-    const socketRef = useRef(socket);
     const [isUploading, setIsUploading] = useState(false);
     const [progress, setProgress] = useState<FileProgress>({
         currentFileName: '',
@@ -27,7 +27,7 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
             if (files.length === 0) {
                 return;
             }
-
+            socket.emit('ping', { message: 'transferingFiles' });
             const topLevelDirectory = files[0].webkitRelativePath.split('/')[0];
             setIsUploading(true);
             setProgress({
@@ -49,14 +49,12 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
 
                         reader.onload = (event) => {
                             if (event.target?.result) {
-                                const uploadData = {
+                                socket.emit('upload-report', {
                                     directory: topLevelDirectory,
                                     fileName: fullRelativePath,
-                                    chunk: event.target.result as ArrayBuffer,
+                                    chunk: event.target.result,
                                     isLastChunk: offset + CHUNK_SIZE >= file.size,
-                                };
-
-                                socketRef.current.emit('upload-report', uploadData);
+                                });
 
                                 offset += CHUNK_SIZE;
                                 const percentOfCurrent = Math.min((offset / file.size) * 100, 100);
@@ -114,16 +112,6 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
         },
         [progress.percentOfCurrent],
     );
-
-    useEffect(() => {
-        const currentSocket = socketRef.current;
-
-        return () => {
-            if (currentSocket) {
-                currentSocket.disconnect();
-            }
-        };
-    }, []);
 
     return { isUploading, uploadDirectory, progress };
 };

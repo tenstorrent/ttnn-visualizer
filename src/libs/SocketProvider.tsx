@@ -1,16 +1,13 @@
 /* eslint-disable no-console */
-import React, { ReactNode, createContext, useCallback, useEffect } from 'react';
+import React, { ReactNode, createContext, useEffect, useMemo } from 'react';
 import { Socket, io } from 'socket.io-client';
 import { getOrCreateTabId } from './axiosInstance';
 
 // Define the type for the socket
-export type SocketContextType = { socket: Socket; uploadDirectory: any };
-
-// Initialize the socket connection (replace with your backend URL)
-const socket = io(`http://localhost:8000?tabId=${getOrCreateTabId()}`);
+export type SocketContextType = { socket: Socket | null };
 
 // Create the SocketContext with a default value of `null`
-export const SocketContext = createContext<SocketContextType>(null as any);
+export const SocketContext = createContext<SocketContextType>({ socket: null });
 
 // TypeScript interface for the provider props
 interface SocketProviderProps {
@@ -18,77 +15,43 @@ interface SocketProviderProps {
 }
 
 export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
-    useEffect(() => {
-        // Debugging: Listen for connection and disconnection events
-        socket.on('connect', () => {
+    // Initialize the socket connection in useMemo to ensure it's created only once
+    const socket = useMemo(() => {
+        const newSocket = io(`http://127.0.0.1:8000?tabId=${getOrCreateTabId()}`);
+        newSocket.on('connect_error', (error: Error) => {
+            console.error('Connection error:', error.message);
+        });
+        newSocket.on('connect', () => {
             console.log(`Socket connected with ID: ${socket.id}`);
+            socket.emit('ping', { message: 'Connected' });
         });
 
-        socket.on('disconnect', (reason: string) => {
+        newSocket.on('disconnect', (reason: string) => {
             console.log(`Socket disconnected: ${reason}`);
         });
 
-        socket.on('connect_error', (error: Error) => {
+        newSocket.on('connect_error', (error: Error) => {
             console.error(`Socket connection error: ${error.message}`);
         });
 
-        socket.on('reconnect', (attemptNumber: number) => {
+        newSocket.on('reconnect', (attemptNumber: number) => {
             console.log(`Socket reconnected after ${attemptNumber} attempts`);
         });
+        return newSocket;
+    }, []);
 
+    useEffect(() => {
         return () => {
             socket.off('connect');
             socket.off('disconnect');
             socket.off('connect_error');
             socket.off('reconnect');
+            socket.disconnect(); // Optionally disconnect on unmount
         };
-    }, []);
+    }, [socket]);
 
-    const CHUNK_SIZE = 64 * 1024; // 64 KB per chunk
+    // Memoize the context value to prevent re-creating the object on every render
+    const contextValue = useMemo(() => ({ socket }), [socket]);
 
-    const uploadDirectory = useCallback((files: File[]) => {
-        if (files.length === 0) {
-            return;
-        }
-
-        const topLevelDirectory = files[0].webkitRelativePath.split('/')[0];
-
-        Array.from(files).forEach((file) => {
-            let offset = 0;
-            const fullRelativePath = file.webkitRelativePath; //
-            const readChunk = () => {
-                const reader = new FileReader();
-                const slice = file.slice(offset, offset + CHUNK_SIZE);
-
-                reader.onload = (event) => {
-                    if (event.target?.result) {
-                        socket.emit('upload-report', {
-                            directory: topLevelDirectory,
-                            fileName: fullRelativePath,
-                            chunk: event.target.result,
-                            isLastChunk: offset + CHUNK_SIZE >= file.size,
-                        });
-
-                        offset += CHUNK_SIZE;
-
-                        // Continue reading the next chunk if not done
-                        if (offset < file.size) {
-                            readChunk();
-                        }
-                    }
-                };
-
-                reader.onerror = (error) => {
-                    console.error('Error reading file chunk:', error);
-                };
-
-                reader.readAsArrayBuffer(slice);
-            };
-
-            // Start reading the first chunk
-            readChunk();
-        });
-    }, []);
-
-    return <SocketContext.Provider value={{ socket, uploadDirectory }}>{children}</SocketContext.Provider>;
+    return <SocketContext.Provider value={contextValue}>{children}</SocketContext.Provider>;
 };

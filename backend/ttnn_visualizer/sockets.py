@@ -6,7 +6,6 @@ from datetime import datetime
 from enum import Enum
 from logging import getLogger
 
-from flask import current_app
 from flask_socketio import join_room, disconnect, leave_room
 
 from ttnn_visualizer.utils import SerializeableDataclass
@@ -93,9 +92,19 @@ def register_handlers(socketio_instance):
             join_room(tab_id)  # Join the room identified by the tabId
             tab_clients[tab_id] = sid  # Store the socket ID associated with this tabId
             print(f"Joined room: {tab_id}")
+            socketio.emit("pong")
         else:
             print("No tabId provided, disconnecting client.")
             disconnect()
+
+    @socketio.on("ping")
+    def handle_ping(data):
+
+        from flask import request
+
+        tab_id = request.args.get("tabId")
+        print(f"Received ping from tabId: {tab_id}")
+        print(data)
 
     @socketio.on("disconnect")
     def handle_disconnect():
@@ -121,7 +130,6 @@ def register_handlers(socketio_instance):
         file_name = data.get("fileName")
         chunk = data.get("chunk")
         is_last_chunk = data.get("isLastChunk")
-        target_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
         if not (directory and file_name and chunk is not None):
             return {"error": "Invalid data received"}
@@ -134,9 +142,9 @@ def register_handlers(socketio_instance):
         file_chunks[file_key].append(chunk)
 
         if is_last_chunk:
-            save_path = os.path.join(target_directory, file_name)
+            save_path = os.path.join("/tmp", file_name)
 
-            print(f"Writing file: {save_path}")
+            logger.info(f"Writing file: {save_path}")
 
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
@@ -146,7 +154,7 @@ def register_handlers(socketio_instance):
 
             del file_chunks[file_key]
 
-            print(f"File {file_name} saved successfully at {save_path}")
+            logger.info(f"File {file_name} saved successfully at {save_path}")
             return {"status": "File uploaded successfully"}
 
         # Return success for each chunk received

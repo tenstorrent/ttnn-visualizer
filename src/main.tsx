@@ -71,7 +71,6 @@ const queryClient = new QueryClient({
 });
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <SocketProvider>
-
         <QueryClientProvider client={queryClient}>
             <HelmetProvider>
                 <React.StrictMode>
@@ -80,6 +79,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     </OverlaysProvider>
                 </React.StrictMode>
             </HelmetProvider>
-        </QueryClientProvider>,
-    </SocketProvider>
+        </QueryClientProvider>
+    </SocketProvider>,
 );
