@@ -31,8 +31,6 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
             if (files.length === 0) {
                 return;
             }
-
-            socket.emit('ping', { message: 'transferringFiles' });
             const topLevelDirectory = files[0].webkitRelativePath.split('/')[0];
             setIsUploading(true);
             setProgress({
