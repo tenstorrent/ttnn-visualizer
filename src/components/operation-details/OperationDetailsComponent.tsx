@@ -30,11 +30,11 @@ import OperationArguments from '../OperationArguments';
 import { isDramActiveAtom, isL1ActiveAtom, selectedAddressAtom, showHexAtom } from '../../store/app';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
-import TensorDetailsComponent from './TensorDetailsComponent';
 import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
 import GlobalSwitch from '../GlobalSwitch';
+import TensorDetailsList from './TensorDetailsList';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -572,37 +572,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                         <hr />
 
-                        <div className='tensor-list'>
-                            <div className='inputs'>
-                                <h3>Inputs</h3>
-                                {details.inputs.map((tensor) => (
-                                    <TensorDetailsComponent
-                                        tensor={tensor}
-                                        key={tensor.id}
-                                        selectedAddress={selectedAddress}
-                                        onTensorClick={onTensorClick}
-                                        memorySize={memorySizeL1}
-                                        operationId={operationId}
-                                        zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
-                                    />
-                                ))}
-                            </div>
+                        <TensorDetailsList
+                            operationDetails={details}
+                            plotZoomRangeStart={plotZoomRangeStart}
+                            plotZoomRangeEnd={plotZoomRangeEnd}
+                            onTensorClick={onTensorClick}
+                        />
 
-                            <div className='outputs'>
-                                <h3>Outputs</h3>
-                                {details.outputs.map((tensor) => (
-                                    <TensorDetailsComponent
-                                        tensor={tensor}
-                                        key={tensor.id}
-                                        selectedAddress={selectedAddress}
-                                        onTensorClick={onTensorClick}
-                                        memorySize={memorySizeL1}
-                                        operationId={operationId}
-                                        zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
-                                    />
-                                ))}{' '}
-                            </div>
-                        </div>
                         {details.deviceOperations.length > 0 && (
                             <div className='device-operations'>
                                 <hr />
