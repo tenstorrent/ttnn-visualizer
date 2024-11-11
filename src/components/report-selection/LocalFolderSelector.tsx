@@ -14,7 +14,6 @@ import ROUTES from '../../definitions/routes';
 import { SocketContext } from '../../libs/SocketProvider';
 import { FileStatus } from '../../model/APIData';
 import FileStatusOverlay from '../FileStatusOverlay';
-import FileStatusWrapper from '../FileStatusOverlayWrapper';
 import useSocketUpload from '../../hooks/useSocketUpload';
 import useLocal from '../../hooks/useLocal';
 import { fetchTabSession } from '../../hooks/useAPI';
@@ -123,19 +122,15 @@ const LocalFolderOptions: FC = () => {
                     >
                         View report
                     </Button>
-                    <FileStatusWrapper>
-                        {(fileProgress) => (
-                            <FileStatusOverlay
-                                open={
-                                    isUploading ||
-                                    [FileStatus.DOWNLOADING, FileStatus.COMPRESSING, FileStatus.STARTED].includes(
-                                        progress?.status,
-                                    )
-                                }
-                                progress={progress}
-                            />
-                        )}
-                    </FileStatusWrapper>
+                    <FileStatusOverlay
+                        open={
+                            isUploading ||
+                            [FileStatus.DOWNLOADING, FileStatus.COMPRESSING, FileStatus.STARTED].includes(
+                                progress?.status,
+                            )
+                        }
+                        progress={progress}
+                    />
 
                     {folderStatus && !isUploading && (
                         <div className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}>
