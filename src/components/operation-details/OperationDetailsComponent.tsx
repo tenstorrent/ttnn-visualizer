@@ -413,7 +413,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 <MemoryPlotRenderer
                                     title='Current Summarized L1 Report'
                                     className={classNames('l1-memory-renderer', {
-                                        'empty-plot': chartData.length === 0,
+                                        'empty-plot':
+                                            chartData.length === 0 &&
+                                            cbChartDataByOperation.size === 0 &&
+                                            l1Small.memory.length > 0,
                                     })}
                                     isZoomedIn={zoomedInViewMainMemory}
                                     plotZoomRange={[
