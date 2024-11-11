@@ -43,12 +43,11 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                 status: FileStatus.STARTED,
             });
 
-            let updateTimer: number; // Use number for browser compatibility
+            let updateTimer: number;
 
             const processFile = async (file: File): Promise<void> => {
                 let offset = 0;
                 const fullRelativePath = file.webkitRelativePath;
-
                 currentFileRef.current.fileName = fullRelativePath;
 
                 return new Promise((resolve) => {
@@ -112,8 +111,15 @@ const useSocketUpload = (props: UseSocketUploadProps) => {
                     }));
                 }
 
-                clearInterval(updateTimer); // Clear interval after all files are processed
+                clearInterval(updateTimer); // Stop updates once all files are processed
                 setIsUploading(false);
+
+                // Set the final progress status to FINISHED
+                setProgress((prev) => ({
+                    ...prev,
+                    status: FileStatus.FINISHED,
+                    percentOfCurrent: 100, // Ensure 100% completion
+                }));
 
                 if (onUploadFinished) {
                     onUploadFinished({ directoryName: topLevelDirectory });
