@@ -3,6 +3,7 @@ from pathlib import Path
 
 import torch
 
+from ttnn_visualizer.models import TabSession
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.sftp_operations import read_remote_file
 
@@ -10,7 +11,7 @@ from ttnn_visualizer.sftp_operations import read_remote_file
 class TensorComparator:
     def __init__(self, session, db=None):
         self.session = session
-        self.report_path = Path(session.report_path).joinpath("tensors")
+        self.report_path = Path(session.report_path).parent.joinpath("tensors")
         self.db = (
             db if db else DatabaseQueries(session)
         )  # Use provided db or create a new instance
@@ -18,7 +19,7 @@ class TensorComparator:
     def compare_tensor(self, tensor_id, local=False):
         """Main method to compare tensors and return the absolute difference as a tensor."""
         if local:
-            comparison = self.db.query_global_tensor_comparisons_by_tensor_id(tensor_id)
+            comparison = self.db.query_local_comparison_records(tensor_id)
         else:
             comparison = self.db.query_global_tensor_comparisons_by_tensor_id(tensor_id)
 
@@ -58,6 +59,7 @@ class TensorComparator:
             return self._read_local_tensor(tensor_file_path)
 
     def _read_remote_tensor(self, tensor_file_path):
+        """Reads tensor from remote location."""
         tensor_content = read_remote_file(
             self.session.remote_connection, tensor_file_path
         )
@@ -67,14 +69,17 @@ class TensorComparator:
         return None
 
     def _read_local_tensor(self, tensor_file_path):
-        """Reads tensor from local file system."""
+        """Reads tensor from local file system using a buffer."""
         try:
-            return torch.load(tensor_file_path, map_location="cpu")
+            with open(tensor_file_path, "rb") as f:
+                buffer = BytesIO(f.read())
+                return torch.load(buffer, map_location="cpu")
         except FileNotFoundError:
             return None
 
     @staticmethod
     def make_torch_json_serializable(data):
+        """Recursively convert PyTorch tensors and complex data structures to JSON-serializable types."""
         if isinstance(data, torch.Tensor):
             return data.tolist()  # Convert tensor to list
         elif isinstance(data, dict):

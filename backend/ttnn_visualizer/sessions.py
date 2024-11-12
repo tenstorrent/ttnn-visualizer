@@ -38,7 +38,7 @@ def update_tab_session(
     )
 
     if session_data:
-        session_data.report_path = report_path
+        session_data.tensor_folder = report_path
         session_data.remote_folder = remote_folder_data
         session_data.remote_connection = remote_connection_data
         session_data.active_report = active_report

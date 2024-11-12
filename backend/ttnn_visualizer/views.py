@@ -11,6 +11,7 @@ from typing import List
 import torch
 from flask import Blueprint, Response, jsonify
 from flask import request, current_app
+from sqlalchemy.exc import NoSuchModuleError
 
 from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.enums import ConnectionTestStates
@@ -301,8 +302,6 @@ def read_tensor(tensor_id, session: TabSession):
             return Response(str(e), status=HTTPStatus.BAD_REQUEST)
         except ValueError as e:
             return Response(str(e), status=HTTPStatus.BAD_REQUEST)
-        finally:
-            return Response(status=HTTPStatus.NOT_FOUND)
 
 
 @api.route("/compare-tensors/<tensor_id>", methods=["GET"])
@@ -317,8 +316,8 @@ def compare_tensor(tensor_id, session: TabSession):
             return Response(str(e), status=HTTPStatus.BAD_REQUEST)
         except ValueError as e:
             return Response(str(e), status=HTTPStatus.BAD_REQUEST)
-        finally:
-            return Response(status=HTTPStatus.NOT_FOUND)
+        except ModuleNotFoundError as e:
+            return Response(str(e), status=HTTPStatus.BAD_REQUEST)
 
 
 @api.route("/operation-buffers/<operation_id>", methods=["GET"])
