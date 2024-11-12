@@ -37,7 +37,7 @@ const LocalFolderOptions: FC = () => {
     const queryClient = useQueryClient();
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
 
-    const { uploadLocalFolder } = useLocalConnection();
+    const { uploadLocalFolder, checkRequiredFiles, filterReportFiles } = useLocalConnection();
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploading, setIsUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
@@ -54,11 +54,24 @@ const LocalFolderOptions: FC = () => {
         if (!e.target.files) {
             return;
         }
-        const { files } = e.target;
+
+        const { files: unfilteredFiles } = e.target;
+        const files = filterReportFiles(unfilteredFiles);
+
         const connectionStatus: ConnectionStatus = {
             status: ConnectionTestStates.OK,
             message: 'Files uploaded successfully',
         };
+
+        const invalidReportStatus: ConnectionStatus = {
+            status: ConnectionTestStates.FAILED,
+            message: 'Selected directory does not contain a valid report',
+        };
+
+        if (!checkRequiredFiles(files)) {
+            setFolderStatus(invalidReportStatus);
+            return;
+        }
 
         setIsUploading(true);
 
