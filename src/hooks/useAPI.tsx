@@ -30,12 +30,14 @@ export const fetchBufferPages = async (
     operationId: number,
     address?: number | string,
     bufferType?: BufferType,
+    deviceId?: number,
 ): Promise<BufferPage[]> => {
     const response = await axiosInstance.get<BufferPage[]>(`/api/buffer-pages`, {
         params: {
             operation_id: operationId,
             address,
             buffer_type: bufferType,
+            deviceId,
         },
     });
     return response.data;
@@ -64,8 +66,12 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
     return defaultOperationDetailsData;
 };
 
-const fetchOperations = async (): Promise<OperationDescription[]> => {
-    const { data: operationList } = await axiosInstance.get<OperationDescription[]>('/api/operations');
+const fetchOperations = async (deviceId?: number): Promise<OperationDescription[]> => {
+    const { data: operationList } = await axiosInstance.get<OperationDescription[]>('/api/operations', {
+        params: {
+            deviceId,
+        },
+    });
 
     return operationList;
 };
@@ -100,10 +106,12 @@ export interface DeviceData {
 /** @description
  * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
  */
-const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
-    const params = { buffer_type: bufferType };
+const fetchAllBuffers = async (bufferType: BufferType | null, deviceId?: number): Promise<BuffersByOperationData[]> => {
+    const params = { buffer_type: bufferType, deviceId };
 
-    const { data: buffers } = await axiosInstance.get<BuffersByOperationData[]>('/api/operation-buffers', { params });
+    const { data: buffers } = await axiosInstance.get<BuffersByOperationData[]>('/api/operation-buffers', {
+        params,
+    });
 
     return buffers;
 };
@@ -126,8 +134,12 @@ const fetchDevices = async () => {
     return meta;
 };
 
-export const useOperationsList = () => {
-    return useQuery<OperationDescription[], AxiosError>('get-operations', fetchOperations);
+export const useOperationsList = (deviceId?: number) => {
+    return useQuery<OperationDescription[], AxiosError>({
+        queryFn: () => fetchOperations(deviceId),
+        queryKey: ['get-operations', deviceId],
+        retry: false,
+    });
 };
 
 export const useOperationDetails = (operationId: number | null) => {
@@ -185,16 +197,24 @@ export const useReportMeta = () => {
     return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
 };
 
-export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
-    return useQuery<BufferPage[], AxiosError>(['get-buffer-pages', operationId, address, bufferType], () =>
-        fetchBufferPages(operationId, address, bufferType),
+export const useBufferPages = (
+    operationId: number,
+    address?: number | string,
+    bufferType?: BufferType,
+    deviceId?: number,
+) => {
+    return useQuery<BufferPage[], AxiosError>(['get-buffer-pages', operationId, address, bufferType, deviceId], () =>
+        fetchBufferPages(operationId, address, bufferType, deviceId),
     );
 };
 
-export const fetchTensors = async (): Promise<TensorData[]> => {
+export const fetchTensors = async (deviceId?: number): Promise<TensorData[]> => {
     try {
         const { data: tensorList } = await axiosInstance.get<TensorData[]>('/api/tensors', {
             maxRedirects: 1,
+            params: {
+                deviceId,
+            },
         });
 
         return tensorList;
@@ -213,8 +233,12 @@ export const fetchTensors = async (): Promise<TensorData[]> => {
     return [defaultTensorData];
 };
 
-export const useTensors = () => {
-    return useQuery<TensorData[], AxiosError>('get-tensors', fetchTensors);
+export const useTensors = (deviceId?: number) => {
+    return useQuery<TensorData[], AxiosError>({
+        queryFn: () => fetchTensors(deviceId),
+        queryKey: ['get-tensors', deviceId],
+        retry: false,
+    });
 };
 
 export const useDevices = () => {
@@ -242,8 +266,8 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
     });
 };
 
-export const useBuffers = (bufferType: BufferType) => {
+export const useBuffers = (bufferType: BufferType, deviceId?: number) => {
     return useQuery('get-buffers', {
-        queryFn: () => fetchAllBuffers(bufferType),
+        queryFn: () => fetchAllBuffers(bufferType, deviceId),
     });
 };

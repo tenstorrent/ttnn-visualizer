@@ -4,45 +4,6 @@
 
 @use '../definitions/colours' as *;
 
-.dram-memory-renderer,
-.l1-memory-renderer {
-    .memory-plot {
-        width: 100%;
-        margin-right: 10px;
-
-        &.js-plotly-plot {
-            .xaxislayer-above {
-                // Fixes the issue where the first x-axis tick is not visible (thanks Plotly)
-                .xtick:first-child text {
-                    /* stylelint-disable-next-line declaration-no-important */
-                    opacity: 1 !important; // Need this to overwrite inline style
-                    text-anchor: start;
-                }
-            }
-        }
-    }
-
-    &.circular-buffers {
-        margin-bottom: 5px;
-    }
-
-    &.identical-plot {
-        .memory-plot {
-            opacity: 0.5;
-        }
-    }
-
-    &.empty-plot {
-        opacity: 0.4;
-    }
-
-    .plot-title {
-        font-weight: 500;
-        margin-bottom: -14px;
-        margin-top: 0;
-    }
-}
-
 .operation-details-component {
     .outside-click {
         background-color: rgb(255 0 0 / 47%);
@@ -167,12 +128,6 @@
                 font-size: 0.875rem;
             }
         }
-    }
-
-    .tensor-list {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 5px;
     }
 
     .plot-title {
