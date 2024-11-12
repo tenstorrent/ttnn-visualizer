@@ -275,6 +275,22 @@ class DatabaseQueries:
         for row in rows:
             yield TensorComparisonRecord(*row)
 
+    def query_local_tensor_comparisons_by_tensor_id(
+        self, tensor_id
+    ) -> Optional[TensorComparisonRecord]:
+        query = "SELECT * FROM global_tensor_comparison_records WHERE tensor_id = ?"
+        row = self.query_runner.execute_query(query, tensor_id)
+        if row:
+            return TensorComparisonRecord(*row)
+
+    def query_global_tensor_comparisons_by_tensor_id(
+        self, tensor_id
+    ) -> Optional[TensorComparisonRecord]:
+        query = "SELECT * FROM global_tensor_comparison_records WHERE tensor_id = ?"
+        row = self.query_runner.execute_query(query, tensor_id)
+        if row:
+            return TensorComparisonRecord(*row)
+
     def query_global_tensor_comparisons_by_tensor_ids(
         self, tensor_ids
     ) -> Generator[TensorComparisonRecord, None, None]:

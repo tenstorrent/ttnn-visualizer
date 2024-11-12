@@ -4,6 +4,7 @@ import json
 import logging
 import time
 from http import HTTPStatus
+from multiprocessing.managers import Value
 from pathlib import Path
 from typing import List
 
@@ -19,6 +20,7 @@ from ttnn_visualizer.models import (
     RemoteConnection,
     StatusMessage,
     TabSession,
+    TensorComparisonRecord,
 )
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path, check_sqlite_path
@@ -47,6 +49,7 @@ from ttnn_visualizer.sockets import (
     FileStatus,
 )
 from ttnn_visualizer.ssh_client import get_client
+from ttnn_visualizer.tensor_comparison import TensorComparator
 from ttnn_visualizer.utils import (
     read_last_synced_file,
     timer,
@@ -289,43 +292,33 @@ def get_operations_buffers(session: TabSession):
 @api.route("/read-tensor/<tensor_id>", methods=["GET"])
 @with_session
 def read_tensor(tensor_id, session: TabSession):
-    if session.remote_connection:
+    local = request.args.get("local", False)
+    with DatabaseQueries(session) as db:
+        comparator = TensorComparator(session=session, db=db)
         try:
-            if session.remote_folder and session.remote_folder.remotePath:
-                model = read_remote_tensor(
-                    session.remote_connection, session.remote_folder, tensor_id
-                )
-                return make_torch_json_serializable(model)
-        except RemoteConnectionException:
-            return Response(status=HTTPStatus.NOT_FOUND)
-    return Response(status=HTTPStatus.NOT_FOUND)
-
-
-@api.route("/compare-tensors/<tensor_id1>/<tensor_id2>", methods=["GET"])
-@with_session
-def compare_tensor(tensor_id1, tensor_id2, session: TabSession):
-    if session.remote_connection:
-        try:
-            if session.remote_folder and session.remote_folder.remotePath:
-                tensor_1 = read_remote_tensor(
-                    session.remote_connection, session.remote_folder, tensor_id1
-                )
-                tensor_2 = read_remote_tensor(
-                    session.remote_connection, session.remote_folder, tensor_id2
-                )
-
-                if tensor_1 is not None and tensor_2 is not None:
-                    # Compare tensors and get the difference as JSON
-                    diff_json = compare_tensors(tensor_1, tensor_2)
-
-                    # Return the difference as a JSON response
-                    return diff_json
-
-        except RemoteConnectionException:
-            return Response(status=HTTPStatus.NOT_FOUND)
+            return comparator.get_tensor_json(tensor_id)
+        except RemoteConnectionException as e:
+            return Response(str(e), status=HTTPStatus.BAD_REQUEST)
         except ValueError as e:
             return Response(str(e), status=HTTPStatus.BAD_REQUEST)
-    return Response(status=HTTPStatus.NOT_FOUND)
+        finally:
+            return Response(status=HTTPStatus.NOT_FOUND)
+
+
+@api.route("/compare-tensors/<tensor_id>", methods=["GET"])
+@with_session
+def compare_tensor(tensor_id, session: TabSession):
+    local = request.args.get("local", False)
+    with DatabaseQueries(session) as db:
+        comparator = TensorComparator(session=session, db=db)
+        try:
+            return comparator.get_comparison_json(tensor_id, local)
+        except RemoteConnectionException as e:
+            return Response(str(e), status=HTTPStatus.BAD_REQUEST)
+        except ValueError as e:
+            return Response(str(e), status=HTTPStatus.BAD_REQUEST)
+        finally:
+            return Response(status=HTTPStatus.NOT_FOUND)
 
 
 @api.route("/operation-buffers/<operation_id>", methods=["GET"])
