@@ -27,10 +27,10 @@ import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
 import GlobalSwitch from '../GlobalSwitch';
-import TensorDetailsList from './TensorDetailsList';
 import { BufferType } from '../../model/BufferType';
 import DRAMPlots from './DRAMPlots';
 import L1Plots from './L1Plots';
+import TensorDetailsList from './TensorDetailsList';
 
 interface OperationDetailsProps {
     operationId: number;
