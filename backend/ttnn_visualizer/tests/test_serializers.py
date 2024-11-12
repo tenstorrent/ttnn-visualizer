@@ -217,6 +217,8 @@ class TestSerializers(unittest.TestCase):
             outputs,
             stack_trace,
             tensors,
+            [],
+            [],
             devices,
             producers_consumers,
             device_operations,
@@ -239,6 +241,7 @@ class TestSerializers(unittest.TestCase):
                 {
                     "address": 1000,
                     "buffer_type": 0,
+                    "comparison": {},
                     "consumers": [3],
                     "device_id": 1,
                     "dtype": "dtype1",
@@ -257,6 +260,7 @@ class TestSerializers(unittest.TestCase):
                 {
                     "address": 1000,
                     "buffer_type": 0,
+                    "comparison": {},
                     "consumers": [3],
                     "device_id": 1,
                     "dtype": "dtype1",
@@ -305,34 +309,33 @@ class TestSerializers(unittest.TestCase):
         result = serialize_buffer_pages(buffer_pages)
 
         expected = [
-                {
-                    "operation_id": 1,
-                    "device_id": 1,
-                    "address": 1234,
-                    "core_y": 0,
-                    "core_x": 0,
-                    "bank_id": 1,
-                    "page_index": 0,
-                    "page_address": 1000,
-                    "page_size": 4096,
-                    "buffer_type": 0,
-                    "id": "1_0",
-                },
-                {
-                    "operation_id": 2,
-                    "device_id": 2,
-                    "address": 5678,
-                    "core_y": 1,
-                    "core_x": 1,
-                    "bank_id": 2,
-                    "page_index": 1,
-                    "page_address": 2000,
-                    "page_size": 8192,
-                    "buffer_type": 1,
-                    "id": "2_1",
-                },
-            ]
-        
+            {
+                "operation_id": 1,
+                "device_id": 1,
+                "address": 1234,
+                "core_y": 0,
+                "core_x": 0,
+                "bank_id": 1,
+                "page_index": 0,
+                "page_address": 1000,
+                "page_size": 4096,
+                "buffer_type": 0,
+                "id": "1_0",
+            },
+            {
+                "operation_id": 2,
+                "device_id": 2,
+                "address": 5678,
+                "core_y": 1,
+                "core_x": 1,
+                "bank_id": 2,
+                "page_index": 1,
+                "page_address": 2000,
+                "page_size": 8192,
+                "buffer_type": 1,
+                "id": "2_1",
+            },
+        ]
 
         self.assertEqual(result, expected)
 

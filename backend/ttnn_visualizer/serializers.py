@@ -89,7 +89,7 @@ def serialize_buffer_pages(buffer_pages):
     # Collect device-specific data if needed
 
     # Serialize each buffer page to a dictionary using dataclasses.asdict
-    buffer_pages_list = [dataclasses.asdict(page) for page in buffer_pages]
+    buffer_pages_list = [page.to_dict() for page in buffer_pages]
 
     # Optionally, modify or adjust the serialized data as needed
     for page_data in buffer_pages_list:
@@ -105,6 +105,25 @@ def serialize_buffer_pages(buffer_pages):
     return buffer_pages_list
 
 
+def attach_comparisons(values, local_comparisons_dict, global_comparisons_dict):
+    """Attaches the local/global comparisons to the inputs/outputs"""
+    results = []
+    if values:
+        for v in values:
+            tensor_id = v.get("id")
+            local_comparison = local_comparisons_dict.get(tensor_id, None)
+            global_comparison = global_comparisons_dict.get(tensor_id, None)
+            comparison = {}
+            if local_comparison:
+                comparison.update({"local": local_comparison.to_dict()})
+            if global_comparison:
+                comparison.update({"global": global_comparison.to_dict()})
+            value_copy = v.copy()
+            value_copy.update({"comparison": comparison})
+            results.append(value_copy)
+        return results
+
+
 def serialize_operation(
     buffers,
     inputs,
@@ -113,14 +132,21 @@ def serialize_operation(
     outputs,
     stack_trace,
     tensors,
+    global_tensor_comparisons,
+    local_tensor_comparisons,
     devices,
     producers_consumers,
     device_operations,
 ):
     tensors_dict = {t.tensor_id: t for t in tensors}
+    local_comparisons_dict = {c.tensor_id: c for c in local_tensor_comparisons}
+    global_comparisons_dict = {c.tensor_id: c for c in global_tensor_comparisons}
 
     inputs_dict, outputs_dict = serialize_inputs_outputs(
-        inputs, outputs, producers_consumers, tensors_dict
+        inputs,
+        outputs,
+        producers_consumers,
+        tensors_dict,
     )
 
     buffer_list = [buffer.to_dict() for buffer in buffers]
@@ -131,7 +157,16 @@ def serialize_operation(
     operation_data["id"] = operation.operation_id
 
     inputs_data = inputs_dict.get(operation.operation_id)
+    inputs_data = attach_comparisons(
+        inputs_data, local_comparisons_dict, global_comparisons_dict
+    )
+
     outputs_data = outputs_dict.get(operation.operation_id)
+    outputs_data = attach_comparisons(
+        outputs_data, local_comparisons_dict, global_comparisons_dict
+    )
+
+    attach_comparisons(inputs_data, local_comparisons_dict, global_comparisons_dict)
     id = operation_data.pop("operation_id", None)
 
     device_operations_data = []
