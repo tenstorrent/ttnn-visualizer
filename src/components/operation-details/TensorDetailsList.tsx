@@ -24,6 +24,7 @@ function TensorDetailsList({
         <div className='tensor-list'>
             <div>
                 <h3>Inputs</h3>
+
                 {inputs.map((tensor) => (
                     <TensorDetailsComponent
                         tensor={tensor}
@@ -39,6 +40,7 @@ function TensorDetailsList({
 
             <div>
                 <h3>Outputs</h3>
+
                 {outputs.map((tensor) => (
                     <TensorDetailsComponent
                         tensor={tensor}

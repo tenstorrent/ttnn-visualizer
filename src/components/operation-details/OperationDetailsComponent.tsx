@@ -187,7 +187,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
             />
 
             <div className='operation-details-component'>
-                {(selectedAddress || selectedTensorId) && (
+                {(selectedAddress || isValidNumber(selectedTensorId)) && (
                     // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
                     <div
                         className='outside-click'
