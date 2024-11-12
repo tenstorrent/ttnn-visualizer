@@ -13,7 +13,7 @@
     gap: 10px;
 
     &.no-gap {
-        gap: 0
+        gap: 0;
     }
 
     &.wrap {
@@ -73,9 +73,9 @@
 
         @each $colour-name, $shades in $tt-colours {
             @each $shade-name, $shade-value in $shades {
-              &.#{$colour-name}-#{$shade-name} {
-                background-color: $shade-value;
-              }
+                &.#{$colour-name}-#{$shade-name} {
+                    background-color: $shade-value;
+                }
             }
         }
     }
