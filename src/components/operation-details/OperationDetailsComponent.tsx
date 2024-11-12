@@ -30,7 +30,7 @@ import GlobalSwitch from '../GlobalSwitch';
 import { BufferType } from '../../model/BufferType';
 import DRAMPlots from './DRAMPlots';
 import L1Plots from './L1Plots';
-import TensorDetailsList from './blah';
+import TensorDetailsList from './TensorDetailsList';
 
 interface OperationDetailsProps {
     operationId: number;
