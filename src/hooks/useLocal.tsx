@@ -10,8 +10,40 @@ export interface UploadProgress {
     estimated?: number;
 }
 
+type FileWithRelativePath = File & { webkitRelativePath?: string };
+
 const useLocalConnection = () => {
     const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+    function filterReportFiles(files: FileList, excludeFolders: string[] = ['tensors']): FileList {
+        // Convert FileList to an array
+        const fileArray = Array.from(files) as FileWithRelativePath[];
+
+        // Filter out files in the excluded folders
+        const filteredFiles = fileArray.filter((file) => {
+            return !excludeFolders.some((folder) => file.webkitRelativePath?.includes(`/${folder}/`));
+        });
+
+        // Create a new DataTransfer object to hold the filtered files
+        const dataTransfer = new DataTransfer();
+        filteredFiles.forEach((file) => dataTransfer.items.add(file));
+
+        // Return the filtered files as a FileList
+        return dataTransfer.files;
+    }
+
+    const checkRequiredFiles = (files: FileList): boolean => {
+        const requiredFiles = ['db.sqlite', 'config.json'];
+        const fileSet = new Set<string>();
+
+        Array.from(files).forEach((file) => {
+            const pathParts = file.webkitRelativePath.split('/');
+            if (pathParts.length === 2) {
+                fileSet.add(pathParts[1]);
+            }
+        });
+
+        return requiredFiles.every((file) => fileSet.has(file));
+    };
 
     const uploadLocalFolder = async (files: FileList) => {
         const formData = new FormData();
@@ -39,8 +71,10 @@ const useLocalConnection = () => {
     };
 
     return {
+        checkRequiredFiles,
         uploadLocalFolder,
         uploadProgress,
+        filterReportFiles,
     };
 };
 
