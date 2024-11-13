@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-@use "../definitions/colours" as *;
+@use '../definitions/colours' as *;
 
 $tt-pending: $tt-yellow;
 
@@ -12,12 +12,15 @@ $tt-pending: $tt-yellow;
     .bp5-dialog-header {
         background-color: $tt-grey-2;
 
-        .bp5-icon, .bp5-heading {
+        .bp5-icon,
+        .bp5-heading {
             color: $tt-grey-7;
         }
     }
 
-    .bp5-form-group-sub-label { color: $tt-grey-7 }
+    .bp5-form-group-sub-label {
+        color: $tt-grey-7;
+    }
 
     fieldset {
         border: solid 1px $tt-grey-5;
@@ -33,7 +36,9 @@ $tt-pending: $tt-yellow;
         animation: 0.7s steps(2) infinite alternate both;
     }
 
-    &.status-idle .connection-status-icon { color: $tt-grey-5; }
+    &.status-idle .connection-status-icon {
+        color: $tt-grey-5;
+    }
 
     &.status-progress .connection-status-icon {
         animation-name: connection-test-progress;
@@ -51,6 +56,11 @@ $tt-pending: $tt-yellow;
 }
 
 @keyframes connection-test-progress {
-    from { color: $tt-grey-5; }
-    to { color: $tt-yellow; }
+    from {
+        color: $tt-grey-5;
+    }
+
+    to {
+        color: $tt-yellow;
+    }
 }

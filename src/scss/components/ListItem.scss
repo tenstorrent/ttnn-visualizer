@@ -20,13 +20,13 @@
     }
 
     &.operation-icon {
-        .bp5-icon:not([class*="bp5-intent-"]).styled-icon {
+        .bp5-icon:not([class*='bp5-intent-']).styled-icon {
             color: $tt-operations;
         }
     }
 
     &.tensor-icon {
-        .bp5-icon:not([class*="bp5-intent-"]).styled-icon {
+        .bp5-icon:not([class*='bp5-intent-']).styled-icon {
             color: $tt-tensors;
         }
     }

@@ -29,11 +29,13 @@ function BufferSummary() {
     const setMeta = useSetAtom(reportMetaAtom);
     const plotRef = useRef<HTMLHeadingElement>(null);
     const tableRef = useRef<HTMLHeadingElement>(null);
+    const deviceId = 0;
     const [activeSection, setActiveSection] = useState(SECTION_IDS.PLOT);
-    const { data: buffersByOperation } = useBuffers(BufferType.L1);
+    const { data: buffersByOperation } = useBuffers(BufferType.L1, deviceId);
     const { data: operationsList } = useOperationsList();
 
-    toast.dismiss();
+    // Dismiss any toasts that are open
+    useEffect(() => toast.dismiss(), []);
 
     // Needs to be in a useEffect to avoid a bad setState call
     useEffect(() => {
@@ -106,6 +108,7 @@ function BufferSummary() {
                         <BufferSummaryPlotRenderer
                             buffersByOperation={buffersByOperation}
                             tensorListByOperation={tensorListByOperation}
+                            deviceId={deviceId}
                         />
                     </div>
 

@@ -1,11 +1,12 @@
 {
   "name": "ttnn-visualzer",
   "private": true,
-  "version": "0.9.0",
+  "version": "0.10.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "serve": "vite build && FLASK_ENV=production npm run flask:start",
     "lint": "eslint . --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",

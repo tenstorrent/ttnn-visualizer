@@ -1,8 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
-.golden-tensor-comparison-square {
-    width: 10px;
-    height: 10px;
-    margin: 0 -7px 0 0;
+
+.golden-tensor-comparison {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    ~ .golden-tensor-comparison {
+        margin-top: 10px;
+    }
+
+    .memory-color-block {
+        border-radius: 50%;
+    }
 }

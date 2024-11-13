@@ -5,7 +5,5 @@ release/dist
 src/sample-data
 *.md
 *.json
-*.css
-*.scss
 *.yml
 *.yaml

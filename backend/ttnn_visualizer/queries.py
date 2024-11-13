@@ -18,6 +18,7 @@ from ttnn_visualizer.models import (
     OutputTensor,
     Device,
     ProducersConsumers,
+    TensorComparisonRecord,
 )
 from ttnn_visualizer.ssh_client import get_client
 import sqlite3
@@ -262,6 +263,43 @@ class DatabaseQueries:
         rows = self.query_runner.execute_query(query, params)
         for row in rows:
             yield Buffer(*row)
+
+    def query_local_tensor_comparisons(
+        self,
+    ) -> Generator[TensorComparisonRecord, None, None]:
+        query = "SELECT * FROM local_tensor_comparison_records"
+        rows = self.query_runner.execute_query(query)
+        for row in rows:
+            yield TensorComparisonRecord(*row)
+
+    def query_local_tensor_comparisons_by_tensor_ids(
+        self, tensor_ids
+    ) -> Generator[TensorComparisonRecord, None, None]:
+
+        query = "SELECT * FROM local_tensor_comparison_records WHERE tensor_id IN ({})".format(
+            ",".join("?" * len(tensor_ids))
+        )
+        rows = self.query_runner.execute_query(query, tensor_ids)
+        for row in rows:
+            yield TensorComparisonRecord(*row)
+
+    def query_global_tensor_comparisons(
+        self,
+    ) -> Generator[TensorComparisonRecord, None, None]:
+        query = "SELECT * FROM global_tensor_comparison_records"
+        rows = self.query_runner.execute_query(query)
+        for row in rows:
+            yield TensorComparisonRecord(*row)
+
+    def query_global_tensor_comparisons_by_tensor_ids(
+        self, tensor_ids
+    ) -> Generator[TensorComparisonRecord, None, None]:
+        query = "SELECT * FROM global_tensor_comparison_records WHERE tensor_id IN ({})".format(
+            ",".join("?" * len(tensor_ids))
+        )
+        rows = self.query_runner.execute_query(query, tensor_ids)
+        for row in rows:
+            yield TensorComparisonRecord(*row)
 
     def query_buffer_pages(
         self,

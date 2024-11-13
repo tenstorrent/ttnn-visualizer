@@ -13,6 +13,8 @@ import getNextAllocationOperation from '../../functions/getNextAllocationOperati
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
 import 'styles/components/TensorDetailsComponent.scss';
+import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
+import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator';
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
@@ -87,6 +89,19 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     </Tooltip>
                 )}
 
+                {(tensor.consumers.length > MAX_NUM_CONSUMERS || tensor.producers.length > MAX_NUM_CONSUMERS) && (
+                    <Tooltip
+                        content='Unusually high number of consumers'
+                        position={PopoverPosition.TOP}
+                        className='warning-icon'
+                    >
+                        <Icon
+                            icon={IconNames.ISSUE}
+                            intent={Intent.DANGER}
+                        />
+                    </Tooltip>
+                )}
+
                 {isValidNumber(nextAllocationOperationId) && isValidNumber(address) && operations ? (
                     <Tooltip
                         content={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
@@ -128,10 +143,32 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
             </div>
 
             <div className='tensor-meta'>
-                {tensor.buffer_type !== null && <p>Buffer type: {BufferTypeLabel[tensor.buffer_type]}</p>}
-                <p>Shape: {tensor.shape}</p>
-                <p>Dtype: {tensor.dtype}</p>
-                <p>Layout: {tensor.layout}</p>
+                {tensor.buffer_type !== null && (
+                    <p>
+                        <strong>Buffer type:</strong> {BufferTypeLabel[tensor.buffer_type]}
+                    </p>
+                )}
+                <p>
+                    <strong>Shape:</strong> {tensor.shape}
+                </p>
+                <p>
+                    <strong>Dtype:</strong> {tensor.dtype}
+                </p>
+                <p>
+                    <strong>Layout:</strong> {tensor.layout}
+                </p>
+                {tensor.comparison?.global ? (
+                    <>
+                        <GoldenTensorComparisonIndicator
+                            label='Actual PCC:'
+                            value={tensor.comparison.global.actual_pcc}
+                        />
+                        <GoldenTensorComparisonIndicator
+                            label='Desired PCC:'
+                            value={tensor.comparison.global.desired_pcc}
+                        />
+                    </>
+                ) : null}
             </div>
         </div>
     );

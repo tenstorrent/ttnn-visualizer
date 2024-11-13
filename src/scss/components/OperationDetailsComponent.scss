@@ -4,33 +4,6 @@
 
 @use '../definitions/colours' as *;
 
-.dram-memory-renderer,
-.l1-memory-renderer {
-    .memory-plot {
-        width: 100%;
-    }
-
-    &.circular-buffers {
-        margin-bottom: 5px;
-    }
-
-    &.identical-plot {
-        .memory-plot {
-            opacity: 0.5;
-        }
-    }
-
-    &.empty-plot {
-        opacity: 0.4;
-    }
-
-    .plot-title {
-        font-weight: 500;
-        margin-bottom: -14px;
-        margin-top: 0;
-    }
-}
-
 .operation-details-component {
     .outside-click {
         background-color: rgb(255 0 0 / 47%);
@@ -70,36 +43,6 @@
 
         .bp5-icon {
             margin-right: 5px;
-        }
-    }
-
-    .plot-tensor-details {
-        display: inline-grid;
-        grid-template-columns: 1fr auto;
-        align-items: start;
-        gap: 25px;
-        position: relative;
-    }
-
-    .producer-consumer {
-        &.hidden {
-            display: none;
-        }
-
-        .title {
-            font-size: 18px;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-
-            &.hidden {
-                display: none;
-            }
-        }
-
-        .operation-link {
-            margin-left: #{14px + 8px}; // icon width + gap
-            margin-bottom: 3px;
         }
     }
 
@@ -185,12 +128,6 @@
                 font-size: 0.875rem;
             }
         }
-    }
-
-    .tensor-list {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 5px;
     }
 
     .plot-title {

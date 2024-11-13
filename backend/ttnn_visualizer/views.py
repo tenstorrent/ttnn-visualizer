@@ -102,10 +102,19 @@ def operation_detail(operation_id, session):
 
         inputs = list(db.query_input_tensors_by_operation_id(operation_id))
         outputs = list(db.query_output_tensors_by_operation_id(operation_id))
+
         input_tensor_ids = [i.tensor_id for i in inputs]
         output_tensor_ids = [o.tensor_id for o in outputs]
         tensor_ids = input_tensor_ids + output_tensor_ids
         tensors = list(db.query_tensors_by_tensor_ids(tensor_ids))
+        local_comparisons = list(
+            db.query_local_tensor_comparisons_by_tensor_ids(tensor_ids)
+        )
+
+        global_comparisons = list(
+            db.query_global_tensor_comparisons_by_tensor_ids(tensor_ids)
+        )
+
         device_operations = db.query_device_operations_by_operation_id(operation_id)
 
         producers_consumers = list(
@@ -124,6 +133,8 @@ def operation_detail(operation_id, session):
             outputs,
             stack_trace,
             tensors,
+            global_comparisons,
+            local_comparisons,
             devices,
             producers_consumers,
             device_operations,
@@ -192,8 +203,12 @@ def get_config(session: TabSession):
 def tensors_list(session: TabSession):
     with DatabaseQueries(session) as db:
         tensors = list(db.query_tensors())
+        local_comparisons = list(db.query_local_tensor_comparisons())
+        global_comparisons = list(db.query_global_tensor_comparisons())
         producers_consumers = list(db.query_producers_consumers())
-        return serialize_tensors(tensors, producers_consumers)
+        return serialize_tensors(
+            tensors, producers_consumers, local_comparisons, global_comparisons
+        )
 
 
 @api.route("/buffer", methods=["GET"])

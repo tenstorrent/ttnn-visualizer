@@ -33,9 +33,11 @@ const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo element
 const TensorList = () => {
     const location = useLocation();
     const navigate = useNavigate();
+    const deviceId = 0;
     const { data: operations } = useOperationsList();
-    const { data: fetchedTensors, error, isLoading } = useTensors();
-    const scrollElementRef = useRef(null);
+    const { data: fetchedTensors, error, isLoading } = useTensors(deviceId);
+    const scrollElementRef = useRef<HTMLDivElement>(null);
+
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [filterQuery, setFilterQuery] = useState('');
     const [memoryLeakCount, setMemoryLeakCount] = useState(0);
@@ -56,6 +58,7 @@ const TensorList = () => {
     const virtualItems = virtualizer.getVirtualItems();
     const numberOfTensors =
         filteredTensorList && filteredTensorList.length >= 0 ? filteredTensorList.length : PLACEHOLDER_ARRAY_SIZE;
+    const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
 
     const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
         const el = event.currentTarget;
@@ -155,6 +158,13 @@ const TensorList = () => {
         }
     }, [virtualizer, fetchedTensors, location, navigate]);
 
+    useEffect(() => {
+        if (virtualHeight <= 0 && scrollElementRef.current) {
+            scrollElementRef.current.scrollTop = 0;
+            setHasScrolledFromTop(false);
+        }
+    }, [virtualHeight]);
+
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList
         <fieldset className='list-wrap'>
@@ -252,8 +262,9 @@ const TensorList = () => {
             <div
                 ref={scrollElementRef}
                 className={classNames('scrollable-element', {
-                    'scroll-shade-top': hasScrolledFromTop,
+                    'scroll-shade-top': hasScrolledFromTop && virtualHeight >= 0,
                     'scroll-shade-bottom': !hasScrolledToBottom && numberOfTensors > virtualItems.length,
+                    'scroll-lock': virtualHeight <= 0,
                 })}
                 onScroll={(event) => handleUserScrolling(event)}
             >

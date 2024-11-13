@@ -34,7 +34,7 @@ const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
-    const scrollElementRef = useRef(null);
+    const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const [filterQuery, setFilterQuery] = useState('');
     const [filteredOperationsList, setFilteredOperationsList] = useState<OperationDescription[]>([]);
@@ -56,6 +56,7 @@ const OperationList = () => {
         filteredOperationsList && filteredOperationsList.length >= 0
             ? filteredOperationsList.length
             : PLACEHOLDER_ARRAY_SIZE;
+    const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
 
     const handleToggleCollapsible = (operationId: number) => {
         setExpandedOperations((currentIds) => {
@@ -145,6 +146,13 @@ const OperationList = () => {
             navigate(ROUTES.OPERATIONS, { replace: true });
         }
     }, [virtualizer, fetchedOperations, location, navigate]);
+
+    useEffect(() => {
+        if (virtualHeight <= 0 && scrollElementRef.current) {
+            scrollElementRef.current.scrollTop = 0;
+            setHasScrolledFromTop(false);
+        }
+    }, [virtualHeight]);
 
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList
@@ -244,15 +252,16 @@ const OperationList = () => {
             <div
                 ref={scrollElementRef}
                 className={classNames('scrollable-element', {
-                    'scroll-shade-top': hasScrolledFromTop,
+                    'scroll-shade-top': hasScrolledFromTop && virtualHeight >= 0,
                     'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
+                    'scroll-lock': virtualHeight <= 0,
                 })}
                 onScroll={(event) => handleUserScrolling(event)}
             >
                 <div
                     style={{
                         // Div is sized to the maximum required to render all list items minus our shade element heights
-                        height: virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT,
+                        height: virtualHeight,
                     }}
                 >
                     <ul

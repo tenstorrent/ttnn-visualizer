@@ -101,3 +101,49 @@ $row-background: $tt-grey-2;
     width: 100%;
     height: 80vh;
 }
+
+// Toast overrides
+/* stylelint-disable-next-line selector-class-pattern */
+.Toastify__toast {
+    --toastify-toast-bd-radius: 2px;
+}
+
+// Shared memory plots styles used in Operation Details
+.dram-memory-renderer,
+.l1-memory-renderer {
+    .memory-plot {
+        width: 100%;
+        margin-right: 10px;
+
+        &.js-plotly-plot {
+            .xaxislayer-above {
+                // Fixes the issue where the first x-axis tick is not visible (thanks Plotly)
+                .xtick:first-child text {
+                    /* stylelint-disable-next-line declaration-no-important */
+                    opacity: 1 !important; // Need this to overwrite inline style
+                    text-anchor: start;
+                }
+            }
+        }
+    }
+
+    &.circular-buffers {
+        margin-bottom: 5px;
+    }
+
+    &.identical-plot {
+        .memory-plot {
+            opacity: 0.5;
+        }
+    }
+
+    &.empty-plot {
+        opacity: 0.4;
+    }
+
+    .plot-title {
+        font-weight: 500;
+        margin-bottom: -14px;
+        margin-top: 0;
+    }
+}
