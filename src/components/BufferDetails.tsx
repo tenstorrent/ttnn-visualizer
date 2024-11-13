@@ -16,6 +16,7 @@ import { Operation, Tensor } from '../model/Graph';
 import isValidNumber from '../functions/isValidNumber';
 import parseMemoryConfig, { ShardSpec } from '../functions/parseMemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';
+import GoldenTensorComparisonIndicator from './GoldenTensorComparisonIndicator';
 
 interface BufferDetailsProps {
     tensor: TensorData;
@@ -126,6 +127,38 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         <th>Shape</th>
                         <td>{shape}</td>
                     </tr>
+
+                    {tensor.comparison ? (
+                        <>
+                            <tr>
+                                <th>Matches Locally</th>
+                                <td>
+                                    <GoldenTensorComparisonIndicator
+                                        value={tensor.comparison.local.actual_pcc}
+                                        label='Actual PCC:'
+                                    />
+                                    <GoldenTensorComparisonIndicator
+                                        value={tensor.comparison.local.desired_pcc}
+                                        label='Desired PCC:'
+                                    />
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <th>Matches Globally</th>
+                                <td>
+                                    <GoldenTensorComparisonIndicator
+                                        value={tensor.comparison.global.actual_pcc}
+                                        label='Actual PCC:'
+                                    />
+                                    <GoldenTensorComparisonIndicator
+                                        value={tensor.comparison.global.desired_pcc}
+                                        label='Desired PCC:'
+                                    />
+                                </td>
+                            </tr>
+                        </>
+                    ) : null}
                 </tbody>
             </table>
         </>
