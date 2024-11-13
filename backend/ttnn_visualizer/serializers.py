@@ -86,7 +86,7 @@ def serialize_inputs_outputs(
             )
             if comparisons:
                 comparison = comparisons.get(value.tensor_id)
-                value_dict.update({"comparisons": comparison})
+                value_dict.update({"comparison": comparison})
 
             values_dict[value.operation_id].append({**value_dict, **tensor_dict})
         return values_dict
@@ -225,7 +225,7 @@ def serialize_tensors(
         tensor_data.update(
             {
                 "id": tensor_id,
-                "comparisons": comparisons.get(tensor_id),
+                "comparison": comparisons.get(tensor_id),
                 "consumers": (
                     producers_consumers_dict[tensor_id].consumers
                     if tensor_id in producers_consumers_dict
