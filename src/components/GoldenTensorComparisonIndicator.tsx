@@ -3,19 +3,23 @@ import 'styles/components/GoldenTensorComparisonIndicator.scss';
 
 interface GoldenTensorComparisonIndicatorProps {
     value: number;
+    label: string;
 }
 
-function GoldenTensorComparisonIndicator({ value }: GoldenTensorComparisonIndicatorProps) {
+function GoldenTensorComparisonIndicator({ value, label }: GoldenTensorComparisonIndicatorProps) {
     return (
-        <>
+        <div className='golden-tensor-comparison'>
+            <span>
+                <strong>{label}</strong> {value.toFixed(4)}
+            </span>
+
             <div
-                className='golden-tensor-comparison-square'
+                className='memory-color-block'
                 style={{
                     backgroundColor: calculateOpPerformanceColor(value),
                 }}
             />
-            <span>t{value.toFixed(4)}</span>
-        </>
+        </div>
     );
 }
 
