@@ -2,10 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-
 @use 'sass:color';
 @use './definitions/colours' as *;
-@use "@blueprintjs/colors/lib/scss/colors" as *;
+@use '@blueprintjs/colors/lib/scss/colors' as *;
 
 $dark-button-background-base: $tt-grey-2;
 $dark-primary-background-base: $tt-purple-shade;
@@ -13,7 +12,7 @@ $dark-primary-intent-color: $tt-purple;
 $dark-warning-background-base: $tt-yellow;
 $dark-danger-background-base: $tt-red-accent;
 
-@use "@blueprintjs/core/src/blueprint.scss" with (
+@use '@blueprintjs/core/src/blueprint.scss' with (
     $dark-button-background-color: $dark-button-background-base,
     $dark-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: -5%),
     $dark-minimal-button-background-color: $dark-button-background-base,
@@ -27,23 +26,40 @@ $dark-danger-background-base: $tt-red-accent;
     // $dark-control-checked-background-color: #abc123,
     $pt-dark-icon-color: $tt-white,
     // "intent": (default, hover, active colors)
-    $button-intents: (
-        "primary": ($dark-primary-background-base, color.adjust($dark-primary-background-base, $lightness: -5%), color.adjust($dark-primary-background-base, $lightness: -10%)),
-        "success": ($green3, $green2, $green1),
-        "warning": ($dark-warning-background-base, color.adjust($dark-warning-background-base, $lightness: -5%), $dark-warning-background-base),
-        "danger": ($dark-danger-background-base, color.adjust($dark-danger-background-base, $lightness: -5%), $tt-red-shade)
-    ),
+    $button-intents:
+        (
+            'primary': (
+                $dark-primary-background-base,
+                color.adjust($dark-primary-background-base, $lightness: -5%),
+                color.adjust($dark-primary-background-base, $lightness: -10%),
+            ),
+            'success': (
+                $green3,
+                $green2,
+                $green1,
+            ),
+            'warning': (
+                $dark-warning-background-base,
+                color.adjust($dark-warning-background-base, $lightness: -5%),
+                $dark-warning-background-base,
+            ),
+            'danger': (
+                $dark-danger-background-base,
+                color.adjust($dark-danger-background-base, $lightness: -5%),
+                $tt-red-shade,
+            ),
+        ),
     $pt-intent-colors: (
-        "primary": $dark-primary-intent-color,
-        "success": $tt-green,
-        "warning": $dark-warning-background-base,
-        "danger" : $tt-red,
+        'primary': $dark-primary-intent-color,
+        'success': $tt-green,
+        'warning': $dark-warning-background-base,
+        'danger': $tt-red,
     ),
     $pt-dark-intent-text-colors: (
-        "primary": $dark-primary-intent-color,
-        "success": $tt-green,
-        "warning": $dark-warning-background-base,
-        "danger" : $tt-red,
+        'primary': $dark-primary-intent-color,
+        'success': $tt-green,
+        'warning': $dark-warning-background-base,
+        'danger': $tt-red,
     ),
     $dark-navbar-background-color: transparent
 );
@@ -67,5 +83,4 @@ $dark-danger-background-base: $tt-red-accent;
             }
         }
     }
-
 }

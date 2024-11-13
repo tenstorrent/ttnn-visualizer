@@ -19,6 +19,8 @@ class DefaultConfig(object):
     STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0
 
+    LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "true"))
+
     # File Name Configs
     TEST_CONFIG_FILE = "config.json"
     SQLITE_DB_PATH = "db.sqlite"
@@ -38,7 +40,12 @@ class DefaultConfig(object):
     # Gunicorn settings
     GUNICORN_WORKER_CLASS = os.getenv("GUNICORN_WORKER_CLASS", "gevent")
     GUNICORN_WORKERS = os.getenv("GUNICORN_WORKERS", "1")
-    GUNICORN_BIND = f"0.0.0.0:{os.getenv('PORT', '8000')}"
+    PORT = os.getenv("PORT", "8000")
+    HOST = "0.0.0.0"
+    DEV_SERVER_PORT = "5173"
+    DEV_SERVER_HOST = "localhost"
+
+    GUNICORN_BIND = f"{HOST}:{PORT}"
     GUNICORN_APP_MODULE = os.getenv(
         "GUNICORN_APP_MODULE", "ttnn_visualizer.app:create_app()"
     )

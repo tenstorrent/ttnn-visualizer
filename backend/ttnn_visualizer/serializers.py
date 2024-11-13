@@ -1,7 +1,8 @@
 import dataclasses
 from collections import defaultdict
+from typing import List, Optional
 
-from ttnn_visualizer.models import BufferType, Operation
+from ttnn_visualizer.models import BufferType, Operation, TensorComparisonRecord
 
 
 def serialize_operations(
@@ -59,10 +60,16 @@ def serialize_operations(
     return results
 
 
-def serialize_inputs_outputs(inputs, outputs, producers_consumers, tensors_dict):
+def serialize_inputs_outputs(
+    inputs,
+    outputs,
+    producers_consumers,
+    tensors_dict,
+    comparisons=None,
+):
     producers_consumers_dict = {pc.tensor_id: pc for pc in producers_consumers}
 
-    def attach_producers_consumers(values):
+    def attach_tensor_data(values):
         values_dict = defaultdict(list)
         for value in values:
             tensor = tensors_dict.get(value.tensor_id)
@@ -77,11 +84,15 @@ def serialize_inputs_outputs(inputs, outputs, producers_consumers, tensors_dict)
                     "producers": pc.producers if pc else [],
                 }
             )
+            if comparisons:
+                comparison = comparisons.get(value.tensor_id)
+                value_dict.update({"comparisons": comparison})
+
             values_dict[value.operation_id].append({**value_dict, **tensor_dict})
         return values_dict
 
-    inputs_dict = attach_producers_consumers(inputs)
-    outputs_dict = attach_producers_consumers(outputs)
+    inputs_dict = attach_tensor_data(inputs)
+    outputs_dict = attach_tensor_data(outputs)
     return inputs_dict, outputs_dict
 
 
@@ -89,7 +100,7 @@ def serialize_buffer_pages(buffer_pages):
     # Collect device-specific data if needed
 
     # Serialize each buffer page to a dictionary using dataclasses.asdict
-    buffer_pages_list = [dataclasses.asdict(page) for page in buffer_pages]
+    buffer_pages_list = [page.to_dict() for page in buffer_pages]
 
     # Optionally, modify or adjust the serialized data as needed
     for page_data in buffer_pages_list:
@@ -105,6 +116,18 @@ def serialize_buffer_pages(buffer_pages):
     return buffer_pages_list
 
 
+def comparisons_by_tensor_id(
+    local_comparisons: List[TensorComparisonRecord],
+    global_comparisons: List[TensorComparisonRecord],
+):
+    comparisons = defaultdict(dict)
+    for local_comparison in local_comparisons:
+        comparisons[local_comparison.tensor_id].update({"local": local_comparison})
+    for global_comparison in global_comparisons:
+        comparisons[global_comparison.tensor_id].update({"global": global_comparison})
+    return comparisons
+
+
 def serialize_operation(
     buffers,
     inputs,
@@ -113,14 +136,23 @@ def serialize_operation(
     outputs,
     stack_trace,
     tensors,
+    global_tensor_comparisons,
+    local_tensor_comparisons,
     devices,
     producers_consumers,
     device_operations,
 ):
     tensors_dict = {t.tensor_id: t for t in tensors}
+    comparisons = comparisons_by_tensor_id(
+        local_tensor_comparisons, global_tensor_comparisons
+    )
 
     inputs_dict, outputs_dict = serialize_inputs_outputs(
-        inputs, outputs, producers_consumers, tensors_dict
+        inputs,
+        outputs,
+        producers_consumers,
+        tensors_dict,
+        comparisons,
     )
 
     buffer_list = [buffer.to_dict() for buffer in buffers]
@@ -132,6 +164,7 @@ def serialize_operation(
 
     inputs_data = inputs_dict.get(operation.operation_id)
     outputs_data = outputs_dict.get(operation.operation_id)
+
     id = operation_data.pop("operation_id", None)
 
     device_operations_data = []
@@ -180,16 +213,19 @@ def serialize_operations_buffers(operations, buffers):
     return results
 
 
-def serialize_tensors(tensors, producers_consumers):
+def serialize_tensors(
+    tensors, producers_consumers, local_comparisons, global_comparisons
+):
     producers_consumers_dict = {pc.tensor_id: pc for pc in producers_consumers}
     results = []
-
+    comparisons = comparisons_by_tensor_id(local_comparisons, global_comparisons)
     for tensor in tensors:
         tensor_data = dataclasses.asdict(tensor)
         tensor_id = tensor_data.pop("tensor_id")
         tensor_data.update(
             {
                 "id": tensor_id,
+                "comparisons": comparisons.get(tensor_id),
                 "consumers": (
                     producers_consumers_dict[tensor_id].consumers
                     if tensor_id in producers_consumers_dict

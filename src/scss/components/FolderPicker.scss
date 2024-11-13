@@ -29,7 +29,7 @@
         width: 35vw;
 
         & > .bp5-icon {
-            color: $tt-grey-4
+            color: $tt-grey-4;
         }
 
         .folder-picker-wrapper {
@@ -53,7 +53,9 @@
             white-space: nowrap;
         }
 
-        .bp5-form-group-sub-label { color: $tt-grey-7; }
+        .bp5-form-group-sub-label {
+            color: $tt-grey-7;
+        }
     }
 
     legend {
@@ -75,7 +77,7 @@
     align-items: center;
 
     .folder-path {
-        font-weight: 700
+        font-weight: 700;
     }
 
     .test-name {

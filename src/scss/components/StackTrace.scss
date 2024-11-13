@@ -1,6 +1,5 @@
 @use '../definitions/colours' as *;
 
-
 .stack-trace {
     display: flex;
     flex-wrap: nowrap;
@@ -69,6 +68,4 @@
             }
         }
     }
-
-
 }

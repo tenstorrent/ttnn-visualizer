@@ -1,6 +1,8 @@
 import logging
 import os
 import subprocess
+import threading
+import webbrowser
 from os import environ
 from pathlib import Path
 import sys
@@ -129,6 +131,20 @@ def middleware(app: flask.Flask):
     return None
 
 
+def open_browser(host, port, protocol="http"):
+
+    url = f"{protocol}://{host}:{port}"
+
+    print(f"Launching browser with url: {url}")
+    try:
+        if os.name == "posix" and "DISPLAY" in os.environ:  # Checks for non-headless
+            subprocess.run(["xdg-open", url], check=True)
+        else:
+            webbrowser.open(url)
+    except webbrowser.Error as e:
+        print(f"Could not open the default browser: {e}")
+
+
 def main():
 
     run_command = sys.argv[0].split("/")
@@ -156,9 +172,17 @@ def main():
     ]
 
     if debug_mode:
-        gunicorn_args.insert(1, "--reload")  # Add the --reload flag if in debug mode
+        gunicorn_args.insert(1, "--reload")
 
-    subprocess.run(gunicorn_args)
+    if config.LAUNCH_BROWSER_ON_START:
+        flask_env = os.getenv("FLASK_ENV", "development")
+        port = config.PORT if flask_env == "production" else config.DEV_SERVER_PORT
+        host = config.HOST if flask_env == "production" else config.DEV_SERVER_HOST
+        threading.Timer(2, open_browser, [host, port]).start()
+    try:
+        subprocess.run(gunicorn_args)
+    except KeyboardInterrupt:
+        print("\nServer stopped by user (Ctrl+C)")
 
 
 if __name__ == "__main__":
