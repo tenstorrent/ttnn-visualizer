@@ -264,6 +264,14 @@ class DatabaseQueries:
         for row in rows:
             yield Buffer(*row)
 
+    def query_local_tensor_comparisons(
+        self,
+    ) -> Generator[TensorComparisonRecord, None, None]:
+        query = "SELECT * FROM local_tensor_comparison_records"
+        rows = self.query_runner.execute_query(query)
+        for row in rows:
+            yield TensorComparisonRecord(*row)
+
     def query_local_tensor_comparisons_by_tensor_ids(
         self, tensor_ids
     ) -> Generator[TensorComparisonRecord, None, None]:
@@ -272,6 +280,14 @@ class DatabaseQueries:
             ",".join("?" * len(tensor_ids))
         )
         rows = self.query_runner.execute_query(query, tensor_ids)
+        for row in rows:
+            yield TensorComparisonRecord(*row)
+
+    def query_global_tensor_comparisons(
+        self,
+    ) -> Generator[TensorComparisonRecord, None, None]:
+        query = "SELECT * FROM global_tensor_comparison_records"
+        rows = self.query_runner.execute_query(query)
         for row in rows:
             yield TensorComparisonRecord(*row)
 
