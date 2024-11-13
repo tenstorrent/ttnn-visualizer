@@ -19,7 +19,6 @@ import {
     PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
 import { MemoryLegendElement } from './MemoryLegendElement';
-import OperationArguments from '../OperationArguments';
 import { isDramActiveAtom, isL1ActiveAtom, selectedAddressAtom, showHexAtom } from '../../store/app';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
@@ -32,10 +31,12 @@ import { BufferType } from '../../model/BufferType';
 import DRAMPlots from './DRAMPlots';
 import L1Plots from './L1Plots';
 import TensorDetailsList from './TensorDetailsList';
+import OperationArguments from '../OperationArguments';
 
 interface OperationDetailsProps {
     operationId: number;
 }
+
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const { data: operations } = useOperationsList();
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
@@ -55,6 +56,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [toastId, setToastId] = useState<number | null>(null);
     const [tensixFullVisualisationOpen, setTensixFullVisualisationOpen] = useState(false);
     const [tensixIOVisualisationOpen, setTensixIOVisualisationOpen] = useState(false);
+    const [deviceOperationsGraphOpen, setDeviceOperationsGraphOpen] = useState(false);
 
     const onClickOutside = () => {
         setSelectedAddress(null);
@@ -173,12 +175,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const inputOutputList = details.inputs.concat(details.outputs);
     const inputOutputAddressList: string = inputOutputList.map((tensor) => tensor.address).join(',');
-
-    // TODO: keeping this as a reminder. this wont work properly while we pick tensor by address only, an only for a specific operation
-    // const onPreviousBufferClick = (event: Readonly<PlotMouseEvent>): void => {
-    //     const { address } = previousMemory[event.points[0].curveNumber];
-    //     setSelectedTensorAddress(address);
-    // };
 
     return (
         <>
@@ -359,7 +355,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {details.deviceOperations.length > 0 && (
                             <div className='device-operations'>
                                 <hr />
-                                <h3>Device operations</h3>
+                                <h3>
+                                    Device operations{' '}
+                                    <Button onClick={() => setDeviceOperationsGraphOpen(true)}>Open graph</Button>
+                                </h3>
 
                                 {details.deviceOperations.map((deviceOperation, index) => (
                                     // eslint-disable-next-line react/no-array-index-key
@@ -462,11 +461,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                                 <div className='arguments-wrapper'>
                                     <OperationArguments operation={operation} />
-
-                                    {/* TODO: we shouldn't be rendering this raw but lets keep this commented out for debug purposes for now */}
-                                    {/* {operation?.device_operations && ( */}
-                                    {/*    <DeviceOperations deviceOperations={operation.device_operations} /> */}
-                                    {/* )} */}
                                 </div>
                             </>
                         )}
@@ -475,7 +469,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                     <p className='not-found-message'>Operation {operationId} not found</p>
                 )}
 
-                <GraphComponent data={details.device_operations} />
+                <GraphComponent
+                    data={details.device_operations}
+                    open={deviceOperationsGraphOpen}
+                    onClose={() => setDeviceOperationsGraphOpen(false)}
+                />
             </div>
         </>
     );

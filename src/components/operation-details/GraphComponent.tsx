@@ -1,9 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DataSet, Network } from 'vis-network/standalone';
 import { Edge } from 'vis-network';
+import { Button, Card, Overlay2 } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import { Node } from '../../model/APIData';
 
-const GraphComponent: React.FC<{ data: Node[] }> = ({ data }) => {
+export interface GraphComponentProps {
+    data: Node[];
+    open: boolean;
+    onClose: () => void;
+}
+
+const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) => {
     const networkContainer = useRef<HTMLDivElement>(null);
     const networkRef = useRef<Network | null>(null);
     const tooltipRef = useRef<HTMLDivElement>(null);
@@ -146,31 +154,55 @@ ${JSON.stringify(nodeData.params) !== '{}' ? `${result}` : ''}`,
     }, [data]);
 
     return (
-        <div style={{ position: 'relative' }}>
-            <div
-                ref={networkContainer}
-                style={{ height: '600px', width: '100%' }}
-            />
-            <div
-                className='tooltip'
-                ref={tooltipRef}
-                // eslint-disable-next-line react/no-danger
-                dangerouslySetInnerHTML={{ __html: tooltipContent }}
-                style={{
-                    position: 'absolute',
-                    display: 'none',
-                    top: 0,
-                    padding: '10px',
-                    backgroundColor: 'white',
-                    border: '1px solid #ccc',
-                    borderRadius: '5px',
-                    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.2)',
-                    pointerEvents: 'none',
-                    zIndex: 10,
-                    color: '#202020',
-                }}
-            />
-        </div>
+        <Overlay2
+            isOpen={open}
+            enforceFocus
+            hasBackdrop
+            usePortal
+            canEscapeKeyClose
+            transitionDuration={0}
+            onClose={onClose}
+            canOutsideClickClose
+            portalClassName='tensor-visualisation-overlay'
+        >
+            <Card className='tensor-visualisation'>
+                <div className='header'>
+                    <h3 className='title'>
+                        <Button
+                            icon={IconNames.CROSS}
+                            minimal
+                            small
+                            onClick={onClose}
+                        />
+                    </h3>
+                </div>
+                <div style={{ position: 'relative' }}>
+                    <div
+                        ref={networkContainer}
+                        style={{ height: '80vh', width: '80vw' }}
+                    />
+                    <div
+                        className='tooltip'
+                        ref={tooltipRef}
+                        // eslint-disable-next-line react/no-danger
+                        dangerouslySetInnerHTML={{ __html: tooltipContent }}
+                        style={{
+                            position: 'absolute',
+                            display: 'none',
+                            top: 0,
+                            padding: '10px',
+                            backgroundColor: 'white',
+                            border: '1px solid #ccc',
+                            borderRadius: '5px',
+                            boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.2)',
+                            pointerEvents: 'none',
+                            zIndex: 10,
+                            color: '#202020',
+                        }}
+                    />
+                </div>
+            </Card>
+        </Overlay2>
     );
 };
 
