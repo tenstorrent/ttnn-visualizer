@@ -203,8 +203,12 @@ def get_config(session: TabSession):
 def tensors_list(session: TabSession):
     with DatabaseQueries(session) as db:
         tensors = list(db.query_tensors())
+        local_comparisons = list(db.query_local_tensor_comparisons())
+        global_comparisons = list(db.query_global_tensor_comparisons())
         producers_consumers = list(db.query_producers_consumers())
-        return serialize_tensors(tensors, producers_consumers)
+        return serialize_tensors(
+            tensors, producers_consumers, local_comparisons, global_comparisons
+        )
 
 
 @api.route("/buffer", methods=["GET"])
