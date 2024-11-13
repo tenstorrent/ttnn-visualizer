@@ -65,7 +65,8 @@ class TensorComparator:
         )
         if tensor_content:
             buffer = BytesIO(tensor_content)
-            return torch.load(buffer, map_location="cpu")
+            return torch.load(buffer)
+
         return None
 
     def _read_local_tensor(self, tensor_file_path):
@@ -73,9 +74,9 @@ class TensorComparator:
         try:
             with open(tensor_file_path, "rb") as f:
                 buffer = BytesIO(f.read())
-                return torch.load(buffer, map_location="cpu")
+                return torch.load(buffer)
         except FileNotFoundError:
-            return None
+            raise ValueError("Tensor file not found")
 
     @staticmethod
     def make_torch_json_serializable(data):

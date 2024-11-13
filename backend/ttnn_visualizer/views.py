@@ -297,7 +297,8 @@ def read_tensor(tensor_id, session: TabSession):
     with DatabaseQueries(session) as db:
         comparator = TensorComparator(session=session, db=db)
         try:
-            return comparator.get_tensor_json(tensor_id)
+            comparison_data = comparator.get_tensor_json(tensor_id)
+            return comparison_data
         except RemoteConnectionException as e:
             return Response(str(e), status=HTTPStatus.BAD_REQUEST)
         except ValueError as e:
@@ -311,7 +312,8 @@ def compare_tensor(tensor_id, session: TabSession):
     with DatabaseQueries(session) as db:
         comparator = TensorComparator(session=session, db=db)
         try:
-            return comparator.get_comparison_json(tensor_id, local)
+            comparison_data = comparator.get_comparison_json(tensor_id, local)
+            return comparison_data
         except RemoteConnectionException as e:
             return Response(str(e), status=HTTPStatus.BAD_REQUEST)
         except ValueError as e:

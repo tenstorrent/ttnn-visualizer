@@ -279,17 +279,17 @@ class DatabaseQueries:
         self, tensor_id
     ) -> Optional[TensorComparisonRecord]:
         query = "SELECT * FROM global_tensor_comparison_records WHERE tensor_id = ?"
-        row = self.query_runner.execute_query(query, tensor_id)
-        if row:
-            return TensorComparisonRecord(*row)
+        rows = self.query_runner.execute_query(query, [int(tensor_id)])
+        if rows:
+            return TensorComparisonRecord(*rows[0])
 
     def query_global_tensor_comparisons_by_tensor_id(
         self, tensor_id
     ) -> Optional[TensorComparisonRecord]:
         query = "SELECT * FROM global_tensor_comparison_records WHERE tensor_id = ?"
-        row = self.query_runner.execute_query(query, tensor_id)
-        if row:
-            return TensorComparisonRecord(*row)
+        rows = self.query_runner.execute_query(query, [int(tensor_id)])
+        if rows:
+            return TensorComparisonRecord(*rows[0])
 
     def query_global_tensor_comparisons_by_tensor_ids(
         self, tensor_ids
@@ -297,7 +297,7 @@ class DatabaseQueries:
         query = "SELECT * FROM global_tensor_comparison_records WHERE tensor_id IN ({})".format(
             ",".join("?" * len(tensor_ids))
         )
-        rows = self.query_runner.execute_query(query, tensor_ids)
+        rows = self.query_runner.execute_query(query, [int(tensor_ids)])
         for row in rows:
             yield TensorComparisonRecord(*row)
 
