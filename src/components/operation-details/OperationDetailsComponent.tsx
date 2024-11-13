@@ -35,6 +35,7 @@ import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
 import GlobalSwitch from '../GlobalSwitch';
+import GraphComponent from './GraphComponent';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -718,6 +719,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 ) : (
                     <p className='not-found-message'>Operation {operationId} not found</p>
                 )}
+
+                <GraphComponent data={details.device_operations} />
             </div>
         </>
     );
