@@ -43,6 +43,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     return (
         <div
             className={classNames('tensor-item', {
+                active: tensor.address === selectedAddress,
                 dimmed: tensor.address !== selectedAddress && selectedAddress !== null,
             })}
         >
