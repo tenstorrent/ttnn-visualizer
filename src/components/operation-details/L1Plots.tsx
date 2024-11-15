@@ -118,8 +118,7 @@ function L1Plots({
                         }}
                     />
                     {[...cbChartDataByOperation.entries()].map(([{ name: deviceOperationName }, plotData], index) => (
-                        // eslint-disable-next-line react/no-array-index-key
-                        <Fragment key={index}>
+                        <Fragment key={`${deviceOperationName}-${index}`}>
                             <h3 className='circular-buffers-plot-title'>
                                 <Icon
                                     className='operation-icon'
@@ -152,10 +151,10 @@ function L1Plots({
                 })}
             >
                 {showCircularBuffer &&
-                    memoryReportWithCB.map((chunk) => (
+                    memoryReportWithCB.map((chunk, index) => (
                         <MemoryLegendElement
                             chunk={chunk}
-                            key={chunk.address}
+                            key={`${chunk.address}-${index}`}
                             memSize={memorySizeL1}
                             selectedTensorAddress={selectedAddress}
                             operationDetails={operationDetails}

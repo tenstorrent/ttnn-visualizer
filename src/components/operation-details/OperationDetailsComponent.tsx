@@ -355,13 +355,16 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {details.deviceOperations.length > 0 && (
                             <div className='device-operations'>
                                 <hr />
-                                <h3>
-                                    Device operations{' '}
-                                    <Button onClick={() => setDeviceOperationsGraphOpen(true)}>Open graph</Button>
-                                </h3>
+                                <h3>Device operations</h3>
+                                <Button
+                                    icon={IconNames.Graph}
+                                    intent={Intent.PRIMARY}
+                                    onClick={() => setDeviceOperationsGraphOpen(true)}
+                                >
+                                    Device operations graph view
+                                </Button>
 
                                 {details.deviceOperations.map((deviceOperation, index) => (
-                                    // eslint-disable-next-line react/no-array-index-key
                                     <Fragment key={deviceOperation.name + index}>
                                         <h4
                                             className='device-operation-name'
@@ -468,12 +471,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 ) : (
                     <p className='not-found-message'>Operation {operationId} not found</p>
                 )}
-
-                <GraphComponent
-                    data={details.device_operations}
-                    open={deviceOperationsGraphOpen}
-                    onClose={() => setDeviceOperationsGraphOpen(false)}
-                />
+                {deviceOperationsGraphOpen && details.device_operations && (
+                    <GraphComponent
+                        data={details.device_operations}
+                        open={deviceOperationsGraphOpen}
+                        onClose={() => setDeviceOperationsGraphOpen(false)}
+                    />
+                )}
             </div>
         </>
     );

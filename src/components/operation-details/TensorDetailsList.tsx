@@ -25,10 +25,10 @@ function TensorDetailsList({
             <div>
                 <h3>Inputs</h3>
 
-                {inputs.map((tensor) => (
+                {inputs.map((tensor, index) => (
                     <TensorDetailsComponent
                         tensor={tensor}
-                        key={tensor.id}
+                        key={`${tensor.id}-${index}`}
                         selectedAddress={selectedAddress}
                         onTensorClick={onTensorClick}
                         memorySize={memorySizeL1}
