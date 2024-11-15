@@ -12,6 +12,22 @@ export interface TensorData extends Tensor {
     memory_config: string | null;
     device_id: number | null;
     io: 'input' | 'output' | null; // TODO: validate usefulness in the future
+    comparison: {
+        global: {
+            actual_pcc: number;
+            desired_pcc: number;
+            golden_tensor_id: number;
+            matches: number;
+            tensor_id: number;
+        };
+        local: {
+            actual_pcc: number;
+            desired_pcc: number;
+            golden_tensor_id: number;
+            matches: number;
+            tensor_id: number;
+        };
+    } | null;
 }
 
 export interface BufferData {
@@ -91,6 +107,7 @@ export const defaultTensorData: TensorData = {
     consumers: [],
     producerNames: [],
     consumerNames: [],
+    comparison: null,
 };
 
 export const defaultBuffer: BufferData = {

@@ -350,6 +350,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             plotZoomRangeStart={plotZoomRangeStart}
                             plotZoomRangeEnd={plotZoomRangeEnd}
                             onTensorClick={onTensorClick}
+                            selectedTensorId={selectedTensorId}
                         />
 
                         {details.deviceOperations.length > 0 && (

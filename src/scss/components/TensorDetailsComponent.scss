@@ -5,10 +5,15 @@
 @use '../definitions/colours' as *;
 
 .tensor-item {
-    margin-top: 20px;
+    display: inline-block;
 
     &.dimmed {
         opacity: 0.5;
+    }
+
+    &.active {
+        outline: 2px solid $tt-bg-highlight;
+        outline-offset: 10px;
     }
 
     .tensor-header {
