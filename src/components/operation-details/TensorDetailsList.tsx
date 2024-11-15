@@ -1,6 +1,4 @@
-import { useAtomValue } from 'jotai';
 import TensorDetailsComponent from './TensorDetailsComponent';
-import { selectedAddressAtom } from '../../store/app';
 import { OperationDetails } from '../../model/OperationDetails';
 import 'styles/components/TensorDetailsList.scss';
 
@@ -9,6 +7,7 @@ interface TensorDetailsProps {
     plotZoomRangeStart: number;
     plotZoomRangeEnd: number;
     onTensorClick: (address?: number, tensorId?: number) => void;
+    selectedTensorId: number | null;
 }
 
 function TensorDetailsList({
@@ -16,20 +15,21 @@ function TensorDetailsList({
     plotZoomRangeStart,
     plotZoomRangeEnd,
     onTensorClick,
+    selectedTensorId,
 }: TensorDetailsProps) {
-    const selectedAddress = useAtomValue(selectedAddressAtom);
     const { id, inputs, outputs, memorySizeL1 } = operationDetails;
 
     return (
         <div className='tensor-list'>
-            <div>
-                <h3>Inputs</h3>
+            <div className='column'>
+                <h3 className='title'>Inputs</h3>
 
-                {inputs.map((tensor) => (
+                {inputs.map((tensor, index) => (
                     <TensorDetailsComponent
                         tensor={tensor}
-                        key={tensor.id}
-                        selectedAddress={selectedAddress}
+                        // eslint-disable-next-line react/no-array-index-key
+                        key={index}
+                        selectedTensorId={selectedTensorId}
                         onTensorClick={onTensorClick}
                         memorySize={memorySizeL1}
                         operationId={id}
@@ -38,14 +38,15 @@ function TensorDetailsList({
                 ))}
             </div>
 
-            <div>
-                <h3>Outputs</h3>
+            <div className='column'>
+                <h3 className='title'>Outputs</h3>
 
-                {outputs.map((tensor) => (
+                {outputs.map((tensor, index) => (
                     <TensorDetailsComponent
                         tensor={tensor}
-                        key={tensor.id}
-                        selectedAddress={selectedAddress}
+                        // eslint-disable-next-line react/no-array-index-key
+                        key={index}
+                        selectedTensorId={selectedTensorId}
                         onTensorClick={onTensorClick}
                         memorySize={memorySizeL1}
                         operationId={id}
