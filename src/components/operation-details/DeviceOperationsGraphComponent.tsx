@@ -6,7 +6,7 @@ import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Node, NodeType } from '../../model/APIData';
 import { getTensorColor } from '../../functions/colorGenerator';
-import '../../scss/components/GraphComponent.scss';
+import 'styles/components/DeviceOperationsGraphComponent.scss';
 
 export interface GraphComponentProps {
     data: Node[];

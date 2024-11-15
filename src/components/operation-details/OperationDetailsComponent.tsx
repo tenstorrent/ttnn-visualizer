@@ -26,7 +26,7 @@ import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
 import GlobalSwitch from '../GlobalSwitch';
-import GraphComponent from './GraphComponent';
+import GraphComponent from './DeviceOperationsGraphComponent';
 import { BufferType } from '../../model/BufferType';
 import DRAMPlots from './DRAMPlots';
 import L1Plots from './L1Plots';
