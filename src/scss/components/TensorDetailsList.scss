@@ -6,4 +6,15 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 5px;
+
+    .title {
+        margin-bottom: 0;
+    }
+
+    .column {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 20px;
+    }
 }
