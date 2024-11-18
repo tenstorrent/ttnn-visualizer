@@ -1,6 +1,5 @@
 import json
-from typing import Generator
-
+from typing import Generator, Dict, Any, Union
 
 from ttnn_visualizer.exceptions import (
     DatabaseFileNotFoundException,
@@ -176,208 +175,118 @@ class DatabaseQueries:
 
         return bool(rows)
 
-    # Query methods below:
-    def query_device_operations(self) -> List[DeviceOperation]:
-        # Check if the 'captured_graph' table exists before querying
-        if not self._check_table_exists("captured_graph"):
-            return []  # Return an empty list if the table does not exist
+    def _query_table(
+        self,
+        table_name: str,
+        filters: Optional[Dict[str, Union[Any, List[Any]]]] = None,
+        additional_conditions: Optional[str] = None,
+        additional_params: Optional[List[Any]] = None,
+    ) -> List[Any]:
+        query = f"SELECT * FROM {table_name} WHERE 1=1"
+        params = []
 
-        query = "SELECT * FROM captured_graph"
-        rows = self.query_runner.execute_query(query)
+        if filters:
+            for column, value in filters.items():
+                if value is None:  # Skip filters with None values
+                    continue
+
+                if isinstance(value, list):  # Handle list-based filters
+                    if len(value) == 0:  # Skip empty lists
+                        continue
+                    placeholders = ", ".join(["?"] * len(value))
+                    query += f" AND {column} IN ({placeholders})"
+                    params.extend(value)
+                else:
+                    query += f" AND {column} = ?"
+                    params.append(value)
+
+        if additional_conditions:
+            query += f" {additional_conditions}"
+            if additional_params:
+                params.extend(additional_params)
+
+        return self.query_runner.execute_query(query, params)
+
+    def query_device_operations(
+        self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
+    ) -> List[DeviceOperation]:
+        if not self._check_table_exists("captured_graph"):
+            return []
+        rows = self._query_table("captured_graph", filters)
         return [DeviceOperation(*row) for row in rows]
 
-    def query_device_operations_by_operation_id(
-        self, operation_id: int
-    ) -> Optional[DeviceOperation]:
-        if not self._check_table_exists("captured_graph"):
-            return None  # Return an empty list if the table does not exist
-        query = "SELECT * FROM captured_graph WHERE operation_id = ?"
-        rows = self.query_runner.execute_query(query, [operation_id])
-        if rows:
-            operation_id, captured_graph = rows[0]
-            return DeviceOperation(
-                operation_id=operation_id, captured_graph=captured_graph
-            )
-        return None
+    def query_operation_arguments(
+        self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
+    ) -> Generator[OperationArgument, None, None]:
+        rows = self._query_table("operation_arguments", filters)
+        for row in rows:
+            yield OperationArgument(*row)
 
-    def query_operations(self) -> Generator[Operation, None, None]:
-        query = "SELECT * FROM operations"
-        rows = self.query_runner.execute_query(query)
+    def query_operations(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> Generator[Operation, None, None]:
+        rows = self._query_table("operations", filters)
         for row in rows:
             yield Operation(*row)
 
-    def query_operation_by_id(self, operation_id: int) -> Optional[Operation]:
-        query = "SELECT * FROM operations WHERE operation_id = ?"
-        rows = self.query_runner.execute_query(query, [operation_id])
-        return Operation(*rows[0]) if rows else None
-
-    def query_operation_arguments(self) -> Generator[OperationArgument, None, None]:
-        query = "SELECT * FROM operation_arguments"
-        rows = self.query_runner.execute_query(query)
+    def query_buffers(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> Generator[Buffer, None, None]:
+        rows = self._query_table("buffers", filters)
         for row in rows:
-            yield OperationArgument(*row)
+            yield Buffer(*row)
 
-    def query_operation_arguments_by_operation_id(
-        self, operation_id: int
-    ) -> Generator[OperationArgument, None, None]:
-        query = "SELECT * FROM operation_arguments WHERE operation_id = ?"
-        rows = self.query_runner.execute_query(query, [operation_id])
-        for row in rows:
-            yield OperationArgument(*row)
-
-    def query_stack_traces(self) -> Generator[StackTrace, None, None]:
-        query = "SELECT * FROM stack_traces"
-        rows = self.query_runner.execute_query(query)
+    def query_stack_traces(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> Generator[StackTrace, None, None]:
+        rows = self._query_table("stack_traces", filters)
         for row in rows:
             operation_id, stack_trace = row
             yield StackTrace(operation_id, stack_trace=stack_trace)
 
-    def query_stack_trace(self, operation_id: int) -> Optional[StackTrace]:
-        query = "SELECT * FROM stack_traces WHERE operation_id = ?"
-        rows = self.query_runner.execute_query(query, [operation_id])
-        if rows:
-            operation_id, stack_trace = rows[0]
-            return StackTrace(operation_id, stack_trace=stack_trace)
-        return None
-
-    def query_buffers(
-        self, buffer_type: Optional[int] = None
-    ) -> Generator[Buffer, None, None]:
-        query = "SELECT * FROM buffers WHERE 1=1"
-        params = []
-        if buffer_type is not None:
-            query += " AND buffer_type = ?"
-            params.append(buffer_type)
-        rows = self.query_runner.execute_query(query, params)
-        for row in rows:
-            yield Buffer(*row)
-
-    def query_buffers_by_operation_id(
-        self, operation_id: int, buffer_type: Optional[int] = None
-    ) -> Generator[Buffer, None, None]:
-        query = "SELECT * FROM buffers WHERE operation_id = ?"
-        params = [operation_id]
-        if buffer_type is not None:
-            query += " AND buffer_type = ?"
-            params.append(buffer_type)
-        rows = self.query_runner.execute_query(query, params)
-        for row in rows:
-            yield Buffer(*row)
-
-    def query_local_tensor_comparisons(
-        self,
+    def query_tensor_comparisons(
+        self, local: bool = True, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[TensorComparisonRecord, None, None]:
-        query = "SELECT * FROM local_tensor_comparison_records"
-        rows = self.query_runner.execute_query(query)
-        for row in rows:
-            yield TensorComparisonRecord(*row)
-
-    def query_local_tensor_comparisons_by_tensor_ids(
-        self, tensor_ids
-    ) -> Generator[TensorComparisonRecord, None, None]:
-
-        query = "SELECT * FROM local_tensor_comparison_records WHERE tensor_id IN ({})".format(
-            ",".join("?" * len(tensor_ids))
-        )
-        rows = self.query_runner.execute_query(query, tensor_ids)
-        for row in rows:
-            yield TensorComparisonRecord(*row)
-
-    def query_global_tensor_comparisons(
-        self,
-    ) -> Generator[TensorComparisonRecord, None, None]:
-        query = "SELECT * FROM global_tensor_comparison_records"
-        rows = self.query_runner.execute_query(query)
-        for row in rows:
-            yield TensorComparisonRecord(*row)
-
-    def query_global_tensor_comparisons_by_tensor_ids(
-        self, tensor_ids
-    ) -> Generator[TensorComparisonRecord, None, None]:
-        query = "SELECT * FROM global_tensor_comparison_records WHERE tensor_id IN ({})".format(
-            ",".join("?" * len(tensor_ids))
-        )
-        rows = self.query_runner.execute_query(query, tensor_ids)
+        if local:
+            table_name = "local_tensor_comparison_records"
+        else:
+            table_name = "global_tensor_comparison_records"
+        rows = self._query_table(table_name, filters)
         for row in rows:
             yield TensorComparisonRecord(*row)
 
     def query_buffer_pages(
-        self,
-        operation_id=None,
-        addresses=None,
-        buffer_type=None,
+        self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[BufferPage, None, None]:
-        # noinspection SqlConstantExpression
-        query = "SELECT * FROM buffer_pages WHERE 1=1"
-        params = []
-
-        # Add optional conditions
-        if operation_id is not None:
-            query += " AND operation_id = ?"
-            params.append(operation_id)
-
-        if addresses is not None and len(addresses) > 0:
-            placeholders = ",".join(["?"] * len(addresses))
-            query += f" AND address IN ({placeholders})"
-            params.extend(addresses)
-
-        if buffer_type is not None:
-            query += " AND buffer_type = ?"
-            params.append(buffer_type)
-
-        rows = self.query_runner.execute_query(query, params)
+        rows = self._query_table("buffer_pages", filters)
         for row in rows:
             yield BufferPage(*row)
 
-    def query_tensors(self) -> Generator[Tensor, None, None]:
-        query = "SELECT * FROM tensors"
-        rows = self.query_runner.execute_query(query)
+    def query_tensors(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> Generator[Tensor, None, None]:
+        rows = self._query_table("tensors", filters)
         for row in rows:
             yield Tensor(*row)
 
-    def query_tensors_by_tensor_ids(self, tensor_ids: List[int]) -> List[Tensor]:
-        query = "SELECT * FROM tensors WHERE tensor_id IN ({})".format(
-            ",".join("?" * len(tensor_ids))
-        )
-        rows = self.query_runner.execute_query(query, tensor_ids)
-        return [Tensor(*row) for row in rows]
-
-    def query_tensor_by_id(self, tensor_id: int) -> Optional[Tensor]:
-        query = "SELECT * FROM tensors WHERE tensor_id = ?"
-        rows = self.query_runner.execute_query(query, [tensor_id])
-        return Tensor(*rows[0]) if rows else None
-
-    def query_input_tensors(self) -> Generator[InputTensor, None, None]:
-        query = "SELECT * FROM input_tensors"
-        rows = self.query_runner.execute_query(query)
-        for row in rows:
-            yield InputTensor(*row)
-
-    def query_input_tensors_by_operation_id(
-        self, operation_id: int
+    def query_input_tensors(
+        self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[InputTensor, None, None]:
-        query = "SELECT * FROM input_tensors WHERE operation_id = ?"
-        rows = self.query_runner.execute_query(query, [operation_id])
+        rows = self._query_table("input_tensors", filters)
         for row in rows:
             yield InputTensor(*row)
 
-    def query_output_tensors(self) -> Generator[OutputTensor, None, None]:
-        query = "SELECT * FROM output_tensors"
-        rows = self.query_runner.execute_query(query)
-        for row in rows:
-            yield OutputTensor(*row)
-
-    def query_output_tensors_by_operation_id(
-        self, operation_id: int
+    def query_output_tensors(
+        self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[OutputTensor, None, None]:
-        query = "SELECT * FROM output_tensors WHERE operation_id = ?"
-        rows = self.query_runner.execute_query(query, [operation_id])
+        rows = self._query_table("output_tensors", filters)
         for row in rows:
             yield OutputTensor(*row)
 
-    def query_devices(self) -> Generator[Device, None, None]:
-        query = "SELECT * FROM devices"
-        rows = self.query_runner.execute_query(query)
+    def query_devices(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> Generator[Device, None, None]:
+        rows = self._query_table("devices", filters)
         for row in rows:
             yield Device(*row)
 
@@ -399,14 +308,6 @@ class DatabaseQueries:
         rows = self.query_runner.execute_query(query)
         for row in rows:
             tensor_id, producers_data, consumers_data = row
-
-            # TODO Remote querying currently casts single string digits as int
-            if producers_data and type(producers_data) is int:
-                producers_data = str(producers_data)
-
-            if consumers_data and type(consumers_data) is int:
-                consumers_data = str(consumers_data)
-
             producers = sorted(
                 set(map(int, producers_data.strip('"').split(",")))
                 if producers_data
@@ -418,14 +319,6 @@ class DatabaseQueries:
                 else []
             )
             yield ProducersConsumers(tensor_id, producers, consumers)
-
-    def query_consumer_operation_ids(
-        self, tensor_id: int
-    ) -> Generator[int, None, None]:
-        query = "SELECT * FROM input_tensors WHERE tensor_id = ?"
-        rows = self.query_runner.execute_query(query, [tensor_id])
-        for row in rows:
-            yield row[0]
 
     def query_next_buffer(self, operation_id: int, address: str) -> Optional[Buffer]:
         query = """
