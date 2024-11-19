@@ -147,3 +147,17 @@ $row-background: $tt-grey-2;
         margin-top: 0;
     }
 }
+
+.current-dram-plots {
+    display: flex;
+    gap: 10px;
+
+    > .dram-memory-renderer {
+        flex: 1 1 50%;
+
+        > .memory-plot {
+            width: auto;
+            margin-right: 0;
+        }
+    }
+}

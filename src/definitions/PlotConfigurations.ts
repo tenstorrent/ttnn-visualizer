@@ -65,6 +65,7 @@ export interface PlotConfiguration {
     xAxis?: {
         side: 'top' | 'bottom';
     };
+    nticks?: number;
 }
 
 export const CONDENSED_PLOT_CHUNK_COLOR = '#9c9e9f';

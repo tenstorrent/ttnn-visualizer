@@ -39,6 +39,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     const tickFormat = showHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: 'd' };
 
     const layout: Partial<Layout> = {
+        autosize: true,
         height: configuration.height,
         xaxis: {
             autorange: false,
@@ -50,6 +51,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             color: 'white',
             gridcolor: configuration.gridColour || '#999',
             side: configuration.xAxis?.side || 'bottom',
+            nticks: configuration?.nticks || 0,
             ...tickFormat,
         },
         yaxis: {
@@ -128,7 +130,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             {title ? <h3 className='plot-title'>{title}</h3> : null}
 
             <Plot
-                className='memory-plot'
+                className='memory-plot js-plotly-plot'
                 data={augmentedChart}
                 layout={layout}
                 config={config}
@@ -136,6 +138,8 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
                 onClick={onBufferClick}
                 onHover={(data) => setHoveredPoint(data.points[0].x as number)}
                 onUnhover={() => setHoveredPoint(null)}
+                useResizeHandler
+                style={{ width: '100%', height: configuration.height }}
             />
         </div>
     );

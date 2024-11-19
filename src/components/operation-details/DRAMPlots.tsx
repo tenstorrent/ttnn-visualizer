@@ -1,5 +1,6 @@
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
+import { PlotData } from 'plotly.js';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { isEqual } from '../../functions/math';
@@ -68,6 +69,33 @@ function DRAMPlots({
         dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
     }
 
+    const splitDramData = (data: Partial<PlotData>[]) => {
+        const result = [];
+        let currentArray = [];
+
+        for (let i = 0; i < data.length; i++) {
+            const thisPosition = data?.[i]?.x?.[0] as number;
+            const lastPosition = data?.[i - 1]?.x?.[0] as number;
+
+            if (thisPosition - lastPosition > 10000000) {
+                result.push(currentArray);
+                currentArray = [];
+            }
+
+            currentArray.push(data[i]);
+        }
+
+        if (currentArray.length > 0) {
+            result.push(currentArray);
+        }
+
+        return result;
+    };
+
+    const getPlotConfig = () => ({
+        nticks: 3,
+    });
+
     return (
         <>
             <MemoryPlotRenderer
@@ -83,18 +111,34 @@ function DRAMPlots({
                 configuration={DRAMRenderConfiguration}
             />
 
-            <MemoryPlotRenderer
-                title='Current Summarized DRAM Report'
-                className={classNames('dram-memory-renderer', {
-                    'empty-plot': dramData.length === 0,
+            <h3 className='plot-title'>Current Plots</h3>
+
+            <div className='current-dram-plots'>
+                {splitDramData(dramData).map((data, index) => {
+                    const start = data[0].x?.[0] as number;
+                    const endPosition = data.at(-1)?.x?.[0] as number;
+                    const endWidth = data.at(-1)?.width as number;
+
+                    return (
+                        <MemoryPlotRenderer
+                            // eslint-disable-next-line react/no-array-index-key
+                            key={index}
+                            className={classNames('dram-memory-renderer', {
+                                'empty-plot': dramData.length === 0,
+                            })}
+                            plotZoomRange={[start, endPosition - endWidth]}
+                            chartDataList={[data]}
+                            isZoomedIn
+                            memorySize={DRAM_MEMORY_SIZE}
+                            onBufferClick={onDramBufferClick}
+                            configuration={{
+                                ...DRAMRenderConfiguration,
+                                ...getPlotConfig(),
+                            }}
+                        />
+                    );
                 })}
-                plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
-                chartDataList={[dramData]}
-                isZoomedIn={zoomedInViewMainMemory}
-                memorySize={DRAM_MEMORY_SIZE}
-                onBufferClick={onDramBufferClick}
-                configuration={DRAMRenderConfiguration}
-            />
+            </div>
 
             <MemoryPlotRenderer
                 title='DRAM Delta (difference between current and previous operation)'
