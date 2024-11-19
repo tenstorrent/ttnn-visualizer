@@ -63,9 +63,12 @@ export interface PlotConfiguration {
     gridColour?: string;
     bgColour?: string;
     xAxis?: {
-        side: 'top' | 'bottom';
+        side?: 'top' | 'bottom';
+        tickmode?: 'array' | 'auto' | 'linear';
+        tick0?: number;
+        dtick?: number;
+        tickvals?: number[];
     };
-    nticks?: number;
 }
 
 export const CONDENSED_PLOT_CHUNK_COLOR = '#9c9e9f';
