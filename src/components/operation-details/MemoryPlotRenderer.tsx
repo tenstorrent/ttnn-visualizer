@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { CSSProperties, useMemo, useState } from 'react';
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
@@ -15,6 +15,7 @@ export interface MemoryPlotRendererProps {
     plotZoomRange?: [start: number, end: number];
     className?: string;
     configuration: PlotConfiguration;
+    style?: CSSProperties;
 }
 
 const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
@@ -26,6 +27,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     onBufferClick,
     plotZoomRange,
     configuration,
+    style,
 }) => {
     const showHex = useAtomValue(showHexAtom);
     const chartData = useMemo(() => chartDataList.flat(), [chartDataList]);
@@ -129,7 +131,10 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     }, [hoveredPoint, chartData, selectedAddress]);
 
     return (
-        <div className={className}>
+        <div
+            className={className}
+            style={style}
+        >
             {title ? <h3 className='plot-title'>{title}</h3> : null}
 
             <Plot

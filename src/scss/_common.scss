@@ -147,28 +147,3 @@ $row-background: $tt-grey-2;
         margin-top: 0;
     }
 }
-
-.zoomed-dram-plots {
-    display: flex;
-    gap: 10px;
-
-    > .dram-memory-renderer {
-        flex: 1 1 50%;
-
-        > .memory-plot {
-            width: auto;
-            margin-right: 0;
-
-            &.js-plotly-plot {
-                .xaxislayer-above {
-                    // Fixes the issue where the last x-axis tick is not visible (thanks Plotly)
-                    .xtick:last-child text {
-                        /* stylelint-disable-next-line declaration-no-important */
-                        opacity: 1 !important; // Need this to overwrite inline style
-                        text-anchor: end;
-                    }
-                }
-            }
-        }
-    }
-}
