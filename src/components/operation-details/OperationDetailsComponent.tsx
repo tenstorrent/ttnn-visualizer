@@ -348,7 +348,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             selectedTensorId={selectedTensorId}
                         />
 
-                        {details.device_operations && (
+                        {details.device_operations && details.deviceOperations.length > 0 && (
                             <>
                                 <h3>Device operations</h3>
                                 <Button
