@@ -76,6 +76,7 @@ module.exports = {
         'prefer-const': 'warn',
         'prettier/prettier': 'warn',
         'react/jsx-filename-extension': ['warn', { extensions: ['.tsx'] }],
+        'react/no-array-index-key': 'off',
         'react/react-in-jsx-scope': 'off',
         'no-plusplus': 'off',
         'no-underscore-dangle': 'off',

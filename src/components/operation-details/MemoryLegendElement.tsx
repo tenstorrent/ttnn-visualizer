@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import React from 'react';
 import classNames from 'classnames';
 import { Icon, Tooltip } from '@blueprintjs/core';
@@ -6,6 +10,7 @@ import { DeviceOperationLayoutTypes, DeviceOperationTypes, FragmentationEntry } 
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatSize, prettyPrintAddress, toHex } from '../../functions/math';
+import 'styles/components/MemoryLegendElement.scss';
 
 export const MemoryLegendElement: React.FC<{
     chunk: FragmentationEntry;
@@ -46,6 +51,7 @@ export const MemoryLegendElement: React.FC<{
             key={chunk.address}
             className={classNames('legend-item', {
                 button: !chunk.empty,
+                active: selectedTensorAddress === chunk.address,
                 dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
             })}
             // eslint-disable-next-line react/jsx-props-no-spreading

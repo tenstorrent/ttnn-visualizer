@@ -30,10 +30,6 @@
         margin-bottom: 0;
     }
 
-    .dram-memory-renderer {
-        margin-bottom: 10px;
-    }
-
     .circular-buffers-plot-title {
         display: inline-flex;
         align-items: center;
@@ -77,56 +73,6 @@
 
         h4 {
             margin: 0;
-        }
-
-        .legend-item {
-            display: inline-grid;
-            gap: 5px;
-            grid-template-columns: 20px 1fr;
-            height: 18px;
-            align-content: center;
-            align-items: center;
-            padding: 0;
-
-            &.button {
-                font-size: inherit;
-
-                &:focus,
-                &:hover {
-                    .legend-details {
-                        .format-numbers:first-child {
-                            text-decoration: underline;
-                        }
-                    }
-                }
-            }
-
-            &.dimmed {
-                opacity: 0.4;
-            }
-
-            .legend-details {
-                display: inline-grid;
-                grid-template-columns: 0.7fr 1.2fr 0.75fr 1fr;
-                gap: 15px;
-                text-align: left;
-
-                &.extra-info {
-                    grid-template-columns: 0.7fr 1.2fr 0.75fr 1fr 2fr;
-                }
-
-                .format-numbers {
-                    text-align: right;
-
-                    &.keep-left {
-                        text-align: left;
-                    }
-                }
-            }
-
-            .legend-text {
-                font-size: 0.875rem;
-            }
         }
     }
 

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
@@ -41,7 +45,14 @@ function L1Plots({
     onLegendClick,
 }: L1PlotsProps) {
     const selectedAddress = useAtomValue(selectedAddressAtom);
-    const { chartData, memory, fragmentation, cbChartData, cbChartDataByOperation } = operationDetails.memoryData();
+    const {
+        // nowrap
+        chartData,
+        memory,
+        fragmentation,
+        cbChartData,
+        cbChartDataByOperation,
+    } = operationDetails.memoryData();
     const { chartData: previousChartData } = previousOperationDetails.memoryData();
 
     const cbZoomStart = operationDetails.deviceOperations
@@ -67,19 +78,18 @@ function L1Plots({
     const memoryReportWithCB: FragmentationEntry[] = [
         ...memoryReport,
         ...operationDetails.deviceOperations
-            .map((op, i) =>
+            .map((op) =>
                 op.cbList.map(
                     (cb) =>
                         ({
                             ...cb,
                             bufferType: 'CB',
-                            colorVariance: i,
+                            colorVariance: op.id,
                         }) as FragmentationEntry,
                 ),
             )
             .flat(),
     ].sort((a, b) => a.address - b.address);
-
     return (
         <>
             <MemoryPlotRenderer
@@ -118,8 +128,7 @@ function L1Plots({
                         }}
                     />
                     {[...cbChartDataByOperation.entries()].map(([{ name: deviceOperationName }, plotData], index) => (
-                        // eslint-disable-next-line react/no-array-index-key
-                        <Fragment key={index}>
+                        <Fragment key={`${deviceOperationName}-${index}`}>
                             <h3 className='circular-buffers-plot-title'>
                                 <Icon
                                     className='operation-icon'
@@ -152,10 +161,10 @@ function L1Plots({
                 })}
             >
                 {showCircularBuffer &&
-                    memoryReportWithCB.map((chunk) => (
+                    memoryReportWithCB.map((chunk, index) => (
                         <MemoryLegendElement
                             chunk={chunk}
-                            key={chunk.address}
+                            key={`${chunk.address}-${index}`}
                             memSize={memorySizeL1}
                             selectedTensorAddress={selectedAddress}
                             operationDetails={operationDetails}

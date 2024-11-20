@@ -18,20 +18,20 @@ import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator'
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
-    selectedAddress: number | null;
     memorySize: number;
     onTensorClick: (address?: number, tensorId?: number) => void;
     operationId: number;
     zoomRange: [number, number];
+    selectedTensorId: number | null;
 }
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     tensor,
-    selectedAddress = null,
     memorySize,
     onTensorClick,
     operationId,
     zoomRange,
+    selectedTensorId,
 }) => {
     const { address } = tensor;
     const { data: operations } = useOperationsList();
@@ -43,7 +43,8 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     return (
         <div
             className={classNames('tensor-item', {
-                dimmed: tensor.address !== selectedAddress && selectedAddress !== null,
+                active: tensor.id === selectedTensorId,
+                dimmed: tensor.id !== selectedTensorId && selectedTensorId !== null,
             })}
         >
             <div className='tensor-header'>

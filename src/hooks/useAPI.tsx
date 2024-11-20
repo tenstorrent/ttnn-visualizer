@@ -37,7 +37,7 @@ export const fetchBufferPages = async (
             operation_id: operationId,
             address,
             buffer_type: bufferType,
-            deviceId,
+            device_id: deviceId,
         },
     });
     return response.data;
@@ -69,7 +69,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
 const fetchOperations = async (deviceId?: number): Promise<OperationDescription[]> => {
     const { data: operationList } = await axiosInstance.get<OperationDescription[]>('/api/operations', {
         params: {
-            deviceId,
+            device_id: deviceId,
         },
     });
 
@@ -107,7 +107,10 @@ export interface DeviceData {
  * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
  */
 const fetchAllBuffers = async (bufferType: BufferType | null, deviceId?: number): Promise<BuffersByOperationData[]> => {
-    const params = { buffer_type: bufferType, deviceId };
+    const params = {
+        buffer_type: bufferType,
+        device_id: deviceId,
+    };
 
     const { data: buffers } = await axiosInstance.get<BuffersByOperationData[]>('/api/operation-buffers', {
         params,
@@ -213,7 +216,7 @@ export const fetchTensors = async (deviceId?: number): Promise<TensorData[]> => 
         const { data: tensorList } = await axiosInstance.get<TensorData[]>('/api/tensors', {
             maxRedirects: 1,
             params: {
-                deviceId,
+                device_id: deviceId,
             },
         });
 

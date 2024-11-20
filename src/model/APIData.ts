@@ -123,6 +123,7 @@ export interface Chunk {
     size: number;
     tensorId?: number;
 }
+
 export interface ColoredChunk extends Chunk {
     color: string | undefined;
 }
@@ -173,6 +174,9 @@ export enum NodeType {
 export enum DeviceOperationLayoutTypes {
     INTERLEAVED = 'INTERLEAVED',
     SINGLE_BANK = 'SINGLE_BANK',
+    HEIGHT_SHARDED = 'HEIGHT_SHARDED',
+    ROW_MAJOR = 'ROW_MAJOR',
+    TILE = 'TILE',
 }
 
 export enum DeviceOperationTypes {
@@ -200,17 +204,19 @@ export interface Node {
 }
 
 export interface DeviceOperation {
+    id: number;
     name: string;
     cbList: CircularBuffer[];
     bufferList: TensorBuffer[];
     deallocateCBs: boolean;
     deallocateBuffers: boolean;
-    indentLevel: number; // device ops nesting level indicator
-    colorVariance?: number | undefined;
+    tensor?: { shape: string; id: number };
+    events: NodeType[];
 }
 
 export interface CircularBuffer extends Chunk {
     core_range_set: string;
+    colorVariance?: number | undefined;
 }
 
 export interface TensorBuffer extends Chunk {
