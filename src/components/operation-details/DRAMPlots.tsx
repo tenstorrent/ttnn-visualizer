@@ -101,7 +101,6 @@ function DRAMPlots({
 
                         return (
                             <MemoryPlotRenderer
-                                // eslint-disable-next-line react/no-array-index-key
                                 key={index}
                                 className={classNames('dram-memory-renderer', {
                                     'empty-plot': dramData.length === 0,
@@ -160,7 +159,6 @@ function DRAMPlots({
 
                         return (
                             <MemoryPlotRenderer
-                                // eslint-disable-next-line react/no-array-index-key
                                 key={index}
                                 className={classNames('dram-memory-renderer', {
                                     'empty-plot': dramData.length === 0,
