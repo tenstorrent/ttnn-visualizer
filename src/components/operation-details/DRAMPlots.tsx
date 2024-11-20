@@ -231,11 +231,13 @@ const getPlotConfig = (
     start: number,
     end: number,
 ): {
+    title: string;
     xAxis: {
         tickmode: 'array' | 'linear' | 'auto';
         tickvals: number[];
     };
 } => ({
+    title: '',
     xAxis: {
         tickmode: 'array',
         tickvals: [start, end],
