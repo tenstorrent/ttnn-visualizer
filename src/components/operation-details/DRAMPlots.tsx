@@ -1,7 +1,6 @@
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
 import { useMemo } from 'react';
-import { PlotData } from 'plotly.js';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { isEqual } from '../../functions/math';
@@ -83,8 +82,12 @@ function DRAMPlots({
             <div className='zoomed-dram-plots'>
                 {zoomedInViewMainMemory && previousDramData.length > 0 ? (
                     splitPreviousDramData.map((data, index) => {
-                        const firstDataPoint = data[0] as PlotDataCustom;
-                        const lastDataPoint = data.at(-1) as PlotDataCustom;
+                        const firstDataPoint = data[0];
+                        const lastDataPoint = data.at(-1);
+
+                        if (!firstDataPoint.memoryData || !lastDataPoint?.memoryData) {
+                            return null;
+                        }
 
                         const dramNonContinuousPlotZoomRangeStart =
                             firstDataPoint.memoryData.address || DRAM_MEMORY_SIZE * DRAM_PADDING_RATIO;
@@ -138,8 +141,12 @@ function DRAMPlots({
             <div className='zoomed-dram-plots'>
                 {zoomedInViewMainMemory && dramData.length > 0 ? (
                     splitDramData.map((data, index) => {
-                        const firstDataPoint = data[0] as PlotDataCustom;
-                        const lastDataPoint = data.at(-1) as PlotDataCustom;
+                        const firstDataPoint = data[0];
+                        const lastDataPoint = data.at(-1);
+
+                        if (!firstDataPoint.memoryData || !lastDataPoint?.memoryData) {
+                            return null;
+                        }
 
                         const dramNonContinuousPlotZoomRangeStart =
                             firstDataPoint.memoryData.address || DRAM_MEMORY_SIZE * DRAM_PADDING_RATIO;
@@ -237,12 +244,11 @@ const getPlotConfig = (
     },
 });
 
-const splitData = (data: Partial<PlotData>[]): Array<PlotDataCustom[]> => {
-    const plotData = data as PlotDataCustom[]; // TODO: Fix horrible typing situation with PlotData and PlotDataCustom
-    const result: PlotDataCustom[][] = [];
-    const lastDataPoint = plotData.at(-1)?.memoryData;
+const splitData = (data: Partial<PlotDataCustom>[]) => {
+    const result = [];
+    const lastDataPoint = data.at(-1)?.memoryData;
     const splitThreshold = lastDataPoint ? (lastDataPoint.address + lastDataPoint.size) / 8 : 0;
-    let currentArray: PlotDataCustom[] = [];
+    let currentArray = [];
 
     for (let i = 0; i < data.length; i++) {
         const thisPosition = data?.[i]?.x?.[0] as number;
@@ -253,7 +259,7 @@ const splitData = (data: Partial<PlotData>[]): Array<PlotDataCustom[]> => {
             currentArray = [];
         }
 
-        currentArray.push(data[i] as PlotDataCustom);
+        currentArray.push(data[i]);
     }
 
     if (currentArray.length > 0) {
@@ -263,13 +269,16 @@ const splitData = (data: Partial<PlotData>[]): Array<PlotDataCustom[]> => {
     return result;
 };
 
-const calculateWidth = (data: { memoryData: { size: number } }[][]) => {
+const calculateWidth = (data: Partial<PlotDataCustom>[][]) => {
     const totalWidth = data.reduce((total, subArray) => {
-        return total + subArray.reduce((subTotal, item) => subTotal + item.memoryData.size, 0);
+        return total + subArray.reduce((subTotal, item) => (item.memoryData ? subTotal + item.memoryData.size : 0), 0);
     }, 0);
 
     const widthPercentages = data.map((subArray) => {
-        const subArrayWidth = subArray.reduce((subTotal, item) => subTotal + item.memoryData.size, 0);
+        const subArrayWidth = subArray.reduce(
+            (subTotal, item) => (item.memoryData ? subTotal + item.memoryData.size : 0),
+            0,
+        );
         const percentage = (subArrayWidth / totalWidth) * 100;
         return percentage < 20 ? '200px' : `${percentage}%`;
     });

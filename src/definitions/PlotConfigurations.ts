@@ -1,5 +1,6 @@
 import { PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
 import { HistoricalTensor } from '../model/Graph';
+import { TensorData } from '../model/APIData';
 
 export const L1RenderConfiguration = {
     height: 110,
@@ -85,7 +86,7 @@ export interface PlotDataCustom extends PlotData {
     memoryData: {
         address: number;
         size: number;
-        tensor: HistoricalTensor | null;
+        tensor: HistoricalTensor | TensorData | null;
     };
 }
 
