@@ -1,5 +1,6 @@
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
+import { useMemo } from 'react';
 import { PlotData } from 'plotly.js';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
@@ -10,9 +11,9 @@ import { FragmentationEntry } from '../../model/APIData';
 import { BufferType } from '../../model/BufferType';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
+import 'styles/components/DRAMPlots.scss';
 
 const DRAM_PADDING_RATIO = 0.9998;
-const SPLIT_THRESHOLD = 10000000;
 
 interface DramPlotProps {
     operationDetails: OperationDetails;
@@ -38,9 +39,7 @@ function DRAMPlots({
     );
 
     const dramHasntChanged = isEqual(dramMemory, previousDramMemory);
-
     const dramMemoryReport: FragmentationEntry[] = [...dramMemory].sort((a, b) => a.address - b.address);
-
     const dramDelta = dramMemoryReport.filter(
         (chunk) => !chunk.empty && !previousDramMemory.find((c) => c.address === chunk.address),
     );
@@ -70,152 +69,50 @@ function DRAMPlots({
         dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
     }
 
-    const splitDramData = (data: Partial<PlotData>[]) => {
-        const result = [];
-        let currentArray = [];
-
-        for (let i = 0; i < data.length; i++) {
-            const thisPosition = data?.[i]?.x?.[0] as number;
-            const lastPosition = data?.[i - 1]?.x?.[0] as number;
-
-            if (thisPosition - lastPosition > SPLIT_THRESHOLD) {
-                result.push(currentArray);
-                currentArray = [];
-            }
-
-            currentArray.push(data[i]);
-        }
-
-        if (currentArray.length > 0) {
-            result.push(currentArray);
-        }
-
-        return result;
-    };
-
-    const getPlotConfig = (
-        start: number,
-        end: number,
-    ): {
-        xAxis: {
-            tickmode: 'array';
-            tickvals: number[];
-        };
-    } => {
-        return {
-            xAxis: {
-                // tickmode: 'linear',
-                // tick0: start,
-                // dtick: end,
-                tickmode: 'array',
-                tickvals: [start, end / 2, end],
-            },
-        };
-    };
+    const splitPreviousDramData = useMemo(() => splitData(previousDramData), [previousDramData]);
+    const splitDramData = useMemo(() => splitData(dramData), [dramData]);
 
     return (
         <>
-            {zoomedInViewMainMemory ? (
-                <>
-                    <h3 className='plot-title'>
-                        Previous Summarized DRAM Report {dramHasntChanged ? ' (No changes)' : ''}
-                    </h3>
-                    <div className='zoomed-dram-plots'>
-                        {splitDramData(previousDramData).map((data, index) => {
-                            const dramNonContinuousPlotZoomRangeStart =
-                                data[0]?.memoryData.address || DRAM_MEMORY_SIZE * DRAM_PADDING_RATIO;
-                            const dramNonContinuousPlotZoomRangeEnd =
-                                data.at(-1).memoryData.address + data.at(-1).memoryData.size * (1 / DRAM_PADDING_RATIO);
+            <h3 className='plot-title'>Previous Summarized DRAM Report {dramHasntChanged ? ' (No changes)' : ''}</h3>
+            <div className='zoomed-dram-plots'>
+                {zoomedInViewMainMemory && previousDramData.length > 0 ? (
+                    splitPreviousDramData.map((data, index) => {
+                        const dramNonContinuousPlotZoomRangeStart =
+                            data[0]?.memoryData.address || DRAM_MEMORY_SIZE * DRAM_PADDING_RATIO;
+                        const dramNonContinuousPlotZoomRangeEnd =
+                            data.at(-1).memoryData.address + data.at(-1).memoryData.size * (1 / DRAM_PADDING_RATIO);
 
-                            if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
-                                dramPlotZoomRangeStart = 0;
-                                dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
-                            }
+                        if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
+                            dramPlotZoomRangeStart = 0;
+                            dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
+                        }
 
-                            return (
-                                <MemoryPlotRenderer
-                                    // eslint-disable-next-line react/no-array-index-key
-                                    key={index}
-                                    className={classNames('dram-memory-renderer', {
-                                        'empty-plot': dramData.length === 0,
-                                    })}
-                                    plotZoomRange={[
+                        return (
+                            <MemoryPlotRenderer
+                                // eslint-disable-next-line react/no-array-index-key
+                                key={index}
+                                className={classNames('dram-memory-renderer', {
+                                    'empty-plot': dramData.length === 0,
+                                })}
+                                style={{ flexBasis: calculateWidth(splitPreviousDramData)[index] }}
+                                plotZoomRange={[dramNonContinuousPlotZoomRangeStart, dramNonContinuousPlotZoomRangeEnd]}
+                                chartDataList={[data]}
+                                isZoomedIn
+                                memorySize={DRAM_MEMORY_SIZE}
+                                onBufferClick={onDramBufferClick}
+                                configuration={{
+                                    ...DRAMRenderConfiguration,
+                                    ...getPlotConfig(
                                         dramNonContinuousPlotZoomRangeStart,
                                         dramNonContinuousPlotZoomRangeEnd,
-                                    ]}
-                                    chartDataList={[data]}
-                                    isZoomedIn
-                                    memorySize={DRAM_MEMORY_SIZE}
-                                    onBufferClick={onDramBufferClick}
-                                    configuration={{
-                                        ...DRAMRenderConfiguration,
-                                        ...getPlotConfig(
-                                            dramNonContinuousPlotZoomRangeStart,
-                                            dramNonContinuousPlotZoomRangeEnd,
-                                        ),
-                                    }}
-                                />
-                            );
-                        })}
-                    </div>
-
-                    <h3 className='plot-title'>Current Summarized DRAM Reports</h3>
-                    <div className='zoomed-dram-plots'>
-                        {splitDramData(dramData).map((data, index) => {
-                            const dramNonContinuousPlotZoomRangeStart =
-                                data[0]?.memoryData.address || DRAM_MEMORY_SIZE * DRAM_PADDING_RATIO;
-                            const dramNonContinuousPlotZoomRangeEnd =
-                                data.at(-1).memoryData.address + data.at(-1).memoryData.size * (1 / DRAM_PADDING_RATIO);
-
-                            if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
-                                dramPlotZoomRangeStart = 0;
-                                dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
-                            }
-
-                            return (
-                                <MemoryPlotRenderer
-                                    // eslint-disable-next-line react/no-array-index-key
-                                    key={index}
-                                    className={classNames('dram-memory-renderer', {
-                                        'empty-plot': dramData.length === 0,
-                                    })}
-                                    plotZoomRange={[
-                                        dramNonContinuousPlotZoomRangeStart,
-                                        dramNonContinuousPlotZoomRangeEnd,
-                                    ]}
-                                    chartDataList={[data]}
-                                    isZoomedIn
-                                    memorySize={DRAM_MEMORY_SIZE}
-                                    onBufferClick={onDramBufferClick}
-                                    configuration={{
-                                        ...DRAMRenderConfiguration,
-                                        ...getPlotConfig(
-                                            dramNonContinuousPlotZoomRangeStart,
-                                            dramNonContinuousPlotZoomRangeEnd,
-                                        ),
-                                    }}
-                                />
-                            );
-                        })}
-                    </div>
-
-                    <h3 className='plot-title'>DRAM Delta (difference between current and previous operation)</h3>
+                                    ),
+                                }}
+                            />
+                        );
+                    })
+                ) : (
                     <MemoryPlotRenderer
-                        className={classNames('dram-memory-renderer', {
-                            'empty-plot': dramDeltaObject.chartData.length === 0,
-                        })}
-                        plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
-                        chartDataList={[dramDeltaObject.chartData]}
-                        isZoomedIn={zoomedInViewMainMemory}
-                        memorySize={DRAM_MEMORY_SIZE}
-                        onBufferClick={onDramDeltaClick}
-                        configuration={DRAMRenderConfiguration}
-                    />
-                </>
-            ) : (
-                <>
-                    <MemoryPlotRenderer
-                        title={`Previous Summarized DRAM Report ${dramHasntChanged ? ' (No changes)' : ''}  `}
                         className={classNames('dram-memory-renderer', {
                             'empty-plot': previousDramData.length === 0,
                             'identical-plot': dramHasntChanged,
@@ -226,9 +123,48 @@ function DRAMPlots({
                         memorySize={DRAM_MEMORY_SIZE}
                         configuration={DRAMRenderConfiguration}
                     />
+                )}
+            </div>
 
+            <h3 className='plot-title'>Current Summarized DRAM Report</h3>
+            <div className='zoomed-dram-plots'>
+                {zoomedInViewMainMemory && dramData.length > 0 ? (
+                    splitDramData.map((data, index) => {
+                        const dramNonContinuousPlotZoomRangeStart =
+                            data[0]?.memoryData.address || DRAM_MEMORY_SIZE * DRAM_PADDING_RATIO;
+                        const dramNonContinuousPlotZoomRangeEnd =
+                            data.at(-1).memoryData.address + data.at(-1).memoryData.size * (1 / DRAM_PADDING_RATIO);
+
+                        if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
+                            dramPlotZoomRangeStart = 0;
+                            dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
+                        }
+
+                        return (
+                            <MemoryPlotRenderer
+                                // eslint-disable-next-line react/no-array-index-key
+                                key={index}
+                                className={classNames('dram-memory-renderer', {
+                                    'empty-plot': dramData.length === 0,
+                                })}
+                                style={{ flexBasis: calculateWidth(splitPreviousDramData)[index] }}
+                                plotZoomRange={[dramNonContinuousPlotZoomRangeStart, dramNonContinuousPlotZoomRangeEnd]}
+                                chartDataList={[data]}
+                                isZoomedIn
+                                memorySize={DRAM_MEMORY_SIZE}
+                                onBufferClick={onDramBufferClick}
+                                configuration={{
+                                    ...DRAMRenderConfiguration,
+                                    ...getPlotConfig(
+                                        dramNonContinuousPlotZoomRangeStart,
+                                        dramNonContinuousPlotZoomRangeEnd,
+                                    ),
+                                }}
+                            />
+                        );
+                    })
+                ) : (
                     <MemoryPlotRenderer
-                        title='Current Summarized DRAM Report'
                         className={classNames('dram-memory-renderer', {
                             'empty-plot': dramData.length === 0,
                         })}
@@ -239,21 +175,21 @@ function DRAMPlots({
                         onBufferClick={onDramBufferClick}
                         configuration={DRAMRenderConfiguration}
                     />
+                )}
+            </div>
 
-                    <MemoryPlotRenderer
-                        title='DRAM Delta (difference between current and previous operation)'
-                        className={classNames('dram-memory-renderer', {
-                            'empty-plot': dramDeltaObject.chartData.length === 0,
-                        })}
-                        plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
-                        chartDataList={[dramDeltaObject.chartData]}
-                        isZoomedIn={zoomedInViewMainMemory}
-                        memorySize={DRAM_MEMORY_SIZE}
-                        onBufferClick={onDramDeltaClick}
-                        configuration={DRAMRenderConfiguration}
-                    />
-                </>
-            )}
+            <h3 className='plot-title'>DRAM Delta (difference between current and previous operation)</h3>
+            <MemoryPlotRenderer
+                className={classNames('dram-memory-renderer', {
+                    'empty-plot': dramDeltaObject.chartData.length === 0,
+                })}
+                plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
+                chartDataList={[dramDeltaObject.chartData]}
+                isZoomedIn={zoomedInViewMainMemory}
+                memorySize={DRAM_MEMORY_SIZE}
+                onBufferClick={onDramDeltaClick}
+                configuration={DRAMRenderConfiguration}
+            />
 
             <div
                 className={classNames('legend', {
@@ -274,5 +210,61 @@ function DRAMPlots({
         </>
     );
 }
+
+const getPlotConfig = (
+    start: number,
+    end: number,
+): {
+    xAxis: {
+        tickmode: 'array' | 'linear' | 'auto';
+        tickvals: number[];
+    };
+} => {
+    return {
+        xAxis: {
+            tickmode: 'array',
+            tickvals: [start, end],
+        },
+    };
+};
+
+const splitData = (data: Partial<PlotData>[]) => {
+    const result = [];
+    const lastMemoryData = data.at(-1)?.memoryData;
+    const splitThreshold = lastMemoryData ? (lastMemoryData.address + lastMemoryData.size) / 8 : 0;
+    let currentArray = [];
+
+    for (let i = 0; i < data.length; i++) {
+        const thisPosition = data?.[i]?.x?.[0] as number;
+        const lastPosition = data?.[i - 1]?.x?.[0] as number;
+
+        if (thisPosition - lastPosition > splitThreshold) {
+            result.push(currentArray);
+            currentArray = [];
+        }
+
+        currentArray.push(data[i]);
+    }
+
+    if (currentArray.length > 0) {
+        result.push(currentArray);
+    }
+
+    return result;
+};
+
+const calculateWidth = (data: { memoryData: { size: number } }[][]) => {
+    const totalWidth = data.reduce((total, subArray) => {
+        return total + subArray.reduce((subTotal, item) => subTotal + item.memoryData.size, 0);
+    }, 0);
+
+    const widthPercentages = data.map((subArray) => {
+        const subArrayWidth = subArray.reduce((subTotal, item) => subTotal + item.memoryData.size, 0);
+        const percentage = (subArrayWidth / totalWidth) * 100;
+        return percentage < 20 ? '200px' : `${percentage}%`;
+    });
+
+    return widthPercentages;
+};
 
 export default DRAMPlots;
