@@ -125,7 +125,6 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                     >
                         {Array.from({ length: width * height }).map((_, index) => (
                             <div
-                                // eslint-disable-next-line react/no-array-index-key
                                 key={index}
                                 className='tensix empty-tensix'
                                 style={{
@@ -147,7 +146,6 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                         {coordsByBankId.map((coords, index) => (
                             <button
                                 type='button'
-                                // eslint-disable-next-line react/no-array-index-key
                                 key={index}
                                 className={classNames('tensix', { active: selectedTensix === index })}
                                 style={{
