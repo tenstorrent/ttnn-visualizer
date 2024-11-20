@@ -3,7 +3,6 @@ import { DataSet, Network } from 'vis-network/standalone';
 import { Edge } from 'vis-network';
 import { Button, Card, Overlay2 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import classNames from 'classnames';
 import { Node, NodeType } from '../../model/APIData';
 import { getTensorColor } from '../../functions/colorGenerator';
 import 'styles/components/DeviceOperationsGraphComponent.scss';
@@ -48,16 +47,15 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
         return item.params.name ? `${prefix + item.params.name}() ${suffix}` : item.node_type;
     };
     const getTensorSquare = (tensorId: number | null) => {
-        if (!tensorId) {
-            return null;
-        }
         return (
-            <div
-                className={classNames('memory-color-block', {})}
-                style={{
-                    backgroundColor: getTensorColor(tensorId),
-                }}
-            />
+            tensorId && (
+                <div
+                    className='memory-color-block'
+                    style={{
+                        backgroundColor: getTensorColor(tensorId),
+                    }}
+                />
+            )
         );
     };
 
