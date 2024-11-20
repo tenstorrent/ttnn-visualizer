@@ -89,33 +89,49 @@ def operation_list(session):
 @timer
 def operation_detail(operation_id, session):
     with DatabaseQueries(session) as db:
-        operation = db.query_operation_by_id(operation_id)
 
-        if not operation:
+        device_id = request.args.get("device_id", None)
+        operations = list(db.query_operations(filters={"operation_id": operation_id}))
+
+        if not operations:
             return Response(status=HTTPStatus.NOT_FOUND)
 
-        buffers = list(db.query_buffers_by_operation_id(operation_id))
-        operation_arguments = list(
-            db.query_operation_arguments_by_operation_id(operation_id)
-        )
-        stack_trace = db.query_stack_trace(operation_id)
+        operation = operations[0]
 
-        inputs = list(db.query_input_tensors_by_operation_id(operation_id))
-        outputs = list(db.query_output_tensors_by_operation_id(operation_id))
+        buffers = list(
+            db.query_buffers(
+                filters={"operation_id": operation_id, "device_id": device_id}
+            )
+        )
+        operation_arguments = list(
+            db.query_operation_arguments(filters={"operation_id": operation_id})
+        )
+        stack_trace = list(
+            db.query_stack_traces(filters={"operation_id": operation_id})
+        )
+
+        if stack_trace:
+            stack_trace = stack_trace[0]
+        else:
+            stack_trace = None
+
+        inputs = list(db.query_input_tensors(filters={"operation_id": operation_id}))
+        outputs = list(db.query_output_tensors({"operation_id": operation_id}))
 
         input_tensor_ids = [i.tensor_id for i in inputs]
         output_tensor_ids = [o.tensor_id for o in outputs]
         tensor_ids = input_tensor_ids + output_tensor_ids
-        tensors = list(db.query_tensors_by_tensor_ids(tensor_ids))
+        tensors = list(db.query_tensors(filters={"tensor_id": tensor_ids}))
         local_comparisons = list(
-            db.query_local_tensor_comparisons_by_tensor_ids(tensor_ids)
+            db.query_tensor_comparisons(filters={"tensor_id": tensor_ids})
         )
-
         global_comparisons = list(
-            db.query_global_tensor_comparisons_by_tensor_ids(tensor_ids)
+            db.query_tensor_comparisons(local=False, filters={"tensor_id": tensor_ids})
         )
 
-        device_operations = db.query_device_operations_by_operation_id(operation_id)
+        device_operations = db.query_device_operations(
+            filters={"operation_id": operation_id}
+        )
 
         producers_consumers = list(
             filter(
@@ -203,8 +219,8 @@ def get_config(session: TabSession):
 def tensors_list(session: TabSession):
     with DatabaseQueries(session) as db:
         tensors = list(db.query_tensors())
-        local_comparisons = list(db.query_local_tensor_comparisons())
-        global_comparisons = list(db.query_global_tensor_comparisons())
+        local_comparisons = list(db.query_tensor_comparisons())
+        global_comparisons = list(db.query_tensor_comparisons(local=False))
         producers_consumers = list(db.query_producers_consumers())
         return serialize_tensors(
             tensors, producers_consumers, local_comparisons, global_comparisons
@@ -240,6 +256,7 @@ def buffer_pages(session: TabSession):
     address = request.args.get("address")
     operation_id = request.args.get("operation_id")
     buffer_type = request.args.get("buffer_type", "")
+    device_id = request.args.get("device_id", None)
 
     if address:
         addresses = [addr.strip() for addr in address.split(",")]
@@ -252,7 +269,18 @@ def buffer_pages(session: TabSession):
         buffer_type = None
 
     with DatabaseQueries(session) as db:
-        buffers = list(db.query_buffer_pages(operation_id, addresses, buffer_type))
+        buffers = list(
+            list(
+                db.query_buffer_pages(
+                    filters={
+                        "operation_id": operation_id,
+                        "device_id": device_id,
+                        "address": addresses,
+                        "buffer_type": buffer_type,
+                    }
+                )
+            )
+        )
         return serialize_buffer_pages(buffers)
 
 
@@ -262,11 +290,11 @@ def buffer_pages(session: TabSession):
 def tensor_detail(tensor_id, session: TabSession):
 
     with DatabaseQueries(session) as db:
-        tensor = db.query_tensor_by_id(tensor_id)
-        if not tensor:
+        tensors = list(db.query_tensors(filters={"tensor_id": tensor_id}))
+        if not tensors:
             return Response(status=HTTPStatus.NOT_FOUND)
 
-        return dataclasses.asdict(tensor)
+        return dataclasses.asdict(tensors[0])
 
 
 @api.route("/operation-buffers", methods=["GET"])
@@ -274,13 +302,18 @@ def tensor_detail(tensor_id, session: TabSession):
 def get_operations_buffers(session: TabSession):
 
     buffer_type = request.args.get("buffer_type", "")
+    device_id = request.args.get("device_id", None)
     if buffer_type and str.isdigit(buffer_type):
         buffer_type = int(buffer_type)
     else:
         buffer_type = None
 
     with DatabaseQueries(session) as db:
-        buffers = list(db.query_buffers(buffer_type=buffer_type))
+        buffers = list(
+            db.query_buffers(
+                filters={"buffer_type": buffer_type, "device_id": device_id}
+            )
+        )
         operations = list(db.query_operations())
         return serialize_operations_buffers(operations, buffers)
 
@@ -290,15 +323,25 @@ def get_operations_buffers(session: TabSession):
 def get_operation_buffers(operation_id, session: TabSession):
 
     buffer_type = request.args.get("buffer_type", "")
+    device_id = request.args.get("device_id", None)
     if buffer_type and str.isdigit(buffer_type):
         buffer_type = int(buffer_type)
     else:
         buffer_type = None
 
     with DatabaseQueries(session) as db:
-        operation = db.query_operation_by_id(operation_id)
+        operations = list(db.query_operations(filters={"operation_id": operation_id}))
+        if not operations:
+            return Response(status=HTTPStatus.NOT_FOUND)
+        operation = operations[0]
         buffers = list(
-            db.query_buffers_by_operation_id(operation_id, buffer_type=buffer_type)
+            db.query_buffers(
+                filters={
+                    "operation_id": operation_id,
+                    "buffer_type": buffer_type,
+                    "device_id": device_id,
+                }
+            )
         )
         if not operation:
             return Response(status=HTTPStatus.NOT_FOUND)
