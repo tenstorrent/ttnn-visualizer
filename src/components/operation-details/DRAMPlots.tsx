@@ -270,20 +270,22 @@ const splitData = (data: Partial<PlotDataCustom>[]) => {
 };
 
 const calculateWidth = (data: Partial<PlotDataCustom>[][]) => {
-    const totalWidth = data.reduce((total, subArray) => {
-        return total + subArray.reduce((subTotal, item) => (item.memoryData ? subTotal + item.memoryData.size : 0), 0);
-    }, 0);
+    const totalWidth = data.reduce(
+        (total, subArray) =>
+            total + subArray.reduce((subTotal, item) => (item.memoryData ? subTotal + item.memoryData.size : 0), 0),
+        0,
+    );
 
-    const widthPercentages = data.map((subArray) => {
+    return data.map((subArray) => {
         const subArrayWidth = subArray.reduce(
             (subTotal, item) => (item.memoryData ? subTotal + item.memoryData.size : 0),
             0,
         );
+
         const percentage = (subArrayWidth / totalWidth) * 100;
+
         return percentage < 20 ? '200px' : `${percentage}%`;
     });
-
-    return widthPercentages;
 };
 
 export default DRAMPlots;
