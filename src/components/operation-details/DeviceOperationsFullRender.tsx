@@ -40,7 +40,6 @@ const DeviceOperationsFullRender: React.FC<{
                             intent={Intent.SUCCESS}
                             icon={IconNames.CUBE_ADD}
                         />
-                        &nbsp;
                         {node.params.name}
                     </h4>
                 );
