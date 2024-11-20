@@ -210,8 +210,6 @@ export interface DeviceOperation {
     bufferList: TensorBuffer[];
     deallocateCBs: boolean;
     deallocateBuffers: boolean;
-    indentLevel: number; // device ops nesting level indicator
-    // colorVariance?: number | undefined;
     tensor?: { shape: string; id: number };
     events: NodeType[];
 }

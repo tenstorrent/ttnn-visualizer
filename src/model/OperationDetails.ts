@@ -106,7 +106,6 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             this.device_operations.forEach((node) => {
                 if (node.node_type === NodeType.function_start) {
                     this.deviceOperations.push({
-                        indentLevel: deviceOpList.length,
                         name: node.params.name,
                         cbList: [],
                         bufferList: [],
