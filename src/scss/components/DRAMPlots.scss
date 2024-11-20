@@ -16,6 +16,7 @@
             &.js-plotly-plot {
                 .xaxislayer-above {
                     // Fixes the issue where the last x-axis tick is not visible (thanks Plotly)
+                    // This can be removed if we're aiming for more than just showing the first and last tick
                     .xtick:last-child text {
                         /* stylelint-disable-next-line declaration-no-important */
                         opacity: 1 !important; // Need this to overwrite inline style

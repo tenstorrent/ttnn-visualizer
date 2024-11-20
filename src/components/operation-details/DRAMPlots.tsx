@@ -189,60 +189,6 @@ function DRAMPlots({
                 )}
             </div>
 
-            <div className='zoomed-dram-plots'>
-                {zoomedInViewMainMemory && dramData.length > 0 ? (
-                    splitDramData.map((data, index) => {
-                        const firstDataPoint = data[0] as PlotDataCustom;
-                        const lastDataPoint = data.at(-1) as PlotDataCustom;
-
-                        const dramNonContinuousPlotZoomRangeStart =
-                            firstDataPoint.memoryData.address || DRAM_MEMORY_SIZE * DRAM_PADDING_RATIO;
-                        const dramNonContinuousPlotZoomRangeEnd =
-                            lastDataPoint.memoryData.address + lastDataPoint.memoryData.size * (1 / DRAM_PADDING_RATIO);
-
-                        if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
-                            dramPlotZoomRangeStart = 0;
-                            dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
-                        }
-
-                        return (
-                            <MemoryPlotRenderer
-                                // eslint-disable-next-line react/no-array-index-key
-                                key={index}
-                                className={classNames('dram-memory-renderer', {
-                                    'empty-plot': dramData.length === 0,
-                                })}
-                                style={{ flexBasis: calculateWidth(splitPreviousDramData)[index] }}
-                                plotZoomRange={[dramNonContinuousPlotZoomRangeStart, dramNonContinuousPlotZoomRangeEnd]}
-                                chartDataList={[data]}
-                                isZoomedIn
-                                memorySize={DRAM_MEMORY_SIZE}
-                                onBufferClick={onDramBufferClick}
-                                configuration={{
-                                    ...DRAMRenderConfiguration,
-                                    ...getPlotConfig(
-                                        dramNonContinuousPlotZoomRangeStart,
-                                        dramNonContinuousPlotZoomRangeEnd,
-                                    ),
-                                }}
-                            />
-                        );
-                    })
-                ) : (
-                    <MemoryPlotRenderer
-                        className={classNames('dram-memory-renderer', {
-                            'empty-plot': dramData.length === 0,
-                        })}
-                        plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
-                        chartDataList={[dramData]}
-                        isZoomedIn={zoomedInViewMainMemory}
-                        memorySize={DRAM_MEMORY_SIZE}
-                        onBufferClick={onDramBufferClick}
-                        configuration={DRAMRenderConfiguration}
-                    />
-                )}
-            </div>
-
             <h3 className='plot-title'>DRAM Delta (difference between current and previous operation)</h3>
             <MemoryPlotRenderer
                 className={classNames('dram-memory-renderer', {
@@ -284,14 +230,12 @@ const getPlotConfig = (
         tickmode: 'array' | 'linear' | 'auto';
         tickvals: number[];
     };
-} => {
-    return {
-        xAxis: {
-            tickmode: 'array',
-            tickvals: [start, end],
-        },
-    };
-};
+} => ({
+    xAxis: {
+        tickmode: 'array',
+        tickvals: [start, end],
+    },
+});
 
 const splitData = (data: Partial<PlotData>[]): Array<PlotDataCustom[]> => {
     const plotData = data as PlotDataCustom[]; // TODO: Fix horrible typing situation with PlotData and PlotDataCustom
