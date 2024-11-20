@@ -13,7 +13,13 @@ import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
-import { isDramActiveAtom, isL1ActiveAtom, selectedAddressAtom, showHexAtom } from '../../store/app';
+import {
+    isDramActiveAtom,
+    isL1ActiveAtom,
+    selectedAddressAtom,
+    selectedTensorAtom,
+    showHexAtom,
+} from '../../store/app';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
 import ProducerConsumersData from './ProducerConsumersData';
@@ -47,7 +53,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [isL1Active, setIsL1Active] = useAtom(isL1ActiveAtom);
     const [isDramActive, setIsDramActive] = useAtom(isDramActiveAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
-    const [selectedTensorId, setSelectedTensorId] = useState<number | null>(null);
+    const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorAtom);
     const [toastId, setToastId] = useState<number | null>(null);
     const [tensixFullVisualisationOpen, setTensixFullVisualisationOpen] = useState(false);
     const [tensixIOVisualisationOpen, setTensixIOVisualisationOpen] = useState(false);
@@ -345,7 +351,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             plotZoomRangeStart={plotZoomRangeStart}
                             plotZoomRangeEnd={plotZoomRangeEnd}
                             onTensorClick={onTensorClick}
-                            selectedTensorId={selectedTensorId}
                         />
 
                         {details.device_operations && details.deviceOperations.length > 0 && (
