@@ -11,7 +11,7 @@ import 'styles/components/DeviceOperationFullRender.scss';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
-import Collapsible from '../Collapsible';
+import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
 
 const DeviceOperationsFullRender: React.FC<{
     deviceOperations: Node[];
@@ -44,11 +44,13 @@ const DeviceOperationsFullRender: React.FC<{
                         {node.params.name}
                     </h4>
                 );
+
+                const hasContent = innerContent && innerContent.length > 0;
                 const completedBlock = (
                     <Collapsible
                         key={`end-${index}`}
                         label={label}
-                        collapseClassName='device-operation function-container'
+                        collapseClassName={`device-operation function-container ${!hasContent && COLLAPSIBLE_EMPTY_CLASS}`}
                     >
                         <div className='function-content'>{innerContent}</div>
                     </Collapsible>

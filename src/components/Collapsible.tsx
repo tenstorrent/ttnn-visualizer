@@ -80,3 +80,4 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
 };
 
 export default Collapsible;
+export const COLLAPSIBLE_EMPTY_CLASS = 'empty-collapsible';
