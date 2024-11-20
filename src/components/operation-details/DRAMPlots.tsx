@@ -18,6 +18,7 @@ import { selectedAddressAtom } from '../../store/app';
 import 'styles/components/DRAMPlots.scss';
 
 const DRAM_PADDING_RATIO = 0.9998;
+const SPLIT_THRESHOLD_RATIO = 8;
 
 interface DramPlotProps {
     operationDetails: OperationDetails;
@@ -247,7 +248,7 @@ const getPlotConfig = (
 const splitData = (data: Partial<PlotDataCustom>[]) => {
     const result = [];
     const lastDataPoint = data.at(-1)?.memoryData;
-    const splitThreshold = lastDataPoint ? (lastDataPoint.address + lastDataPoint.size) / 8 : 0;
+    const splitThreshold = lastDataPoint ? (lastDataPoint.address + lastDataPoint.size) / SPLIT_THRESHOLD_RATIO : 0;
     let currentArray = [];
 
     for (let i = 0; i < data.length; i++) {
