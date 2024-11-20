@@ -66,11 +66,10 @@ const DeviceOperationsFullRender: React.FC<{
                 if (nodeType === NodeType.buffer_allocate) {
                     const buffer = node.params;
                     operationContent = (
-                        <div
+                        <DeviceOperationNode
                             key={index}
-                            className='device-operation'
+                            title='Buffer allocate'
                         >
-                            <h4>Buffer allocate</h4>
                             <MemoryLegendElement
                                 chunk={{ address: parseInt(buffer.address, 10), size: parseInt(buffer.size, 10) }}
                                 key={buffer.address}
@@ -81,50 +80,41 @@ const DeviceOperationsFullRender: React.FC<{
                                 bufferType={buffer.type}
                                 layout={buffer.layout}
                             />
-                        </div>
+                        </DeviceOperationNode>
                     );
                 } else if (nodeType === NodeType.buffer) {
                     const buffer = node.params;
                     operationContent = (
-                        <div
+                        <DeviceOperationNode
                             key={index}
-                            className='device-operation'
-                        >
-                            <h4>
-                                Buffer {buffer.size} {buffer.type} {buffer.layout}
-                            </h4>
-                        </div>
+                            title={`Buffer ${buffer.size} ${buffer.type} ${buffer.layout}`}
+                        />
                     );
                 } else if (nodeType === NodeType.buffer_deallocate) {
                     operationContent = (
-                        <div
+                        <DeviceOperationNode
                             key={index}
-                            className='device-operation'
-                        >
-                            <h4>Deallocate Buffer</h4>
-                        </div>
+                            title='Buffer deallocate'
+                        />
                     );
                 } else if (nodeType === NodeType.circular_buffer_deallocate_all) {
                     operationContent = (
-                        <div
+                        <DeviceOperationNode
                             key={index}
-                            className='device-operation'
-                        >
-                            <h4>Deallocate Circular Buffers</h4>
-                        </div>
+                            title='Circular buffer deallocate all'
+                        />
                     );
                 } else if (nodeType === NodeType.tensor) {
                     const tensorData = node.params;
                     operationContent = (
-                        <div
+                        <DeviceOperationNode
                             key={index}
-                            className='device-operation'
+                            title='Tensor'
                         >
-                            <h4>Tensor</h4>
                             <p>
                                 <strong>ID:</strong> {tensorData.tensor_id} {tensorData.shape}
                             </p>
-                        </div>
+                        </DeviceOperationNode>
                     );
                 } else if (nodeType === NodeType.circular_buffer_allocate) {
                     const cb = node.params;
@@ -165,3 +155,12 @@ const DeviceOperationsFullRender: React.FC<{
 };
 
 export default DeviceOperationsFullRender;
+
+const DeviceOperationNode: React.FC<React.PropsWithChildren<{ title: string }>> = ({ title, children }) => {
+    return (
+        <div className='device-operation'>
+            <h4>{title}</h4>
+            {children}
+        </div>
+    );
+};
