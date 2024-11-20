@@ -1,5 +1,6 @@
 import { PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
 import { HistoricalTensor } from '../model/Graph';
+import { TensorData } from '../model/APIData';
 
 export const L1RenderConfiguration = {
     height: 110,
@@ -63,7 +64,11 @@ export interface PlotConfiguration {
     gridColour?: string;
     bgColour?: string;
     xAxis?: {
-        side: 'top' | 'bottom';
+        side?: 'top' | 'bottom';
+        tickmode?: 'array' | 'auto' | 'linear';
+        tick0?: number;
+        dtick?: number;
+        tickvals?: number[];
     };
 }
 
@@ -81,7 +86,7 @@ export interface PlotDataCustom extends PlotData {
     memoryData: {
         address: number;
         size: number;
-        tensor: HistoricalTensor | null;
+        tensor: HistoricalTensor | TensorData | null;
     };
 }
 

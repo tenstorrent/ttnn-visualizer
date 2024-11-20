@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { useMemo, useState } from 'react';
+import React, { CSSProperties, useMemo, useState } from 'react';
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
@@ -19,6 +19,7 @@ export interface MemoryPlotRendererProps {
     plotZoomRange?: [start: number, end: number];
     className?: string;
     configuration: PlotConfiguration;
+    style?: CSSProperties;
 }
 
 const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
@@ -30,6 +31,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     onBufferClick,
     plotZoomRange,
     configuration,
+    style,
 }) => {
     const showHex = useAtomValue(showHexAtom);
     const chartData = useMemo(() => chartDataList.flat(), [chartDataList]);
@@ -43,6 +45,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     const tickFormat = showHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: 'd' };
 
     const layout: Partial<Layout> = {
+        autosize: true,
         height: configuration.height,
         xaxis: {
             autorange: false,
@@ -55,6 +58,10 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             gridcolor: configuration.gridColour || '#999',
             side: configuration.xAxis?.side || 'bottom',
             ...tickFormat,
+            tickmode: configuration.xAxis?.tickmode || 'auto',
+            tick0: configuration.xAxis?.tick0,
+            dtick: configuration.xAxis?.dtick,
+            tickvals: configuration.xAxis?.tickvals,
         },
         yaxis: {
             range: [0, 1],
@@ -128,11 +135,14 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     }, [hoveredPoint, chartData, selectedAddress]);
 
     return (
-        <div className={className}>
+        <div
+            className={className}
+            style={style}
+        >
             {title ? <h3 className='plot-title'>{title}</h3> : null}
 
             <Plot
-                className='memory-plot'
+                className='memory-plot js-plotly-plot'
                 data={augmentedChart}
                 layout={layout}
                 config={config}
@@ -140,6 +150,8 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
                 onClick={onBufferClick}
                 onHover={(data) => setHoveredPoint(data.points[0].x as number)}
                 onUnhover={() => setHoveredPoint(null)}
+                useResizeHandler
+                style={{ width: '100%', height: configuration.height }}
             />
         </div>
     );

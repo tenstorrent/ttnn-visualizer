@@ -1,14 +1,14 @@
-import { PlotData } from 'plotly.js';
 import { getBufferColor, getTensorColor } from './colorGenerator';
 import { formatSize, toHex } from './math';
 import { BufferPage, Chunk, ColoredChunk, TensorData } from '../model/APIData';
 import { HistoricalTensor } from '../model/Graph';
+import { PlotDataCustom } from '../definitions/PlotConfigurations';
 
 export default function getChartData(
     memory: Chunk[],
     getTensorForAddress: (id: number) => TensorData | HistoricalTensor | null,
     overrides?: { color?: string; colorVariance?: number; hovertemplate?: string },
-): Partial<PlotData>[] {
+): Partial<PlotDataCustom>[] {
     return memory.map((chunk) => {
         const { address, size } = chunk;
         const tensor = getTensorForAddress(address);
