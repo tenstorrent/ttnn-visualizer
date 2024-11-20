@@ -2,9 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { Fragment, useState } from 'react';
-import { Button, ButtonGroup, Icon, Intent, Position, Switch, Tooltip } from '@blueprintjs/core';
-import classNames from 'classnames';
+import React, { useState } from 'react';
+import { Button, ButtonGroup, Intent, Position, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { toast } from 'react-toastify';
 import { useAtom } from 'jotai';
@@ -13,12 +12,7 @@ import 'styles/components/OperationDetailsComponent.scss';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
-import {
-    CONDENSED_PLOT_CHUNK_COLOR,
-    MAX_LEGEND_LENGTH,
-    PlotMouseEventCustom,
-} from '../../definitions/PlotConfigurations';
-import { MemoryLegendElement } from './MemoryLegendElement';
+import { CONDENSED_PLOT_CHUNK_COLOR, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
 import { isDramActiveAtom, isL1ActiveAtom, selectedAddressAtom, showHexAtom } from '../../store/app';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
@@ -32,6 +26,7 @@ import DRAMPlots from './DRAMPlots';
 import L1Plots from './L1Plots';
 import TensorDetailsList from './TensorDetailsList';
 import OperationArguments from '../OperationArguments';
+import DeviceOperationsFullRender from './DeviceOperationsFullRender';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -353,9 +348,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             selectedTensorId={selectedTensorId}
                         />
 
-                        {details.deviceOperations.length > 0 && (
-                            <div className='device-operations'>
-                                <hr />
+                        {details.device_operations && (
+                            <>
                                 <h3>Device operations</h3>
                                 <Button
                                     icon={IconNames.Graph}
@@ -364,100 +358,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 >
                                     Device operations graph view
                                 </Button>
-
-                                {details.deviceOperations.map((deviceOperation, index) => (
-                                    <Fragment key={deviceOperation.name + index}>
-                                        <h4
-                                            className='device-operation-name'
-                                            style={{ paddingLeft: `${deviceOperation.indentLevel * 20}px` }}
-                                        >
-                                            <Icon
-                                                className='operation-icon'
-                                                size={13}
-                                                intent={Intent.SUCCESS}
-                                                icon={IconNames.CUBE_ADD}
-                                            />
-                                            &nbsp;
-                                            {deviceOperation.name}
-                                        </h4>
-
-                                        {deviceOperation.cbList.length > 0 && (
-                                            <div
-                                                className={classNames('legend nested-legend', {
-                                                    'lengthy-legend': deviceOperation.cbList.length > MAX_LEGEND_LENGTH,
-                                                })}
-                                                style={{ marginLeft: `${deviceOperation.indentLevel * 20}px` }}
-                                            >
-                                                <h4>CBs</h4>
-                                                {deviceOperation.cbList.map((cb) => (
-                                                    <MemoryLegendElement
-                                                        chunk={cb}
-                                                        key={cb.address}
-                                                        memSize={memorySizeL1}
-                                                        selectedTensorAddress={selectedAddress}
-                                                        operationDetails={details}
-                                                        onLegendClick={onLegendClick}
-                                                        colorVariance={deviceOperation.colorVariance}
-                                                    />
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        {deviceOperation.deallocateCBs && (
-                                            <p
-                                                className='deallocate-msg'
-                                                style={{ marginLeft: `${deviceOperation.indentLevel * 20}px` }}
-                                            >
-                                                <Icon
-                                                    className='operation-icon'
-                                                    size={13}
-                                                    intent={Intent.NONE}
-                                                    icon={IconNames.CUBE_REMOVE}
-                                                />
-                                                &nbsp; Deallocate circular buffers
-                                            </p>
-                                        )}
-
-                                        {deviceOperation.bufferList.length > 0 && (
-                                            <div
-                                                className={classNames('legend nested-legend', {
-                                                    'lengthy-legend':
-                                                        deviceOperation.bufferList.length > MAX_LEGEND_LENGTH,
-                                                })}
-                                                style={{ marginLeft: `${deviceOperation.indentLevel * 20}px` }}
-                                            >
-                                                <h4>Buffer</h4>
-                                                {deviceOperation.bufferList.map((buffer) => (
-                                                    <MemoryLegendElement
-                                                        chunk={buffer}
-                                                        key={buffer.address}
-                                                        memSize={memorySizeL1}
-                                                        selectedTensorAddress={selectedAddress}
-                                                        operationDetails={details}
-                                                        onLegendClick={onLegendClick}
-                                                        bufferType={buffer.type}
-                                                        layout={buffer.layout}
-                                                    />
-                                                ))}
-                                            </div>
-                                        )}
-                                        {deviceOperation.deallocateBuffers && (
-                                            <p
-                                                className='deallocate-msg'
-                                                style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}
-                                            >
-                                                <Icon
-                                                    className='operation-icon'
-                                                    size={13}
-                                                    intent={Intent.NONE}
-                                                    icon={IconNames.CUBE_REMOVE}
-                                                />
-                                                &nbsp; Deallocate buffer
-                                            </p>
-                                        )}
-                                    </Fragment>
-                                ))}
-                            </div>
+                                <DeviceOperationsFullRender
+                                    deviceOperations={details.device_operations}
+                                    details={details}
+                                    onLegendClick={onLegendClick}
+                                />
+                            </>
                         )}
                         {operation?.arguments && (
                             <>
