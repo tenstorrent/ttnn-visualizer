@@ -86,7 +86,6 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
             const nodes = new DataSet(
                 data.map((node) => {
                     // keeping the level implementation just in case, we may want to add a toggle
-                    // const level = deviceOpList.length;
                     if (node.node_type === NodeType.function_start) {
                         deviceOpList.push(node);
                     }
