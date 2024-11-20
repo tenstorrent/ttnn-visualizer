@@ -31,6 +31,19 @@
         }
     }
 
+    &.empty-collapsible {
+        .collapsible-controls {
+            [type='button'] {
+                pointer-events: none;
+            }
+
+            .bp5-icon.bp5-icon-caret-up,
+            .bp5-icon.bp5-icon-caret-down {
+                display: none;
+            }
+        }
+    }
+
     .arguments-wrapper {
         padding-top: 16px;
         padding-bottom: 16px;

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import React, { CSSProperties, useMemo, useState } from 'react';
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData } from 'plotly.js';

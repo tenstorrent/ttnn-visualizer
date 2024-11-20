@@ -2,9 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { Fragment, useState } from 'react';
-import { Button, ButtonGroup, Icon, Intent, Position, Switch, Tooltip } from '@blueprintjs/core';
-import classNames from 'classnames';
+import React, { useState } from 'react';
+import { Button, ButtonGroup, Intent, Position, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { toast } from 'react-toastify';
 import { useAtom } from 'jotai';
@@ -13,13 +12,7 @@ import 'styles/components/OperationDetailsComponent.scss';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
-import {
-    CONDENSED_PLOT_CHUNK_COLOR,
-    MAX_LEGEND_LENGTH,
-    PlotMouseEventCustom,
-} from '../../definitions/PlotConfigurations';
-import { MemoryLegendElement } from './MemoryLegendElement';
-import OperationArguments from '../OperationArguments';
+import { CONDENSED_PLOT_CHUNK_COLOR, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
 import { isDramActiveAtom, isL1ActiveAtom, selectedAddressAtom, showHexAtom } from '../../store/app';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import ToastTensorMessage from './ToastTensorMessage';
@@ -27,14 +20,18 @@ import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
 import GlobalSwitch from '../GlobalSwitch';
+import GraphComponent from './DeviceOperationsGraphComponent';
 import { BufferType } from '../../model/BufferType';
 import DRAMPlots from './DRAMPlots';
 import L1Plots from './L1Plots';
 import TensorDetailsList from './TensorDetailsList';
+import OperationArguments from '../OperationArguments';
+import DeviceOperationsFullRender from './DeviceOperationsFullRender';
 
 interface OperationDetailsProps {
     operationId: number;
 }
+
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const { data: operations } = useOperationsList();
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
@@ -54,6 +51,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [toastId, setToastId] = useState<number | null>(null);
     const [tensixFullVisualisationOpen, setTensixFullVisualisationOpen] = useState(false);
     const [tensixIOVisualisationOpen, setTensixIOVisualisationOpen] = useState(false);
+    const [deviceOperationsGraphOpen, setDeviceOperationsGraphOpen] = useState(false);
 
     const onClickOutside = () => {
         setSelectedAddress(null);
@@ -172,12 +170,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const inputOutputList = details.inputs.concat(details.outputs);
     const inputOutputAddressList: string = inputOutputList.map((tensor) => tensor.address).join(',');
-
-    // TODO: keeping this as a reminder. this wont work properly while we pick tensor by address only, an only for a specific operation
-    // const onPreviousBufferClick = (event: Readonly<PlotMouseEvent>): void => {
-    //     const { address } = previousMemory[event.points[0].curveNumber];
-    //     setSelectedTensorAddress(address);
-    // };
 
     return (
         <>
@@ -356,105 +348,22 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             selectedTensorId={selectedTensorId}
                         />
 
-                        {details.deviceOperations.length > 0 && (
-                            <div className='device-operations'>
-                                <hr />
+                        {details.device_operations && details.deviceOperations.length > 0 && (
+                            <>
                                 <h3>Device operations</h3>
-
-                                {details.deviceOperations.map((deviceOperation, index) => (
-                                    // eslint-disable-next-line react/no-array-index-key
-                                    <Fragment key={deviceOperation.name + index}>
-                                        <h4
-                                            className='device-operation-name'
-                                            style={{ paddingLeft: `${deviceOperation.indentLevel * 20}px` }}
-                                        >
-                                            <Icon
-                                                className='operation-icon'
-                                                size={13}
-                                                intent={Intent.SUCCESS}
-                                                icon={IconNames.CUBE_ADD}
-                                            />
-                                            &nbsp;
-                                            {deviceOperation.name}
-                                        </h4>
-
-                                        {deviceOperation.cbList.length > 0 && (
-                                            <div
-                                                className={classNames('legend nested-legend', {
-                                                    'lengthy-legend': deviceOperation.cbList.length > MAX_LEGEND_LENGTH,
-                                                })}
-                                                style={{ marginLeft: `${deviceOperation.indentLevel * 20}px` }}
-                                            >
-                                                <h4>CBs</h4>
-                                                {deviceOperation.cbList.map((cb) => (
-                                                    <MemoryLegendElement
-                                                        chunk={cb}
-                                                        key={cb.address}
-                                                        memSize={memorySizeL1}
-                                                        selectedTensorAddress={selectedAddress}
-                                                        operationDetails={details}
-                                                        onLegendClick={onLegendClick}
-                                                        colorVariance={deviceOperation.colorVariance}
-                                                    />
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        {deviceOperation.deallocateCBs && (
-                                            <p
-                                                className='deallocate-msg'
-                                                style={{ marginLeft: `${deviceOperation.indentLevel * 20}px` }}
-                                            >
-                                                <Icon
-                                                    className='operation-icon'
-                                                    size={13}
-                                                    intent={Intent.NONE}
-                                                    icon={IconNames.CUBE_REMOVE}
-                                                />
-                                                &nbsp; Deallocate circular buffers
-                                            </p>
-                                        )}
-
-                                        {deviceOperation.bufferList.length > 0 && (
-                                            <div
-                                                className={classNames('legend nested-legend', {
-                                                    'lengthy-legend':
-                                                        deviceOperation.bufferList.length > MAX_LEGEND_LENGTH,
-                                                })}
-                                                style={{ marginLeft: `${deviceOperation.indentLevel * 20}px` }}
-                                            >
-                                                <h4>Buffer</h4>
-                                                {deviceOperation.bufferList.map((buffer) => (
-                                                    <MemoryLegendElement
-                                                        chunk={buffer}
-                                                        key={buffer.address}
-                                                        memSize={memorySizeL1}
-                                                        selectedTensorAddress={selectedAddress}
-                                                        operationDetails={details}
-                                                        onLegendClick={onLegendClick}
-                                                        bufferType={buffer.type}
-                                                        layout={buffer.layout}
-                                                    />
-                                                ))}
-                                            </div>
-                                        )}
-                                        {deviceOperation.deallocateBuffers && (
-                                            <p
-                                                className='deallocate-msg'
-                                                style={{ marginLeft: `${deviceOperation.indentLevel * 2}em` }}
-                                            >
-                                                <Icon
-                                                    className='operation-icon'
-                                                    size={13}
-                                                    intent={Intent.NONE}
-                                                    icon={IconNames.CUBE_REMOVE}
-                                                />
-                                                &nbsp; Deallocate buffer
-                                            </p>
-                                        )}
-                                    </Fragment>
-                                ))}
-                            </div>
+                                <Button
+                                    icon={IconNames.Graph}
+                                    intent={Intent.PRIMARY}
+                                    onClick={() => setDeviceOperationsGraphOpen(true)}
+                                >
+                                    Device operations graph view
+                                </Button>
+                                <DeviceOperationsFullRender
+                                    deviceOperations={details.device_operations}
+                                    details={details}
+                                    onLegendClick={onLegendClick}
+                                />
+                            </>
                         )}
                         {operation?.arguments && (
                             <>
@@ -462,17 +371,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                                 <div className='arguments-wrapper'>
                                     <OperationArguments operation={operation} />
-
-                                    {/* TODO: we shouldn't be rendering this raw but lets keep this commented out for debug purposes for now */}
-                                    {/* {operation?.device_operations && ( */}
-                                    {/*    <DeviceOperations deviceOperations={operation.device_operations} /> */}
-                                    {/* )} */}
                                 </div>
                             </>
                         )}
                     </>
                 ) : (
                     <p className='not-found-message'>Operation {operationId} not found</p>
+                )}
+                {deviceOperationsGraphOpen && details.device_operations && (
+                    <GraphComponent
+                        data={details.device_operations}
+                        open={deviceOperationsGraphOpen}
+                        onClose={() => setDeviceOperationsGraphOpen(false)}
+                    />
                 )}
             </div>
         </>

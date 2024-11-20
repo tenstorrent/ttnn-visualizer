@@ -13,6 +13,7 @@ interface CollapsibleProps {
     label: string | JSX.Element;
     additionalElements?: string | JSX.Element;
     isOpen?: boolean;
+    collapseClassName?: string;
     contentStyles?: React.CSSProperties;
     contentClassName?: string;
     keepChildrenMounted?: boolean;
@@ -23,6 +24,7 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
     label,
     additionalElements = undefined,
     isOpen = true,
+    collapseClassName = '',
     contentStyles = {},
     contentClassName = '',
     keepChildrenMounted = true,
@@ -36,7 +38,7 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
 
     const icon = isOpenState ? IconNames.CARET_UP : IconNames.CARET_DOWN;
     return (
-        <div className='collapsible-component'>
+        <div className={`collapsible-component ${collapseClassName}`}>
             <div className='collapsible-controls'>
                 {children && (
                     <Button
@@ -78,3 +80,4 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
 };
 
 export default Collapsible;
+export const COLLAPSIBLE_EMPTY_CLASS = 'empty-collapsible';

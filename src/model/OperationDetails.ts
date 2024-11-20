@@ -106,12 +106,14 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             this.device_operations.forEach((node) => {
                 if (node.node_type === NodeType.function_start) {
                     this.deviceOperations.push({
-                        indentLevel: deviceOpList.length,
                         name: node.params.name,
                         cbList: [],
                         bufferList: [],
                         deallocateCBs: false,
                         deallocateBuffers: false,
+                        tensor: undefined,
+                        events: [],
+                        id: node.id,
                     });
                     deviceOpList.push(node);
                 }
@@ -131,24 +133,26 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                                 address: parseInt(node.params.address, 10),
                                 size: parseInt(node.params.size, 10),
                                 core_range_set: node.params.core_range_set,
+                                colorVariance: deviceOp.id,
                             });
+                            deviceOp.events.push(node.node_type);
                         }
                     }
                 }
-                // TODO: removing this since it is brittle logic and causes layout issues
-                // if (node.node_type === NodeType.circular_buffer_deallocate_all) {
-                //     const deviceOpNode = deviceOpList.at(-1);
-                //     if (deviceOpNode) {
-                //         const deviceOp = this.deviceOperations
-                //             .slice()
-                //             .reverse()
-                //             .find((op) => op.name === deviceOpNode.params.name);
-                //
-                //         if (deviceOp) {
-                //             deviceOp.deallocateCBs = true;
-                //         }
-                //     }
-                // }
+
+                if (node.node_type === NodeType.circular_buffer_deallocate_all) {
+                    const deviceOpNode = deviceOpList.at(-1);
+                    if (deviceOpNode) {
+                        const deviceOp = this.deviceOperations
+                            .slice()
+                            .reverse()
+                            .find((op) => op.name === deviceOpNode.params.name);
+
+                        if (deviceOp) {
+                            deviceOp.events.push(node.node_type);
+                        }
+                    }
+                }
                 if (node.node_type === NodeType.buffer_allocate) {
                     const deviceOpNode = deviceOpList.at(-1);
                     if (deviceOpNode) {
@@ -165,23 +169,38 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                                 type: node.params.type,
                                 tensorId: this.getTensorForAddress(parseInt(node.params.address, 10))?.id,
                             });
+                            deviceOp.events.push(node.node_type);
                         }
                     }
                 }
-                // TODO: this is incorrect so we wont do it this way, but keeping this for now
-                // if (node.node_type === NodeType.buffer_deallocate) {
-                //     const deviceOpNode = deviceOpList.at(-1);
-                //     if (deviceOpNode) {
-                //         const deviceOp = this.deviceOperations
-                //             .slice()
-                //             .reverse()
-                //             .find((op) => op.name === deviceOpNode.params.name);
-                //
-                //         if (deviceOp) {
-                //             deviceOp.deallocateBuffers = true;
-                //         }
-                //     }
-                // }
+                if (node.node_type === NodeType.tensor) {
+                    const deviceOpNode = deviceOpList.at(-1);
+                    if (deviceOpNode) {
+                        const deviceOp = this.deviceOperations
+                            .slice()
+                            .reverse()
+                            .find((op) => op.name === deviceOpNode.params.name);
+
+                        if (deviceOp) {
+                            deviceOp.tensor = { shape: node.params.shape, id: node.params.tensor_id };
+                            deviceOp.events.push(node.node_type);
+                        }
+                    }
+                }
+
+                if (node.node_type === NodeType.buffer_deallocate) {
+                    const deviceOpNode = deviceOpList.at(-1);
+                    if (deviceOpNode) {
+                        const deviceOp = this.deviceOperations
+                            .slice()
+                            .reverse()
+                            .find((op) => op.name === deviceOpNode.params.name);
+
+                        if (deviceOp) {
+                            deviceOp.events.push(node.node_type);
+                        }
+                    }
+                }
             });
         }
     }
@@ -238,6 +257,9 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         cbChartData: Partial<PlotData>[];
         cbChartDataByOperation: Map<{ name: string; index: number }, Partial<PlotData>[]>;
         cbMemory: Chunk[];
+        bufferChartData: Partial<PlotData>[];
+        bufferChartDataByOperation: Map<{ name: string; index: number }, Partial<PlotData>[]>;
+        bufferMemory: Chunk[];
     } {
         const fragmentation: FragmentationEntry[] = [];
         const memory: Chunk[] =
@@ -253,11 +275,16 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 .sort((a, b) => a.address - b.address) || [];
 
         const cbMemory = bufferType === BufferType.L1 ? this.deviceOperations.flatMap((op) => op.cbList) : [];
+        const bufferMemory =
+            bufferType === BufferType.L1
+                ? this.deviceOperations.flatMap((op) => op.bufferList).filter((op) => op.type === 'L1')
+                : [];
 
         const totalMemory = [
             { address: 0, size: 0 },
             ...cbMemory,
             ...memory,
+            ...bufferMemory,
             {
                 address: this.memorySizeL1,
                 size: 0,
@@ -313,6 +340,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
         const condensed: Chunk = this.calculateCondensed(memory);
         const cbCondensed: Chunk = this.calculateCondensed(cbMemory);
+        const bufferCondesed: Chunk = this.calculateCondensed(bufferMemory);
 
         const chartData = this.getChartData(memory);
         const cbColor = '#e2defc';
@@ -324,15 +352,37 @@ ${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cb
 
         const cbChartData = this.getChartData([cbCondensed], { color: cbColor, hovertemplate: cbHoverTemplate });
         const cbChartDataByOperation: Map<{ name: string; index: number }, Partial<PlotData>[]> = new Map();
-        this.deviceOperations.forEach((op, index) => {
+        this.deviceOperations.forEach((op) => {
             if (op.cbList.length !== 0) {
-                op.colorVariance = index;
                 cbChartDataByOperation.set(
                     {
                         name: op.name,
-                        index,
+                        index: op.id,
                     },
-                    this.getChartData(op.cbList, { colorVariance: op.colorVariance }),
+                    this.getChartData(op.cbList, { colorVariance: op.id }),
+                );
+            }
+        });
+
+        const bufferColor = '#fcdefa';
+        const bufferHoverTemplate = `
+<span style="color:${bufferColor};font-size:20px;">&#9632;</span>
+${bufferCondesed.address} (${toHex(bufferCondesed.address)}) <br>Size: ${formatSize(bufferCondesed.size)}
+<br><br>Buffers Summary
+<extra></extra>`;
+        const bufferChartData = this.getChartData([bufferCondesed], {
+            color: bufferColor,
+            hovertemplate: bufferHoverTemplate,
+        });
+        const bufferChartDataByOperation: Map<{ name: string; index: number }, Partial<PlotData>[]> = new Map();
+        this.deviceOperations.forEach((op) => {
+            if (op.bufferList.length !== 0 && op.bufferList[0].type === 'L1') {
+                bufferChartDataByOperation.set(
+                    {
+                        name: op.name,
+                        index: op.id,
+                    },
+                    this.getChartData(op.bufferList, { colorVariance: op.id }),
                 );
             }
         });
@@ -346,6 +396,9 @@ ${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cb
             cbChartData,
             cbChartDataByOperation,
             cbMemory,
+            bufferChartData,
+            bufferChartDataByOperation,
+            bufferMemory,
         };
     }
 

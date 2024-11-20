@@ -27,8 +27,7 @@ function TensorDetailsList({
                 {inputs.map((tensor, index) => (
                     <TensorDetailsComponent
                         tensor={tensor}
-                        // eslint-disable-next-line react/no-array-index-key
-                        key={index}
+                        key={`${tensor.id}-${index}`}
                         selectedTensorId={selectedTensorId}
                         onTensorClick={onTensorClick}
                         memorySize={memorySizeL1}
@@ -44,8 +43,7 @@ function TensorDetailsList({
                 {outputs.map((tensor, index) => (
                     <TensorDetailsComponent
                         tensor={tensor}
-                        // eslint-disable-next-line react/no-array-index-key
-                        key={index}
+                        key={`${tensor.id}-${index}`}
                         selectedTensorId={selectedTensorId}
                         onTensorClick={onTensorClick}
                         memorySize={memorySizeL1}
