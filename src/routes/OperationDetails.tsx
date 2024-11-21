@@ -6,11 +6,14 @@ import { useParams } from 'react-router';
 import { Helmet } from 'react-helmet-async';
 import OperationDetailsComponent from '../components/operation-details/OperationDetailsComponent';
 import { useOperationDetails } from '../hooks/useAPI';
+import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 
 export default function OperationDetails() {
     const { operationId } = useParams();
     const intOperationId = operationId ? parseInt(operationId, 10) : 0;
     const { operation } = useOperationDetails(intOperationId);
+
+    useClearSelectedBuffer();
 
     return (
         operationId && (

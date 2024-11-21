@@ -2,21 +2,20 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams } from 'react-router';
 
-import { toast } from 'react-toastify';
 import { useOperationsList } from '../hooks/useAPI';
 import OperationGraph from '../components/OperationGraphComponent';
 import LoadingSpinner from '../components/LoadingSpinner';
+import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 
 const GraphView: React.FC = () => {
     const { data: operationList, isLoading } = useOperationsList();
     const { operationId } = useParams<{ operationId?: string }>();
 
-    // Dismiss any toasts that are open
-    useEffect(() => toast.dismiss(), []);
+    useClearSelectedBuffer();
 
     return (
         <>

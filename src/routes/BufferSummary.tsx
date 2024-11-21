@@ -7,7 +7,6 @@ import { AnchorButton, ButtonGroup, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useSetAtom } from 'jotai';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'react-toastify';
 import { BuffersByOperationData, useBuffers, useOperationsList, useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom } from '../store/app';
 import 'styles/components/BufferSummary.scss';
@@ -18,6 +17,7 @@ import { BufferType } from '../model/BufferType';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { HistoricalTensor, Operation, Tensor } from '../model/Graph';
 import { HistoricalTensorsByOperation } from '../model/BufferSummary';
+import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 
 const SECTION_IDS = {
     PLOT: 'plot',
@@ -34,8 +34,7 @@ function BufferSummary() {
     const { data: buffersByOperation } = useBuffers(BufferType.L1, deviceId);
     const { data: operationsList } = useOperationsList();
 
-    // Dismiss any toasts that are open
-    useEffect(() => toast.dismiss(), []);
+    useClearSelectedBuffer();
 
     // Needs to be in a useEffect to avoid a bad setState call
     useEffect(() => {
