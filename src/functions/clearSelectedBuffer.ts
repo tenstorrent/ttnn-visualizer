@@ -1,18 +1,11 @@
-import { useSetAtom } from 'jotai';
-import { toast } from 'react-toastify';
 import { useEffect } from 'react';
-import { activeToastAtom, selectedAddressAtom, selectedTensorAtom } from '../store/app';
+import useToasts from '../hooks/useToasts';
 
 function useClearSelectedBuffer() {
-    const setSelectedTensor = useSetAtom(selectedTensorAtom);
-    const setSelectedAddress = useSetAtom(selectedAddressAtom);
-    const setActiveToast = useSetAtom(activeToastAtom);
+    const { resetToasts } = useToasts();
 
     useEffect(() => {
-        setSelectedTensor(null);
-        setSelectedAddress(null);
-        setActiveToast(null);
-        toast.dismiss();
+        resetToasts();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 }
