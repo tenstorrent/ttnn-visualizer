@@ -147,3 +147,14 @@ $row-background: $tt-grey-2;
         margin-top: 0;
     }
 }
+
+// Element to trigger onClick to dismiss focussed buffer
+.outside-click {
+    background-color: rgb(255 0 0 / 47%);
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    position: fixed;
+    top: 0;
+    z-index: 0;
+}

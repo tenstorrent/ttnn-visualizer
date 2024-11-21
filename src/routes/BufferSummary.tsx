@@ -18,6 +18,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { HistoricalTensor, Operation, Tensor } from '../model/Graph';
 import { HistoricalTensorsByOperation } from '../model/BufferSummary';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
+import useBufferFocus from '../hooks/useBufferFocus';
 
 const SECTION_IDS = {
     PLOT: 'plot',
@@ -35,6 +36,8 @@ function BufferSummary() {
     const { data: operationsList } = useOperationsList();
 
     useClearSelectedBuffer();
+
+    const { activeToast, resetToasts } = useBufferFocus();
 
     // Needs to be in a useEffect to avoid a bad setState call
     useEffect(() => {
@@ -96,6 +99,14 @@ function BufferSummary() {
                     Table view
                 </AnchorButton>
             </ButtonGroup>
+
+            {activeToast && (
+                // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
+                <div
+                    className='outside-click'
+                    onClick={resetToasts}
+                />
+            )}
 
             {buffersByOperation && operationsList && tensorListByOperation ? (
                 <>
