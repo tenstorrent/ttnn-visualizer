@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import useToasts from '../hooks/useToasts';
+import useBufferFocus from '../hooks/useBufferFocus';
 
 function useClearSelectedBuffer() {
-    const { resetToasts } = useToasts();
+    const { resetToasts } = useBufferFocus();
 
     useEffect(() => {
         resetToasts();

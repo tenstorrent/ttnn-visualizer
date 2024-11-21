@@ -7,7 +7,7 @@ import { HistoricalTensor } from '../../model/Graph';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import { getDimmedColour } from '../../functions/colour';
-import useToasts from '../../hooks/useToasts';
+import useBufferFocus from '../../hooks/useBufferFocus';
 
 interface BufferSummaryBufferProps {
     buffer: Buffer;
@@ -22,7 +22,7 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
     const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
 
-    const { createToast, resetToasts } = useToasts();
+    const { createToast, resetToasts } = useBufferFocus();
 
     const originalColour = tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address);
     const dimmedColour = originalColour ? getDimmedColour(originalColour) : '#000';

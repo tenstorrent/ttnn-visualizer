@@ -30,7 +30,7 @@ import L1Plots from './L1Plots';
 import TensorDetailsList from './TensorDetailsList';
 import OperationArguments from '../OperationArguments';
 import DeviceOperationsFullRender from './DeviceOperationsFullRender';
-import useToasts from '../../hooks/useToasts';
+import useBufferFocus from '../../hooks/useBufferFocus';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -56,7 +56,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [tensixIOVisualisationOpen, setTensixIOVisualisationOpen] = useState(false);
     const [deviceOperationsGraphOpen, setDeviceOperationsGraphOpen] = useState(false);
 
-    const { createToast, resetToasts } = useToasts();
+    const { createToast, resetToasts } = useBufferFocus();
 
     const onClickOutside = () => {
         resetToasts();

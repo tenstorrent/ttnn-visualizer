@@ -4,7 +4,7 @@ import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
 import ToastTensorMessage from '../components/operation-details/ToastTensorMessage';
 import { activeToastAtom, selectedAddressAtom, selectedTensorAtom } from '../store/app';
 
-const useToasts = () => {
+const useBufferFocus = () => {
     const [activeToast, setActiveToast] = useAtom(activeToastAtom);
     const setSelectedTensor = useSetAtom(selectedTensorAtom);
     const setSelectedAddress = useSetAtom(selectedAddressAtom);
@@ -48,4 +48,4 @@ const useToasts = () => {
     return { activeToast, resetToasts, setActiveToast, createToast };
 };
 
-export default useToasts;
+export default useBufferFocus;
