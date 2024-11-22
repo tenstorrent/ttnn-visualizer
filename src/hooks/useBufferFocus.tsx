@@ -37,7 +37,7 @@ const useBufferFocus = () => {
                 position: 'bottom-right',
                 hideProgressBar: true,
                 closeOnClick: true,
-                onClick: () => setActiveToast(null),
+                onClick: resetToasts,
                 theme: 'light',
             },
         ) as number;
