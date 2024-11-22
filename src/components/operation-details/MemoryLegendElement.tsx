@@ -46,6 +46,7 @@ export const MemoryLegendElement: React.FC<{
             )}
         </>
     );
+    const derivedTensor = operationDetails.getTensorForAddress(chunk.address);
     return (
         <Component
             key={chunk.address}
@@ -70,9 +71,10 @@ export const MemoryLegendElement: React.FC<{
                     ...(chunk.empty
                         ? {}
                         : {
-                              backgroundColor: chunk.tensorId
-                                  ? getTensorColor(chunk.tensorId)
-                                  : getBufferColor(chunk.address + (colorVariance || 0)),
+                              backgroundColor:
+                                  chunk.tensorId || derivedTensor
+                                      ? getTensorColor(chunk.tensorId) || getTensorColor(derivedTensor?.id)
+                                      : getBufferColor(chunk.address + (colorVariance || 0)),
                           }),
                 }}
             />
@@ -85,9 +87,7 @@ export const MemoryLegendElement: React.FC<{
                 <div className='format-numbers monospace keep-left'>({toHex(chunk.address)})</div>
                 <div className='format-numbers monospace'>{formatSize(chunk.size)} </div>
                 <div>
-                    {!chunk.empty && operationDetails.getTensorForAddress(chunk.address) && (
-                        <>Tensor {operationDetails.getTensorForAddress(chunk.address)?.id}</>
-                    )}
+                    {!chunk.empty && derivedTensor && <>Tensor {derivedTensor.id}</>}
                     {chunk.empty && emptyChunkLabel}
                 </div>
                 {(bufferType || layout) && (

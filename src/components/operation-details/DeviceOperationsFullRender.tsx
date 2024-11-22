@@ -12,6 +12,8 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
 import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
+import { calculateL1MemoryUsage } from '../../functions/calculateMemoryPeakLoad';
+import { formatSize } from '../../functions/math';
 
 const DeviceOperationsFullRender: React.FC<{
     deviceOperations: Node[];
@@ -73,7 +75,7 @@ const DeviceOperationsFullRender: React.FC<{
                             <MemoryLegendElement
                                 chunk={{ address: parseInt(buffer.address, 10), size: parseInt(buffer.size, 10) }}
                                 key={buffer.address}
-                                memSize={0}
+                                memSize={details.l1_sizes[0]}
                                 selectedTensorAddress={selectedAddress}
                                 operationDetails={details}
                                 onLegendClick={onLegendClick}
@@ -91,11 +93,16 @@ const DeviceOperationsFullRender: React.FC<{
                         />
                     );
                 } else if (nodeType === NodeType.buffer_deallocate) {
+                    const buffer = node.params;
                     operationContent = (
                         <DeviceOperationNode
                             key={index}
                             title='Buffer deallocate'
-                        />
+                        >
+                            <p>
+                                {buffer.size} {buffer.type} {buffer.layout}
+                            </p>
+                        </DeviceOperationNode>
                     );
                 } else if (nodeType === NodeType.circular_buffer_deallocate_all) {
                     operationContent = (
@@ -151,7 +158,13 @@ const DeviceOperationsFullRender: React.FC<{
         return output;
     };
 
-    return <div className='device-operations-full-render'>{renderOperations(deviceOperations)}</div>;
+    const memoryLoad = formatSize(calculateL1MemoryUsage(deviceOperations));
+    return (
+        <>
+            <h3 className='monospace'>Peak memory load: {memoryLoad}</h3>
+            <div className='device-operations-full-render'>{renderOperations(deviceOperations)}</div>
+        </>
+    );
 };
 
 export default DeviceOperationsFullRender;
