@@ -270,7 +270,8 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
 };
 
 export const useBuffers = (bufferType: BufferType, deviceId?: number) => {
-    return useQuery('get-buffers', {
+    return useQuery({
         queryFn: () => fetchAllBuffers(bufferType, deviceId),
+        queryKey: ['fetch-all-buffers', bufferType, deviceId],
     });
 };
