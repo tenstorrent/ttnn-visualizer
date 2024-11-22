@@ -2,4 +2,26 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-// .device-selector {}
+.device-selector {
+    // Matching Blueprint Select styles
+    .bp5-button.bp5-outlined {
+        color: #abb3bf;
+        background-color: rgb(17 20 24 / 30%);
+    }
+
+    // Matching Blueprint Select styles
+    &.bp5-popover-open {
+        box-shadow:
+            inset 0 0 0 1px rgb(138 187 255 / 75.2%),
+            0 0 0 1px rgb(138 187 255 / 75.2%),
+            inset 0 0 0 1px rgb(255 255 255 / 20%),
+            inset 0 -1px 1px 0 rgb(255 255 255 / 30%);
+        border-radius: 2px;
+    }
+
+    &.has-selection {
+        .bp5-button.bp5-outlined {
+            color: unset;
+        }
+    }
+}

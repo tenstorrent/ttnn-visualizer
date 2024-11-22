@@ -1,3 +1,4 @@
+import classNames from 'classnames';
 import { Button, Checkbox, MenuItem } from '@blueprintjs/core';
 import { Select } from '@blueprintjs/select';
 import { useAtom } from 'jotai';
@@ -19,7 +20,9 @@ function DeviceSelector() {
 
     return (
         <Select
-            className='device-selector'
+            className={classNames('device-selector', {
+                'has-selection': selectedDevice !== undefined,
+            })}
             items={items}
             itemRenderer={(value) => DeviceItem(value, updateSelectedDevices, selectedDevice)}
             filterable

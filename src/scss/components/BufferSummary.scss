@@ -23,6 +23,8 @@
 
         .device-selector {
             display: inline-flex;
+            flex-grow: 0;
+            margin-left: 10px;
         }
     }
 }

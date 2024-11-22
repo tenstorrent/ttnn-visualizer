@@ -249,9 +249,9 @@ const TensorList = () => {
                         }
                         resetOnSelect
                     />
-
-                    <DeviceSelector />
                 </ButtonGroup>
+
+                <DeviceSelector />
 
                 {!isLoading && (
                     <p className='result-count'>
