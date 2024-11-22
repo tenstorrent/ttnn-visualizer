@@ -24,4 +24,14 @@
     .function-content {
         padding-left: 20px;
     }
+
+    .memory-info {
+        width: 300px;
+        display: inline-grid;
+        gap: 10px;
+        font-weight: lighter;
+        position: absolute;
+        right: 0;
+        grid-template-columns: 1fr 1fr 1fr;
+    }
 }

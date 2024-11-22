@@ -12,7 +12,7 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
 import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
-import { calculateL1MemoryUsage } from '../../functions/calculateMemoryPeakLoad';
+import { calculateL1MemoryUsage, processAllocations } from '../../functions/calculateMemoryPeakLoad';
 import { formatSize } from '../../functions/math';
 
 const DeviceOperationsFullRender: React.FC<{
@@ -23,12 +23,23 @@ const DeviceOperationsFullRender: React.FC<{
     const deviceOpList: Node[] = [];
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const renderOperations = (operations: Node[]) => {
+        const processedData = processAllocations(operations);
+
         const stack: JSX.Element[][] = [];
         const output: JSX.Element[] = [];
         let consecutiveCBsOutput: boolean = false;
         operations.forEach((node, index) => {
             const nodeType = node.node_type;
 
+            const memoryDetails = processedData.find((data) => data.id === node.id);
+
+            const memoryInfo = memoryDetails ? (
+                <span className='memory-info monospace '>
+                    <span className='format-numbers'>{formatSize(memoryDetails.total_cb)}</span>
+                    <span className='format-numbers'>{formatSize(memoryDetails.total_buffer)}</span>
+                    <span className='format-numbers'>{formatSize(memoryDetails.total_memory)}</span>
+                </span>
+            ) : undefined;
             if (nodeType === NodeType.function_start) {
                 deviceOpList.push(node);
                 stack.push([]);
@@ -54,6 +65,8 @@ const DeviceOperationsFullRender: React.FC<{
                         collapseClassName={`device-operation function-container ${!hasContent && COLLAPSIBLE_EMPTY_CLASS}`}
                     >
                         <div className='function-content'>{innerContent}</div>
+                        <div>END OP:</div>
+                        {memoryInfo}
                     </Collapsible>
                 );
 
@@ -69,6 +82,7 @@ const DeviceOperationsFullRender: React.FC<{
                     const buffer = node.params;
                     operationContent = (
                         <DeviceOperationNode
+                            memoryInfo={memoryInfo}
                             key={index}
                             title='Buffer allocate'
                         >
@@ -88,6 +102,7 @@ const DeviceOperationsFullRender: React.FC<{
                     const buffer = node.params;
                     operationContent = (
                         <DeviceOperationNode
+                            memoryInfo={memoryInfo}
                             key={index}
                             title={`Buffer ${buffer.size} ${buffer.type} ${buffer.layout}`}
                         />
@@ -96,6 +111,7 @@ const DeviceOperationsFullRender: React.FC<{
                     const buffer = node.params;
                     operationContent = (
                         <DeviceOperationNode
+                            memoryInfo={memoryInfo}
                             key={index}
                             title='Buffer deallocate'
                         >
@@ -107,6 +123,7 @@ const DeviceOperationsFullRender: React.FC<{
                 } else if (nodeType === NodeType.circular_buffer_deallocate_all) {
                     operationContent = (
                         <DeviceOperationNode
+                            memoryInfo={memoryInfo}
                             key={index}
                             title='Circular buffer deallocate all'
                         />
@@ -115,6 +132,7 @@ const DeviceOperationsFullRender: React.FC<{
                     const tensorData = node.params;
                     operationContent = (
                         <DeviceOperationNode
+                            memoryInfo={memoryInfo}
                             key={index}
                             title='Tensor'
                         >
@@ -169,10 +187,17 @@ const DeviceOperationsFullRender: React.FC<{
 
 export default DeviceOperationsFullRender;
 
-const DeviceOperationNode: React.FC<React.PropsWithChildren<{ title: string }>> = ({ title, children }) => {
+const DeviceOperationNode: React.FC<React.PropsWithChildren<{ title: string; memoryInfo?: JSX.Element }>> = ({
+    title,
+    memoryInfo,
+    children,
+}) => {
     return (
         <div className='device-operation'>
-            <h4>{title}</h4>
+            <h4>
+                {title} {memoryInfo}
+            </h4>
+
             {children}
         </div>
     );
