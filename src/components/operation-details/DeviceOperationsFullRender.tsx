@@ -6,7 +6,7 @@ import React, { JSX } from 'react';
 import { Icon, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai/index';
-import { Node, NodeType } from '../../model/APIData';
+import { DeviceOperationTypes, Node, NodeType } from '../../model/APIData';
 import 'styles/components/DeviceOperationFullRender.scss';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
@@ -65,7 +65,12 @@ const DeviceOperationsFullRender: React.FC<{
                         collapseClassName={`device-operation function-container ${!hasContent && COLLAPSIBLE_EMPTY_CLASS}`}
                     >
                         <div className='function-content'>{innerContent}</div>
-                        <div>END OP:</div>
+                        <Icon
+                            className='operation-icon'
+                            size={13}
+                            intent={Intent.SUCCESS}
+                            icon={IconNames.CUBE}
+                        />
                         {memoryInfo}
                     </Collapsible>
                 );
@@ -82,7 +87,7 @@ const DeviceOperationsFullRender: React.FC<{
                     const buffer = node.params;
                     operationContent = (
                         <DeviceOperationNode
-                            memoryInfo={memoryInfo}
+                            memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
                             key={index}
                             title='Buffer allocate'
                         >
@@ -102,23 +107,19 @@ const DeviceOperationsFullRender: React.FC<{
                     const buffer = node.params;
                     operationContent = (
                         <DeviceOperationNode
-                            memoryInfo={memoryInfo}
+                            memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
                             key={index}
-                            title={`Buffer ${buffer.size} ${buffer.type} ${buffer.layout}`}
+                            title={`Buffer ${formatSize(parseInt(buffer.size, 10))} ${buffer.type}`}
                         />
                     );
                 } else if (nodeType === NodeType.buffer_deallocate) {
                     const buffer = node.params;
                     operationContent = (
                         <DeviceOperationNode
-                            memoryInfo={memoryInfo}
+                            memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
                             key={index}
-                            title='Buffer deallocate'
-                        >
-                            <p>
-                                {buffer.size} {buffer.type} {buffer.layout}
-                            </p>
-                        </DeviceOperationNode>
+                            title={`Buffer deallocate ${formatSize(parseInt(operations[node.connections[0]].params.size, 10))} ${buffer.type}`}
+                        />
                     );
                 } else if (nodeType === NodeType.circular_buffer_deallocate_all) {
                     operationContent = (
@@ -145,7 +146,12 @@ const DeviceOperationsFullRender: React.FC<{
                     const cb = node.params;
                     operationContent = (
                         <>
-                            {!consecutiveCBsOutput && <h4>CBs</h4>}
+                            {!consecutiveCBsOutput && (
+                                <>
+                                    <hr style={{ opacity: '0.2', paddingTop: '5px' }} />
+                                    <h4>CBs</h4>
+                                </>
+                            )}
                             <MemoryLegendElement
                                 chunk={{ address: parseInt(cb.address, 10), size: parseInt(cb.size, 10) }}
                                 key={cb.address}
@@ -155,6 +161,7 @@ const DeviceOperationsFullRender: React.FC<{
                                 onLegendClick={onLegendClick}
                                 colorVariance={deviceOpList.at(-1)?.id}
                             />
+                            {memoryInfo}
                             <br />
                         </>
                     );
@@ -180,7 +187,14 @@ const DeviceOperationsFullRender: React.FC<{
     return (
         <>
             <h3 className='monospace'>Peak memory load: {memoryLoad}</h3>
-            <div className='device-operations-full-render'>{renderOperations(deviceOperations)}</div>
+            <div className='device-operations-full-render'>
+                <span className='memory-info monospace '>
+                    <span className='format-numbers'>CBs</span>
+                    <span className='format-numbers'>Buffers</span>
+                    <span className='format-numbers'>Total</span>
+                </span>
+                {renderOperations(deviceOperations)}
+            </div>
         </>
     );
 };
@@ -194,10 +208,10 @@ const DeviceOperationNode: React.FC<React.PropsWithChildren<{ title: string; mem
 }) => {
     return (
         <div className='device-operation'>
+            <hr style={{ opacity: '0.2', paddingTop: '5px' }} />
             <h4>
                 {title} {memoryInfo}
             </h4>
-
             {children}
         </div>
     );

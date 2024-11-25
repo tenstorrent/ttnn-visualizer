@@ -5,6 +5,8 @@
 @use '../definitions/colours' as *;
 
 .device-operations-full-render {
+    position: relative;
+
     .device-operation.function-container {
         padding-left: 20px;
         margin-top: 10px;

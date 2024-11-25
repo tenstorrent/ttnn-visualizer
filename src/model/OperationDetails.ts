@@ -103,6 +103,8 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
         const deviceOpList: Node[] = [];
         if (this.device_operations !== null) {
+            this.device_operations = this.sortDeviceOperationsByBufferDeallocation(this.device_operations);
+
             this.device_operations.forEach((node) => {
                 if (node.node_type === NodeType.function_start) {
                     this.deviceOperations.push({
@@ -473,5 +475,49 @@ ${bufferCondesed.address} (${toHex(bufferCondesed.address)}) <br>Size: ${formatS
             address: mem[0].address || 0,
             size: rangeEnd - mem[0].address,
         };
+    }
+
+    // eslint-disable-next-line class-methods-use-this
+    sortDeviceOperationsByBufferDeallocation(deviceOperations: Node[]): Node[] {
+        // const circularBufferAllocates: Node[] = [];
+        const circularBufferDeallocations: Map<number, Node> = new Map();
+        const nodes: Node[] = [];
+        const opList: Node[] = [];
+
+        for (const node of deviceOperations) {
+            if (node.node_type === NodeType.function_start) {
+                opList.push(node);
+            }
+            if (node.node_type === NodeType.function_end) {
+                opList.pop();
+            }
+            if (node.node_type === NodeType.circular_buffer_deallocate_all) {
+                const opId = opList.length > 0 ? opList[opList.length - 1].id : -1;
+                circularBufferDeallocations.set(opId, node);
+            } else {
+                nodes.push(node);
+            }
+        }
+
+        const sortedNodes: Node[] = [];
+        nodes.forEach((node, index) => {
+            sortedNodes.push(node);
+            if (node.node_type === NodeType.function_start) {
+                opList.push(node);
+            }
+            if (node.node_type === NodeType.function_end) {
+                opList.pop();
+            }
+            if (node.node_type === NodeType.circular_buffer_allocate) {
+                const nextNode = nodes[index + 1];
+                const matchingDeallocate = circularBufferDeallocations.get(
+                    opList.length > 0 ? opList[opList.length - 1].id : -1,
+                );
+                if (matchingDeallocate && nextNode && nextNode.node_type !== NodeType.circular_buffer_allocate) {
+                    sortedNodes.push(matchingDeallocate);
+                }
+            }
+        });
+        return sortedNodes;
     }
 }
