@@ -12,13 +12,7 @@ import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
-import {
-    isDramActiveAtom,
-    isL1ActiveAtom,
-    selectedAddressAtom,
-    selectedTensorAtom,
-    showHexAtom,
-} from '../../store/app';
+import { selectedAddressAtom, selectedTensorAtom, showHexAtom } from '../../store/app';
 import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
@@ -48,13 +42,14 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
 
-    const [isL1Active, setIsL1Active] = useAtom(isL1ActiveAtom);
-    const [isDramActive, setIsDramActive] = useAtom(isDramActiveAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
     const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorAtom);
     const [tensixFullVisualisationOpen, setTensixFullVisualisationOpen] = useState(false);
     const [tensixIOVisualisationOpen, setTensixIOVisualisationOpen] = useState(false);
     const [deviceOperationsGraphOpen, setDeviceOperationsGraphOpen] = useState(false);
+
+    const [isL1Active, setIsL1Active] = useState(true);
+    const [isDramActive, setIsDramActive] = useState(false);
 
     const { createToast, resetToasts } = useBufferFocus();
 
