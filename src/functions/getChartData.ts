@@ -18,6 +18,10 @@ export default function getChartData(
             color = overrides?.color;
         } else {
             color = tensorColor !== undefined ? tensorColor : getBufferColor(address + (overrides?.colorVariance || 0));
+            // check for ColoredChunk
+            if ('color' in chunk && typeof chunk.color === 'string') {
+                color = chunk.color;
+            }
         }
 
         return {
