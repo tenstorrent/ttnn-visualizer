@@ -5,14 +5,16 @@
 import { Helmet } from 'react-helmet-async';
 import { useSetAtom } from 'jotai';
 import { useEffect } from 'react';
-import { toast } from 'react-toastify';
 import OperationList from '../components/OperationList';
 import { useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom } from '../store/app';
+import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 
 export default function Operations() {
     const report = useReportMeta();
     const setMeta = useSetAtom(reportMetaAtom);
+
+    useClearSelectedBuffer();
 
     // Needs to be in a useEffect to avoid a bad setState call
     useEffect(() => {
@@ -20,9 +22,6 @@ export default function Operations() {
             setMeta(report.data);
         }
     }, [report, setMeta]);
-
-    // Dismiss any toasts that are open
-    useEffect(() => toast.dismiss(), []);
 
     return (
         <>
