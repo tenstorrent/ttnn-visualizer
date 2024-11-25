@@ -2,17 +2,15 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { useEffect } from 'react';
-import { toast } from 'react-toastify';
 import { Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import LocalFolderSelector from '../components/report-selection/LocalFolderSelector';
 import RemoteSyncConfigurator from '../components/report-selection/RemoteSyncConfigurator';
 import 'styles/routes/Home.scss';
+import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 
 function Home() {
-    // Dismiss any toasts that are open
-    useEffect(() => toast.dismiss(), []);
+    useClearSelectedBuffer();
 
     return (
         <div className='splash-screen home'>

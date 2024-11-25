@@ -7,7 +7,6 @@ import { AnchorButton, ButtonGroup, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'react-toastify';
 import { BuffersByOperationData, useBuffers, useOperationsList, useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom, selectedDeviceAtom } from '../store/app';
 import 'styles/components/BufferSummary.scss';
@@ -19,6 +18,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { HistoricalTensor, Operation, Tensor } from '../model/Graph';
 import { HistoricalTensorsByOperation } from '../model/BufferSummary';
 import DeviceSelector from '../components/DeviceSelector';
+import useBufferFocus from '../hooks/useBufferFocus';
 
 const SECTION_IDS = {
     PLOT: 'plot',
@@ -35,8 +35,7 @@ function BufferSummary() {
     const { data: buffersByOperation } = useBuffers(BufferType.L1, selectedDevice);
     const { data: operationsList } = useOperationsList();
 
-    // Dismiss any toasts that are open
-    useEffect(() => toast.dismiss(), []);
+    const { activeToast, resetToasts } = useBufferFocus();
 
     // Needs to be in a useEffect to avoid a bad setState call
     useEffect(() => {
@@ -100,6 +99,14 @@ function BufferSummary() {
 
                 <DeviceSelector />
             </ButtonGroup>
+
+            {activeToast && (
+                // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
+                <div
+                    className='outside-click'
+                    onClick={resetToasts}
+                />
+            )}
 
             {buffersByOperation && operationsList && tensorListByOperation ? (
                 <>

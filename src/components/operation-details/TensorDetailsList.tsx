@@ -7,7 +7,6 @@ interface TensorDetailsProps {
     plotZoomRangeStart: number;
     plotZoomRangeEnd: number;
     onTensorClick: (address?: number, tensorId?: number) => void;
-    selectedTensorId: number | null;
 }
 
 function TensorDetailsList({
@@ -15,7 +14,6 @@ function TensorDetailsList({
     plotZoomRangeStart,
     plotZoomRangeEnd,
     onTensorClick,
-    selectedTensorId,
 }: TensorDetailsProps) {
     const { id, inputs, outputs, memorySizeL1 } = operationDetails;
 
@@ -28,7 +26,6 @@ function TensorDetailsList({
                     <TensorDetailsComponent
                         tensor={tensor}
                         key={`${tensor.id}-${index}`}
-                        selectedTensorId={selectedTensorId}
                         onTensorClick={onTensorClick}
                         memorySize={memorySizeL1}
                         operationId={id}
@@ -44,7 +41,6 @@ function TensorDetailsList({
                     <TensorDetailsComponent
                         tensor={tensor}
                         key={`${tensor.id}-${index}`}
-                        selectedTensorId={selectedTensorId}
                         onTensorClick={onTensorClick}
                         memorySize={memorySizeL1}
                         operationId={id}

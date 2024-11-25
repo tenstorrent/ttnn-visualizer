@@ -3,6 +3,7 @@ import classNames from 'classnames';
 import { Button, Icon, Intent, PopoverPosition, Position, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 
+import { useAtomValue } from 'jotai';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { TensorData } from '../../model/APIData';
 import { prettyPrintAddress, toHex } from '../../functions/math';
@@ -15,6 +16,7 @@ import TensorVisualisationComponent from '../tensor-sharding-visualization/Tenso
 import 'styles/components/TensorDetailsComponent.scss';
 import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
 import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator';
+import { selectedTensorAtom } from '../../store/app';
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
@@ -22,7 +24,6 @@ export interface TensorDetailsComponentProps {
     onTensorClick: (address?: number, tensorId?: number) => void;
     operationId: number;
     zoomRange: [number, number];
-    selectedTensorId: number | null;
 }
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
@@ -31,12 +32,12 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     onTensorClick,
     operationId,
     zoomRange,
-    selectedTensorId,
 }) => {
     const { address } = tensor;
     const { data: operations } = useOperationsList();
     const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations)?.id : null;
     const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations)?.id : null;
+    const selectedTensorId = useAtomValue(selectedTensorAtom);
 
     const [overlayOpen, setOverlayOpen] = useState(false);
 

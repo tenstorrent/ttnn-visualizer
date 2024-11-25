@@ -5,7 +5,6 @@
 import React, { useState } from 'react';
 import { Button, ButtonGroup, Intent, Position, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { toast } from 'react-toastify';
 import { useAtom } from 'jotai';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
@@ -13,9 +12,7 @@ import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
-import { isDramActiveAtom, isL1ActiveAtom, selectedAddressAtom, showHexAtom } from '../../store/app';
-import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import ToastTensorMessage from './ToastTensorMessage';
+import { selectedAddressAtom, selectedTensorAtom, showHexAtom } from '../../store/app';
 import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
@@ -27,6 +24,7 @@ import L1Plots from './L1Plots';
 import TensorDetailsList from './TensorDetailsList';
 import OperationArguments from '../OperationArguments';
 import DeviceOperationsFullRender from './DeviceOperationsFullRender';
+import useBufferFocus from '../../hooks/useBufferFocus';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -44,23 +42,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
 
-    const [isL1Active, setIsL1Active] = useAtom(isL1ActiveAtom);
-    const [isDramActive, setIsDramActive] = useAtom(isDramActiveAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
-    const [selectedTensorId, setSelectedTensorId] = useState<number | null>(null);
-    const [toastId, setToastId] = useState<number | null>(null);
+    const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorAtom);
     const [tensixFullVisualisationOpen, setTensixFullVisualisationOpen] = useState(false);
     const [tensixIOVisualisationOpen, setTensixIOVisualisationOpen] = useState(false);
     const [deviceOperationsGraphOpen, setDeviceOperationsGraphOpen] = useState(false);
 
-    const onClickOutside = () => {
-        setSelectedAddress(null);
-        setSelectedTensorId(null);
+    const [isL1Active, setIsL1Active] = useState(true);
+    const [isDramActive, setIsDramActive] = useState(false);
 
-        if (toastId) {
-            toast.dismiss(toastId);
-            setToastId(null);
-        }
+    const { createToast, resetToasts } = useBufferFocus();
+
+    const onClickOutside = () => {
+        resetToasts();
     };
 
     const operation = operations?.find((op) => op.id === operationId);
@@ -137,35 +131,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const onLegendClick = (address: number, tensorId?: number) => {
         updateBufferFocus(address, tensorId);
-    };
-
-    const createToast = (address?: number, tensorId?: number) => {
-        if (toastId) {
-            toast.dismiss(toastId);
-        }
-
-        let colour = getTensorColor(tensorId);
-
-        if (address && !colour) {
-            colour = getBufferColor(address);
-        }
-
-        const toastInstance = toast(
-            <ToastTensorMessage
-                tensorId={tensorId}
-                address={address}
-                colour={colour}
-            />,
-            {
-                position: 'bottom-right',
-                hideProgressBar: true,
-                closeOnClick: true,
-                onClick: () => setToastId(null),
-                theme: 'light',
-            },
-        ) as number;
-
-        setToastId(toastInstance);
     };
 
     const inputOutputList = details.inputs.concat(details.outputs);
@@ -345,7 +310,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             plotZoomRangeStart={plotZoomRangeStart}
                             plotZoomRangeEnd={plotZoomRangeEnd}
                             onTensorClick={onTensorClick}
-                            selectedTensorId={selectedTensorId}
                         />
 
                         {details.device_operations && details.deviceOperations.length > 0 && (
