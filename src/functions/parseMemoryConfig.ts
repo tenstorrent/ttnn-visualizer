@@ -11,16 +11,16 @@ export interface ShardSpec {
 
 export type MemoryKeys = 'shard_spec' | 'memory_layout' | 'grid' | 'shape' | 'orientation' | 'halo';
 
+const memoryConfigPattern = /MemoryConfig\((.*)\)$/;
+const memoryLayoutPattern = /memory_layout=([A-Za-z_:]+)/;
+const shardSpecPattern =
+    /shard_spec=ShardSpec\(grid=\{(\[.*?\])\},shape=\{(\d+),\s*(\d+)\},orientation=ShardOrientation::([A-Z_]+),halo=(\d+)\)/;
+
 const parseMemoryConfig = (string: string) => {
-    const regex = /MemoryConfig\((.*)\)$/;
-    const match = string.match(regex);
+    const match = string.match(memoryConfigPattern);
 
     if (match) {
         const capturedString = match[1];
-
-        const memoryLayoutPattern = /memory_layout=([A-Za-z_:]+)/;
-        const shardSpecPattern =
-            /shard_spec=ShardSpec\(grid=\{(\[.*?\])\},shape=\{(\d+),\s*(\d+)\},orientation=ShardOrientation::([A-Z_]+),halo=(\d+)\)/;
 
         const memoryLayoutMatch = capturedString.match(memoryLayoutPattern);
         const shardSpecMatch = capturedString.match(shardSpecPattern);
