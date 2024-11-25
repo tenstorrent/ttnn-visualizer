@@ -4,12 +4,13 @@
 
 import { Operation, Tensor } from './Graph';
 import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
+import { MemoryConfig } from '../functions/parseMemoryConfig';
 
 export interface TensorData extends Tensor {
     shape: string;
     dtype: string;
     layout: string;
-    memory_config: string | null;
+    memory_config: MemoryConfig | string | null;
     device_id: number | null;
     io: 'input' | 'output' | null; // TODO: validate usefulness in the future
     comparison: {

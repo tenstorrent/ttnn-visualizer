@@ -19,6 +19,7 @@ import {
     defaultTensorData,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
+import parseMemoryConfig from '../functions/parseMemoryConfig';
 
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
@@ -220,7 +221,13 @@ export const fetchTensors = async (deviceId?: number): Promise<TensorData[]> => 
             },
         });
 
-        return tensorList;
+        return tensorList.map((tensor) => ({
+            ...tensor,
+            memory_config:
+                typeof tensor.memory_config === 'string'
+                    ? parseMemoryConfig(tensor.memory_config)
+                    : tensor.memory_config,
+        }));
     } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
             if (error.response && error.response.status >= 400 && error.response.status < 500) {

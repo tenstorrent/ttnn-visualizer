@@ -5,7 +5,7 @@
 import { Switch } from '@blueprintjs/core';
 import { useState } from 'react';
 import 'styles/components/TensorArgument.scss';
-import parseMemoryConfig, { ShardSpec } from '../functions/parseMemoryConfig';
+import { ShardSpec } from '../functions/parseMemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';
 
 interface TensorArgumentProps {
@@ -29,7 +29,7 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
     };
 
     if (argument.name === 'memory_config') {
-        const parsedArgument = Object.entries(parseMemoryConfig(argument.value));
+        const parsedArgument = Object.entries(argument.value);
 
         return (
             <table className='ttnn-table alt-two-tone-rows buffer-table'>

@@ -9,6 +9,11 @@ export interface ShardSpec {
     halo?: number;
 }
 
+export interface MemoryConfig {
+    memory_layout: string;
+    shard_spec: ShardSpec | string;
+}
+
 export type MemoryKeys = 'shard_spec' | 'memory_layout' | 'grid' | 'shape' | 'orientation' | 'halo';
 
 const memoryConfigPattern = /MemoryConfig\((.*)\)$/;
@@ -16,7 +21,7 @@ const memoryLayoutPattern = /memory_layout=([A-Za-z_:]+)/;
 const shardSpecPattern =
     /shard_spec=ShardSpec\(grid=\{(\[.*?\])\},shape=\{(\d+),\s*(\d+)\},orientation=ShardOrientation::([A-Z_]+),halo=(\d+)\)/;
 
-const parseMemoryConfig = (string: string) => {
+const parseMemoryConfig = (string: string): MemoryConfig | string => {
     const match = string.match(memoryConfigPattern);
 
     if (match) {
@@ -25,19 +30,19 @@ const parseMemoryConfig = (string: string) => {
         const memoryLayoutMatch = capturedString.match(memoryLayoutPattern);
         const shardSpecMatch = capturedString.match(shardSpecPattern);
 
-        const memoryLayout = memoryLayoutMatch ? memoryLayoutMatch[1] : null;
-        const shardSpec = shardSpecMatch
+        const memoryLayout = memoryLayoutMatch ? memoryLayoutMatch[1] : '';
+        const shardSpec: ShardSpec | string = shardSpecMatch
             ? {
                   grid: shardSpecMatch[1],
                   shape: [parseInt(shardSpecMatch[2], 10), parseInt(shardSpecMatch[3], 10)],
                   orientation: shardSpecMatch[4],
                   halo: parseInt(shardSpecMatch[5], 10),
               }
-            : null;
+            : 'std::nullopt';
 
         return {
             memory_layout: memoryLayout,
-            shard_spec: shardSpec || 'std::nullopt',
+            shard_spec: shardSpec,
         };
     }
 
