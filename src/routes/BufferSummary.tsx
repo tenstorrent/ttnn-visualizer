@@ -17,7 +17,6 @@ import { BufferType } from '../model/BufferType';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { HistoricalTensor, Operation, Tensor } from '../model/Graph';
 import { HistoricalTensorsByOperation } from '../model/BufferSummary';
-import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import useBufferFocus from '../hooks/useBufferFocus';
 
 const SECTION_IDS = {
@@ -34,8 +33,6 @@ function BufferSummary() {
     const [activeSection, setActiveSection] = useState(SECTION_IDS.PLOT);
     const { data: buffersByOperation } = useBuffers(BufferType.L1, deviceId);
     const { data: operationsList } = useOperationsList();
-
-    useClearSelectedBuffer();
 
     const { activeToast, resetToasts } = useBufferFocus();
 
