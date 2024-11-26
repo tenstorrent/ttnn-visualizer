@@ -160,7 +160,7 @@ export interface OperationDescription extends Operation {
     arguments: {
         name: string;
         value: string;
-        parsedValue?: MemoryConfig;
+        parsedValue: MemoryConfig | null;
     }[];
     device_operations: Node[];
 }

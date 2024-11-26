@@ -12,7 +12,7 @@ interface TensorArgumentProps {
     argument: {
         name: string;
         value: string;
-        parsedValue?: MemoryConfig;
+        parsedValue: MemoryConfig | null;
     };
     onCollapse?: () => void;
 }
