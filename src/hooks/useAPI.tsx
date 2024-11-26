@@ -80,7 +80,7 @@ const fetchOperations = async (deviceId?: number): Promise<OperationDescription[
             argument.name === 'memory_config'
                 ? {
                       ...argument,
-                      parsedValue: argument.value ? (parseMemoryConfig(argument.value) as MemoryConfig) : undefined,
+                      parsedValue: argument.value ? (parseMemoryConfig(argument.value) as MemoryConfig) : null,
                   }
                 : argument,
         ),
