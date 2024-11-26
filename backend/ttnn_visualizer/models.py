@@ -182,6 +182,7 @@ class RemoteReportFolder(SerializeableModel):
 class TabSession(BaseModel):
     tab_id: str
     report_path: Optional[str] = None
+    profiler_directory: Optional[str] = None
     active_report: Optional[ActiveReport] = None
     remote_connection: Optional[RemoteConnection] = None
     remote_folder: Optional[RemoteReportFolder] = None
@@ -193,6 +194,7 @@ class TabSessionTable(db.Model):
     id = Column(Integer, primary_key=True)
     tab_id = Column(String, unique=True, nullable=False)
     report_path = Column(String)
+    profiler_directory = Column(String, nullable=True)
     active_report = Column(JSON)
     remote_connection = Column(JSON, nullable=True)
     remote_folder = Column(JSON, nullable=True)
