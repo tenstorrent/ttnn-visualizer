@@ -12,7 +12,7 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
 import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
-import { calculateL1MemoryUsage, processAllocations } from '../../functions/calculateMemoryPeakLoad';
+import { AllocationDetails, processMemoryAllocations } from '../../functions/calculateMemoryPeakLoad';
 import { formatSize } from '../../functions/math';
 
 const DeviceOperationsFullRender: React.FC<{
@@ -22,17 +22,17 @@ const DeviceOperationsFullRender: React.FC<{
 }> = ({ deviceOperations, details, onLegendClick }) => {
     const deviceOpList: Node[] = [];
     const selectedAddress = useAtomValue(selectedAddressAtom);
+    const { memoryAllocationList, peakMemoryLoad } = processMemoryAllocations(deviceOperations);
     const renderOperations = (operations: Node[]) => {
-        const processedData = processAllocations(operations);
-
         const stack: JSX.Element[][] = [];
         const output: JSX.Element[] = [];
         let consecutiveCBsOutput: boolean = false;
+
         operations.forEach((node, index) => {
             const nodeType = node.node_type;
-
-            const memoryDetails = processedData.find((data) => data.id === node.id);
-
+            const memoryDetails: AllocationDetails | undefined = memoryAllocationList.find(
+                (data) => data.id === node.id,
+            );
             const memoryInfo = memoryDetails ? (
                 <span className='memory-info monospace '>
                     <span className='format-numbers'>{formatSize(memoryDetails.total_cb)}</span>
@@ -45,6 +45,7 @@ const DeviceOperationsFullRender: React.FC<{
                 stack.push([]);
             } else if (nodeType === NodeType.function_end) {
                 const innerContent = stack.pop();
+                const opName = node.params.name;
                 const label = (
                     <h4>
                         <Icon
@@ -53,7 +54,7 @@ const DeviceOperationsFullRender: React.FC<{
                             intent={Intent.SUCCESS}
                             icon={IconNames.CUBE_ADD}
                         />
-                        {node.params.name}
+                        {opName}
                     </h4>
                 );
 
@@ -65,13 +66,16 @@ const DeviceOperationsFullRender: React.FC<{
                         collapseClassName={`device-operation function-container ${!hasContent && COLLAPSIBLE_EMPTY_CLASS}`}
                     >
                         <div className='function-content'>{innerContent}</div>
-                        <Icon
-                            className='operation-icon'
-                            size={13}
-                            intent={Intent.SUCCESS}
-                            icon={IconNames.CUBE}
-                        />
-                        {memoryInfo}
+                        <div className='end-function'>
+                            <Icon
+                                className='operation-icon'
+                                title={opName}
+                                size={13}
+                                intent={Intent.SUCCESS}
+                                icon={IconNames.CUBE}
+                            />
+                            {memoryInfo}
+                        </div>
                     </Collapsible>
                 );
 
@@ -148,7 +152,7 @@ const DeviceOperationsFullRender: React.FC<{
                         <>
                             {!consecutiveCBsOutput && (
                                 <>
-                                    <hr style={{ opacity: '0.2', paddingTop: '5px' }} />
+                                    <hr />
                                     <h4>CBs</h4>
                                 </>
                             )}
@@ -183,10 +187,11 @@ const DeviceOperationsFullRender: React.FC<{
         return output;
     };
 
-    const memoryLoad = formatSize(calculateL1MemoryUsage(deviceOperations));
     return (
-        <>
-            <h3 className='monospace'>Peak memory load: {memoryLoad}</h3>
+        <div className='device-operations-full-render-wrap'>
+            <h3 className='peak-load monospace'>
+                Peak L1 memory load: <span className='format-numbers'>{formatSize(peakMemoryLoad)}</span>
+            </h3>
             <div className='device-operations-full-render'>
                 <span className='memory-info monospace '>
                     <span className='format-numbers'>CBs</span>
@@ -195,7 +200,12 @@ const DeviceOperationsFullRender: React.FC<{
                 </span>
                 {renderOperations(deviceOperations)}
             </div>
-        </>
+            {deviceOperations.length > 20 && (
+                <h3 className='peak-load monospace'>
+                    Peak L1 memory load: <span className='format-numbers'>{formatSize(peakMemoryLoad)}</span>
+                </h3>
+            )}
+        </div>
     );
 };
 
@@ -208,7 +218,7 @@ const DeviceOperationNode: React.FC<React.PropsWithChildren<{ title: string; mem
 }) => {
     return (
         <div className='device-operation'>
-            <hr style={{ opacity: '0.2', paddingTop: '5px' }} />
+            <hr />
             <h4>
                 {title} {memoryInfo}
             </h4>

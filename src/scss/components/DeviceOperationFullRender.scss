@@ -4,12 +4,28 @@
 
 @use '../definitions/colours' as *;
 
+.device-operations-full-render-wrap {
+    h3.peak-load {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px solid $tt-grey-4;
+        font-weight: normal;
+    }
+}
+
 .device-operations-full-render {
     position: relative;
 
-    .device-operation.function-container {
-        padding-left: 20px;
-        margin-top: 10px;
+    .device-operation {
+        hr {
+            opacity: 0.2;
+            padding-top: 5px;
+        }
+
+        .function-container {
+            padding-left: 20px;
+            margin-top: 10px;
+        }
 
         .collapsible-controls {
             h4 {
@@ -21,6 +37,10 @@
                 gap: 10px;
             }
         }
+    }
+
+    .end-function {
+        padding-top: 10px;
     }
 
     .function-content {

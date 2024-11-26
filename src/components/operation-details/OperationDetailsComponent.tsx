@@ -365,14 +365,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 />
                             </>
                         )}
-                        {operation?.arguments && (
-                            <>
-                                <hr />
 
-                                <div className='arguments-wrapper'>
-                                    <OperationArguments operation={operation} />
-                                </div>
-                            </>
+                        {operation?.arguments && (
+                            <div className='arguments-wrapper'>
+                                <OperationArguments operation={operation} />
+                            </div>
                         )}
                     </>
                 ) : (
