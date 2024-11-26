@@ -20,6 +20,9 @@ from ttnn_visualizer.serializers import (
     serialize_operation,
     serialize_tensors,
     serialize_buffer_pages,
+    serialize_operation_buffers,
+    serialize_operations_buffers,
+    serialize_devices,
 )
 
 
@@ -121,6 +124,140 @@ class TestSerializers(unittest.TestCase):
         ]
 
         self.assertEqual(result, expected)
+
+    def test_serialize_operations_buffers(self):
+        operations = [
+            Operation(1, "op1", 0.5),
+            Operation(2, "op2", 1.0),
+        ]
+        buffers = [
+            Buffer(1, 1, 1000, 256, BufferType.DRAM),
+            Buffer(1, 2, 2000, 512, BufferType.L1),
+            Buffer(2, 3, 3000, 1024, BufferType.L1),
+        ]
+
+        result = serialize_operations_buffers(operations, buffers)
+
+        expected = [
+            {
+                "id": 1,
+                "name": "op1",
+                "buffers": [
+                    {
+                        "device_id": 1,
+                        "address": 1000,
+                        "buffer_type": 0,
+                        "size": 256,
+                    },
+                    {
+                        "device_id": 2,
+                        "address": 2000,
+                        "buffer_type": 1,
+                        "size": 512,
+                    },
+                ],
+            },
+            {
+                "id": 2,
+                "name": "op2",
+                "buffers": [
+                    {
+                        "device_id": 3,
+                        "address": 3000,
+                        "buffer_type": 1,
+                        "size": 1024,
+                    },
+                ],
+            },
+        ]
+
+        self.assertEqual(repr(result), repr(expected))
+
+    def test_serialize_devices(self):
+        devices = [
+            Device(1, 4, 4, 2, 2, 256, 4, 64, 0, 0, 1, 2, 512, 256, 128, 64, 1, 512),
+            Device(
+                2, 8, 8, 4, 4, 512, 8, 128, 1, 1, 2, 4, 1024, 512, 256, 128, 2, 1024
+            ),
+        ]
+
+        result = serialize_devices(devices)
+
+        expected = [
+            {
+                "address_at_first_l1_bank": 0,
+                "address_at_first_l1_cb_buffer": 0,
+                "cb_limit": 512,
+                "device_id": 1,
+                "l1_bank_size": 64,
+                "l1_num_banks": 4,
+                "num_banks_per_storage_core": 1,
+                "num_compute_cores": 2,
+                "num_storage_cores": 512,
+                "num_x_compute_cores": 2,
+                "num_x_cores": 4,
+                "num_y_compute_cores": 2,
+                "num_y_cores": 4,
+                "total_l1_for_interleaved_buffers": 64,
+                "total_l1_for_sharded_buffers": 1,
+                "total_l1_for_tensors": 128,
+                "total_l1_memory": 256,
+                "worker_l1_size": 256,
+            },
+            {
+                "address_at_first_l1_bank": 1,
+                "address_at_first_l1_cb_buffer": 1,
+                "cb_limit": 1024,
+                "device_id": 2,
+                "l1_bank_size": 128,
+                "l1_num_banks": 8,
+                "num_banks_per_storage_core": 2,
+                "num_compute_cores": 4,
+                "num_storage_cores": 1024,
+                "num_x_compute_cores": 4,
+                "num_x_cores": 8,
+                "num_y_compute_cores": 4,
+                "num_y_cores": 8,
+                "total_l1_for_interleaved_buffers": 128,
+                "total_l1_for_sharded_buffers": 2,
+                "total_l1_for_tensors": 256,
+                "total_l1_memory": 512,
+                "worker_l1_size": 512,
+            },
+        ]
+
+        # Assert that the serialized devices match the expected output
+        self.assertEqual(result, expected)
+
+    def test_serialize_operation_buffers(self):
+        operation = Operation(1, "op1", 0.5)
+        operation_buffers = [
+            Buffer(1, 1, 1000, 256, BufferType.DRAM),
+            Buffer(1, 2, 2000, 512, BufferType.L1),
+        ]
+
+        result = serialize_operation_buffers(operation, operation_buffers)
+
+        expected = {
+            "id": 1,
+            "name": "op1",
+            "buffers": [
+                {
+                    "device_id": 1,
+                    "address": 1000,
+                    "buffer_type": 0,
+                    "size": 256,
+                },
+                {
+                    "device_id": 2,
+                    "address": 2000,
+                    "buffer_type": 1,
+                    "size": 512,
+                },
+            ],
+        }
+
+        self.assertEqual(repr(result), repr(expected))
 
     def test_serialize_inputs_outputs(self):
         inputs = [InputTensor(1, 0, 1)]
@@ -241,7 +378,6 @@ class TestSerializers(unittest.TestCase):
                 {
                     "address": 1000,
                     "buffer_type": 0,
-                    "comparison": {},
                     "consumers": [3],
                     "device_id": 1,
                     "dtype": "dtype1",
@@ -260,7 +396,6 @@ class TestSerializers(unittest.TestCase):
                 {
                     "address": 1000,
                     "buffer_type": 0,
-                    "comparison": {},
                     "consumers": [3],
                     "device_id": 1,
                     "dtype": "dtype1",
@@ -367,7 +502,7 @@ class TestSerializers(unittest.TestCase):
             ProducersConsumers(2, [], []),
         ]
 
-        result = serialize_tensors(tensors, producers_consumers)
+        result = serialize_tensors(tensors, producers_consumers, [], [])
 
         expected = [
             {
@@ -379,6 +514,7 @@ class TestSerializers(unittest.TestCase):
                 "device_id": 1,
                 "address": 1000,
                 "buffer_type": 0,
+                "comparison": None,
                 "consumers": [3],
                 "producers": [2],
             },
@@ -391,6 +527,7 @@ class TestSerializers(unittest.TestCase):
                 "device_id": 2,
                 "address": 2000,
                 "buffer_type": 1,
+                "comparison": None,
                 "consumers": [],
                 "producers": [],
             },
