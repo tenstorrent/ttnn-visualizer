@@ -159,6 +159,20 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 <p>
                     <strong>Layout:</strong> {tensor.layout}
                 </p>
+                <p>
+                    {tensor.parsed_memory_config?.memory_layout && (
+                        <>
+                            <strong>Memory layout:</strong> {tensor.parsed_memory_config.memory_layout}
+                        </>
+                    )}
+                </p>
+                <p>
+                    {tensor.parsed_memory_config?.shard_spec && (
+                        <>
+                            <strong>Sharding:</strong> {tensor.parsed_memory_config.shard_spec}
+                        </>
+                    )}
+                </p>
                 {tensor.comparison?.global ? (
                     <>
                         <GoldenTensorComparisonIndicator
