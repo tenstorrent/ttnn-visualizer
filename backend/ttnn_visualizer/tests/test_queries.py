@@ -1,23 +1,102 @@
+import tempfile
 import sqlite3
+import tempfile
 import unittest
+from unittest.mock import Mock
+from unittest.mock import patch
 
 from ttnn_visualizer.models import (
-    Operation,
-    Device,
     DeviceOperation,
-    Buffer,
-    Tensor,
-    InputTensor,
-    OutputTensor,
-    OperationArgument,
-    StackTrace,
-    BufferPage,
-    BufferType,
+    TensorComparisonRecord,
 )
 from ttnn_visualizer.queries import DatabaseQueries
+from ttnn_visualizer.queries import LocalQueryRunner
+from ttnn_visualizer.queries import RemoteQueryRunner
+
+
+class TestQueryTable(unittest.TestCase):
+    """Tests query construction logic"""
+
+    def setUp(self):
+        # Mock the query_runner
+        self.mock_query_runner = Mock()
+        self.db_queries = DatabaseQueries(connection=Mock())
+        self.db_queries.query_runner = self.mock_query_runner
+
+    def test_query_table_no_filters_or_conditions(self):
+        self.db_queries._query_table("test_table")
+        self.mock_query_runner.execute_query.assert_called_once_with(
+            "SELECT * FROM test_table WHERE 1=1", []
+        )
+
+    def test_query_table_single_filter(self):
+        filters = {"column1": "value1"}
+        self.db_queries._query_table("test_table", filters)
+        self.mock_query_runner.execute_query.assert_called_once_with(
+            "SELECT * FROM test_table WHERE 1=1 AND column1 = ?", ["value1"]
+        )
+
+    def test_query_table_multiple_filters(self):
+        filters = {"column1": "value1", "column2": 42}
+        self.db_queries._query_table("test_table", filters)
+        self.mock_query_runner.execute_query.assert_called_once_with(
+            "SELECT * FROM test_table WHERE 1=1 AND column1 = ? AND column2 = ?",
+            ["value1", 42],
+        )
+
+    def test_query_table_filter_with_none_value(self):
+        filters = {"column1": "value1", "column2": None}
+        self.db_queries._query_table("test_table", filters)
+        self.mock_query_runner.execute_query.assert_called_once_with(
+            "SELECT * FROM test_table WHERE 1=1 AND column1 = ?", ["value1"]
+        )
+
+    def test_query_table_empty_list_filter(self):
+        filters = {"column1": []}
+        self.db_queries._query_table("test_table", filters)
+        self.mock_query_runner.execute_query.assert_called_once_with(
+            "SELECT * FROM test_table WHERE 1=1", []
+        )
+
+    def test_query_table_list_based_filter(self):
+        filters = {"column1": [1, 2, 3]}
+        self.db_queries._query_table("test_table", filters)
+        self.mock_query_runner.execute_query.assert_called_once_with(
+            "SELECT * FROM test_table WHERE 1=1 AND column1 IN (?, ?, ?)", [1, 2, 3]
+        )
+
+    def test_query_table_with_additional_conditions(self):
+        additional_conditions = "AND column3 > ?"
+        additional_params = [100]
+        self.db_queries._query_table(
+            "test_table",
+            additional_conditions=additional_conditions,
+            additional_params=additional_params,
+        )
+        self.mock_query_runner.execute_query.assert_called_once_with(
+            "SELECT * FROM test_table WHERE 1=1 AND column3 > ?", [100]
+        )
+
+    def test_query_table_with_filters_and_conditions(self):
+        filters = {"column1": "value1"}
+        additional_conditions = "AND column3 > ?"
+        additional_params = [100]
+        self.db_queries._query_table(
+            "test_table", filters, additional_conditions, additional_params
+        )
+        self.mock_query_runner.execute_query.assert_called_once_with(
+            "SELECT * FROM test_table WHERE 1=1 AND column1 = ? AND column3 > ?",
+            ["value1", 100],
+        )
+
+    def tearDown(self):
+        self.mock_query_runner.reset_mock()
 
 
 class TestDatabaseQueries(unittest.TestCase):
+    """
+    Tests specific table querying with filters and conditions
+    """
 
     def setUp(self):
         self.connection = sqlite3.connect(":memory:")
@@ -106,160 +185,254 @@ class TestDatabaseQueries(unittest.TestCase):
             page_size INT,
             buffer_type INT
         );
+        CREATE TABLE local_tensor_comparison_records (
+            tensor_id int,
+            golden_tensor_id int,
+            matches int,
+            desired_pcc float,
+            actual_pcc float
+        );
+        CREATE TABLE global_tensor_comparison_records (
+            tensor_id int,
+            golden_tensor_id int,
+            matches int,
+            desired_pcc float,
+            actual_pcc float
+        );
+
         """
         self.connection.executescript(schema)
 
-    def test_query_devices(self):
-        self.connection.execute(
-            "INSERT INTO devices VALUES (1, 4, 4, 2, 2, 1024, 4, 256, 0, 0, 1, 2, 2, 4096, 2048, 2048, 2048, 256)"
+    def test_init_with_valid_connection(self):
+        connection = sqlite3.connect(":memory:")
+        db_queries = DatabaseQueries(connection=connection)
+        self.assertIsInstance(db_queries.query_runner, LocalQueryRunner)
+        connection.close()
+
+    def test_init_with_missing_session_and_connection(self):
+        with self.assertRaises(ValueError) as context:
+            DatabaseQueries(session=None, connection=None)
+        self.assertIn(
+            "Must provide either an existing connection or session",
+            str(context.exception),
         )
-        devices = list(self.db_queries.query_devices())
-        self.assertEqual(len(devices), 1)
-        device = devices[0]
-        self.assertIsInstance(device, Device)
-        self.assertEqual(device.device_id, 1)
+
+    @patch("ttnn_visualizer.queries.get_client")
+    def test_init_with_valid_remote_session(self, _mock_client):
+        mock_session = Mock()
+        mock_session.remote_connection = Mock(useRemoteQuerying=True)
+        mock_session.remote_connection.sqliteBinaryPath = "/usr/bin/sqlite3"
+        mock_session.remote_folder = Mock(remotePath="/remote/path")
+        db_queries = DatabaseQueries(session=mock_session)
+        self.assertIsInstance(db_queries.query_runner, RemoteQueryRunner)
+
+    def test_init_with_valid_local_session(self):
+        with tempfile.NamedTemporaryFile(suffix=".sqlite") as temp_db_file:
+            connection = sqlite3.connect(temp_db_file.name)
+            connection.execute("CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT);")
+            connection.close()
+
+            mock_session = Mock()
+            mock_session.report_path = temp_db_file.name
+            mock_session.remote_connection = None
+
+            db_queries = DatabaseQueries(session=mock_session)
+            self.assertIsInstance(db_queries.query_runner, LocalQueryRunner)
+
+    def test_init_with_invalid_session(self):
+        mock_session = Mock()
+        mock_session.report_path = None
+        mock_session.remote_connection = None
+        with self.assertRaises(ValueError) as context:
+            DatabaseQueries(session=mock_session)
+        self.assertIn(
+            "Report path must be provided for local queries", str(context.exception)
+        )
+
+    def test_check_table_exists(self):
+        self.assertTrue(self.db_queries._check_table_exists("devices"))
+        self.assertFalse(self.db_queries._check_table_exists("nonexistent_table"))
 
     def test_query_device_operations(self):
         self.connection.execute(
             'INSERT INTO captured_graph VALUES (1, \'[{"counter": 1, "data": "value1"}]\')'
         )
-        device_operations = list(self.db_queries.query_device_operations())
-        self.assertEqual(len(device_operations), 1)
-        device_operation = device_operations[0]
-        self.assertIsInstance(device_operation, DeviceOperation)
-        self.assertEqual(device_operation.operation_id, 1)
+        results = self.db_queries.query_device_operations(filters={"operation_id": 1})
+        self.assertEqual(len(results), 1)
+        self.assertIsInstance(results[0], DeviceOperation)
 
-    def test_query_device_operations_by_operation_id(self):
-        self.connection.execute(
-            'INSERT INTO captured_graph VALUES (1, \'[{"counter": 1, "data": "value1"}]\')'
-        )
-        device_operation = self.db_queries.query_device_operations_by_operation_id(1)
-        self.assertIsInstance(device_operation, DeviceOperation)
-        self.assertEqual(device_operation.operation_id, 1)
-
-        no_operation = self.db_queries.query_device_operations_by_operation_id(999)
-        self.assertIsNone(no_operation)
-
-    def test_query_buffer_pages(self):
-        # Insert sample data into buffer_pages table
-        self.connection.execute(
-            "INSERT INTO buffer_pages (operation_id, device_id, address, core_y, core_x, bank_id, page_index, page_address, page_size, buffer_type) "
-            "VALUES (1, 1, 1234, 0, 0, 1, 0, 1000, 4096, 0)"
-        )
-
-        # Query without any filters
-        buffer_pages = list(self.db_queries.query_buffer_pages())
-        self.assertEqual(len(buffer_pages), 1)
-
-        # Validate the returned buffer page
-        buffer_page = buffer_pages[0]
-        self.assertIsInstance(buffer_page, BufferPage)
-        self.assertEqual(buffer_page.operation_id, 1)
-        self.assertEqual(buffer_page.address, 1234)
-        self.assertEqual(buffer_page.buffer_type, BufferType(0).value)
-
-        # Query with filter by operation_id
-        buffer_pages = list(self.db_queries.query_buffer_pages(operation_id=1))
-        self.assertEqual(len(buffer_pages), 1)
-
-        # Query with filter by address
-        buffer_pages = list(self.db_queries.query_buffer_pages(addresses=["1234"]))
-        self.assertEqual(len(buffer_pages), 1)
-
-        # Query with filter by buffer_type
-        buffer_pages = list(
-            self.db_queries.query_buffer_pages(buffer_type=BufferType(0).value)
-        )
-        self.assertEqual(len(buffer_pages), 1)
-
-        # Query with a non-matching filter
-        buffer_pages = list(self.db_queries.query_buffer_pages(operation_id="9999"))
-        self.assertEqual(len(buffer_pages), 0)
-
-    def test_query_buffers(self):
-        self.connection.execute("INSERT INTO buffers VALUES (1, 1, 0, 1024, 0)")
-        buffers = list(self.db_queries.query_buffers())
-        self.assertEqual(len(buffers), 1)
-        buffer = buffers[0]
-        self.assertIsInstance(buffer, Buffer)
-        self.assertEqual(buffer.operation_id, 1)
-
-    def test_query_tensors(self):
-        self.connection.execute(
-            "INSERT INTO tensors VALUES (1, '(2,2)', 'float32', 'NCHW', 'default', 1, 0, 0)"
-        )
-        tensors = list(self.db_queries.query_tensors())
-        self.assertEqual(len(tensors), 1)
-        tensor = tensors[0]
-        self.assertIsInstance(tensor, Tensor)
-        self.assertEqual(tensor.tensor_id, 1)
+    def test_query_device_operations_table_missing(self):
+        self.connection.execute("DROP TABLE captured_graph")
+        results = self.db_queries.query_device_operations(filters={"operation_id": 1})
+        self.assertEqual(results, [])
 
     def test_query_operation_arguments(self):
         self.connection.execute(
-            "INSERT INTO operation_arguments VALUES (1, 'arg1', 'value1')"
+            "INSERT INTO operation_arguments VALUES (1, 'arg_name', 'arg_value')"
         )
-        args = list(self.db_queries.query_operation_arguments())
-        self.assertEqual(len(args), 1)
-        arg = args[0]
-        self.assertIsInstance(arg, OperationArgument)
-        self.assertEqual(arg.operation_id, 1)
-
-    def test_query_stack_traces(self):
-        self.connection.execute("INSERT INTO stack_traces VALUES (1, 'trace1')")
-        traces = list(self.db_queries.query_stack_traces())
-        self.assertEqual(len(traces), 1)
-        trace = traces[0]
-        self.assertIsInstance(trace, StackTrace)
-        self.assertEqual(trace.operation_id, 1)
-
-    def test_query_input_tensors(self):
-        self.connection.execute("INSERT INTO input_tensors VALUES (1, 0, 1)")
-        inputs = list(self.db_queries.query_input_tensors())
-        self.assertEqual(len(inputs), 1)
-        input_tensor = inputs[0]
-        self.assertIsInstance(input_tensor, InputTensor)
-        self.assertEqual(input_tensor.operation_id, 1)
-
-    def test_query_output_tensors(self):
-        self.connection.execute("INSERT INTO output_tensors VALUES (1, 0, 1)")
-        outputs = list(self.db_queries.query_output_tensors())
-        self.assertEqual(len(outputs), 1)
-        output_tensor = outputs[0]
-        self.assertIsInstance(output_tensor, OutputTensor)
-        self.assertEqual(output_tensor.operation_id, 1)
+        results = list(
+            self.db_queries.query_operation_arguments(filters={"operation_id": 1})
+        )
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].name, "arg_name")
 
     def test_query_operations(self):
         self.connection.execute("INSERT INTO operations VALUES (1, 'op1', 2.0)")
-        operations = list(self.db_queries.query_operations())
-        self.assertEqual(len(operations), 1)
-        operation = operations[0]
-        self.assertIsInstance(operation, Operation)
-        self.assertEqual(operation.operation_id, 1)
+        results = list(self.db_queries.query_operations(filters={"operation_id": 1}))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].name, "op1")
+
+    def test_query_buffers(self):
+        self.connection.execute("INSERT INTO buffers VALUES (1, 1, 100, 1024, 0)")
+        results = list(self.db_queries.query_buffers(filters={"operation_id": 1}))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].address, 100)
+
+    def test_query_stack_traces(self):
+        self.connection.execute("INSERT INTO stack_traces VALUES (1, 'trace_data')")
+        results = list(self.db_queries.query_stack_traces(filters={"operation_id": 1}))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].stack_trace, "trace_data")
+
+    def test_query_tensor_comparisons(self):
+        self.connection.execute(
+            """
+            INSERT INTO local_tensor_comparison_records
+            (tensor_id, golden_tensor_id, matches, desired_pcc, actual_pcc)
+            VALUES (1, 10, 1, 0.9, 0.8)
+            """
+        )
+        results = list(
+            self.db_queries.query_tensor_comparisons(local=True, filters={"matches": 1})
+        )
+
+        self.assertEqual(len(results), 1)
+        comparison = results[0]
+        self.assertIsInstance(comparison, TensorComparisonRecord)
+        self.assertEqual(comparison.tensor_id, 1)
+        self.assertEqual(comparison.golden_tensor_id, 10)
+        self.assertTrue(comparison.matches)
+        self.assertAlmostEqual(comparison.desired_pcc, 0.9)
+        self.assertAlmostEqual(comparison.actual_pcc, 0.8)
+
+    def test_query_buffer_pages(self):
+        self.connection.execute(
+            "INSERT INTO buffer_pages VALUES (1, 1, 100, 0, 0, 1, 0, 1000, 4096, 0)"
+        )
+        results = list(self.db_queries.query_buffer_pages(filters={"operation_id": 1}))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].address, 100)
+
+    def test_query_tensors(self):
+        self.connection.execute(
+            "INSERT INTO tensors VALUES (1, '(2,2)', 'float32', 'NCHW', 'default', 1, 100, 0)"
+        )
+        results = list(self.db_queries.query_tensors(filters={"tensor_id": 1}))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].tensor_id, 1)
+
+    def test_query_input_tensors(self):
+        self.connection.execute("INSERT INTO input_tensors VALUES (1, 0, 1)")
+        results = list(self.db_queries.query_input_tensors(filters={"operation_id": 1}))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].operation_id, 1)
+
+    def test_query_output_tensors(self):
+        self.connection.execute("INSERT INTO output_tensors VALUES (1, 0, 1)")
+        results = list(
+            self.db_queries.query_output_tensors(filters={"operation_id": 1})
+        )
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].operation_id, 1)
+
+    def test_query_devices(self):
+        self.connection.execute(
+            "INSERT INTO devices VALUES (1, 4, 4, 2, 2, 1024, 4, 256, 0, 0, 1, 2, 2, 4096, 2048, 2048, 2048, 256)"
+        )
+        results = list(self.db_queries.query_devices(filters={"device_id": 1}))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].device_id, 1)
 
     def test_query_producers_consumers(self):
         self.connection.execute(
-            "INSERT INTO tensors VALUES (1, '(2,2)', 'float32', 'NCHW', 'default', 1, 0, 0)"
+            "INSERT INTO tensors VALUES (1, '(2,2)', 'float32', 'NCHW', 'default', 1, 100, 0)"
         )
-        self.connection.execute("INSERT INTO input_tensors VALUES (1, 0, 1)")
+        self.connection.execute("INSERT INTO input_tensors VALUES (2, 0, 1)")
         self.connection.execute("INSERT INTO output_tensors VALUES (1, 0, 1)")
 
-        producers_consumers = list(self.db_queries.query_producers_consumers())
-        self.assertEqual(len(producers_consumers), 1)
-        pc = producers_consumers[0]
+        results = list(self.db_queries.query_producers_consumers())
+
+        self.assertEqual(len(results), 1)
+        pc = results[0]
         self.assertEqual(pc.tensor_id, 1)
         self.assertIn(1, pc.producers)
-        self.assertIn(1, pc.consumers)
+        self.assertIn(2, pc.consumers)
 
-        # Test with no producers or consumers
-        self.connection.execute("DELETE FROM input_tensors")
-        self.connection.execute("DELETE FROM output_tensors")
+    def test_query_next_buffer(self):
+        self.connection.execute("INSERT INTO buffers VALUES (1, 1, 100, 1024, 0)")
+        self.connection.execute("INSERT INTO buffers VALUES (2, 1, 100, 2048, 0)")
+        result = self.db_queries.query_next_buffer(operation_id=1, address=100)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.operation_id, 2)
 
-        producers_consumers_empty = list(self.db_queries.query_producers_consumers())
-        self.assertEqual(len(producers_consumers_empty), 1)
-        pc_empty = producers_consumers_empty[0]
-        self.assertEqual(pc_empty.tensor_id, 1)
-        self.assertEqual(pc_empty.producers, [])
-        self.assertEqual(pc_empty.consumers, [])
+
+class TestRemoteQueryRunner(unittest.TestCase):
+
+    def setUp(self):
+        self.mock_session = Mock()
+        self.mock_session.remote_connection.sqliteBinaryPath = "/usr/bin/sqlite3"
+        self.mock_session.remote_connection.host = "mockhost"
+        self.mock_session.remote_connection.user = "mockuser"
+        self.mock_session.remote_folder.remotePath = "/remote/db"
+
+    @patch("ttnn_visualizer.queries.get_client")
+    def test_init_with_mock_get_client(self, mock_get_client):
+        # Mock the SSHClient returned by get_client
+        mock_ssh_client = Mock()
+        mock_get_client.return_value = mock_ssh_client
+
+        runner = RemoteQueryRunner(session=self.mock_session)
+        self.assertEqual(runner.ssh_client, mock_ssh_client)
+        mock_get_client.assert_called_once_with(
+            remote_connection=self.mock_session.remote_connection
+        )
+
+    @patch("ttnn_visualizer.queries.get_client")
+    def test_execute_query(self, mock_get_client):
+        # Mock the SSH client
+        mock_ssh_client = Mock()
+        mock_get_client.return_value = mock_ssh_client
+
+        mock_stdout = Mock()
+        mock_stdout.read.return_value = b'[{"col1": "value1", "col2": "value2"}]'
+        mock_stderr = Mock()
+        mock_stderr.read.return_value = b""
+        mock_ssh_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+
+        runner = RemoteQueryRunner(session=self.mock_session)
+
+        query = "SELECT * FROM table WHERE id = ?"
+        params = [1]
+        results = runner.execute_query(query, params)
+
+        # Validate results
+        self.assertEqual(results, [("value1", "value2")])
+        mock_get_client.assert_called_once()
+        mock_ssh_client.exec_command.assert_called_once()
+
+    @patch("ttnn_visualizer.queries.get_client")
+    def test_close(self, mock_get_client):
+        # Mock the SSH client
+        mock_ssh_client = Mock()
+        mock_get_client.return_value = mock_ssh_client
+
+        runner = RemoteQueryRunner(session=self.mock_session)
+
+        runner.close()
+        mock_ssh_client.close.assert_called_once()
+
+    def tearDown(self):
+        pass
 
 
 if __name__ == "__main__":
