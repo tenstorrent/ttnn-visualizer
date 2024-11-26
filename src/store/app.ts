@@ -20,7 +20,7 @@ export const expandedOperationsAtom = atom<number[]>([]);
 export const expandedTensorsAtom = atom<number[]>([]);
 export const activeToastAtom = atom<number | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
-export const selectedTensorAtom = atom<number | null>();
+export const selectedTensorAtom = atom<number | null>(null);
 
 // This atom stores the file transfer progress data in localStorage (or sessionStorage)
 export const fileTransferProgressAtom = atom({
