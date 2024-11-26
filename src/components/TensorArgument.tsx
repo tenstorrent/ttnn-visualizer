@@ -19,7 +19,7 @@ interface TensorArgumentProps {
 
 function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
     const [isExpanded, setIsExpanded] = useState(false);
-    const splitArgument = typeof argument.value === 'string' ? argument.value.split('\n') : argument.value;
+    const splitArgument = argument.value.split('\n');
 
     const handleExpandToggle = () => {
         setIsExpanded((previousValue) => !previousValue);
@@ -29,7 +29,7 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
         }
     };
 
-    if (argument.name === 'memory_config') {
+    if (argument.name === 'memory_config' && argument?.parsedValue) {
         return (
             <table className='ttnn-table alt-two-tone-rows buffer-table'>
                 <tbody>
