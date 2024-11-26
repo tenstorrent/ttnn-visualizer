@@ -5,14 +5,14 @@
 import React, { useState } from 'react';
 import { Button, ButtonGroup, Intent, Position, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
-import { selectedAddressAtom, selectedTensorAtom, showHexAtom } from '../../store/app';
+import { selectedAddressAtom, selectedDeviceAtom, selectedTensorAtom, showHexAtom } from '../../store/app';
 import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
@@ -25,19 +25,21 @@ import TensorDetailsList from './TensorDetailsList';
 import OperationArguments from '../OperationArguments';
 import DeviceOperationsFullRender from './DeviceOperationsFullRender';
 import useBufferFocus from '../../hooks/useBufferFocus';
+import DeviceSelector from '../DeviceSelector';
 
 interface OperationDetailsProps {
     operationId: number;
 }
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
+    const selectedDevice = useAtomValue(selectedDeviceAtom);
     const { data: operations } = useOperationsList();
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const {
         operationDetails: { data: operationDetails, isLoading, status },
-    } = useOperationDetails(operationId);
+    } = useOperationDetails(operationId, selectedDevice);
 
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
@@ -71,7 +73,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         );
     }
 
-    const details: OperationDetails | null = new OperationDetails(operationDetails, operations);
+    const details: OperationDetails | null = new OperationDetails(operationDetails, operations, selectedDevice);
     const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations);
 
     const l1Small = details.memoryData(BufferType.L1_SMALL);
@@ -171,7 +173,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     DRAM
                                 </Button>
                             </ButtonGroup>
+
+                            <DeviceSelector />
                         </div>
+
                         <div className='zoom-controls'>
                             <Switch
                                 label='Buffer zoom'
@@ -305,12 +310,14 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                         <hr />
 
-                        <TensorDetailsList
-                            operationDetails={details}
-                            plotZoomRangeStart={plotZoomRangeStart}
-                            plotZoomRangeEnd={plotZoomRangeEnd}
-                            onTensorClick={onTensorClick}
-                        />
+                        {details.inputs.length > 0 || details.outputs.length > 0 ? (
+                            <TensorDetailsList
+                                operationDetails={details}
+                                plotZoomRangeStart={plotZoomRangeStart}
+                                plotZoomRangeEnd={plotZoomRangeEnd}
+                                onTensorClick={onTensorClick}
+                            />
+                        ) : null}
 
                         {details.device_operations && details.deviceOperations.length > 0 && (
                             <>

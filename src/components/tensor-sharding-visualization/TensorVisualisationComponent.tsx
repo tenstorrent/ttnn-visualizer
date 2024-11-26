@@ -3,6 +3,7 @@ import { Button, Card, Overlay2 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { PlotData } from 'plotly.js';
 import classNames from 'classnames';
+import { useAtomValue } from 'jotai';
 import { BufferType } from '../../model/BufferType';
 import { useBufferPages, useDevices } from '../../hooks/useAPI';
 import '../../scss/components/TensorVisualizationComponent.scss';
@@ -14,6 +15,7 @@ import { getTensorColor } from '../../functions/colorGenerator';
 import getChartData, { pageDataToChunkArray } from '../../functions/getChartData';
 import { L1RenderConfiguration } from '../../definitions/PlotConfigurations';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
+import { selectedDeviceAtom } from '../../store/app';
 
 export interface TensorVisualisationComponentProps {
     title: string;
@@ -51,11 +53,13 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
     zoomRange,
     tensorId,
 }) => {
-    const { data } = useBufferPages(operationId, address, bufferType);
+    const deviceId = useAtomValue(selectedDeviceAtom);
+    const { data } = useBufferPages(operationId, address, bufferType, deviceId);
     const { data: devices } = useDevices();
 
     const [selectedTensix, setSelectedTensix] = useState<number | null>(null);
     const [chartData, setChartData] = useState<Partial<PlotData>[]>([]);
+
     if (!data || !devices) {
         return (
             <span className='tensor-visualisation-loader'>
