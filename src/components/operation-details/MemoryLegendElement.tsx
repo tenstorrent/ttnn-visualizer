@@ -11,6 +11,7 @@ import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatSize, prettyPrintAddress, toHex } from '../../functions/math';
 import 'styles/components/MemoryLegendElement.scss';
+import isValidNumber from '../../functions/isValidNumber';
 
 export const MemoryLegendElement: React.FC<{
     chunk: FragmentationEntry;
@@ -52,7 +53,7 @@ export const MemoryLegendElement: React.FC<{
             className={classNames('legend-item', {
                 button: !chunk.empty,
                 active: selectedTensorAddress === chunk.address,
-                dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
+                dimmed: isValidNumber(selectedTensorAddress) && selectedTensorAddress !== chunk.address,
             })}
             // eslint-disable-next-line react/jsx-props-no-spreading
             {...(!chunk.empty

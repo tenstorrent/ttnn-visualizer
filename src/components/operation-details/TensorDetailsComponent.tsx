@@ -45,7 +45,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
         <div
             className={classNames('tensor-item', {
                 active: tensor.id === selectedTensorId,
-                dimmed: tensor.id !== selectedTensorId && selectedTensorId !== null,
+                dimmed: isValidNumber(selectedTensorId) && selectedTensorId !== tensor.id,
             })}
         >
             <div className='tensor-header'>
