@@ -34,8 +34,8 @@ const TensorList = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const deviceId = 0;
-    const { data: operations } = useOperationsList();
-    const { data: fetchedTensors, error, isLoading } = useTensors(deviceId);
+    const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
+    const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors(deviceId);
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
@@ -250,13 +250,13 @@ const TensorList = () => {
                     />
                 </ButtonGroup>
 
-                {!isLoading && (
+                {!isTensorsLoading && !isOperationsLoading ? (
                     <p className='result-count'>
                         {fetchedTensors && filterQuery
                             ? `Showing ${numberOfTensors} of ${fetchedTensors.length} tensors`
                             : `Showing ${numberOfTensors} tensors`}
                     </p>
-                )}
+                ) : null}
             </div>
 
             <div
@@ -326,7 +326,7 @@ const TensorList = () => {
                             })
                         ) : (
                             <>
-                                {isLoading ? <LoadingSpinner /> : <p>No results</p>}
+                                {isTensorsLoading || isOperationsLoading ? <LoadingSpinner /> : <p>No results</p>}
                                 {error && <div>An error occurred: {error.message}</div>}
                             </>
                         )}
