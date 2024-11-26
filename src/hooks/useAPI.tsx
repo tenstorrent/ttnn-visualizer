@@ -19,7 +19,7 @@ import {
     defaultTensorData,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
-import parseMemoryConfig from '../functions/parseMemoryConfig';
+import parseMemoryConfig, { MemoryConfig } from '../functions/parseMemoryConfig';
 
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
@@ -80,7 +80,8 @@ const fetchOperations = async (deviceId?: number): Promise<OperationDescription[
             argument.name === 'memory_config'
                 ? {
                       ...argument,
-                      value: typeof argument.value === 'string' ? parseMemoryConfig(argument.value) : argument.value,
+                      parsedValue:
+                          typeof argument.value === 'string' ? parseMemoryConfig(argument.value) : argument.value,
                   }
                 : argument,
         ),
@@ -233,9 +234,9 @@ export const fetchTensors = async (deviceId?: number): Promise<TensorData[]> => 
 
         return tensorList.map((tensor) => ({
             ...tensor,
-            memory_config:
+            parsed_memory_config:
                 typeof tensor.memory_config === 'string'
-                    ? parseMemoryConfig(tensor.memory_config)
+                    ? (parseMemoryConfig(tensor.memory_config) as MemoryConfig)
                     : tensor.memory_config,
         }));
     } catch (error: unknown) {

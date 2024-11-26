@@ -113,8 +113,8 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         <td>{layout}</td>
                     </tr>
 
-                    {tensor?.memory_config
-                        ? Object.entries(tensor.memory_config).map(([key, value]) => (
+                    {tensor?.parsed_memory_config
+                        ? Object.entries(tensor.parsed_memory_config).map(([key, value]) => (
                               <MemoryConfigRow
                                   key={key}
                                   header={key}
