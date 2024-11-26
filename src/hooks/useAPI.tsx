@@ -74,7 +74,17 @@ const fetchOperations = async (deviceId?: number): Promise<OperationDescription[
         },
     });
 
-    return operationList;
+    return operationList.map((operation) => ({
+        ...operation,
+        arguments: operation.arguments.map((argument) =>
+            argument.name === 'memory_config'
+                ? {
+                      ...argument,
+                      value: typeof argument.value === 'string' ? parseMemoryConfig(argument.value) : argument.value,
+                  }
+                : argument,
+        ),
+    }));
 };
 
 export interface BuffersByOperationData {
