@@ -34,7 +34,6 @@ const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo element
 const TensorList = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { data: operations } = useOperationsList();
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
@@ -48,7 +47,8 @@ const TensorList = () => {
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
     const selectedDevice = useAtomValue(selectedDeviceAtom);
 
-    const { data: fetchedTensors, error, isLoading } = useTensors(selectedDevice);
+    const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
+    const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors(selectedDevice);
 
     // TODO: Figure out an initial scroll position based on last used tensor
     const virtualizer = useVirtualizer({
@@ -253,13 +253,13 @@ const TensorList = () => {
 
                 <DeviceSelector />
 
-                {!isLoading && (
+                {!isTensorsLoading && !isOperationsLoading ? (
                     <p className='result-count'>
                         {fetchedTensors && filterQuery
                             ? `Showing ${numberOfTensors} of ${fetchedTensors.length} tensors`
                             : `Showing ${numberOfTensors} tensors`}
                     </p>
-                )}
+                ) : null}
             </div>
 
             <div
@@ -329,7 +329,7 @@ const TensorList = () => {
                             })
                         ) : (
                             <>
-                                {isLoading ? <LoadingSpinner /> : <p>No results</p>}
+                                {isTensorsLoading || isOperationsLoading ? <LoadingSpinner /> : <p>No results</p>}
                                 {error && <div>An error occurred: {error.message}</div>}
                             </>
                         )}

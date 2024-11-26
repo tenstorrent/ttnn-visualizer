@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import classNames from 'classnames';
 import { Button, Checkbox, MenuItem } from '@blueprintjs/core';
 import { Select } from '@blueprintjs/select';
