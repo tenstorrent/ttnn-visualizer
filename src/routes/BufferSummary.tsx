@@ -5,10 +5,10 @@
 import { Helmet } from 'react-helmet-async';
 import { AnchorButton, ButtonGroup, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BuffersByOperationData, useBuffers, useOperationsList, useReportMeta } from '../hooks/useAPI';
-import { reportMetaAtom } from '../store/app';
+import { reportMetaAtom, selectedDeviceAtom } from '../store/app';
 import 'styles/components/BufferSummary.scss';
 import BufferSummaryPlotRenderer from '../components/buffer-summary/BufferSummaryPlotRenderer';
 import BufferSummaryTable from '../components/buffer-summary/BufferSummaryTable';
@@ -17,6 +17,7 @@ import { BufferType } from '../model/BufferType';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { HistoricalTensor, Operation, Tensor } from '../model/Graph';
 import { HistoricalTensorsByOperation } from '../model/BufferSummary';
+import DeviceSelector from '../components/DeviceSelector';
 import useBufferFocus from '../hooks/useBufferFocus';
 
 const SECTION_IDS = {
@@ -29,9 +30,9 @@ function BufferSummary() {
     const setMeta = useSetAtom(reportMetaAtom);
     const plotRef = useRef<HTMLHeadingElement>(null);
     const tableRef = useRef<HTMLHeadingElement>(null);
-    const deviceId = 0;
+    const selectedDevice = useAtomValue(selectedDeviceAtom);
     const [activeSection, setActiveSection] = useState(SECTION_IDS.PLOT);
-    const { data: buffersByOperation } = useBuffers(BufferType.L1, deviceId);
+    const { data: buffersByOperation } = useBuffers(BufferType.L1, selectedDevice);
     const { data: operationsList } = useOperationsList();
 
     const { activeToast, resetToasts } = useBufferFocus();
@@ -95,6 +96,8 @@ function BufferSummary() {
                 >
                     Table view
                 </AnchorButton>
+
+                <DeviceSelector />
             </ButtonGroup>
 
             {activeToast && (
@@ -115,7 +118,6 @@ function BufferSummary() {
                         <BufferSummaryPlotRenderer
                             buffersByOperation={buffersByOperation}
                             tensorListByOperation={tensorListByOperation}
-                            deviceId={deviceId}
                         />
                     </div>
 
@@ -125,7 +127,7 @@ function BufferSummary() {
                         id={SECTION_IDS.TABLE}
                     >
                         <BufferSummaryTable
-                            buffersByOperation={buffersByOperation}
+                            buffersByOperation={buffersByOperation.filter((op) => op.buffers.length > 0)}
                             tensorListByOperation={tensorListByOperation}
                         />
                     </div>

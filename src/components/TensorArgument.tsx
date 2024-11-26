@@ -11,7 +11,8 @@ import MemoryConfigRow from './MemoryConfigRow';
 interface TensorArgumentProps {
     argument: {
         name: string;
-        value: string | MemoryConfig;
+        value: string;
+        parsedValue?: MemoryConfig;
     };
     onCollapse?: () => void;
 }
@@ -29,18 +30,17 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
     };
 
     if (argument.name === 'memory_config') {
-        const parsedArgument = Object.entries(argument.value);
-
         return (
             <table className='ttnn-table alt-two-tone-rows buffer-table'>
                 <tbody>
-                    {parsedArgument?.map(([key, value]) => (
-                        <MemoryConfigRow
-                            key={key}
-                            header={key}
-                            value={value as string | ShardSpec}
-                        />
-                    ))}
+                    {argument.parsedValue &&
+                        Object.entries(argument.parsedValue)?.map(([key, value]) => (
+                            <MemoryConfigRow
+                                key={key}
+                                header={key}
+                                value={value as string | ShardSpec}
+                            />
+                        ))}
                 </tbody>
             </table>
         );

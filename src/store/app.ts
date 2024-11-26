@@ -30,3 +30,5 @@ export const fileTransferProgressAtom = atom({
     finishedFiles: 0,
     status: FileStatus.FINISHED,
 });
+
+export const selectedDeviceAtom = atom<number>();
