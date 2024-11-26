@@ -12,7 +12,7 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
 import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
-import { AllocationDetails, processMemoryAllocations } from '../../functions/calculateMemoryPeakLoad';
+import { AllocationDetails, processMemoryAllocations } from '../../functions/processMemoryAllocations';
 import { formatSize } from '../../functions/math';
 
 const DeviceOperationsFullRender: React.FC<{
