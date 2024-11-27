@@ -11,6 +11,12 @@ $height-offset: 15px;
 .buffer-summary-chart {
     margin-bottom: $height-offset * 2;
 
+    .controls {
+        display: inline-flex;
+        flex-direction: column;
+        margin-bottom: 0;
+    }
+
     .chart-position {
         position: relative;
     }

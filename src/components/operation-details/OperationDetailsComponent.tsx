@@ -177,7 +177,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             <DeviceSelector />
                         </div>
 
-                        <div className='zoom-controls'>
+                        <div className='controls'>
                             <Switch
                                 label='Buffer zoom'
                                 checked={zoomedInViewMainMemory}
