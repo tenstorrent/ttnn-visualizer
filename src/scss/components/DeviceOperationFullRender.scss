@@ -5,7 +5,7 @@
 @use '../definitions/colours' as *;
 
 .device-operations-full-render-wrap {
-    h3.peak-load {
+    .peak-load {
         display: flex;
         justify-content: space-between;
         border-bottom: 1px solid $tt-grey-4;
