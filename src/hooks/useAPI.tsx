@@ -52,6 +52,20 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
         const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(`/api/operations/${id}`, {
             maxRedirects: 1,
         });
+
+        // TODO: once this processing is moved to the backend, we should remove this
+        operationDetails.inputs = operationDetails.inputs.map((tensor) => ({
+            ...tensor,
+            parsed_memory_config: tensor.memory_config
+                ? (parseMemoryConfig(tensor.memory_config) as MemoryConfig)
+                : null,
+        }));
+        operationDetails.outputs = operationDetails.outputs.map((tensor) => ({
+            ...tensor,
+            parsed_memory_config: tensor.memory_config
+                ? (parseMemoryConfig(tensor.memory_config) as MemoryConfig)
+                : null,
+        }));
         return operationDetails;
     } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
