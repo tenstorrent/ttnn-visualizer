@@ -310,14 +310,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                         <hr />
 
-                        {details.inputs.length > 0 || details.outputs.length > 0 ? (
-                            <TensorDetailsList
-                                operationDetails={details}
-                                plotZoomRangeStart={plotZoomRangeStart}
-                                plotZoomRangeEnd={plotZoomRangeEnd}
-                                onTensorClick={onTensorClick}
-                            />
-                        ) : null}
+                        <TensorDetailsList
+                            operationDetails={details}
+                            plotZoomRangeStart={plotZoomRangeStart}
+                            plotZoomRangeEnd={plotZoomRangeEnd}
+                            onTensorClick={onTensorClick}
+                        />
 
                         {details.device_operations && details.deviceOperations.length > 0 && (
                             <>
