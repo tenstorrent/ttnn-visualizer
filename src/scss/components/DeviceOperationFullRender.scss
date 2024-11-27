@@ -4,10 +4,28 @@
 
 @use '../definitions/colours' as *;
 
+.device-operations-full-render-wrap {
+    .peak-load {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px solid $tt-grey-4;
+        font-weight: normal;
+    }
+}
+
 .device-operations-full-render {
-    .device-operation.function-container {
-        padding-left: 20px;
-        margin-top: 10px;
+    position: relative;
+
+    .device-operation {
+        hr {
+            opacity: 0.2;
+            padding-top: 5px;
+        }
+
+        .function-container {
+            padding-left: 20px;
+            margin-top: 10px;
+        }
 
         .collapsible-controls {
             h4 {
@@ -21,7 +39,21 @@
         }
     }
 
+    .end-function {
+        padding-top: 10px;
+    }
+
     .function-content {
         padding-left: 20px;
+    }
+
+    .memory-info {
+        width: 300px;
+        display: inline-grid;
+        gap: 10px;
+        font-weight: lighter;
+        position: absolute;
+        right: 0;
+        grid-template-columns: 1fr 1fr 1fr;
     }
 }

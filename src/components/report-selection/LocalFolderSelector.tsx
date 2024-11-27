@@ -9,10 +9,10 @@ import { ChangeEvent, type FC, useEffect, useState } from 'react';
 import 'styles/components/FolderPicker.scss';
 import { useNavigate } from 'react-router';
 import { useQueryClient } from 'react-query';
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
-import { reportLocationAtom } from '../../store/app';
+import { reportLocationAtom, selectedDeviceAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusWrapper from '../FileStatusOverlayWrapper';
 import FileStatusOverlay from '../FileStatusOverlay';
@@ -36,6 +36,7 @@ const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
+    const setSelectedDevice = useSetAtom(selectedDeviceAtom);
 
     const { uploadLocalFolder, checkRequiredFiles, filterReportFiles } = useLocalConnection();
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
@@ -98,6 +99,7 @@ const LocalFolderOptions: FC = () => {
     const viewOperation = () => {
         // keeping this here temporarily until proven otherwise
         queryClient.clear();
+        setSelectedDevice(0);
 
         navigate(ROUTES.OPERATIONS);
     };
@@ -149,6 +151,7 @@ const LocalFolderOptions: FC = () => {
                         />
                         <span className='bp5-file-upload-input'>{localUploadLabel}</span>
                     </label>
+
                     <Button
                         disabled={!isLocalReportMounted}
                         onClick={viewOperation}
@@ -156,6 +159,7 @@ const LocalFolderOptions: FC = () => {
                     >
                         View report
                     </Button>
+
                     <FileStatusWrapper>
                         {(fileProgress) => (
                             <FileStatusOverlay

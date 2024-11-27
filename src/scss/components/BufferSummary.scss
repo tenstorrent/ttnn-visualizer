@@ -12,12 +12,19 @@
     }
 
     .sticky-nav {
-        display: block;
+        display: flex;
         position: sticky;
         top: 0;
         left: 0;
         z-index: 1;
         background-color: $tt-background;
         padding: 5px 0;
+        align-items: center;
+
+        .device-selector {
+            display: inline-flex;
+            flex-grow: 0;
+            margin-left: 10px;
+        }
     }
 }

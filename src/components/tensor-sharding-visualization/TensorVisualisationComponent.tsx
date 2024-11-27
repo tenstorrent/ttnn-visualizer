@@ -56,6 +56,7 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
 
     const [selectedTensix, setSelectedTensix] = useState<number | null>(null);
     const [chartData, setChartData] = useState<Partial<PlotData>[]>([]);
+
     if (!data || !devices) {
         return (
             <span className='tensor-visualisation-loader'>

@@ -15,8 +15,6 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
-import { toast } from 'react-toastify';
-import { useEffect } from 'react';
 import ConnectionTestMessage from '../components/report-selection/ConnectionTestMessage';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import ProgressBar from '../components/ProgressBar';
@@ -24,6 +22,7 @@ import SearchField from '../components/SearchField';
 import 'styles/routes/Styleguide.scss';
 import LoadingSpinner from '../components/LoadingSpinner';
 import GlobalSwitch from '../components/GlobalSwitch';
+import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -40,8 +39,7 @@ const FORM_GROUP = {
 export default function Styleguide() {
     // const [showProgressOverlay, setShowProgressOverlay] = useState(false);
 
-    // Dismiss any toasts that are open
-    useEffect(() => toast.dismiss(), []);
+    useClearSelectedBuffer();
 
     return (
         <>

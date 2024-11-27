@@ -19,6 +19,8 @@ import {
     defaultTensorData,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
+import parseMemoryConfig, { MemoryConfig } from '../functions/parseMemoryConfig';
+import isValidNumber from '../functions/isValidNumber';
 
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
@@ -51,6 +53,20 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
         const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(`/api/operations/${id}`, {
             maxRedirects: 1,
         });
+
+        // TODO: once this processing is moved to the backend, we should remove this
+        operationDetails.inputs = operationDetails.inputs.map((tensor) => ({
+            ...tensor,
+            parsed_memory_config: tensor.memory_config
+                ? (parseMemoryConfig(tensor.memory_config) as MemoryConfig)
+                : null,
+        }));
+        operationDetails.outputs = operationDetails.outputs.map((tensor) => ({
+            ...tensor,
+            parsed_memory_config: tensor.memory_config
+                ? (parseMemoryConfig(tensor.memory_config) as MemoryConfig)
+                : null,
+        }));
         return operationDetails;
     } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
@@ -73,7 +89,17 @@ const fetchOperations = async (deviceId?: number): Promise<OperationDescription[
         },
     });
 
-    return operationList;
+    return operationList.map((operation) => ({
+        ...operation,
+        arguments: operation.arguments.map((argument) =>
+            argument.name === 'memory_config'
+                ? {
+                      ...argument,
+                      parsedValue: argument.value ? (parseMemoryConfig(argument.value) as MemoryConfig) : null,
+                  }
+                : argument,
+        ),
+    }));
 };
 
 export interface BuffersByOperationData {
@@ -145,19 +171,24 @@ export const useOperationsList = (deviceId?: number) => {
     });
 };
 
-export const useOperationDetails = (operationId: number | null) => {
+export const useOperationDetails = (operationId: number | null, deviceId?: number | null) => {
     const { data: operations } = useOperationsList();
-    const operation = operations?.filter((_operation) => {
-        return _operation.id === operationId;
-    })[0];
+    const operation = operations?.filter((_operation) => _operation.id === operationId)[0];
+
     const operationDetails = useQuery<OperationDetailsData>(
-        ['get-operation-detail', operationId],
+        ['get-operation-detail', operationId, deviceId],
         () => fetchOperationDetails(operationId),
         {
             retry: 2,
             retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
         },
     );
+
+    if (operationDetails.data) {
+        operationDetails.data.buffers = operationDetails.data.buffers.filter((buffer) =>
+            isValidNumber(deviceId) ? buffer.device_id === deviceId : true,
+        );
+    }
 
     return {
         operation,
@@ -220,7 +251,10 @@ export const fetchTensors = async (deviceId?: number): Promise<TensorData[]> => 
             },
         });
 
-        return tensorList;
+        return tensorList.map((tensor) => ({
+            ...tensor,
+            parsed_memory_config: tensor.memory_config ? parseMemoryConfig(tensor.memory_config) : null,
+        }));
     } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
             if (error.response && error.response.status >= 400 && error.response.status < 500) {
@@ -270,7 +304,8 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
 };
 
 export const useBuffers = (bufferType: BufferType, deviceId?: number) => {
-    return useQuery('get-buffers', {
+    return useQuery({
         queryFn: () => fetchAllBuffers(bufferType, deviceId),
+        queryKey: ['fetch-all-buffers', bufferType, deviceId],
     });
 };

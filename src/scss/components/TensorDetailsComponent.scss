@@ -6,6 +6,7 @@
 
 .tensor-item {
     display: inline-block;
+    margin-bottom: 20px;
 
     &.dimmed {
         opacity: 0.5;
@@ -45,5 +46,10 @@
 
     .tensor-meta {
         padding-left: 25px;
+
+        li {
+            list-style-type: none;
+            padding-left: 10px;
+        }
     }
 }

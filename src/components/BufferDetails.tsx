@@ -14,7 +14,7 @@ import getDeallocationOperation from '../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../functions/getNextAllocationOperation';
 import { Operation, Tensor } from '../model/Graph';
 import isValidNumber from '../functions/isValidNumber';
-import parseMemoryConfig, { ShardSpec } from '../functions/parseMemoryConfig';
+import { ShardSpec } from '../functions/parseMemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';
 import GoldenTensorComparisonIndicator from './GoldenTensorComparisonIndicator';
 
@@ -113,8 +113,8 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         <td>{layout}</td>
                     </tr>
 
-                    {tensor?.memory_config
-                        ? Object.entries(parseMemoryConfig(tensor.memory_config)).map(([key, value]) => (
+                    {tensor?.parsed_memory_config
+                        ? Object.entries(tensor.parsed_memory_config).map(([key, value]) => (
                               <MemoryConfigRow
                                   key={key}
                                   header={key}

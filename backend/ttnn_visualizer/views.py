@@ -218,7 +218,10 @@ def get_config(session: TabSession):
 @timer
 def tensors_list(session: TabSession):
     with DatabaseQueries(session) as db:
-        tensors = list(db.query_tensors())
+        device_id = request.args.get("device_id", None)
+        tensors = list(db.query_tensors(
+            filters={"device_id": device_id}
+        ))
         local_comparisons = list(db.query_tensor_comparisons())
         global_comparisons = list(db.query_tensor_comparisons(local=False))
         producers_consumers = list(db.query_producers_consumers())

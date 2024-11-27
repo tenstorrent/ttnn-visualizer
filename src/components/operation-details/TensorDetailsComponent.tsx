@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { JSX, useState } from 'react';
 import classNames from 'classnames';
 import { Button, Icon, Intent, PopoverPosition, Position, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 
+import { useAtomValue } from 'jotai';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { TensorData } from '../../model/APIData';
 import { prettyPrintAddress, toHex } from '../../functions/math';
@@ -15,6 +16,7 @@ import TensorVisualisationComponent from '../tensor-sharding-visualization/Tenso
 import 'styles/components/TensorDetailsComponent.scss';
 import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
 import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator';
+import { selectedTensorAtom } from '../../store/app';
 
 export interface TensorDetailsComponentProps {
     tensor: TensorData;
@@ -22,7 +24,6 @@ export interface TensorDetailsComponentProps {
     onTensorClick: (address?: number, tensorId?: number) => void;
     operationId: number;
     zoomRange: [number, number];
-    selectedTensorId: number | null;
 }
 
 const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
@@ -31,20 +32,44 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     onTensorClick,
     operationId,
     zoomRange,
-    selectedTensorId,
 }) => {
     const { address } = tensor;
     const { data: operations } = useOperationsList();
     const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations)?.id : null;
     const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations)?.id : null;
+    const selectedTensorId = useAtomValue(selectedTensorAtom);
 
     const [overlayOpen, setOverlayOpen] = useState(false);
 
+    const sharding: JSX.Element[] = [];
+    const shardSpec = tensor.parsed_memory_config?.shard_spec;
+    if (shardSpec && typeof shardSpec === 'object') {
+        sharding.push(
+            <p>
+                <strong>Sharding:</strong>
+            </p>,
+        );
+
+        sharding.push(
+            ...Object.entries(shardSpec).map(([prop, value]) => (
+                <li key={prop}>
+                    {prop}=<em>{value}</em>
+                </li>
+            )),
+        );
+    } else {
+        sharding.push(
+            <p>
+                <strong>Sharding: </strong>
+                {shardSpec}
+            </p>,
+        );
+    }
     return (
         <div
             className={classNames('tensor-item', {
                 active: tensor.id === selectedTensorId,
-                dimmed: tensor.id !== selectedTensorId && selectedTensorId !== null,
+                dimmed: selectedTensorId !== null && tensor.id !== selectedTensorId,
             })}
         >
             <div className='tensor-header'>
@@ -158,6 +183,14 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 <p>
                     <strong>Layout:</strong> {tensor.layout}
                 </p>
+                <p>
+                    {tensor.parsed_memory_config?.memory_layout && (
+                        <>
+                            <strong>Memory layout:</strong> {tensor.parsed_memory_config.memory_layout}
+                        </>
+                    )}
+                </p>
+                <p>{sharding.length > 0 && sharding}</p>
                 {tensor.comparison?.global ? (
                     <>
                         <GoldenTensorComparisonIndicator
