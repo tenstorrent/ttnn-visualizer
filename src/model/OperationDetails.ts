@@ -479,7 +479,6 @@ ${bufferCondesed.address} (${toHex(bufferCondesed.address)}) <br>Size: ${formatS
 
     // eslint-disable-next-line class-methods-use-this
     sortDeviceOperationsByBufferDeallocation(deviceOperations: Node[]): Node[] {
-        // const circularBufferAllocates: Node[] = [];
         const circularBufferDeallocations: Map<number, Node> = new Map();
         const nodes: Node[] = [];
         const opList: Node[] = [];

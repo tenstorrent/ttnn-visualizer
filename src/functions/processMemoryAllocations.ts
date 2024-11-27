@@ -20,10 +20,10 @@ export function processMemoryAllocations(graph: Node[]): {
 
     let i = 1;
     while (i < graph.length) {
-        const v = graph[i];
+        const node = graph[i];
         i += 1;
 
-        if (v.node_type === NodeType.function_start) {
+        if (node.node_type === NodeType.function_start) {
             if (curOp.length === 0) {
                 while (i < graph.length) {
                     if (graph[i].node_type === NodeType.buffer && graph[i].params.type === DeviceOperationTypes.L1) {
@@ -37,45 +37,37 @@ export function processMemoryAllocations(graph: Node[]): {
                 }
             }
 
-            const { name } = v.params;
-            curOp.push({ name, id: v.id });
+            const { name } = node.params;
+            curOp.push({ name, id: node.id });
         }
 
-        if (v.node_type === NodeType.circular_buffer_allocate) {
-            totalCb += parseInt(v.params.size, 10);
+        if (node.node_type === NodeType.circular_buffer_allocate) {
+            totalCb += parseInt(node.params.size, 10);
         }
 
-        if (v.node_type === NodeType.circular_buffer_deallocate_all) {
+        if (node.node_type === NodeType.circular_buffer_deallocate_all) {
             totalCb = 0;
         }
 
-        if (v.node_type === NodeType.buffer_allocate && v.params.type === DeviceOperationTypes.L1) {
-            totalBuffer += parseInt(v.params.size, 10);
+        if (node.node_type === NodeType.buffer_allocate && node.params.type === DeviceOperationTypes.L1) {
+            totalBuffer += parseInt(node.params.size, 10);
         }
 
-        if (v.node_type === 'function_end') {
+        if (node.node_type === NodeType.function_end) {
             curOp.pop();
         }
 
-        if (v.node_type === 'tensor') {
-            // continue;
-        }
-
-        if (v.node_type === 'buffer_deallocate') {
-            const connectionIndex = v.connections ? v.connections[0] : -1;
+        if (node.node_type === NodeType.buffer_deallocate) {
+            const connectionIndex = node.connections ? node.connections[0] : -1;
             if (connectionIndex >= 0 && graph[connectionIndex].params.type === 'L1') {
                 totalBuffer -= parseInt(graph[connectionIndex].params.size, 10);
             }
         }
 
-        if (v.node_type === 'buffer') {
-            // continue;
-        }
-
         if (curOp.length > 0) {
             const obj: AllocationDetails = {
                 name: curOp[curOp.length - 1].name,
-                id: v.id,
+                id: node.id,
                 total_cb: totalCb,
                 total_buffer: totalBuffer,
                 total_memory: totalCb + totalBuffer,
