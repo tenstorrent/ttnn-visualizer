@@ -20,6 +20,7 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig } from '../functions/parseMemoryConfig';
+import isValidNumber from '../functions/isValidNumber';
 
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
@@ -170,19 +171,24 @@ export const useOperationsList = (deviceId?: number) => {
     });
 };
 
-export const useOperationDetails = (operationId: number | null) => {
+export const useOperationDetails = (operationId: number | null, deviceId?: number | null) => {
     const { data: operations } = useOperationsList();
-    const operation = operations?.filter((_operation) => {
-        return _operation.id === operationId;
-    })[0];
+    const operation = operations?.filter((_operation) => _operation.id === operationId)[0];
+
     const operationDetails = useQuery<OperationDetailsData>(
-        ['get-operation-detail', operationId],
+        ['get-operation-detail', operationId, deviceId],
         () => fetchOperationDetails(operationId),
         {
             retry: 2,
             retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
         },
     );
+
+    if (operationDetails.data) {
+        operationDetails.data.buffers = operationDetails.data.buffers.filter((buffer) =>
+            isValidNumber(deviceId) ? buffer.device_id === deviceId : true,
+        );
+    }
 
     return {
         operation,

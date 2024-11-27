@@ -88,21 +88,23 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
 
     return buffersByOperation && !isLoadingDevices && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
-            <Switch
-                label='Buffer zoom'
-                checked={isZoomedIn}
-                onChange={() => {
-                    setIsZoomedIn(!isZoomedIn);
-                }}
-            />
+            <div className='controls'>
+                <Switch
+                    label='Buffer zoom'
+                    checked={isZoomedIn}
+                    onChange={() => {
+                        setIsZoomedIn(!isZoomedIn);
+                    }}
+                />
 
-            <GlobalSwitch
-                label='Hex axis labels'
-                checked={showHex}
-                onChange={() => {
-                    setShowHex(!showHex);
-                }}
-            />
+                <GlobalSwitch
+                    label='Hex axis labels'
+                    checked={showHex}
+                    onChange={() => {
+                        setShowHex(!showHex);
+                    }}
+                />
+            </div>
 
             <p className='x-axis-label'>Memory Address</p>
 

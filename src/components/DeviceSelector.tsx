@@ -19,10 +19,10 @@ function DeviceSelector() {
     const [selectedDevice, setSelectedDevice] = useAtom(selectedDeviceAtom);
 
     const updateSelectedDevices = (device?: number) => {
-        setSelectedDevice(device !== selectedDevice ? device : undefined);
+        setSelectedDevice(device !== undefined && device !== selectedDevice ? device : null);
     };
 
-    return (
+    return devices && devices?.length > 1 ? (
         <Select
             className={classNames('device-selector', {
                 'has-selection': selectedDevice !== undefined,
@@ -46,10 +46,10 @@ function DeviceSelector() {
                 outlined
             />
         </Select>
-    );
+    ) : null;
 }
 
-const DeviceItem = (device: number, onClick: (device: number) => void, selectedDevice?: number) => {
+const DeviceItem = (device: number, onClick: (device: number) => void, selectedDevice: number | null) => {
     return (
         <li key={device}>
             <Checkbox
