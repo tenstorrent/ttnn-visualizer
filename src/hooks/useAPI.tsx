@@ -54,9 +54,11 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
         });
 
         // TODO: once this processing is moved to the backend, we should remove this
-        operationDetails.inputs = operationDetails.inputs.map((tesor) => ({
-            ...tesor,
-            parsed_memory_config: tesor.memory_config ? (parseMemoryConfig(tesor.memory_config) as MemoryConfig) : null,
+        operationDetails.inputs = operationDetails.inputs.map((tensor) => ({
+            ...tensor,
+            parsed_memory_config: tensor.memory_config
+                ? (parseMemoryConfig(tensor.memory_config) as MemoryConfig)
+                : null,
         }));
         operationDetails.outputs = operationDetails.outputs.map((tensor) => ({
             ...tensor,
