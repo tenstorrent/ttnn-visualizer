@@ -21,7 +21,7 @@ const memoryLayoutPattern = /memory_layout=([A-Za-z_:]+)/;
 const shardSpecPattern =
     /shard_spec=ShardSpec\(grid=\{(\[.*?\])\},shape=\{(\d+),\s*(\d+)\},orientation=ShardOrientation::([A-Z_]+),halo=(\d+)\)/;
 
-const parseMemoryConfig = (string: string): MemoryConfig | string => {
+const parseMemoryConfig = (string: string): MemoryConfig | null => {
     const match = string.match(memoryConfigPattern);
 
     if (match) {
@@ -46,7 +46,7 @@ const parseMemoryConfig = (string: string): MemoryConfig | string => {
         };
     }
 
-    return string;
+    return null;
 };
 
 export const MEMORY_CONFIG_HEADERS = {

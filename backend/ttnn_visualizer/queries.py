@@ -63,29 +63,18 @@ class RemoteQueryRunner:
     column_delimiter = "|||"
 
     def __init__(self, session: TabSession):
-
         self.session = session
-
-        if (
-            not self.session.remote_connection
-            or not self.session.remote_connection.sqliteBinaryPath
-            or not self.session.remote_folder
-            or not self.session.remote_folder.remotePath
-        ):
-            raise ValueError(
-                "Remote connections require remote path and sqliteBinaryPath"
-            )
-
-        self.ssh_client = self._get_ssh_client(session.remote_connection)
+        self._validate_session()
+        self.ssh_client = self._get_ssh_client(self.session.remote_connection)
         self.sqlite_binary = self.session.remote_connection.sqliteBinaryPath
         self.remote_db_path = str(
             Path(self.session.remote_folder.remotePath, "db.sqlite")
         )
 
-    def _get_ssh_client(self, remote_connection) -> paramiko.SSHClient:
-        return get_client(remote_connection=remote_connection)
-
-    def execute_query(self, query: str, params: Optional[List] = None) -> List:
+    def _validate_session(self):
+        """
+        Validate that the session has all required remote connection attributes.
+        """
         if (
             not self.session.remote_connection
             or not self.session.remote_connection.sqliteBinaryPath
@@ -96,46 +85,76 @@ class RemoteQueryRunner:
                 "Remote connections require remote path and sqliteBinaryPath"
             )
 
-        sqlite_binary = self.session.remote_connection.sqliteBinaryPath or "sqlite3"
-        remote_db_path = str(Path(self.session.remote_folder.remotePath, "db.sqlite"))
-        formatted_query = query
+    def _get_ssh_client(self, remote_connection) -> paramiko.SSHClient:
+        """
+        Retrieve the SSH client for the given remote connection.
+        """
+        return get_client(remote_connection=remote_connection)
 
-        if params:
-            # Properly quote string parameters for SQLite, adding single quotes where needed
-            formatted_params = [
-                f"'{param}'" if isinstance(param, str) else str(param)
-                for param in params
-            ]
-            formatted_query = formatted_query.replace("?", "{}").format(
-                *formatted_params
-            )
+    def _format_query(self, query: str, params: Optional[List] = None) -> str:
+        """
+        Format the query by replacing placeholders with properly quoted parameters.
+        """
+        if not params:
+            return query
 
-        command = f'{sqlite_binary} {remote_db_path} "{formatted_query}" -json'
+        formatted_params = [
+            f"'{param}'" if isinstance(param, str) else str(param) for param in params
+        ]
+        return query.replace("?", "{}").format(*formatted_params)
+
+    def _build_command(self, formatted_query: str) -> str:
+        """
+        Build the remote SQLite command.
+        """
+        return f'{self.sqlite_binary} {self.remote_db_path} "{formatted_query}" -json'
+
+    def _execute_ssh_command(self, command: str) -> tuple:
+        """
+        Execute the SSH command and return the standard output and error.
+        """
         stdin, stdout, stderr = self.ssh_client.exec_command(command)
-        output = (
-            stdout.read().decode("utf-8").strip()
-        )  # Read, decode, and strip extra whitespace
+        output = stdout.read().decode("utf-8").strip()
         error_output = stderr.read().decode("utf-8").strip()
+        return output, error_output
+
+    def _parse_output(self, output: str, command: str) -> List:
+        """
+        Parse the output from the SQLite command. Attempt JSON parsing first,
+        then fall back to line-based parsing.
+        """
+        if not output.strip():
+            return []
+
+        try:
+            rows = json.loads(output)
+            return [tuple(row.values()) for row in rows]
+        except json.JSONDecodeError:
+            print(
+                f"Output is not valid JSON, attempting manual parsing.\nCommand: {command}"
+            )
+            return [tuple(line.split("|")) for line in output.splitlines()]
+
+    def execute_query(self, query: str, params: Optional[List] = None) -> List:
+        """
+        Execute a remote SQLite query using the session's SSH client.
+        """
+        self._validate_session()
+        formatted_query = self._format_query(query, params)
+        command = self._build_command(formatted_query)
+        output, error_output = self._execute_ssh_command(command)
 
         if error_output:
             raise RuntimeError(
                 f"Error executing query remotely: {error_output}\nCommand: {command}"
             )
 
-        # Handle empty output safely
-        if not output.strip():
-            return []
-
-        # Try to parse JSON output or fallback to line-based parsing
-        try:
-            rows = json.loads(output)
-            return [tuple(row.values()) for row in rows]
-        except json.JSONDecodeError:
-            # If output is not JSON, fallback to parsing using a pipe as a delimiter
-            print("Output is not valid JSON, attempting manual parsing.")
-            return [tuple(line.split("|")) for line in output.splitlines()]
+        return self._parse_output(output, command)
 
     def close(self):
+        """
+        Close the SSH connection.
+        """
         if self.ssh_client:
             self.ssh_client.close()
 

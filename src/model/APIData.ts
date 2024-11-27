@@ -157,7 +157,11 @@ export interface ReportMetaData {
 
 export interface OperationDescription extends Operation {
     duration: number;
-    arguments: { name: string; value: string | MemoryConfig }[];
+    arguments: {
+        name: string;
+        value: string;
+        parsedValue: MemoryConfig | null;
+    }[];
     device_operations: Node[];
 }
 
