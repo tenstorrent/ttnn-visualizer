@@ -20,7 +20,6 @@ import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { HistoricalTensor, Tensor } from './Graph';
 import { PlotDataOverrides } from '../definitions/PlotConfigurations';
 import getChartData from '../functions/getChartData';
-import isValidNumber from '../functions/isValidNumber';
 
 export class OperationDetails implements Partial<OperationDetailsData> {
     id: number;
@@ -47,7 +46,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     public deviceOperations: DeviceOperation[] = [];
 
-    constructor(data: OperationDetailsData, operations: OperationDescription[], deviceId?: number) {
+    constructor(data: OperationDetailsData, operations: OperationDescription[]) {
         this.id = data.id;
         this.inputs = data.inputs;
         this.outputs = data.outputs;
@@ -87,14 +86,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                         return { ...output, io: 'output' } as TensorData;
                     }) || []),
                 ],
-            ]
-                .flat()
-                .filter((tensor) => (isValidNumber(deviceId) ? tensor.device_id === deviceId : true)) || [];
-
-        this.inputs = this.inputs.filter((input) => (isValidNumber(deviceId) ? input.device_id === deviceId : true));
-        this.outputs = this.outputs.filter((output) =>
-            isValidNumber(deviceId) ? output.device_id === deviceId : true,
-        );
+            ].flat() || [];
 
         this.historicalTensorListByAddress = this.createHitoricalTensorList();
         this.historicalTensorListByAddress.forEach((tensor) => {
