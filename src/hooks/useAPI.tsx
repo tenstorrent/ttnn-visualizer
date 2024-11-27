@@ -157,7 +157,7 @@ export const useOperationsList = (deviceId?: number) => {
     });
 };
 
-export const useOperationDetails = (operationId: number | null, deviceId?: number) => {
+export const useOperationDetails = (operationId: number | null, deviceId?: number | null) => {
     const { data: operations } = useOperationsList();
     const operation = operations?.filter((_operation) => _operation.id === operationId)[0];
 

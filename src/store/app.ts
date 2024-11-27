@@ -31,4 +31,4 @@ export const fileTransferProgressAtom = atom({
     status: FileStatus.FINISHED,
 });
 
-export const selectedDeviceAtom = atom<number>(0); // Assumes device_id always uses a zero based index
+export const selectedDeviceAtom = atom<number | null>(0); // Assumes device_id always uses a zero based index

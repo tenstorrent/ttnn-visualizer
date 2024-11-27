@@ -15,6 +15,7 @@ $height-offset: 15px;
         display: inline-flex;
         flex-direction: column;
         margin-bottom: 0;
+        align-items: flex-start;
     }
 
     .chart-position {
