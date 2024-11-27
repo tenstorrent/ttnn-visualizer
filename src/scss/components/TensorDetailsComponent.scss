@@ -46,5 +46,10 @@
 
     .tensor-meta {
         padding-left: 25px;
+
+        li {
+            list-style-type: none;
+            padding-left: 10px;
+        }
     }
 }

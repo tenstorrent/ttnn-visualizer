@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { JSX, useState } from 'react';
 import classNames from 'classnames';
 import { Button, Icon, Intent, PopoverPosition, Position, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -41,6 +41,30 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
     const [overlayOpen, setOverlayOpen] = useState(false);
 
+    const sharding: JSX.Element[] = [];
+    const shardSpec = tensor.parsed_memory_config?.shard_spec;
+    if (shardSpec && typeof shardSpec === 'object') {
+        sharding.push(
+            <p>
+                <strong>Sharding:</strong>
+            </p>,
+        );
+
+        sharding.push(
+            ...Object.entries(shardSpec).map(([prop, value]) => (
+                <li key={prop}>
+                    {prop}=<em>{value}</em>
+                </li>
+            )),
+        );
+    } else {
+        sharding.push(
+            <p>
+                <strong>Sharding: </strong>
+                {shardSpec}
+            </p>,
+        );
+    }
     return (
         <div
             className={classNames('tensor-item', {
@@ -166,13 +190,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         </>
                     )}
                 </p>
-                <p>
-                    {tensor.parsed_memory_config?.shard_spec && (
-                        <>
-                            <strong>Sharding:</strong> {tensor.parsed_memory_config.shard_spec}
-                        </>
-                    )}
-                </p>
+                <p>{sharding.length > 0 && sharding}</p>
                 {tensor.comparison?.global ? (
                     <>
                         <GoldenTensorComparisonIndicator
