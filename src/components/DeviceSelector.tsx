@@ -22,7 +22,7 @@ function DeviceSelector() {
         setSelectedDevice(device !== selectedDevice ? device : undefined);
     };
 
-    return (
+    return devices && devices?.length > 0 ? (
         <Select
             className={classNames('device-selector', {
                 'has-selection': selectedDevice !== undefined,
@@ -46,7 +46,7 @@ function DeviceSelector() {
                 outlined
             />
         </Select>
-    );
+    ) : null;
 }
 
 const DeviceItem = (device: number, onClick: (device: number) => void, selectedDevice?: number) => {
