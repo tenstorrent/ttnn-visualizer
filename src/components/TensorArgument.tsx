@@ -5,20 +5,21 @@
 import { Switch } from '@blueprintjs/core';
 import { useState } from 'react';
 import 'styles/components/TensorArgument.scss';
-import parseMemoryConfig, { ShardSpec } from '../functions/parseMemoryConfig';
+import { MemoryConfig, ShardSpec } from '../functions/parseMemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';
 
 interface TensorArgumentProps {
     argument: {
         name: string;
         value: string;
+        parsedValue?: MemoryConfig;
     };
     onCollapse?: () => void;
 }
 
 function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
     const [isExpanded, setIsExpanded] = useState(false);
-    const splitArgument = argument.value.split('\n');
+    const splitArgument = typeof argument.value === 'string' ? argument.value.split('\n') : argument.value;
 
     const handleExpandToggle = () => {
         setIsExpanded((previousValue) => !previousValue);
@@ -29,24 +30,23 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
     };
 
     if (argument.name === 'memory_config') {
-        const parsedArgument = Object.entries(parseMemoryConfig(argument.value));
-
         return (
             <table className='ttnn-table alt-two-tone-rows buffer-table'>
                 <tbody>
-                    {parsedArgument?.map(([key, value]) => (
-                        <MemoryConfigRow
-                            key={key}
-                            header={key}
-                            value={value as string | ShardSpec}
-                        />
-                    ))}
+                    {argument.parsedValue &&
+                        Object.entries(argument.parsedValue)?.map(([key, value]) => (
+                            <MemoryConfigRow
+                                key={key}
+                                header={key}
+                                value={value as string | ShardSpec}
+                            />
+                        ))}
                 </tbody>
             </table>
         );
     }
 
-    if (!isLengthyTensor(argument.value)) {
+    if (typeof argument.value === 'string' && !isLengthyTensor(argument.value)) {
         return argument.value;
     }
 
@@ -61,7 +61,9 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
 
             {isExpanded ? (
                 <>
-                    <pre className='full-tensor'>{argument.value}</pre>
+                    {typeof argument.value === 'string' && (
+                        <pre className='full-tensor'>{argument.value as string}</pre>
+                    )}
 
                     {onCollapse && (
                         <Switch
@@ -73,11 +75,13 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
                     )}
                 </>
             ) : (
-                <>
-                    <p className='collapsed-tensor monospace'>{splitArgument[0]}</p>
-                    <p className='collapsed-tensor monospace'>.........</p>
-                    <p className='collapsed-tensor monospace'>{splitArgument[splitArgument.length - 1]}</p>
-                </>
+                Array.isArray(splitArgument) && (
+                    <>
+                        <p className='collapsed-tensor monospace'>{splitArgument[0]}</p>
+                        <p className='collapsed-tensor monospace'>.........</p>
+                        <p className='collapsed-tensor monospace'>{splitArgument[splitArgument.length - 1]}</p>
+                    </>
+                )
             )}
         </div>
     );

@@ -5,8 +5,9 @@ import { Buffer } from '../../model/APIData';
 import { formatSize, toHex } from '../../functions/math';
 import { HistoricalTensor } from '../../model/Graph';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { selectedTensorAtom } from '../../store/app';
+import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import { getDimmedColour } from '../../functions/colour';
+import useBufferFocus from '../../hooks/useBufferFocus';
 
 interface BufferSummaryBufferProps {
     buffer: Buffer;
@@ -19,6 +20,9 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
     const [isHovered, setIsHovered] = useState<boolean>(false);
 
     const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
+    const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
+
+    const { createToast, resetToasts } = useBufferFocus();
 
     const originalColour = tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address);
     const dimmedColour = originalColour ? getDimmedColour(originalColour) : '#000';
@@ -27,6 +31,24 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
         width: `${size}%`,
         left: `${position}%`,
         backgroundColor: selectedTensor && selectedTensor !== tensor?.id ? dimmedColour : originalColour,
+    };
+
+    const clearFocusedBuffer = () => {
+        resetToasts();
+    };
+
+    const setFocusedBuffer = () => {
+        setSelectedTensor(tensor?.id === selectedTensor ? null : tensor?.id);
+        setSelectedAddress(tensor?.address === selectedTensor ? null : tensor?.address ?? null);
+        createToast(tensor?.address ?? undefined, tensor?.id ?? undefined);
+    };
+
+    const handleFocusBuffer = (address: number) => {
+        if (address === selectedAddress) {
+            clearFocusedBuffer();
+        } else {
+            setFocusedBuffer();
+        }
     };
 
     return (
@@ -54,7 +76,7 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
                         aria-label={`Select buffer ${buffer.address}`}
                         onMouseLeave={() => setIsHovered(false)}
                         className='buffer-button'
-                        onClick={() => setSelectedTensor(tensor?.id === selectedTensor ? null : tensor?.id)}
+                        onClick={() => handleFocusBuffer(buffer.address)}
                     />
                 </Tooltip>
             ) : null}
