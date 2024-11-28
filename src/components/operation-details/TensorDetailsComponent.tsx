@@ -53,7 +53,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
         sharding.push(
             ...Object.entries(shardSpec).map(([prop, value]) => (
                 <li key={prop}>
-                    {prop}=<em>{value}</em>
+                    {prop}=<em>{JSON.stringify(value)}</em>
                 </li>
             )),
         );
