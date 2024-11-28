@@ -242,7 +242,7 @@ export const useBufferPages = (
     );
 };
 
-export const fetchTensors = async (deviceId?: number): Promise<TensorData[]> => {
+export const fetchTensors = async (deviceId?: number | null): Promise<TensorData[]> => {
     try {
         const { data: tensorList } = await axiosInstance.get<TensorData[]>('/api/tensors', {
             maxRedirects: 1,
@@ -270,7 +270,7 @@ export const fetchTensors = async (deviceId?: number): Promise<TensorData[]> => 
     return [defaultTensorData];
 };
 
-export const useTensors = (deviceId?: number) => {
+export const useTensors = (deviceId?: number | null) => {
     return useQuery<TensorData[], AxiosError>({
         queryFn: () => fetchTensors(deviceId),
         queryKey: ['get-tensors', deviceId],
