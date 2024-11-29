@@ -13,7 +13,6 @@ import { TensorData } from '../../model/APIData';
 import { prettyPrintAddress, toHex } from '../../functions/math';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { useOperationsList } from '../../hooks/useAPI';
-import getDeallocationOperation from '../../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../../functions/getNextAllocationOperation';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
@@ -40,7 +39,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     const { address } = tensor;
     const { data: operations } = useOperationsList();
     const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations)?.id : null;
-    const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations)?.id : null;
     const selectedTensorId = useAtomValue(selectedTensorAtom);
 
     const [overlayOpen, setOverlayOpen] = useState(false);
@@ -74,28 +72,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         {prettyPrintAddress(tensor.address, memorySize)}
                     </span>
                 </button>
-
-                {isValidNumber(deallocationOperationId) && operations ? (
-                    <Tooltip
-                        content={`Deallocation in ${deallocationOperationId} ${operations.find((operation) => operation.id === deallocationOperationId)?.name}`}
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Icon
-                            icon={IconNames.TICK}
-                            intent={Intent.SUCCESS}
-                        />
-                    </Tooltip>
-                ) : (
-                    <Tooltip
-                        content='Missing deallocation operation'
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Icon
-                            icon={IconNames.WARNING_SIGN}
-                            intent={Intent.WARNING}
-                        />
-                    </Tooltip>
-                )}
 
                 {(tensor.consumers.length > MAX_NUM_CONSUMERS || tensor.producers.length > MAX_NUM_CONSUMERS) && (
                     <Tooltip
