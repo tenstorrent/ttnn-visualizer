@@ -1,14 +1,17 @@
 <div align="center">
-    
+
 <h1 style="color: #FA512E;"> TTNN Visualizer </h1>
 
-<div align="center" style="text-align: center">
-    <img src="./src/assets/tt-logo.svg"  alt="" />
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./src/assets/tt-logo-dark.svg">
+  <img alt="" src="./src/assets/tt-logo.svg">
+</picture>
 </div>
 
 <h2 style="text-align: center">
 
-[Buy hardware](https://tenstorrent.com/cards/) | [Install](https://github.com/tenstorrent/tt-metal/blob/main/INSTALLING.md) | [Discord](https://discord.gg/tvhGzHQwaj) | [Join Us](https://boards.greenhouse.io/tenstorrent/jobs/4155609007)
+[Buy hardware](https://tenstorrent.com/cards/) | [Install TT-NN](https://github.com/tenstorrent/tt-metal/blob/main/INSTALLING.md) | [Discord](https://discord.gg/tvhGzHQwaj) | [Join Us](https://boards.greenhouse.io/tenstorrent/jobs/4155609007)
 
 </h2>
 
@@ -18,16 +21,6 @@
 
 <!-- TOC start -->
 
-- [Running Application](#running-application)
-   * [Prerequisites](#prerequisites)
-   * [Installing as Wheel](#installing-as-wheel)
-   * [Downloading Docker Image](#downloading-docker-image)
-      + [Running Image](#running-image)
-         - [MacOS Run Command](#macos-run-command)
-         - [Linux Run Command](#linux-run-command)
-         - [Using docker compose](#using-docker-compose)
-   * [SSH](#ssh)
-   
 - [Remote Querying ](#remote-querying)
     * [Installing SQLite 3.38 on Ubuntu 18.04 and 20.04](#installing-sqlite-338-on-ubuntu-1804-and-2004)
     * [Option 1: Install from Official Repository](#option-1-install-from-official-repository)
@@ -47,105 +40,9 @@
 
 <!-- TOC end -->
 
-<!-- TOC --><a name="running-application"></a>
-## Running Application
-
-<!-- TOC --><a name="prerequisites"></a>
-### Prerequisites
-
-Visualizer requires a preexisting report generated. Please refer to
-[TT-Metallium](https://docs.tenstorrent.com/tt-metalium/latest/installing.html),
-[TT-NN](https://docs.tenstorrent.com/ttnn/latest/ttnn/get_started.html) and
-[TT-NN models](https://docs.tenstorrent.com/ttnn/latest/tt_metal_models/get_started.html#running-an-example-model)
-on how to run models and generate reports.
-
-<!-- TOC --><a name="installing-as-wheel"></a>
-### Installing as Wheel
-
-Application is meant to run on user local system and has python requirement of 3.12.
-
-Download the wheel file from the [releases page](https://github.com/tenstorrent/ttnn-visualizer/releases) and install using `pip install release_name.whl`. After installation
-simply run `ttnn-visualizer` to start the application.
-
-<!-- TOC --><a name="downloading-docker-image"></a>
-### Downloading Docker Image
-
-Before executing the command below please see the note on SSH agent configuration.
-
-In order to pull the image from ghcr.io you need to create an authentication token that allows you to "read:packages".
-To create and use the token follow the instructions found [here](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic) .
-
-After following the instructions above you should be able to pull the image by running the following command:
-
-`docker pull ghcr.io/tenstorrent/ttnn-visualizer:latest`
-
-Other image versions can be found [here](https://github.com/tenstorrent/ttnn-visualizer/).
-
-<!-- TOC --><a name="running-image"></a>
-#### Running Image
-
-The following commands will run the docker image on your machine. See the docker-compose configuration section for a
-description of the run options.
-
-*Note*: Docker Desktop for MacOS does not currently forward the ssh-agent. To run the container with a forwarded ssh-agent
-add your keys to the agent using `ssh-add` before running the docker run command in your terminal.
-
-<!-- TOC --><a name="macos-run-command"></a>
-##### MacOS Run Command
-
-`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v ./data:/app/backend/data -v /run/host-services/ssh-auth.sock:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
-
-<!-- TOC --><a name="linux-run-command"></a>
-##### Linux Run Command
-
-`docker run -p 8000:8000 -e SSH_AUTH_SOCK=/ssh-agent -v ./data:/app/backend/data -v $SSH_AUTH_SOCK:/ssh-agent ghcr.io/tenstorrent/ttnn-visualizer:latest`
-
-<!-- TOC --><a name="using-docker-compose"></a>
-##### Using docker compose
-
-``` YAML
-services:
-  web:
-    image: ghcr.io/tenstorrent/ttnn-visualizer:latest
-    # Local port to host the application. Application
-    # will be available on `http://localhost:PORT`
-    ports:
-      - 8000:8000
-    # If using a VPN to connect to remote machines remove ports
-    # and use the host network
-    # network: host
-    environment:
-      - SSH_AUTH_SOCK=/ssh-agent
-    volumes:
-      # Directory/volume for stored report data
-      - ./data:/app/backend/data
-      # Linux configuration
-      # - ${SSH_AUTH_SOCK}:/ssh-agent
-      # MacOS configuration
-      - /run/host-services/ssh-auth.sock:/ssh-agent
-
-```
-
-<!-- TOC --><a name="ssh"></a>
-### SSH
-
-To avoid exposing private keys in the docker image an ssh-agent is required to be running on the host machine. The agent
-socket is then mounted to the guest container. For instructions on setting up your ssh-agent
-see [this article](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent?platform=windows#adding-your-ssh-key-to-the-ssh-agent)
-
-Ensure that you are able to connect to the remote machine in question using your local ssh-agent (or the ssh-agent of the remote machine).
-
-To view your currently available keys, `ssh-add -L`.
-
-The docker-compose file should expand the parameter for your agent socket - you can confirm/see this value by entering `echo $SSH_AUTH_SOCK`.
-The printed value should be the location of your SSH agent socket.
-
-For MacOS you need to use the 'magic' socket file. The docker-compose.yml file has a volume mapping that points to this magic file, ensure that it is being used rather than `SSH_AUTH_SOCK`.
-
-Before running the application ensure that your keys are added to the agent (`ssh-add -L`). If your keys are not present, run `ssh-add` to add them.
 
 <!-- TOC --><a name="remote-querying"></a>
-## Remote Querying 
+## Remote Querying
 
 **REQUIREMENTS**
 
@@ -172,21 +69,21 @@ This guide provides two methods for installing SQLite 3.38 on Ubuntu 18.04 and 2
 <!-- TOC --><a name="option-1-install-from-official-repository"></a>
 #### Option 1: Install from Official Repository
 
-1. **Update the Package List**  
+1. **Update the Package List**
    Update your system’s package list to check for the latest versions.
 
    ```bash
    sudo apt-get update
    ```
 
-2. **Install SQLite**  
+2. **Install SQLite**
    Install the latest version of SQLite available in the repository.
 
    ```bash
    sudo apt-get install -y sqlite3
    ```
 
-3. **Verify the Installed Version**  
+3. **Verify the Installed Version**
    Confirm the installed version of SQLite meets the 3.38 requirement.
 
    ```bash
@@ -305,21 +202,21 @@ sudo apt-get install -y build-essential wget libreadline-dev
 <!-- TOC --><a name="step-2-download-sqlite-338-source-code"></a>
 ##### Step 2: Download SQLite 3.38 Source Code
 
-1. **Navigate to a Download Directory**  
+1. **Navigate to a Download Directory**
    Move to a directory where you’d like to download the source code.
 
    ```bash
    cd /tmp
    ```
 
-2. **Download the SQLite 3.38 Source Code**  
+2. **Download the SQLite 3.38 Source Code**
    Fetch the source code for SQLite 3.38.
 
    ```bash
    wget https://www.sqlite.org/2022/sqlite-autoconf-3380000.tar.gz
    ```
 
-3. **Extract the Tar File**  
+3. **Extract the Tar File**
    Unpack the downloaded source archive.
 
    ```bash
@@ -330,21 +227,21 @@ sudo apt-get install -y build-essential wget libreadline-dev
 <!-- TOC --><a name="step-3-compile-and-install-sqlite"></a>
 ##### Step 3: Compile and Install SQLite
 
-1. **Configure the Build**  
+1. **Configure the Build**
    Prepare the build environment.
 
    ```bash
    ./configure --prefix=/usr/local
    ```
 
-2. **Compile SQLite**  
+2. **Compile SQLite**
    Build SQLite from the source code.
 
    ```bash
    make
    ```
 
-3. **Install SQLite**  
+3. **Install SQLite**
    Install the compiled program.
 
    ```bash
