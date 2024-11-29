@@ -25,6 +25,14 @@ A tool for visualizing the Tenstorrent Neural Network model (TT-NN)
 
 For the latest updates and features, please see [releases](https://github.com/tenstorrent/ttnn-visualizer/releases).
 
+- Load reports via the local file system or through an SSH connection
+- Plotted allocation of L1, DRAM and circular buffers onto interactive charts
+- Visualize inputs/outputs per tensor or tensor allocation across each core
+- Navigate a tree of device operations with associated buffers and circular buffers
+- Interactive graph of L1 memory allocation over time
+- Operation flow graph
+- Supports multiple instances of the application running concurrently
+
 ### Demo
 
 #### Application demo
