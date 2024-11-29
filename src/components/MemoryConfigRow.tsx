@@ -21,7 +21,9 @@ const MemoryConfigRow = ({ header, value }: MemoryConfigRowProps) => {
                                 {Object.entries(value as ShardSpec).map(([innerKey, innerValue]) => (
                                     <tr key={innerKey}>
                                         <th>{getMemoryConfigHeader(innerKey as MemoryKeys)}</th>
-                                        <td>{innerValue}</td>
+                                        <td>
+                                            {typeof innerValue !== 'string' ? JSON.stringify(innerValue) : innerValue}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
