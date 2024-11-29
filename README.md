@@ -26,7 +26,11 @@ A tool for visualizing the Tenstorrent Neural Network model (TT-NN)
 See [releases](https://github.com/tenstorrent/ttnn-visualizer/releases) for the most recent additions.
 
 ### Demo
-https://github.com/tenstorrent/ttnn-visualizer/blob/feature/update-readme/docs/assets/TT-NN-Visualizer.mp4
+
+[![Custom Thumbnail](https://github.com/user-attachments/assets/ef0ce0d5-ae00-4030-a1a1-91ae0c1db930)](https://github.com/user-attachments/assets/3d4174ac-e83f-4324-8c4d-f1fa6413be08)
+
+[![Demo](https://github.com/user-attachments/assets/ef0ce0d5-ae00-4030-a1a1-91ae0c1db930)](https://github.com/tenstorrent/ttnn-visualizer/blob/feature/update-readme/docs/assets/TT-NN-Visualizer.mp4)
+
 
 <img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/ef0ce0d5-ae00-4030-a1a1-91ae0c1db930">
 <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/3e59c95c-9a57-459c-98c0-e8d86f4e38ec">
