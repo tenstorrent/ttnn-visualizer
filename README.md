@@ -1,6 +1,8 @@
-<h1 style="text-align: center; color: #FA512E"> TTNN Visualizer </h1>
+<div align="center">
+    
+<h1 style="color: #FA512E;"> TTNN Visualizer </h1>
 
-<div style="text-align: center">
+<div align="center" style="text-align: center">
     <img src="./src/assets/tt-logo.svg"  alt="" />
 </div>
 
@@ -10,6 +12,7 @@
 
 </h2>
 
+</div>
 
 ### A tool for visualizing the Tenstorrent Neural Network (TTNN) model.
 
