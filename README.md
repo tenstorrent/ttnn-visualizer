@@ -7,6 +7,7 @@
   <source media="(prefers-color-scheme: dark)" srcset="./src/assets/tt-logo-dark.svg">
   <img alt="" src="./src/assets/tt-logo.svg">
 </picture>
+    
 A tool for visualizing the Tenstorrent Neural Network model (TT-NN)
 
 </div>
