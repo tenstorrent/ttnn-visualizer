@@ -7,7 +7,7 @@
   <source media="(prefers-color-scheme: dark)" srcset="./src/assets/tt-logo-dark.svg">
   <img alt="" src="./src/assets/tt-logo.svg">
 </picture>
-    
+
 A tool for visualizing the Tenstorrent Neural Network model (TT-NN)
 
 </div>
@@ -25,7 +25,17 @@ A tool for visualizing the Tenstorrent Neural Network model (TT-NN)
 See [releases](https://github.com/tenstorrent/ttnn-visualizer/releases) for the most recent additions.
 
 ### Demo
-https://github.com/user-attachments/assets/205b97f2-8e3b-48d7-8427-0bf2d980d22b
+https://github.com/tenstorrent/ttnn-visualizer/blob/feature/update-readme/docs/assets/TT-NN-Visualizer.mp4
+
+#### 1
+
+<<< Screenshots here >>>
+
+#### 2
+
+<<< Screenshots here >>>
+
+#### 4
 
 <<< Screenshots here >>>
 
