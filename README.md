@@ -27,10 +27,7 @@ See [releases](https://github.com/tenstorrent/ttnn-visualizer/releases) for the 
 
 ### Demo
 
-[![Custom Thumbnail](https://github.com/user-attachments/assets/ef0ce0d5-ae00-4030-a1a1-91ae0c1db930)](https://github.com/user-attachments/assets/3d4174ac-e83f-4324-8c4d-f1fa6413be08)
-
-[![Demo](https://github.com/user-attachments/assets/ef0ce0d5-ae00-4030-a1a1-91ae0c1db930)](https://github.com/tenstorrent/ttnn-visualizer/blob/feature/update-readme/docs/assets/TT-NN-Visualizer.mp4)
-
+https://github.com/user-attachments/assets/80e6cfe5-24c4-4d5f-8c1e-2a6a2f9651ff
 
 <img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/ef0ce0d5-ae00-4030-a1a1-91ae0c1db930">
 <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/3e59c95c-9a57-459c-98c0-e8d86f4e38ec">
