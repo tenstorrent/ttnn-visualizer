@@ -1,6 +1,6 @@
 # Remote Querying
 
-TTNN Visualizer includes the option to remotely query reports instead of syncing them to the local machine.
+TT-NN Visualizer includes the option to remotely query reports instead of syncing them to the local machine.
 
 ## Requirements
 

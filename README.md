@@ -1,12 +1,14 @@
 <div align="center">
 
-<h1 style="color: #FA512E;"> TTNN Visualizer </h1>
+<h1 style="color: #FA512E;"> TT-NN Visualizer </h1>
 
 <div align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./src/assets/tt-logo-dark.svg">
   <img alt="" src="./src/assets/tt-logo.svg">
 </picture>
+A tool for visualizing the Tenstorrent Neural Network model (TT-NN)
+
 </div>
 
 <h2 style="text-align: center">
@@ -17,13 +19,17 @@
 
 </div>
 
-### A tool for visualizing the Tenstorrent Neural Network (TTNN) model
+## Features
+
+See [releases](https://github.com/tenstorrent/ttnn-visualizer/releases) for the most recent additions.
+
+<<< Video here>>>
 
 <<< Screenshots here >>>
 
 ## Getting started
 
-How to [get started](./docs/getting-started.md) with TTNN Visualizer.
+How to [get started](./docs/getting-started.md) with TT-NN Visualizer.
 
 ## Remote Querying
 
@@ -31,4 +37,4 @@ Use [remote querying](./docs/remote-querying.md) instead of file syncing the rep
 
 ## Contributing
 
-How to run [TTNN Visualizer](./docs/contributing.md) from source.
+How to run [TT-NN Visualizer](./docs/contributing.md) from source.
