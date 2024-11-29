@@ -1,6 +1,17 @@
-# TTNN Visualizer
+<h1 style="text-align: center; color: #FA512E"> TTNN Visualizer </h1>
 
-A tool for visualizing the Tenstorrent Neural Network (TTNN) model.
+<div style="text-align: center">
+    <img src="./src/assets/tt-logo.svg"  alt="" />
+</div>
+
+<h2 style="text-align: center">
+
+[Buy hardware](https://tenstorrent.com/cards/) | [Install](https://github.com/tenstorrent/tt-metal/blob/main/INSTALLING.md) | [Discord](https://discord.gg/tvhGzHQwaj) | [Join Us](https://boards.greenhouse.io/tenstorrent/jobs/4155609007)
+
+</h2>
+
+
+### A tool for visualizing the Tenstorrent Neural Network (TTNN) model.
 
 <!-- TOC start -->
 
