@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import { getBufferColor, getTensorColor } from './colorGenerator';
 import { formatSize, toHex } from './math';
 import { BufferPage, Chunk, ColoredChunk, TensorData } from '../model/APIData';

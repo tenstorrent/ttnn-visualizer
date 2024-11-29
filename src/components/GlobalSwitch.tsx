@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import { Intent, Switch } from '@blueprintjs/core';
 import classNames from 'classnames';
 import 'styles/components/GlobalSwitch.scss';
