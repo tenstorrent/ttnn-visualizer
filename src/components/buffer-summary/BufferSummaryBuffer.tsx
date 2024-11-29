@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useState } from 'react';
 import { useAtom } from 'jotai';

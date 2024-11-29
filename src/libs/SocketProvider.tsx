@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 /* eslint-disable no-console */
 import React, { ReactNode, createContext, useEffect } from 'react';
 import { Socket, io } from 'socket.io-client';

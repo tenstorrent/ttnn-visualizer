@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import { PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
 import { HistoricalTensor } from '../model/Graph';
 import { TensorData } from '../model/APIData';

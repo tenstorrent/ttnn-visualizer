@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DataSet, Network } from 'vis-network/standalone';
 import { Edge } from 'vis-network';

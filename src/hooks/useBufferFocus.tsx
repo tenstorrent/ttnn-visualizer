@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import { toast } from 'react-toastify';
 import { useAtom, useSetAtom } from 'jotai';
 import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
