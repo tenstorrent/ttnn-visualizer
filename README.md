@@ -44,18 +44,21 @@ For the latest updates and features, please see [releases](https://github.com/te
 
 https://github.com/user-attachments/assets/80e6cfe5-24c4-4d5f-8c1e-2a6a2f9651ff
 
-<div style="display: flex; flex-wrap: wrap; gap: 10px">
-<div style='display: flex; flex-direction: column;flex: 50%'>
+<div style="display: flex;flex-wrap: wrap;">
+<div style="display: flex;flex-basis: 50%;flex-direction: column;">
+
 #### L1 Summary with Tensor highlight
 
 <img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/ef0ce0d5-ae00-4030-a1a1-91ae0c1db930">
 </div>
-<div style='display: flex; flex-direction: column;flex: 50%'>
+<div style="display: flex;flex-basis: 50%;flex-direction: column;">
+
 #### Operation inputs and ouputs
 
 <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/3e59c95c-9a57-459c-98c0-e8d86f4e38ec">
 </div>
 </div>
+
 #### Device operations with memory consumption
 
 <img width="400" alt="Device operations with memory consumption" src="https://github.com/user-attachments/assets/ae0a261e-650c-4c03-92a8-d2a00ada594b">
