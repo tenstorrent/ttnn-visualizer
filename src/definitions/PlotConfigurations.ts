@@ -87,7 +87,7 @@ export interface PlotConfiguration {
     };
 }
 
-export const CONDENSED_PLOT_CHUNK_COLOR = '#9c9e9f';
+export const CONDENSED_PLOT_CHUNK_COLOR = '#bcb3f7';
 
 export interface PlotMouseEventCustom extends PlotMouseEvent {
     points: PlotDatumCustom[];
