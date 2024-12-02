@@ -25,13 +25,18 @@ A tool for visualizing the Tenstorrent Neural Network model (TT-NN)
 
 For the latest updates and features, please see [releases](https://github.com/tenstorrent/ttnn-visualizer/releases).
 
-- Load reports via the local file system or through an SSH connection
-- Plotted allocation of L1, DRAM and circular buffers onto interactive charts
+- Comprehensive list of all operations in the model
+- Interactive graph visualization of operations
+- Detailed and interactive L1, DRAM, and circular buffer memory plots
+- Filterable list of tensor details
+- Overview of all buffers for the entire model run
+- Visualization of input and output tensors with core tiling and sharding details
 - Visualize inputs/outputs per tensor or tensor allocation across each core
+- Detailed insights into L1 peak memory consumption, with an interactive graph of allocation over time
 - Navigate a tree of device operations with associated buffers and circular buffers
-- Interactive graph of L1 memory allocation over time
-- Operation flow graph
-- Supports multiple instances of the application running concurrently
+- Operation flow graph for a holistic view of model execution
+- Load reports via the local file system or through an SSH connection
+- Support for multiple instances of the application running concurrently
 
 ### Demo
 
@@ -39,14 +44,18 @@ For the latest updates and features, please see [releases](https://github.com/te
 
 https://github.com/user-attachments/assets/80e6cfe5-24c4-4d5f-8c1e-2a6a2f9651ff
 
+<div style="display: flex; flex-wrap: wrap; gap: 10px">
+<div style='display: flex; flex-direction: column;flex: 50%'>
 #### L1 Summary with Tensor highlight
 
 <img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/ef0ce0d5-ae00-4030-a1a1-91ae0c1db930">
-
+</div>
+<div style='display: flex; flex-direction: column;flex: 50%'>
 #### Operation inputs and ouputs
 
 <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/3e59c95c-9a57-459c-98c0-e8d86f4e38ec">
-
+</div>
+</div>
 #### Device operations with memory consumption
 
 <img width="400" alt="Device operations with memory consumption" src="https://github.com/user-attachments/assets/ae0a261e-650c-4c03-92a8-d2a00ada594b">
