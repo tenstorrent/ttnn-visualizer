@@ -11,7 +11,7 @@ from ttnn_visualizer.utils import SerializeableDataclass
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
 
-from backend.ttnn_visualizer.utils import parse_memory_config
+from ttnn_visualizer.utils import parse_memory_config
 
 
 class BufferType(enum.Enum):
