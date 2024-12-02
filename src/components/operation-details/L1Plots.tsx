@@ -49,15 +49,13 @@ function L1Plots({
     onLegendClick,
 }: L1PlotsProps) {
     const selectedAddress = useAtomValue(selectedAddressAtom);
-    const {
-        // nowrap
-        chartData,
-        memory,
-        fragmentation,
-        cbChartData,
-        cbChartDataByOperation,
-    } = operationDetails.memoryData();
+    const { chartData, memory, fragmentation, cbChartData, cbChartDataByOperation } = operationDetails.memoryData();
     const { chartData: previousChartData } = previousOperationDetails.memoryData();
+    const {
+        chartData: l1SmallChartData,
+        memory: l1SmallMemory,
+        condensedChart: l1SmallCondensedChart,
+    } = operationDetails.memoryData(BufferType.L1_SMALL);
 
     const cbZoomStart = operationDetails.deviceOperations
         .map((op) => op.cbList.map((cb) => cb.address))
@@ -70,26 +68,33 @@ function L1Plots({
         .sort((a, b) => a - b)
         .reverse()[0];
 
+    const l1SmallZoomStart = l1SmallChartData
+        .map((op) => op.x)
+        .flat()
+        .sort()[0] as number;
+
+    const l1SmallZoomEnd = l1SmallChartData
+        .map((op) => op.x)
+        .flat()
+        .sort()
+        .reverse()[0] as number;
+
+    if (l1SmallCondensedChart[0] !== undefined) {
+        l1SmallCondensedChart[0].marker!.color = CONDENSED_PLOT_CHUNK_COLOR;
+        l1SmallCondensedChart[0].hovertemplate = `
+    <span style="color:${CONDENSED_PLOT_CHUNK_COLOR};font-size:20px;">&#9632;</span>
+    <br />
+    <span>L1 Small Condensed view</span>
+    <extra></extra>`;
+    }
+
     const MEMORY_PADDING_CB = (cbZoomEnd - cbZoomStart) * MEMORY_ZOOM_PADDING_RATIO;
     const MEMORY_PADDING_L1 = (plotZoomRangeEnd - plotZoomRangeStart) * MEMORY_ZOOM_PADDING_RATIO;
+    const MEMORY_PADDING_L1_SMALL = (l1SmallZoomEnd - l1SmallZoomStart) * MEMORY_ZOOM_PADDING_RATIO;
 
     const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
 
     const { memorySizeL1 } = operationDetails;
-    const l1Small = operationDetails.memoryData(BufferType.L1_SMALL);
-
-    const l1SmallZoomStart = l1Small.condensed.address;
-    const l1SmallZoomEnd = l1Small.condensed.address + l1Small.condensed.size;
-    const MEMORY_PADDING_L1_SMALL = (l1SmallZoomEnd - l1SmallZoomStart) * MEMORY_ZOOM_PADDING_RATIO;
-
-    if (l1Small.condensedChart[0] !== undefined) {
-        l1Small.condensedChart[0].marker!.color = CONDENSED_PLOT_CHUNK_COLOR;
-        l1Small.condensedChart[0].hovertemplate = `
-<span style="color:${CONDENSED_PLOT_CHUNK_COLOR};font-size:20px;">&#9632;</span>
-<br />
-<span>L1 Small Condensed view</span>
-<extra></extra>`;
-    }
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const memoryReportWithCB: FragmentationEntry[] = [
@@ -129,7 +134,7 @@ function L1Plots({
                 })}
                 isZoomedIn={zoomedInViewMainMemory}
                 plotZoomRange={[plotZoomRangeStart - MEMORY_PADDING_L1, plotZoomRangeEnd + MEMORY_PADDING_L1]}
-                chartDataList={[cbChartData, chartData]}
+                chartDataList={[cbChartData, chartData, l1SmallMemory.length > 0 ? l1SmallCondensedChart : []]}
                 memorySize={memorySizeL1}
                 onBufferClick={onBufferClick}
                 configuration={L1RenderConfiguration}
@@ -139,17 +144,17 @@ function L1Plots({
                 <MemoryPlotRenderer
                     title='Current Summarized L1 Small Report'
                     className={classNames('l1-memory-renderer', {
-                        'empty-plot': l1Small.memory.length === 0,
+                        'empty-plot': l1SmallChartData.length === 0,
                     })}
                     isZoomedIn
                     plotZoomRange={[
                         l1SmallZoomStart - MEMORY_PADDING_L1_SMALL,
                         l1SmallZoomEnd + MEMORY_PADDING_L1_SMALL,
                     ]}
-                    chartDataList={[l1Small.condensedChart]}
-                    memorySize={memorySizeL1}
-                    onBufferClick={onBufferClick}
+                    chartDataList={[l1SmallChartData]}
+                    memorySize={memorySizeL1} // Not used as we're always zoomed in
                     configuration={L1SmallRenderConfiguration}
+                    onBufferClick={() => {}}
                 />
             )}
 
