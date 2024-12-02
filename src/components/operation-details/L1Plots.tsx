@@ -14,7 +14,9 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import { selectedAddressAtom } from '../../store/app';
 import {
     CBRenderConfiguration,
+    CONDENSED_PLOT_CHUNK_COLOR,
     L1RenderConfiguration,
+    L1SmallRenderConfiguration,
     MAX_LEGEND_LENGTH,
     PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
@@ -28,6 +30,7 @@ interface L1PlotsProps {
     plotZoomRangeStart: number;
     plotZoomRangeEnd: number;
     showCircularBuffer: boolean;
+    showL1Small: boolean;
     onBufferClick: (event: Readonly<PlotMouseEventCustom>) => void;
     onLegendClick: (address: number, tensorId?: number) => void;
 }
@@ -41,6 +44,7 @@ function L1Plots({
     plotZoomRangeStart,
     plotZoomRangeEnd,
     showCircularBuffer,
+    showL1Small,
     onBufferClick,
     onLegendClick,
 }: L1PlotsProps) {
@@ -74,6 +78,19 @@ function L1Plots({
     const { memorySizeL1 } = operationDetails;
     const l1Small = operationDetails.memoryData(BufferType.L1_SMALL);
 
+    const l1SmallZoomStart = l1Small.condensed.address;
+    const l1SmallZoomEnd = l1Small.condensed.address + l1Small.condensed.size;
+    const MEMORY_PADDING_L1_SMALL = (l1SmallZoomEnd - l1SmallZoomStart) * MEMORY_ZOOM_PADDING_RATIO;
+
+    if (l1Small.condensedChart[0] !== undefined) {
+        l1Small.condensedChart[0].marker!.color = CONDENSED_PLOT_CHUNK_COLOR;
+        l1Small.condensedChart[0].hovertemplate = `
+<span style="color:${CONDENSED_PLOT_CHUNK_COLOR};font-size:20px;">&#9632;</span>
+<br />
+<span>L1 Small Condensed view</span>
+<extra></extra>`;
+    }
+
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const memoryReportWithCB: FragmentationEntry[] = [
         ...memoryReport,
@@ -90,6 +107,7 @@ function L1Plots({
             )
             .flat(),
     ].sort((a, b) => a.address - b.address);
+
     return (
         <>
             <MemoryPlotRenderer
@@ -107,16 +125,34 @@ function L1Plots({
             <MemoryPlotRenderer
                 title='Current Summarized L1 Report'
                 className={classNames('l1-memory-renderer', {
-                    'empty-plot':
-                        chartData.length === 0 && cbChartDataByOperation.size === 0 && l1Small.memory.length === 0,
+                    'empty-plot': chartData.length === 0 && cbChartDataByOperation.size === 0,
                 })}
                 isZoomedIn={zoomedInViewMainMemory}
                 plotZoomRange={[plotZoomRangeStart - MEMORY_PADDING_L1, plotZoomRangeEnd + MEMORY_PADDING_L1]}
-                chartDataList={[cbChartData, chartData, l1Small.memory.length > 0 ? l1Small.condensedChart : []]}
+                chartDataList={[cbChartData, chartData]}
                 memorySize={memorySizeL1}
                 onBufferClick={onBufferClick}
                 configuration={L1RenderConfiguration}
             />
+
+            {showL1Small && (
+                <MemoryPlotRenderer
+                    title='Current Summarized L1 Small Report'
+                    className={classNames('l1-memory-renderer', {
+                        'empty-plot': l1Small.memory.length === 0,
+                    })}
+                    isZoomedIn
+                    plotZoomRange={[
+                        l1SmallZoomStart - MEMORY_PADDING_L1_SMALL,
+                        l1SmallZoomEnd + MEMORY_PADDING_L1_SMALL,
+                    ]}
+                    chartDataList={[l1Small.condensedChart]}
+                    memorySize={memorySizeL1}
+                    onBufferClick={onBufferClick}
+                    configuration={L1SmallRenderConfiguration}
+                />
+            )}
+
             {showCircularBuffer && cbChartDataByOperation.size > 0 && (
                 <>
                     <h3>Device Operations</h3>

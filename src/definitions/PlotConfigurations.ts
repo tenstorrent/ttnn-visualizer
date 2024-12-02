@@ -17,6 +17,17 @@ export const L1RenderConfiguration = {
     title: 'L1 Address Space',
 } as PlotConfiguration;
 
+export const L1SmallRenderConfiguration = {
+    height: 90,
+    margin: {
+        l: 5,
+        r: 5,
+        b: 40,
+        t: 25,
+    },
+    title: 'L1 Small Address Space',
+};
+
 export const DRAMRenderConfiguration = {
     height: 90,
     margin: {

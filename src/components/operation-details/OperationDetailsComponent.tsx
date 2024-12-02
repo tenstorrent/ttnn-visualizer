@@ -11,7 +11,7 @@ import 'styles/components/OperationDetailsComponent.scss';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
-import { CONDENSED_PLOT_CHUNK_COLOR, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
+import { PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
 import { selectedAddressAtom, selectedDeviceAtom, selectedTensorAtom, showHexAtom } from '../../store/app';
 import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
@@ -36,6 +36,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const { data: operations } = useOperationsList();
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
+    const [showL1Small, setShowL1Small] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const {
         operationDetails: { data: operationDetails, isLoading, status },
@@ -80,15 +81,6 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
     const { memory, cbChartDataByOperation } = details.memoryData();
     const { memory: previousMemory } = previousDetails.memoryData();
-
-    if (l1Small.condensedChart[0] !== undefined) {
-        l1Small.condensedChart[0].marker!.color = CONDENSED_PLOT_CHUNK_COLOR;
-        l1Small.condensedChart[0].hovertemplate = `
-<span style="color:${CONDENSED_PLOT_CHUNK_COLOR};font-size:20px;">&#9632;</span>
-<br />
-<span>L1 Small Condensed view</span>
-<extra></extra>`;
-    }
 
     const { memorySizeL1 } = details;
 
@@ -198,6 +190,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 }}
                             />
 
+                            <Switch
+                                label={!showCircularBuffer ? 'Show L1 Small' : 'Hide L1 Small'}
+                                checked={showL1Small}
+                                disabled={l1Small.condensed.size === 0}
+                                onChange={() => {
+                                    setShowL1Small(!showL1Small);
+                                }}
+                            />
+
                             <GlobalSwitch
                                 label='Hex axis labels'
                                 checked={showHex}
@@ -287,6 +288,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     plotZoomRangeStart={plotZoomRangeStart}
                                     plotZoomRangeEnd={plotZoomRangeEnd}
                                     showCircularBuffer={showCircularBuffer}
+                                    showL1Small={showL1Small}
                                     onBufferClick={onBufferClick}
                                     onLegendClick={onLegendClick}
                                 />
