@@ -18,7 +18,7 @@ import {
 import { BufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { HistoricalTensor, Tensor } from './Graph';
-import { PlotDataOverrides } from '../definitions/PlotConfigurations';
+import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import getChartData from '../functions/getChartData';
 
 export class OperationDetails implements Partial<OperationDetailsData> {
@@ -342,7 +342,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
         const condensed: Chunk = this.calculateCondensed(memory);
         const cbCondensed: Chunk = this.calculateCondensed(cbMemory);
-        const bufferCondesed: Chunk = this.calculateCondensed(bufferMemory);
+        const bufferCondensed: Chunk = this.calculateCondensed(bufferMemory);
 
         const chartData = this.getChartData(memory);
         const cbColor = '#e2defc';
@@ -369,10 +369,10 @@ ${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cb
         const bufferColor = '#fcdefa';
         const bufferHoverTemplate = `
 <span style="color:${bufferColor};font-size:20px;">&#9632;</span>
-${bufferCondesed.address} (${toHex(bufferCondesed.address)}) <br>Size: ${formatSize(bufferCondesed.size)}
+${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${formatSize(bufferCondensed.size)}
 <br><br>Buffers Summary
 <extra></extra>`;
-        const bufferChartData = this.getChartData([bufferCondesed], {
+        const bufferChartData = this.getChartData([bufferCondensed], {
             color: bufferColor,
             hovertemplate: bufferHoverTemplate,
         });
@@ -389,12 +389,23 @@ ${bufferCondesed.address} (${toHex(bufferCondesed.address)}) <br>Size: ${formatS
             }
         });
 
+        const condensedChart = this.getChartData([condensed]);
+
+        if (condensedChart[0] !== undefined && bufferType === BufferType.L1_SMALL) {
+            condensedChart[0].marker!.color = CONDENSED_PLOT_CHUNK_COLOR;
+            condensedChart[0].hovertemplate = `
+    <span style="color:${CONDENSED_PLOT_CHUNK_COLOR};font-size:20px;">&#9632;</span>
+<br />
+<span>L1 Small Condensed view</span>
+<extra></extra>`;
+        }
+
         return {
             chartData,
             memory,
             fragmentation,
             condensed,
-            condensedChart: this.getChartData([condensed]),
+            condensedChart,
             cbChartData,
             cbChartDataByOperation,
             cbMemory,

@@ -14,7 +14,6 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import { selectedAddressAtom } from '../../store/app';
 import {
     CBRenderConfiguration,
-    CONDENSED_PLOT_CHUNK_COLOR,
     L1RenderConfiguration,
     L1SmallRenderConfiguration,
     MAX_LEGEND_LENGTH,
@@ -78,15 +77,6 @@ function L1Plots({
         .flat()
         .sort()
         .reverse()[0] as number;
-
-    if (l1SmallCondensedChart[0] !== undefined) {
-        l1SmallCondensedChart[0].marker!.color = CONDENSED_PLOT_CHUNK_COLOR;
-        l1SmallCondensedChart[0].hovertemplate = `
-    <span style="color:${CONDENSED_PLOT_CHUNK_COLOR};font-size:20px;">&#9632;</span>
-    <br />
-    <span>L1 Small Condensed view</span>
-    <extra></extra>`;
-    }
 
     const MEMORY_PADDING_CB = (cbZoomEnd - cbZoomStart) * MEMORY_ZOOM_PADDING_RATIO;
     const MEMORY_PADDING_L1 = (plotZoomRangeEnd - plotZoomRangeStart) * MEMORY_ZOOM_PADDING_RATIO;
