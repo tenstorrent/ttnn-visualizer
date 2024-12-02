@@ -4,11 +4,11 @@ import logging
 from functools import wraps
 from pathlib import Path
 import time
+import re
 from timeit import default_timer
-from typing import Callable, Optional
+from typing import Callable, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
-
 
 LAST_SYNCED_FILE_NAME = ".last-synced"
 
@@ -30,7 +30,6 @@ class SerializeableDataclass:
 def timer(f: Callable):
     @wraps(f)
     def wrapper(*args, **kwargs):
-
         start_time = default_timer()
         response = f(*args, **kwargs)
         total_elapsed_time = default_timer() - start_time
@@ -97,3 +96,40 @@ def update_last_synced(directory: Path) -> None:
     with last_synced_path.open("w") as file:
         logger.info(f"Updating last synced for directory {directory}")
         file.write(str(timestamp))
+
+
+MEMORY_CONFIG_PATTERN = re.compile(r"MemoryConfig\((.*)\)$")
+MEMORY_LAYOUT_PATTERN = re.compile(r"memory_layout=([A-Za-z_:]+)")
+SHARD_SPEC_PATTERN = re.compile(
+    r"shard_spec=ShardSpec\(grid=\{(\[.*?\])\},shape=\{(\d+),\s*(\d+)\},orientation=ShardOrientation::([A-Z_]+),halo=(\d+)\)"
+)
+
+
+def parse_memory_config(memory_config: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not memory_config:  # Handle None or empty string
+        return None
+
+    memory_config_match = MEMORY_CONFIG_PATTERN.match(memory_config)
+    if not memory_config_match:
+        return None
+
+    captured_string = memory_config_match.group(1)
+
+    memory_layout_match = MEMORY_LAYOUT_PATTERN.search(captured_string)
+    memory_layout = memory_layout_match.group(1) if memory_layout_match else None
+
+    shard_spec_match = SHARD_SPEC_PATTERN.search(captured_string)
+    if shard_spec_match:
+        shard_spec = {
+            "grid": shard_spec_match.group(1),
+            "shape": [int(shard_spec_match.group(2)), int(shard_spec_match.group(3))],
+            "orientation": shard_spec_match.group(4),
+            "halo": int(shard_spec_match.group(5)),
+        }
+    else:
+        shard_spec = "std::nullopt"
+
+    return {
+        "memory_layout": memory_layout,
+        "shard_spec": shard_spec,
+    }

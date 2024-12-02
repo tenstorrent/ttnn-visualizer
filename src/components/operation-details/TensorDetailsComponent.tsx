@@ -43,7 +43,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
     const [overlayOpen, setOverlayOpen] = useState(false);
 
-    const shardSpec = tensor.parsed_memory_config?.shard_spec;
+    const shardSpec = tensor.memory_config?.shard_spec;
 
     return (
         <div
@@ -142,9 +142,9 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     <strong>Layout:</strong> {tensor.layout}
                 </p>
                 <p>
-                    {tensor.parsed_memory_config?.memory_layout && (
+                    {tensor.memory_config?.memory_layout && (
                         <>
-                            <strong>Memory layout:</strong> {tensor.parsed_memory_config.memory_layout}
+                            <strong>Memory layout:</strong> {tensor.memory_config.memory_layout}
                         </>
                     )}
                 </p>
