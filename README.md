@@ -36,7 +36,7 @@ For the latest updates and features, please see [releases](https://github.com/te
 - Navigate a tree of device operations with associated buffers and circular buffers
 - Operation flow graph for a holistic view of model execution
 - Load reports via the local file system or through an SSH connection
-- Support for multiple instances of the application running concurrently
+- Supports multiple instances of the application running concurrently
 
 ### Demo
 
@@ -66,7 +66,7 @@ How to [get started](./docs/getting-started.md) with TT-NN Visualizer.
 
 ## Remote Querying
 
-Use [remote querying](./docs/remote-querying.md) instead of file syncing the report data.
+Use [remote querying](./docs/remote-querying.md) instead of syncing the report data to your local file system.
 
 ## Contributing
 
