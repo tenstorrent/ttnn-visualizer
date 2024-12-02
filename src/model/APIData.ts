@@ -10,8 +10,7 @@ export interface TensorData extends Tensor {
     shape: string;
     dtype: string;
     layout: string;
-    memory_config: string | null;
-    parsed_memory_config: MemoryConfig | null;
+    memory_config: MemoryConfig | null;
     device_id: number | null;
     io: 'input' | 'output' | null; // TODO: validate usefulness in the future
     comparison: {
@@ -101,8 +100,7 @@ export const defaultTensorData: TensorData = {
     shape: '',
     dtype: '',
     layout: '',
-    memory_config: '',
-    parsed_memory_config: null,
+    memory_config: null,
     device_id: 0,
     io: null,
     address: null,
