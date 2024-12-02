@@ -1,7 +1,7 @@
 
 <div align="center">
 
-<h1 style="color: #FA512E;"> TT-NN Visualizer </h1>
+<h1>TT-NN Visualizer</h1>
 
 <div align="center">
 <picture>
@@ -13,7 +13,7 @@ A tool for visualizing the Tenstorrent Neural Network model (TT-NN)
 
 </div>
 
-<h2 style="text-align: center">
+<h2>
 
 [Buy Hardware](https://tenstorrent.com/cards/) | [Install TT-NN](https://github.com/tenstorrent/tt-metal/blob/main/INSTALLING.md) | [Discord](https://discord.gg/tvhGzHQwaj) | [Join Us](https://boards.greenhouse.io/tenstorrent/jobs/4155609007)
 
@@ -44,20 +44,13 @@ For the latest updates and features, please see [releases](https://github.com/te
 
 https://github.com/user-attachments/assets/80e6cfe5-24c4-4d5f-8c1e-2a6a2f9651ff
 
-<div style="display: flex;flex-wrap: wrap;">
-<div style="display: flex;flex-basis: 50%;flex-direction: column;">
+| #### L1 Summary with Tensor highlight | #### Operation inputs and ouputs |
+|-----------------------------------------------|------------------------------------------|
+| <img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/ef0ce0d5-ae00-4030-a1a1-91ae0c1db930"> | <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/3e59c95c-9a57-459c-98c0-e8d86f4e38ec"> |
 
-#### L1 Summary with Tensor highlight
-
-<img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/ef0ce0d5-ae00-4030-a1a1-91ae0c1db930">
-</div>
-<div style="display: flex;flex-basis: 50%;flex-direction: column;">
+<table>
 
 #### Operation inputs and ouputs
-
-<img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/3e59c95c-9a57-459c-98c0-e8d86f4e38ec">
-</div>
-</div>
 
 #### Device operations with memory consumption
 
