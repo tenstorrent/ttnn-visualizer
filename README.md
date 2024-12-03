@@ -74,6 +74,9 @@ You may test the application using the following example reports.
 
 Unzip the files into their own directories and select them with the local folder selector.
 
+[segformer_encoder.zip](https://github.com/user-attachments/files/17996493/segformer_encoder.zip)
+[segformer_decoder_good.zip](https://github.com/user-attachments/files/17996491/segformer_decoder_good.zip)
+
 ## Contributing
 
 How to run [TT-NN Visualizer](./docs/contributing.md) from source.
