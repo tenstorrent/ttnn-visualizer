@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import React, { useState } from 'react';
 import { Button, Card, Overlay2 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';

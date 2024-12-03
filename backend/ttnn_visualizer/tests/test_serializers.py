@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import unittest
 
 from ttnn_visualizer.models import (

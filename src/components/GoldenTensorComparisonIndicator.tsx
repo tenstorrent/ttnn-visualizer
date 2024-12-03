@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import calculateOpPerformanceColor from '../functions/calculateOpPerformanceColor';
 import 'styles/components/GoldenTensorComparisonIndicator.scss';
 

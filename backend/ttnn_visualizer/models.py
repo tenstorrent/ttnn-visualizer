@@ -1,8 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import dataclasses
 import enum
 import json
 from json import JSONDecodeError
-from typing import Optional
+from typing import Optional, Any
 
 from pydantic import BaseModel, Field
 from sqlalchemy import Integer, Column, String, JSON
@@ -10,6 +14,8 @@ from sqlalchemy import Integer, Column, String, JSON
 from ttnn_visualizer.utils import SerializeableDataclass
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
+
+from ttnn_visualizer.utils import parse_memory_config
 
 
 class BufferType(enum.Enum):
@@ -103,10 +109,13 @@ class Tensor(SerializeableDataclass):
     shape: str
     dtype: str
     layout: str
-    memory_config: str
+    memory_config: str | dict[str, Any] | None
     device_id: int
     address: int
     buffer_type: BufferType
+
+    def __post_init__(self):
+        self.memory_config = parse_memory_config(self.memory_config)
 
 
 @dataclasses.dataclass

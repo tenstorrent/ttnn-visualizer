@@ -1,4 +1,8 @@
-import React, { JSX, useState } from 'react';
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
+import React, { useState } from 'react';
 import classNames from 'classnames';
 import { Button, Icon, Intent, PopoverPosition, Position, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -9,7 +13,6 @@ import { TensorData } from '../../model/APIData';
 import { prettyPrintAddress, toHex } from '../../functions/math';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { useOperationsList } from '../../hooks/useAPI';
-import getDeallocationOperation from '../../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../../functions/getNextAllocationOperation';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
@@ -36,35 +39,12 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     const { address } = tensor;
     const { data: operations } = useOperationsList();
     const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations)?.id : null;
-    const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations)?.id : null;
     const selectedTensorId = useAtomValue(selectedTensorAtom);
 
     const [overlayOpen, setOverlayOpen] = useState(false);
 
-    const sharding: JSX.Element[] = [];
-    const shardSpec = tensor.parsed_memory_config?.shard_spec;
-    if (shardSpec && typeof shardSpec === 'object') {
-        sharding.push(
-            <p>
-                <strong>Sharding:</strong>
-            </p>,
-        );
+    const shardSpec = tensor.memory_config?.shard_spec;
 
-        sharding.push(
-            ...Object.entries(shardSpec).map(([prop, value]) => (
-                <li key={prop}>
-                    {prop}=<em>{value}</em>
-                </li>
-            )),
-        );
-    } else {
-        sharding.push(
-            <p>
-                <strong>Sharding: </strong>
-                {shardSpec}
-            </p>,
-        );
-    }
     return (
         <div
             className={classNames('tensor-item', {
@@ -92,28 +72,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         {prettyPrintAddress(tensor.address, memorySize)}
                     </span>
                 </button>
-
-                {isValidNumber(deallocationOperationId) && operations ? (
-                    <Tooltip
-                        content={`Deallocation in ${deallocationOperationId} ${operations.find((operation) => operation.id === deallocationOperationId)?.name}`}
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Icon
-                            icon={IconNames.TICK}
-                            intent={Intent.SUCCESS}
-                        />
-                    </Tooltip>
-                ) : (
-                    <Tooltip
-                        content='Missing deallocation operation'
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Icon
-                            icon={IconNames.WARNING_SIGN}
-                            intent={Intent.WARNING}
-                        />
-                    </Tooltip>
-                )}
 
                 {(tensor.consumers.length > MAX_NUM_CONSUMERS || tensor.producers.length > MAX_NUM_CONSUMERS) && (
                     <Tooltip
@@ -184,13 +142,32 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     <strong>Layout:</strong> {tensor.layout}
                 </p>
                 <p>
-                    {tensor.parsed_memory_config?.memory_layout && (
+                    {tensor.memory_config?.memory_layout && (
                         <>
-                            <strong>Memory layout:</strong> {tensor.parsed_memory_config.memory_layout}
+                            <strong>Memory layout:</strong> {tensor.memory_config.memory_layout}
                         </>
                     )}
                 </p>
-                <p>{sharding.length > 0 && sharding}</p>
+
+                {shardSpec ? (
+                    <>
+                        <p>
+                            <strong>Sharding: </strong>
+                            {typeof shardSpec === 'string' ? shardSpec : null}
+                        </p>
+
+                        {typeof shardSpec === 'object' ? (
+                            <ul className='shard-spec'>
+                                {Object.entries(shardSpec).map(([prop, value]) => (
+                                    <li key={value}>
+                                        {prop}=<em>{typeof value !== 'string' ? JSON.stringify(value) : value}</em>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : null}
+                    </>
+                ) : null}
+
                 {tensor.comparison?.global ? (
                     <>
                         <GoldenTensorComparisonIndicator
