@@ -14,6 +14,7 @@ type FileWithRelativePath = File & { webkitRelativePath?: string };
 
 const useLocalConnection = () => {
     const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+
     function filterReportFiles(files: FileList, excludeFolders: string[] = ['tensors']): FileList {
         // Convert FileList to an array
         const fileArray = Array.from(files) as FileWithRelativePath[];

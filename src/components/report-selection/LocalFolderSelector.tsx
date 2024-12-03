@@ -8,7 +8,7 @@ import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
 import 'styles/components/FolderPicker.scss';
 import { useNavigate } from 'react-router';
-import { useQueryClient } from 'react-query';
+import { useQuery, useQueryClient } from 'react-query';
 import { useAtom, useSetAtom } from 'jotai';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
@@ -17,6 +17,7 @@ import { ConnectionStatus, ConnectionTestStates } from '../../definitions/Connec
 import FileStatusWrapper from '../FileStatusOverlayWrapper';
 import FileStatusOverlay from '../FileStatusOverlay';
 import { FileStatus } from '../../model/APIData';
+import { fetchTabSession } from '../../hooks/useAPI';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -32,13 +33,35 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
     [ConnectionTestStates.OK]: Intent.SUCCESS,
 };
 
-const AXIOS_ERROR_CODE = 'ERR_NETWORK';
+const connectionOkStatus: ConnectionStatus = {
+    status: ConnectionTestStates.OK,
+    message: 'Files uploaded successfully',
+};
+
+const invalidReportStatus: ConnectionStatus = {
+    status: ConnectionTestStates.FAILED,
+    message: 'Selected directory does not contain a valid report',
+};
+
+const directoryErrorStatus: ConnectionStatus = {
+    status: ConnectionTestStates.FAILED,
+    message: 'Selected directory does not contain a valid report.',
+};
+
+const connectionFailedStatus: ConnectionStatus = {
+    status: ConnectionTestStates.FAILED,
+    message: 'Unable to upload selected directory.',
+};
 
 const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
+    const { data: tabSession } = useQuery('tabSession', {
+        queryFn: fetchTabSession,
+        initialData: null,
+    });
 
     const { uploadLocalFolder, uploadLocalPerformanceFolder, checkRequiredFiles, filterReportFiles } =
         useLocalConnection();
@@ -49,7 +72,7 @@ const LocalFolderOptions: FC = () => {
     const [performanceFolderStatus, setPerformanceFolderStatus] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
-    const isLocalReportMounted = !isUploading && reportLocation === 'local';
+    const isLocalReportMounted = !isUploading && reportLocation === 'local' && tabSession?.active_report;
 
     /**
      * This is a temporrary solution until we support Safari
@@ -65,44 +88,30 @@ const LocalFolderOptions: FC = () => {
         const { files: unfilteredFiles } = e.target;
         const files = filterReportFiles(unfilteredFiles);
 
-        const connectionStatus: ConnectionStatus = {
-            status: ConnectionTestStates.OK,
-            message: 'Files uploaded successfully',
-        };
-
-        const invalidReportStatus: ConnectionStatus = {
-            status: ConnectionTestStates.FAILED,
-            message: 'Selected directory does not contain a valid report',
-        };
-
         if (!checkRequiredFiles(files)) {
             setFolderStatus(invalidReportStatus);
             return;
         }
 
-        setIsUploading(true);
+        let connectionStatus = connectionOkStatus;
 
+        setIsUploading(true);
         setLocalUploadLabel(`${files.length} files selected.`);
+
         const response = await uploadLocalFolder(files);
 
         if (response.status !== 200) {
-            connectionStatus.status = ConnectionTestStates.FAILED;
-            connectionStatus.message =
-                response.code === AXIOS_ERROR_CODE
-                    ? 'Upload service is not responding'
-                    : 'Unable to upload selected directory.';
-        }
-
-        if (response?.data?.status !== ConnectionTestStates.OK) {
-            connectionStatus.status = ConnectionTestStates.FAILED;
-            connectionStatus.message = 'Selected directory does not contain a valid report.';
+            connectionStatus = connectionFailedStatus;
+        } else if (response?.data?.status !== ConnectionTestStates.OK) {
+            connectionStatus = directoryErrorStatus;
+        } else {
+            setLocalUploadLabel(`${files.length} files uploaded`);
+            setReportLocation('local');
         }
 
         queryClient.clear();
-        setLocalUploadLabel(`${files.length} files uploaded`);
         setIsUploading(false);
         setFolderStatus(connectionStatus);
-        setReportLocation('local');
     };
 
     const handlePerformanceDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -113,44 +122,30 @@ const LocalFolderOptions: FC = () => {
         const { files: unfilteredFiles } = e.target;
         const files = filterReportFiles(unfilteredFiles);
 
-        const connectionStatus: ConnectionStatus = {
-            status: ConnectionTestStates.OK,
-            message: 'Files uploaded successfully',
-        };
-
-        const invalidReportStatus: ConnectionStatus = {
-            status: ConnectionTestStates.FAILED,
-            message: 'Selected directory does not contain a valid report',
-        };
-
         if (!checkRequiredFiles(files)) {
             setPerformanceFolderStatus(invalidReportStatus);
             return;
         }
 
-        setIsPerformanceUploading(true);
+        let connectionStatus = connectionOkStatus;
 
-        setPerformanceDataUploadLabel(`${files.length} files selected.`);
+        setIsPerformanceUploading(true);
+        setPerformanceDataUploadLabel(`${files.length} files selected`);
+
         const response = await uploadLocalPerformanceFolder(files);
 
         if (response.status !== 200) {
-            connectionStatus.status = ConnectionTestStates.FAILED;
-            connectionStatus.message =
-                response.code === AXIOS_ERROR_CODE
-                    ? 'Upload service is not responding'
-                    : 'Unable to upload selected directory.';
-        }
-
-        if (response?.data?.status && response?.data?.status !== ConnectionTestStates.OK) {
-            connectionStatus.status = ConnectionTestStates.FAILED;
-            connectionStatus.message = 'Selected directory does not contain a valid report.';
+            connectionStatus = connectionFailedStatus;
+        } else if (response?.data?.status !== ConnectionTestStates.OK) {
+            connectionStatus = directoryErrorStatus;
+        } else {
+            setPerformanceDataUploadLabel(`${files.length} files uploaded`);
+            setReportLocation('local');
         }
 
         queryClient.clear();
-        setPerformanceDataUploadLabel(`${files.length} files uploaded`);
         setIsPerformanceUploading(false);
         setPerformanceFolderStatus(connectionStatus);
-        setReportLocation('local');
     };
 
     const viewOperation = () => {
