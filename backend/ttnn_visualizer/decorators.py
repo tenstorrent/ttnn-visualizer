@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import re
 from ttnn_visualizer.enums import ConnectionTestStates
 
