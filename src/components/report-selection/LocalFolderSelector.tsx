@@ -41,7 +41,10 @@ const LocalFolderOptions: FC = () => {
     const { uploadLocalFolder, checkRequiredFiles, filterReportFiles } = useLocalConnection();
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploading, setIsUploading] = useState(false);
+    const [isUploadingPerformance, setIsPerformanceUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
+    const [performanceFolderStatus, setPerformanceFolderStatus] = useState<ConnectionStatus | undefined>();
+    const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
     const isLocalReportMounted = !isUploading && reportLocation === 'local';
 
@@ -51,7 +54,7 @@ const LocalFolderOptions: FC = () => {
     const ua = navigator.userAgent.toLowerCase();
     const isSafari = ua.includes('safari') && !ua.includes('chrome') && !ua.includes('android');
 
-    const handleDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
+    const handleReportDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) {
             return;
         }
@@ -96,6 +99,51 @@ const LocalFolderOptions: FC = () => {
         setReportLocation('local');
     };
 
+    const handlePerformanceDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files) {
+            return;
+        }
+
+        const { files: unfilteredFiles } = e.target;
+        const files = filterReportFiles(unfilteredFiles);
+
+        const connectionStatus: ConnectionStatus = {
+            status: ConnectionTestStates.OK,
+            message: 'Files uploaded successfully',
+        };
+
+        const invalidReportStatus: ConnectionStatus = {
+            status: ConnectionTestStates.FAILED,
+            message: 'Selected directory does not contain a valid report',
+        };
+
+        if (!checkRequiredFiles(files)) {
+            setPerformanceFolderStatus(invalidReportStatus);
+            return;
+        }
+
+        setIsPerformanceUploading(true);
+
+        setPerformanceDataUploadLabel(`${files.length} files selected.`);
+        const response = await uploadLocalFolder(files);
+
+        if (response.status !== 200) {
+            connectionStatus.status = ConnectionTestStates.FAILED;
+            connectionStatus.message = 'Unable to upload selected directory.';
+        }
+
+        if (response.data.status !== ConnectionTestStates.OK) {
+            connectionStatus.status = ConnectionTestStates.FAILED;
+            connectionStatus.message = 'Selected directory does not contain a valid report.';
+        }
+
+        queryClient.clear();
+        setPerformanceDataUploadLabel(`${files.length} files uploaded`);
+        setIsPerformanceUploading(false);
+        setPerformanceFolderStatus(connectionStatus);
+        setReportLocation('local');
+    };
+
     const viewOperation = () => {
         // keeping this here temporarily until proven otherwise
         queryClient.clear();
@@ -111,7 +159,14 @@ const LocalFolderOptions: FC = () => {
                 message: 'Files uploading...',
             });
         }
-    }, [isUploading]);
+
+        if (isUploadingPerformance) {
+            setPerformanceFolderStatus({
+                status: ConnectionTestStates.PROGRESS,
+                message: 'Files uploading...',
+            });
+        }
+    }, [isUploading, isUploadingPerformance]);
 
     return (
         <>
@@ -128,18 +183,72 @@ const LocalFolderOptions: FC = () => {
                     <p>Please use Chrome or Firefox to upload a local report </p>
                 </>
             )}
-            <FormGroup
-                label={<h3>Select local report</h3>}
-                labelFor='text-input'
-                subLabel='Select a local directory containing a report'
-            >
-                <div className='buttons-container'>
+
+            <div>
+                <FormGroup
+                    label={<h3>Select local files</h3>}
+                    subLabel='Select a local directory containing a report'
+                >
+                    <div className='buttons-container'>
+                        <label
+                            className='bp5-file-input'
+                            htmlFor='local-upload'
+                        >
+                            <input
+                                id='local-upload'
+                                type='file'
+                                multiple
+                                /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
+                                // eslint-disable-next-line react/no-unknown-property
+                                directory=''
+                                webkitdirectory=''
+                                disabled={isSafari}
+                                onChange={handleReportDirectoryOpen}
+                            />
+                            <span className='bp5-file-upload-input'>{localUploadLabel}</span>
+                        </label>
+
+                        <FileStatusWrapper>
+                            {(fileProgress) => (
+                                <FileStatusOverlay
+                                    open={
+                                        isUploading ||
+                                        [FileStatus.DOWNLOADING, FileStatus.COMPRESSING, FileStatus.STARTED].includes(
+                                            fileProgress?.status,
+                                        )
+                                    }
+                                    progress={fileProgress}
+                                />
+                            )}
+                        </FileStatusWrapper>
+
+                        {folderStatus && !isUploading && (
+                            <div
+                                className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}
+                            >
+                                <Icon
+                                    className='connection-status-icon'
+                                    icon={ICON_MAP[folderStatus.status]}
+                                    size={20}
+                                    intent={INTENT_MAP[folderStatus.status]}
+                                />
+
+                                <span className='connection-status-text'>{folderStatus.message}</span>
+                            </div>
+                        )}
+                    </div>
+                </FormGroup>
+
+                <FormGroup
+                    label={<h3>Select performance data</h3>}
+                    subLabel='Select a local directory containing performance data (optional)'
+                >
                     <label
                         className='bp5-file-input'
-                        htmlFor='local-upload'
+                        htmlFor='local-performance-upload'
                     >
                         <input
-                            id='local-upload'
+                            id='local-performance-upload'
                             type='file'
                             multiple
                             /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
@@ -147,47 +256,35 @@ const LocalFolderOptions: FC = () => {
                             directory=''
                             webkitdirectory=''
                             disabled={isSafari}
-                            onChange={handleDirectoryOpen}
+                            onChange={handlePerformanceDirectoryOpen}
                         />
-                        <span className='bp5-file-upload-input'>{localUploadLabel}</span>
+                        <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
                     </label>
 
-                    <Button
-                        disabled={!isLocalReportMounted}
-                        onClick={viewOperation}
-                        icon={IconNames.EYE_OPEN}
-                    >
-                        View report
-                    </Button>
-
-                    <FileStatusWrapper>
-                        {(fileProgress) => (
-                            <FileStatusOverlay
-                                open={
-                                    isUploading ||
-                                    [FileStatus.DOWNLOADING, FileStatus.COMPRESSING, FileStatus.STARTED].includes(
-                                        fileProgress?.status,
-                                    )
-                                }
-                                progress={fileProgress}
-                            />
-                        )}
-                    </FileStatusWrapper>
-
-                    {folderStatus && !isUploading && (
-                        <div className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}>
+                    {performanceFolderStatus && !isUploadingPerformance && (
+                        <div
+                            className={`verify-connection-item status-${ConnectionTestStates[performanceFolderStatus.status]}`}
+                        >
                             <Icon
                                 className='connection-status-icon'
-                                icon={ICON_MAP[folderStatus.status]}
+                                icon={ICON_MAP[performanceFolderStatus.status]}
                                 size={20}
-                                intent={INTENT_MAP[folderStatus.status]}
+                                intent={INTENT_MAP[performanceFolderStatus.status]}
                             />
 
-                            <span className='connection-status-text'>{folderStatus.message}</span>
+                            <span className='connection-status-text'>{performanceFolderStatus.message}</span>
                         </div>
                     )}
-                </div>
-            </FormGroup>
+                </FormGroup>
+
+                <Button
+                    disabled={!isLocalReportMounted}
+                    onClick={viewOperation}
+                    icon={IconNames.EYE_OPEN}
+                >
+                    View report
+                </Button>
+            </div>
         </>
     );
 };
