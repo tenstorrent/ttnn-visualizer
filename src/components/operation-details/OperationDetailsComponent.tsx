@@ -199,7 +199,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 }}
                             />
                             <Switch
-                                label='Render memory layout for Tensors'
+                                label='Tensor memory layout overlay'
                                 checked={renderMemoryLayoutPattern}
                                 onChange={() => {
                                     setRenderMemoryLayout(!renderMemoryLayoutPattern);
