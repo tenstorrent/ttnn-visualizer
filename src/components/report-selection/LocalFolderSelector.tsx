@@ -32,13 +32,16 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
     [ConnectionTestStates.OK]: Intent.SUCCESS,
 };
 
+const AXIOS_ERROR_CODE = 'ERR_NETWORK';
+
 const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
 
-    const { uploadLocalFolder, checkRequiredFiles, filterReportFiles } = useLocalConnection();
+    const { uploadLocalFolder, uploadLocalPerformanceFolder, checkRequiredFiles, filterReportFiles } =
+        useLocalConnection();
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploading, setIsUploading] = useState(false);
     const [isUploadingPerformance, setIsPerformanceUploading] = useState(false);
@@ -84,10 +87,13 @@ const LocalFolderOptions: FC = () => {
 
         if (response.status !== 200) {
             connectionStatus.status = ConnectionTestStates.FAILED;
-            connectionStatus.message = 'Unable to upload selected directory.';
+            connectionStatus.message =
+                response.code === AXIOS_ERROR_CODE
+                    ? 'Upload service is not responding'
+                    : 'Unable to upload selected directory.';
         }
 
-        if (response.data.status !== ConnectionTestStates.OK) {
+        if (response?.data?.status !== ConnectionTestStates.OK) {
             connectionStatus.status = ConnectionTestStates.FAILED;
             connectionStatus.message = 'Selected directory does not contain a valid report.';
         }
@@ -125,14 +131,17 @@ const LocalFolderOptions: FC = () => {
         setIsPerformanceUploading(true);
 
         setPerformanceDataUploadLabel(`${files.length} files selected.`);
-        const response = await uploadLocalFolder(files);
+        const response = await uploadLocalPerformanceFolder(files);
 
         if (response.status !== 200) {
             connectionStatus.status = ConnectionTestStates.FAILED;
-            connectionStatus.message = 'Unable to upload selected directory.';
+            connectionStatus.message =
+                response.code === AXIOS_ERROR_CODE
+                    ? 'Upload service is not responding'
+                    : 'Unable to upload selected directory.';
         }
 
-        if (response.data.status !== ConnectionTestStates.OK) {
+        if (response?.data?.status && response?.data?.status !== ConnectionTestStates.OK) {
             connectionStatus.status = ConnectionTestStates.FAILED;
             connectionStatus.message = 'Selected directory does not contain a valid report.';
         }
