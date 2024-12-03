@@ -132,7 +132,7 @@ function L1Plots({
 
             {showL1Small && (
                 <MemoryPlotRenderer
-                    title='Current Summarized L1 Small Report'
+                    title='Summarized L1 Small Report'
                     className={classNames('l1-memory-renderer', {
                         'empty-plot': l1SmallChartData.length === 0,
                     })}

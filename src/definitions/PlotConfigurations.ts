@@ -25,7 +25,7 @@ export const L1SmallRenderConfiguration = {
         b: 40,
         t: 25,
     },
-    title: 'L1 Small Address Space',
+    title: 'L1 Address Space',
 };
 
 export const DRAMRenderConfiguration = {
