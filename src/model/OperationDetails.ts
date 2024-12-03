@@ -18,7 +18,7 @@ import {
 import { BufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { HistoricalTensor, Tensor } from './Graph';
-import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataOverrides } from '../definitions/PlotConfigurations';
+import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import getChartData from '../functions/getChartData';
 
 export class OperationDetails implements Partial<OperationDetailsData> {
@@ -251,7 +251,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
     }
 
     memoryData(bufferType: BufferType = BufferType.L1): {
-        chartData: Partial<PlotData>[];
+        chartData: Partial<PlotDataCustom>[];
         memory: Chunk[];
         fragmentation: FragmentationEntry[];
         condensed: Chunk;

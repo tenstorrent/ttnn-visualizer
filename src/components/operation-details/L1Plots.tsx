@@ -68,12 +68,12 @@ function L1Plots({
         .reverse()[0];
 
     const l1SmallZoomStart = l1SmallChartData
-        .map((op) => op.x)
+        .map((op) => op?.memoryData?.address)
         .flat()
         .sort()[0] as number;
 
     const l1SmallZoomEnd = l1SmallChartData
-        .map((op) => op.x)
+        .map((op) => (op?.memoryData ? op.memoryData.address + op.memoryData.size : 0))
         .flat()
         .sort()
         .reverse()[0] as number;
