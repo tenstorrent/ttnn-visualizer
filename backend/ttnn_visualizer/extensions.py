@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 from flask_socketio import SocketIO
 from flask_static_digest import FlaskStaticDigest
 from flask_sqlalchemy import SQLAlchemy
