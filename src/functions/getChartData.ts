@@ -90,7 +90,7 @@ export default function getChartData(
                     : `
 <span style="color:${color};font-size:20px;">&#9632;</span>
 ${address} (${toHex(address)}) <br>Size: ${formatSize(size)}
-${tensor ? `<br>Tensor ${tensor.id}<br>${tensorMemoryLayout}` : ''}
+${tensor ? `<br>Tensor ${tensor.id}<br>${tensorMemoryLayout || ''}` : ''}
 <extra></extra>`,
 
             hoverlabel: {
