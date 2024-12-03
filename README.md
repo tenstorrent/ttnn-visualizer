@@ -68,9 +68,9 @@ How to [get started](./docs/getting-started.md) with TT-NN Visualizer.
 
 Use [remote querying](./docs/remote-querying.md) instead of syncing the report data to your local file system.
 
-## Examples
+## Sample models
 
-You may test the application using the following example reports.
+You may test the application using the following sample reports.
 
 Unzip the files into their own directories and select them with the local folder selector.
 
