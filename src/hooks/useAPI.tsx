@@ -118,7 +118,10 @@ export interface DeviceData {
 /** @description
  * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
  */
-const fetchAllBuffers = async (bufferType: BufferType | null, deviceId?: number): Promise<BuffersByOperationData[]> => {
+const fetchAllBuffers = async (
+    bufferType: BufferType | null,
+    deviceId: number | null,
+): Promise<BuffersByOperationData[]> => {
     const params = {
         buffer_type: bufferType,
         device_id: deviceId,
@@ -286,7 +289,7 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
     });
 };
 
-export const useBuffers = (bufferType: BufferType, deviceId?: number) => {
+export const useBuffers = (bufferType: BufferType, deviceId: number | null) => {
     return useQuery({
         queryFn: () => fetchAllBuffers(bufferType, deviceId),
         queryKey: ['fetch-all-buffers', bufferType, deviceId],

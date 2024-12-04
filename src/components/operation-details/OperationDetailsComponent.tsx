@@ -198,7 +198,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     setShowCircularBuffer(!showCircularBuffer);
                                 }}
                             />
-                            <Switch
+                            <GlobalSwitch
                                 label='Tensor memory layout overlay'
                                 checked={renderMemoryLayoutPattern}
                                 onChange={() => {

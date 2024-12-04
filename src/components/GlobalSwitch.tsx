@@ -13,6 +13,7 @@ interface GlobalSwitchProps {
     intent?: Intent;
 }
 
+// This exists so that we can properly style intent on the Switch component according to our theme
 function GlobalSwitch({ label, checked, onChange, intent = Intent.PRIMARY }: GlobalSwitchProps) {
     return (
         <Switch
