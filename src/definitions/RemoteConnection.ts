@@ -9,7 +9,8 @@ export interface RemoteConnection {
     username: string;
     host: string;
     port: number;
-    path: string;
+    reportPath: string;
+    performancePath?: string;
     sqliteBinaryPath?: string;
     useRemoteQuerying: boolean;
 }

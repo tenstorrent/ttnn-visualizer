@@ -190,7 +190,7 @@ const LocalFolderOptions: FC = () => {
 
             <div>
                 <FormGroup
-                    label={<h3>Select local files</h3>}
+                    label={<h3>Select report folder</h3>}
                     subLabel='Select a local directory containing a report'
                 >
                     <div className='buttons-container'>
@@ -244,7 +244,7 @@ const LocalFolderOptions: FC = () => {
                 </FormGroup>
 
                 <FormGroup
-                    label={<h3>Select performance data</h3>}
+                    label={<h3>Select performance folder</h3>}
                     subLabel='Select a local directory containing performance data (optional)'
                 >
                     <label

@@ -216,7 +216,7 @@ const RemoteSyncConfigurator: FC = () => {
             </FormGroup>
 
             <FormGroup
-                label={<h3>Select remote folder</h3>}
+                label={<h3>Select model folder</h3>}
                 labelFor='text-input'
                 subLabel='Select folder to sync data from'
             >
@@ -276,15 +276,81 @@ const RemoteSyncConfigurator: FC = () => {
                             />
                         </Tooltip>
                     )}
-
-                    <Button
-                        disabled={!isRemoteReportMounted}
-                        onClick={viewReport}
-                        icon={IconNames.EYE_OPEN}
-                    >
-                        View report
-                    </Button>
                 </RemoteFolderSelector>
+            </FormGroup>
+
+            <FormGroup
+                label={<h3>Select performance folder</h3>}
+                labelFor='text-input'
+                subLabel='Select folder to sync data from'
+            >
+                <RemoteFolderSelector
+                    remoteFolder={selectedRemoteFolder}
+                    remoteFolderList={remoteFolderList}
+                    loading={isSyncingRemoteFolder || isLoadingFolderList}
+                    updatingFolderList={isFetchingFolderStatus}
+                    onSelectFolder={(folder) => {
+                        setSelectedRemoteFolder(folder);
+                    }}
+                >
+                    {!isUsingRemoteQuerying && (
+                        <Tooltip content='Sync remote folder'>
+                            <AnchorButton
+                                icon={IconNames.REFRESH}
+                                loading={isSyncingRemoteFolder}
+                                disabled={
+                                    isSyncingRemoteFolder ||
+                                    isUsingRemoteQuerying ||
+                                    isLoadingFolderList ||
+                                    !selectedRemoteFolder ||
+                                    remoteFolderList?.length === 0
+                                }
+                                onClick={async () => {
+                                    try {
+                                        setIsSyncingRemoteFolder(true);
+                                        const { data: updatedFolder } = await remote.syncRemoteFolder(
+                                            remote.persistentState.selectedConnection,
+                                            selectedRemoteFolder,
+                                        );
+
+                                        const savedRemoteFolders = remote.persistentState.getSavedRemoteFolders(
+                                            remote.persistentState.selectedConnection,
+                                        );
+
+                                        const updatedFolderIndex = savedRemoteFolders.findIndex(
+                                            (f) => f.localPath === selectedRemoteFolder?.localPath,
+                                        );
+
+                                        savedRemoteFolders[updatedFolderIndex] = updatedFolder;
+
+                                        updateSavedRemoteFolders(
+                                            remote.persistentState.selectedConnection,
+                                            savedRemoteFolders,
+                                        );
+
+                                        setSelectedRemoteFolder(savedRemoteFolders[updatedFolderIndex]);
+                                    } catch {
+                                        // eslint-disable-next-line no-alert
+                                        alert('Unable to sync remote folder');
+                                    } finally {
+                                        setIsSyncingRemoteFolder(false);
+                                        setReportLocation('remote');
+                                    }
+                                }}
+                            />
+                        </Tooltip>
+                    )}
+                </RemoteFolderSelector>
+            </FormGroup>
+
+            <FormGroup>
+                <Button
+                    disabled={!isRemoteReportMounted}
+                    onClick={viewReport}
+                    icon={IconNames.EYE_OPEN}
+                >
+                    View report
+                </Button>
             </FormGroup>
         </>
     );

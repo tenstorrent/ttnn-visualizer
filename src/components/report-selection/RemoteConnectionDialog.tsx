@@ -156,14 +156,26 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
 
                 <FormGroup
-                    label='Remote Folder path'
+                    label='Report folder path'
                     labelFor='text-input'
-                    subLabel='Path to the remote folder. E.g.: "$HOME/work/ll-sw"'
+                    subLabel='Path to the remote folder with the report e.g. "$HOME/work/ll-sw"'
                 >
                     <InputGroup
                         key='path'
-                        value={connection.path}
-                        onChange={(e) => setConnection({ ...connection, path: e.target.value })}
+                        value={connection.reportPath}
+                        onChange={(e) => setConnection({ ...connection, reportPath: e.target.value })}
+                    />
+                </FormGroup>
+
+                <FormGroup
+                    label='Performance folder path (optional)'
+                    labelFor='text-input'
+                    subLabel='Path to the remote folder with the performance data  e.g. "$HOME/perf/env-123"'
+                >
+                    <InputGroup
+                        key='path'
+                        value={connection.performancePath}
+                        onChange={(e) => setConnection({ ...connection, performancePath: e.target.value })}
                     />
                 </FormGroup>
 
