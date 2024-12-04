@@ -53,20 +53,6 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
         const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(`/api/operations/${id}`, {
             maxRedirects: 1,
         });
-
-        // TODO: once this processing is moved to the backend, we should remove this
-        operationDetails.inputs = operationDetails.inputs.map((tensor) => ({
-            ...tensor,
-            parsed_memory_config: tensor.memory_config
-                ? (parseMemoryConfig(tensor.memory_config) as MemoryConfig)
-                : null,
-        }));
-        operationDetails.outputs = operationDetails.outputs.map((tensor) => ({
-            ...tensor,
-            parsed_memory_config: tensor.memory_config
-                ? (parseMemoryConfig(tensor.memory_config) as MemoryConfig)
-                : null,
-        }));
         return operationDetails;
     } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
@@ -132,7 +118,10 @@ export interface DeviceData {
 /** @description
  * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
  */
-const fetchAllBuffers = async (bufferType: BufferType | null, deviceId?: number): Promise<BuffersByOperationData[]> => {
+const fetchAllBuffers = async (
+    bufferType: BufferType | null,
+    deviceId: number | null,
+): Promise<BuffersByOperationData[]> => {
     const params = {
         buffer_type: bufferType,
         device_id: deviceId,
@@ -242,7 +231,7 @@ export const useBufferPages = (
     );
 };
 
-export const fetchTensors = async (deviceId?: number): Promise<TensorData[]> => {
+export const fetchTensors = async (deviceId?: number | null): Promise<TensorData[]> => {
     try {
         const { data: tensorList } = await axiosInstance.get<TensorData[]>('/api/tensors', {
             maxRedirects: 1,
@@ -251,10 +240,7 @@ export const fetchTensors = async (deviceId?: number): Promise<TensorData[]> => 
             },
         });
 
-        return tensorList.map((tensor) => ({
-            ...tensor,
-            parsed_memory_config: tensor.memory_config ? parseMemoryConfig(tensor.memory_config) : null,
-        }));
+        return tensorList;
     } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
             if (error.response && error.response.status >= 400 && error.response.status < 500) {
@@ -270,7 +256,7 @@ export const fetchTensors = async (deviceId?: number): Promise<TensorData[]> => 
     return [defaultTensorData];
 };
 
-export const useTensors = (deviceId?: number) => {
+export const useTensors = (deviceId?: number | null) => {
     return useQuery<TensorData[], AxiosError>({
         queryFn: () => fetchTensors(deviceId),
         queryKey: ['get-tensors', deviceId],
@@ -303,7 +289,7 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
     });
 };
 
-export const useBuffers = (bufferType: BufferType, deviceId?: number) => {
+export const useBuffers = (bufferType: BufferType, deviceId: number | null) => {
     return useQuery({
         queryFn: () => fetchAllBuffers(bufferType, deviceId),
         queryKey: ['fetch-all-buffers', bufferType, deviceId],

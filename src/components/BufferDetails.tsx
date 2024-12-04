@@ -2,8 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import { Icon, Intent } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { OperationDescription, TensorData } from '../model/APIData';
@@ -40,35 +38,6 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                             {isValidNumber(lastOperationId)
                                 ? getLastOperation(lastOperationId, operations, tensor)
                                 : 'No consumers for this tensor'}
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <th>Deallocation</th>
-                        <td>
-                            {isValidNumber(deallocationOperationId) ? (
-                                <div>
-                                    Deallocation found in{' '}
-                                    <Link to={`${ROUTES.OPERATIONS}/${deallocationOperationId}`}>
-                                        {deallocationOperationId}{' '}
-                                        {operations.find((operation) => operation.id === deallocationOperationId)?.name}
-                                    </Link>
-                                    <Icon
-                                        className='deallocation-icon'
-                                        icon={IconNames.TICK}
-                                        intent={Intent.SUCCESS}
-                                    />
-                                </div>
-                            ) : (
-                                <>
-                                    Missing deallocation operation
-                                    <Icon
-                                        className='deallocation-icon'
-                                        icon={IconNames.WARNING_SIGN}
-                                        intent={Intent.WARNING}
-                                    />
-                                </>
-                            )}
                         </td>
                     </tr>
 
@@ -113,8 +82,8 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         <td>{layout}</td>
                     </tr>
 
-                    {tensor?.parsed_memory_config
-                        ? Object.entries(tensor.parsed_memory_config).map(([key, value]) => (
+                    {tensor?.memory_config
+                        ? Object.entries(tensor.memory_config).map(([key, value]) => (
                               <MemoryConfigRow
                                   key={key}
                                   header={key}

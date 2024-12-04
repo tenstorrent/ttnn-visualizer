@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import TensorDetailsComponent from './TensorDetailsComponent';
 import { OperationDetails } from '../../model/OperationDetails';
 import 'styles/components/TensorDetailsList.scss';

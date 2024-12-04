@@ -48,12 +48,17 @@
     }
 
     .memory-info {
-        width: 300px;
+        width: 320px;
         display: inline-grid;
         gap: 10px;
         font-weight: lighter;
         position: absolute;
         right: 0;
         grid-template-columns: 1fr 1fr 1fr;
+        padding: 0 5px;
+
+        &.peak {
+            border: 1px solid rgb(207 255 90 / 50%);
+        }
     }
 }

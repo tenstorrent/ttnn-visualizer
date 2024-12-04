@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
 import { PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
 import { HistoricalTensor } from '../model/Graph';
 import { TensorData } from '../model/APIData';
@@ -12,6 +16,17 @@ export const L1RenderConfiguration = {
     },
     title: 'L1 Address Space',
 } as PlotConfiguration;
+
+export const L1SmallRenderConfiguration = {
+    height: 90,
+    margin: {
+        l: 5,
+        r: 5,
+        b: 40,
+        t: 25,
+    },
+    title: 'L1 Address Space',
+};
 
 export const DRAMRenderConfiguration = {
     height: 90,
