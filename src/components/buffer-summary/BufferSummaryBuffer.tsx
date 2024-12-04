@@ -97,7 +97,7 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
     );
 }
 
-const FG_COLOUR = '#000000';
+const FG_COLOUR = 'rgba(0, 0, 0, 0.7)';
 
 function getBackgroundPattern(
     layout: TensorMemoryLayout,
