@@ -3,7 +3,7 @@ from collections import defaultdict
 from typing import List, Optional
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 
 from ttnn_visualizer.models import BufferType, Operation, TensorComparisonRecord
