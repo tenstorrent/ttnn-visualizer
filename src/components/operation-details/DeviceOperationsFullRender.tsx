@@ -6,6 +6,7 @@ import React, { JSX } from 'react';
 import { Icon, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai/index';
+import classNames from 'classnames';
 import { DeviceOperationTypes, Node, NodeType } from '../../model/APIData';
 import 'styles/components/DeviceOperationFullRender.scss';
 import { MemoryLegendElement } from './MemoryLegendElement';
@@ -27,14 +28,17 @@ const DeviceOperationsFullRender: React.FC<{
         const stack: JSX.Element[][] = [];
         const output: JSX.Element[] = [];
         let consecutiveCBsOutput: boolean = false;
-
         operations.forEach((node, index) => {
             const nodeType = node.node_type;
             const memoryDetails: AllocationDetails | undefined = memoryAllocationList.find(
                 (data) => data.id === node.id,
             );
             const memoryInfo = memoryDetails ? (
-                <span className='memory-info monospace '>
+                <span
+                    className={classNames('memory-info monospace ', {
+                        peak: memoryDetails.total_memory === peakMemoryLoad,
+                    })}
+                >
                     <span className='format-numbers'>{formatSize(memoryDetails.total_cb)}</span>
                     <span className='format-numbers'>{formatSize(memoryDetails.total_buffer)}</span>
                     <span className='format-numbers'>{formatSize(memoryDetails.total_memory)}</span>
@@ -63,6 +67,7 @@ const DeviceOperationsFullRender: React.FC<{
                     <Collapsible
                         key={`end-${index}`}
                         label={label}
+                        isOpen
                         collapseClassName={`device-operation function-container ${!hasContent && COLLAPSIBLE_EMPTY_CLASS}`}
                     >
                         <div className='function-content'>{innerContent}</div>

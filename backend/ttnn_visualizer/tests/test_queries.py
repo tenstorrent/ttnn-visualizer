@@ -1,3 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+
+
 import tempfile
 import sqlite3
 import tempfile
