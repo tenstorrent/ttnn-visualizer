@@ -32,3 +32,4 @@ export const fileTransferProgressAtom = atom({
 });
 
 export const selectedDeviceAtom = atom<number | null>(0); // Assumes device_id always uses a zero based index
+export const renderMemoryLayoutAtom = atom<boolean>(false);

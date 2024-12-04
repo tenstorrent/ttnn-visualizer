@@ -46,7 +46,9 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     public deviceOperations: DeviceOperation[] = [];
 
-    constructor(data: OperationDetailsData, operations: OperationDescription[]) {
+    private options: { renderPattern: boolean } = { renderPattern: false };
+
+    constructor(data: OperationDetailsData, operations: OperationDescription[], options?: { renderPattern: boolean }) {
         this.id = data.id;
         this.inputs = data.inputs;
         this.outputs = data.outputs;
@@ -55,6 +57,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.stack_trace = data.stack_trace;
         this.operations = operations;
         this.device_operations = data.device_operations;
+        this.options = options || { renderPattern: false };
 
         this.inputs.forEach((tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
@@ -208,7 +211,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
     }
 
     private getChartData(memory: Chunk[], overrides?: PlotDataOverrides): Partial<PlotData>[] {
-        return getChartData(memory, this.getTensorForAddress.bind(this), overrides);
+        return getChartData(memory, this.getTensorForAddress.bind(this), overrides, this.options);
     }
 
     get memorySizeL1(): number {

@@ -10,8 +10,14 @@ export interface ShardSpec {
 }
 
 export interface MemoryConfig {
-    memory_layout: string;
+    memory_layout: TensorMemoryLayout;
     shard_spec: ShardSpec | string;
+}
+
+export enum TensorMemoryLayout {
+    'INTERLEAVED' = 'TensorMemoryLayout::INTERLEAVED',
+    'HEIGHT_SHARDED' = 'TensorMemoryLayout::HEIGHT_SHARDED',
+    'BLOCK_SHARDED' = 'TensorMemoryLayout::BLOCK_SHARDED',
 }
 
 export type MemoryKeys = 'shard_spec' | 'memory_layout' | 'grid' | 'shape' | 'orientation' | 'halo';
@@ -41,7 +47,7 @@ const parseMemoryConfig = (string: string): MemoryConfig | null => {
             : 'std::nullopt';
 
         return {
-            memory_layout: memoryLayout,
+            memory_layout: memoryLayout as TensorMemoryLayout,
             shard_spec: shardSpec,
         };
     }

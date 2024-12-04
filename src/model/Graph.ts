@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { BufferType } from './BufferType';
+import { MemoryConfig } from '../functions/parseMemoryConfig';
 
 export interface Operation {
     id: number;
@@ -19,9 +20,9 @@ export interface Tensor {
     consumers: number[];
     producerNames: string[];
     consumerNames: string[];
+    memory_config: MemoryConfig | null;
 }
 
-// TODO: if this data proves itself pointless, we should remove it
 export interface HistoricalTensor extends Tensor {
     parentOperationId: number;
     historical: boolean; // will this be used?

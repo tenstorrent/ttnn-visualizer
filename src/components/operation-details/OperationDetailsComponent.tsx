@@ -12,7 +12,13 @@ import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
 import { PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
-import { selectedAddressAtom, selectedDeviceAtom, selectedTensorAtom, showHexAtom } from '../../store/app';
+import {
+    renderMemoryLayoutAtom,
+    selectedAddressAtom,
+    selectedDeviceAtom,
+    selectedTensorAtom,
+    showHexAtom,
+} from '../../store/app';
 import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
@@ -35,6 +41,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const selectedDevice = useAtomValue(selectedDeviceAtom);
     const { data: operations } = useOperationsList();
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
+    const [renderMemoryLayoutPattern, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
     const [showL1Small, setShowL1Small] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
@@ -74,7 +81,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         );
     }
 
-    const details: OperationDetails | null = new OperationDetails(operationDetails, operations);
+    const details: OperationDetails | null = new OperationDetails(operationDetails, operations, {
+        renderPattern: renderMemoryLayoutPattern,
+    });
     const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations);
 
     const l1Small = details.memoryData(BufferType.L1_SMALL);
@@ -187,6 +196,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 disabled={cbChartDataByOperation.size === 0}
                                 onChange={() => {
                                     setShowCircularBuffer(!showCircularBuffer);
+                                }}
+                            />
+                            <Switch
+                                label='Tensor memory layout overlay'
+                                checked={renderMemoryLayoutPattern}
+                                onChange={() => {
+                                    setRenderMemoryLayout(!renderMemoryLayoutPattern);
                                 }}
                             />
 
