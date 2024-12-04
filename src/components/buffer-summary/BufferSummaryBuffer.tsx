@@ -82,8 +82,12 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
                                 Size: {formatSize(buffer.size)}
                                 <br />
                                 {tensor?.id ? `Tensor ${tensor.id}` : ''}
-                                <br />
-                                {tensor?.memory_config?.memory_layout}
+                                {tensor?.memory_config?.memory_layout ? (
+                                    <>
+                                        <br />
+                                        {tensor?.memory_config?.memory_layout}
+                                    </>
+                                ) : null}
                             </strong>
                         </div>
                     }
