@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { defineConfig } from 'vite';
 import path, { join } from 'path';
 import react from '@vitejs/plugin-react';
@@ -5,7 +9,6 @@ import react from '@vitejs/plugin-react';
 import { sassNodeModulesLoadPaths } from '@blueprintjs/node-build-scripts';
 // @ts-expect-error don't have types declaration for legacySassSvgInlinerFactory
 import { legacySassSvgInlinerFactory } from './src/libs/blueprintjs/legacySassSvgInlinerFactory';
-// @ts-ignore not included in the project files in ts-config, which is fine
 import { version } from './package.json';
 
 // https://vitejs.dev/config/
