@@ -4,12 +4,12 @@
 
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useState } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { Buffer } from '../../model/APIData';
 import { formatSize, toHex } from '../../functions/math';
 import { HistoricalTensor } from '../../model/Graph';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
+import { renderMemoryLayoutAtom, selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import { getDimmedColour } from '../../functions/colour';
 import useBufferFocus from '../../hooks/useBufferFocus';
 
@@ -26,15 +26,24 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
     const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
 
+    const showPattern = useAtomValue(renderMemoryLayoutAtom);
+
     const { createToast, resetToasts } = useBufferFocus();
 
     const originalColour = tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address);
     const dimmedColour = originalColour ? getDimmedColour(originalColour) : '#000';
+    const currentColour = selectedTensor && selectedTensor !== tensor?.id ? dimmedColour : originalColour;
 
     const styleProps = {
         width: `${size}%`,
         left: `${position}%`,
-        backgroundColor: selectedTensor && selectedTensor !== tensor?.id ? dimmedColour : originalColour,
+        ...(showPattern
+            ? {
+                  backgroundImage: `repeating-linear-gradient( 45deg, #444cf7, #444cf7 2px, ${currentColour} 2px, ${currentColour} 10px )`,
+              }
+            : {
+                  backgroundColor: currentColour,
+              }),
     };
 
     const clearFocusedBuffer = () => {

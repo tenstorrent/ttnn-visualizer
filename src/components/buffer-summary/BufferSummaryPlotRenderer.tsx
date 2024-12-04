@@ -17,7 +17,7 @@ import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/routes';
 import isValidNumber from '../../functions/isValidNumber';
 import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
-import { selectedDeviceAtom, showHexAtom } from '../../store/app';
+import { renderMemoryLayoutAtom, selectedDeviceAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
@@ -35,6 +35,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const deviceId = useAtomValue(selectedDeviceAtom) || 0;
+    const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [isZoomedIn, setIsZoomedIn] = useState(false);
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const scrollElementRef = useRef(null);
@@ -102,6 +103,14 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                     checked={showHex}
                     onChange={() => {
                         setShowHex(!showHex);
+                    }}
+                />
+
+                <GlobalSwitch
+                    label='Tensor memory layout overlay'
+                    checked={renderMemoryLayout}
+                    onChange={() => {
+                        setRenderMemoryLayout(!renderMemoryLayout);
                     }}
                 />
             </div>
