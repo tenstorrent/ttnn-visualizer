@@ -7,11 +7,13 @@ import { formatSize, toHex } from './math';
 import { BufferPage, Chunk, ColoredChunk, TensorData } from '../model/APIData';
 import { HistoricalTensor } from '../model/Graph';
 import { PlotDataCustom } from '../definitions/PlotConfigurations';
+import { TensorMemoryLayout } from './parseMemoryConfig';
 
 export default function getChartData(
     memory: Chunk[],
     getTensorForAddress: (id: number) => TensorData | HistoricalTensor | null,
     overrides?: { color?: string; colorVariance?: number; hovertemplate?: string },
+    options?: { renderPattern?: boolean },
 ): Partial<PlotDataCustom>[] {
     return memory.map((chunk) => {
         const { address, size } = chunk;
@@ -27,6 +29,41 @@ export default function getChartData(
             color = tensorColor !== undefined ? tensorColor : getBufferColor(address + (overrides?.colorVariance || 0));
         }
 
+        const tensorMemoryLayout = tensor?.memory_config?.memory_layout;
+
+        let pattern = {};
+
+        if (options?.renderPattern) {
+            //  shape options "" | "/" | "\\" | "x" | "-" | "|" | "+" | ".";
+            if (tensorMemoryLayout === TensorMemoryLayout.INTERLEAVED) {
+                pattern = {
+                    shape: '.',
+                    fillmode: 'overlay',
+                    size: 4,
+                    fgcolor: '#000000',
+                    fgopacity: 0.3,
+                };
+            }
+            if (tensorMemoryLayout === TensorMemoryLayout.BLOCK_SHARDED) {
+                pattern = {
+                    shape: '+',
+                    fillmode: 'overlay',
+                    size: 6,
+                    fgcolor: '#000000',
+                    fgopacity: 0.2,
+                };
+            }
+            if (tensorMemoryLayout === TensorMemoryLayout.HEIGHT_SHARDED) {
+                pattern = {
+                    shape: '|',
+                    fillmode: 'overlay',
+                    size: 6,
+                    fgcolor: '#000000',
+                    fgopacity: 0.2,
+                };
+            }
+        }
+
         return {
             x: [address + size / 2],
             y: [1],
@@ -39,6 +76,7 @@ export default function getChartData(
                     opacity: 0,
                     simplify: false,
                 },
+                pattern,
             },
             memoryData: {
                 address,
@@ -52,7 +90,7 @@ export default function getChartData(
                     : `
 <span style="color:${color};font-size:20px;">&#9632;</span>
 ${address} (${toHex(address)}) <br>Size: ${formatSize(size)}
-${tensor ? `<br><br>Tensor ${tensor.id}` : ''}
+${tensor ? `<br>Tensor ${tensor.id}<br>${tensorMemoryLayout || ''}` : ''}
 <extra></extra>`,
 
             hoverlabel: {
