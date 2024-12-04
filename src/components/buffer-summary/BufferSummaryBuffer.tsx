@@ -12,6 +12,7 @@ import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { renderMemoryLayoutAtom, selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import { getDimmedColour } from '../../functions/colour';
 import useBufferFocus from '../../hooks/useBufferFocus';
+import { TensorMemoryLayout } from '../../functions/parseMemoryConfig';
 
 interface BufferSummaryBufferProps {
     buffer: Buffer;
@@ -30,17 +31,16 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
 
     const { createToast, resetToasts } = useBufferFocus();
 
+    const tensorMemoryLayout = tensor?.memory_config?.memory_layout;
     const originalColour = tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address);
     const dimmedColour = originalColour ? getDimmedColour(originalColour) : '#000';
-    const currentColour = selectedTensor && selectedTensor !== tensor?.id ? dimmedColour : originalColour;
+    const currentColour = (selectedTensor && selectedTensor !== tensor?.id ? dimmedColour : originalColour) ?? '#000';
 
     const styleProps = {
         width: `${size}%`,
         left: `${position}%`,
-        ...(showPattern
-            ? {
-                  backgroundImage: `repeating-linear-gradient( 45deg, #444cf7, #444cf7 2px, ${currentColour} 2px, ${currentColour} 10px )`,
-              }
+        ...(showPattern && tensorMemoryLayout
+            ? getBackgroundPattern(tensorMemoryLayout, currentColour)
             : {
                   backgroundColor: currentColour,
               }),
@@ -95,6 +95,36 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
             ) : null}
         </div>
     );
+}
+
+const FG_COLOUR = '#000000';
+
+function getBackgroundPattern(
+    layout: TensorMemoryLayout,
+    colour: string,
+): { backgroundImage?: string; backgroundSize?: string } {
+    let pattern = {};
+
+    if (layout === TensorMemoryLayout.INTERLEAVED) {
+        pattern = {
+            backgroundImage: `radial-gradient(${FG_COLOUR} 0.8px, ${colour} 0.8px)`,
+            backgroundSize: '4px 4px',
+        };
+    }
+    if (layout === TensorMemoryLayout.BLOCK_SHARDED) {
+        pattern = {
+            backgroundImage: `linear-gradient(${FG_COLOUR} 0.4px, transparent 0.4px), linear-gradient(to right, ${FG_COLOUR} 0.4px, ${colour} 0.4px)`,
+            backgroundSize: '7px 7px',
+        };
+    }
+    if (layout === TensorMemoryLayout.HEIGHT_SHARDED) {
+        pattern = {
+            backgroundSize: '6px',
+            backgroundImage: `repeating-linear-gradient(to right, ${FG_COLOUR}, ${FG_COLOUR} 0.4px, ${colour} 0.4px, ${colour})`,
+        };
+    }
+
+    return pattern;
 }
 
 export default BufferSummaryBuffer;
