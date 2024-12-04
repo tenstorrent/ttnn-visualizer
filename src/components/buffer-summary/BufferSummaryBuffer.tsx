@@ -74,10 +74,17 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
                 <Tooltip
                     content={
                         <div>
-                            {buffer.address} ({toHex(buffer.address)})<br />
-                            Size: {formatSize(buffer.size)}
-                            <br />
-                            {tensor?.id ? `Tensor ${tensor.id}` : ''}
+                            <strong>
+                                <span style={{ fontSize: '20px', color: currentColour, marginRight: '2px' }}>
+                                    &#9632;
+                                </span>
+                                {buffer.address} ({toHex(buffer.address)})<br />
+                                Size: {formatSize(buffer.size)}
+                                <br />
+                                {tensor?.id ? `Tensor ${tensor.id}` : ''}
+                                <br />
+                                {tensor?.memory_config?.memory_layout}
+                            </strong>
                         </div>
                     }
                     position={PopoverPosition.TOP}
