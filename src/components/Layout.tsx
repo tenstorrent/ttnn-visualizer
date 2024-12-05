@@ -28,8 +28,8 @@ function Layout() {
     return (
         <div className={Classes.DARK}>
             <Helmet
-                defaultTitle='TTNN Visualizer'
-                titleTemplate='%s | TTNN Visualizer'
+                defaultTitle='TT-NN Visualizer'
+                titleTemplate='%s | TT-NN Visualizer'
             >
                 <meta charSet='utf-8' />
             </Helmet>
