@@ -77,7 +77,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
             </Tooltip>
 
             <RemoteConnectionDialog
-                key={`${selectedConnection?.name}${selectedConnection?.host}${selectedConnection?.port}${selectedConnection?.path}`}
+                key={`${selectedConnection?.name}${selectedConnection?.host}${selectedConnection?.port}${selectedConnection?.reportPath}`}
                 open={isEditdialogOpen}
                 onAddConnection={(updatedConnection) => {
                     setIsEditDialogOpen(false);
@@ -106,7 +106,7 @@ const formatConnectionString = (connection?: RemoteConnection) => {
         return '(No connection)';
     }
 
-    return `${connection.name} - ssh://${connection.host}:${connection.port}/${connection.path.replace(/^\//gi, '')}`;
+    return `${connection.name} - ssh://${connection.host}:${connection.port}/${connection?.reportPath?.replace(/^\//gi, '')}`;
 };
 
 const filterRemoteConnections = (query: string, connection: RemoteConnection) => {

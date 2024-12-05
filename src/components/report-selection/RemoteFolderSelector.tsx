@@ -27,7 +27,7 @@ const formatRemoteFolderName = (
         return 'n/a';
     }
 
-    return connection?.name ?? folder.remotePath.replace(selectedConnection.path, '');
+    return connection?.name ?? folder.remotePath.replace(selectedConnection.reportPath, '');
 };
 
 const getTestName = (folder: RemoteFolder) => {

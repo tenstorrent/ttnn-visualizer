@@ -36,10 +36,16 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     buttonLabel = 'Add connection',
     remoteConnection,
 }) => {
-    const defaultConnection = remoteConnection ?? { name: '', host: '', port: 22, path: '', username: '' };
+    const defaultConnection = remoteConnection ?? {
+        name: '',
+        host: '',
+        port: 22,
+        reportPath: '',
+        username: '',
+    };
     const defaultConnectionTests: ConnectionStatus[] = [
         { status: ConnectionTestStates.IDLE, message: 'Test connection' },
-        { status: ConnectionTestStates.IDLE, message: 'Test remote folder path' },
+        { status: ConnectionTestStates.IDLE, message: 'Test report folder path' },
     ];
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
@@ -64,10 +70,14 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     const testConnectionStatus = async () => {
         setIsTestingconnection(true);
 
-        const sshProgressStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing connection' };
-        const folderProgressStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing remote folder path' };
+        const sshStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing connection' };
+        const reportFolderStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing report folder path' };
+        const performanceFolderStatus = {
+            status: ConnectionTestStates.PROGRESS,
+            message: 'Testing performance folder path',
+        };
 
-        setConnectionTests([sshProgressStatus, folderProgressStatus]);
+        setConnectionTests([sshStatus, reportFolderStatus, performanceFolderStatus]);
 
         try {
             const statuses = await testConnection(connection);
@@ -76,7 +86,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
             // TODO: Look at error handling
             setConnectionTests([
                 { status: ConnectionTestStates.FAILED, message: 'Connection failed' },
-                { status: ConnectionTestStates.FAILED, message: 'Remote folder path failed' },
+                { status: ConnectionTestStates.FAILED, message: 'Report folder path failed' },
             ]);
         } finally {
             setIsTestingconnection(false);
@@ -215,12 +225,12 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                 <fieldset>
                     <legend>Test Connection</legend>
-                    {connectionTests.map((v) => {
+                    {connectionTests.map((test, index) => {
                         return (
                             <ConnectionTestMessage
-                                key={v.message}
-                                status={v.status}
-                                message={v.message}
+                                key={`${test.message}-${index}`}
+                                status={test.status}
+                                message={test.message}
                             />
                         );
                     })}
