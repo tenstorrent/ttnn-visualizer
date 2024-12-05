@@ -536,15 +536,23 @@ def test_remote_folder():
     # Test SSH Connection
     try:
         get_client(connection)
-        add_status(ConnectionTestStates.OK.value, "SSH connection established.")
+        add_status(ConnectionTestStates.OK.value, "SSH connection established")
     except RemoteConnectionException as e:
         add_status(ConnectionTestStates.FAILED.value, e.message)
 
     # Test Directory Configuration
     if not has_failures():
         try:
-            check_remote_path_exists(connection)
-            add_status(ConnectionTestStates.OK.value, "Remote folder path exists.")
+            check_remote_path_exists(connection, 'reportPath')
+            add_status(ConnectionTestStates.OK.value, "Report folder path exists")
+        except RemoteConnectionException as e:
+            add_status(ConnectionTestStates.FAILED.value, e.message)
+
+    # Test Directory Configuration (perf)
+    if not has_failures() and connection.performancePath:
+        try:
+            check_remote_path_exists(connection, 'performancePath')
+            add_status(ConnectionTestStates.OK.value, "Performance folder path exists")
         except RemoteConnectionException as e:
             add_status(ConnectionTestStates.FAILED.value, e.message)
 

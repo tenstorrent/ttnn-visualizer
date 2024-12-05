@@ -167,7 +167,8 @@ class RemoteConnection(SerializeableModel):
     username: str
     host: str
     port: int = Field(ge=1, le=65535)
-    path: str
+    reportPath: str
+    performancePath: Optional[str] = None
     sqliteBinaryPath: Optional[str] = None
     useRemoteQuerying: bool = False
 

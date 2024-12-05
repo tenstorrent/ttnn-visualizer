@@ -203,7 +203,7 @@ def read_remote_file(
         if remote_path:
             path = Path(remote_path)
         else:
-            path = Path(remote_connection.path)
+            path = Path(remote_connection.reportPath)
 
         logger.info(f"Opening remote file {path}")
         directory_path = str(path.parent)
@@ -227,7 +227,7 @@ def check_remote_path_for_reports(remote_connection):
     """Check the remote path for config files."""
     ssh_client = get_client(remote_connection)
     remote_config_paths = find_folders_by_files(
-        ssh_client, remote_connection.path, [TEST_CONFIG_FILE]
+        ssh_client, remote_connection.reportPath, [TEST_CONFIG_FILE]
     )
     if not remote_config_paths:
         raise NoProjectsException(
@@ -237,15 +237,15 @@ def check_remote_path_for_reports(remote_connection):
 
 
 @remote_exception_handler
-def check_remote_path_exists(remote_connection: RemoteConnection):
+def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str):
     client = get_client(remote_connection)
     sftp = client.open_sftp()
     # Attempt to list the directory to see if it exists
     try:
-        sftp.stat(remote_connection.path)
+        sftp.stat(getattr(remote_connection, path_key))
     except IOError as e:
         # Directory does not exist or is inaccessible
-        message = f"Directory does not exist or cannot be accessed: {str(e)}"
+        message = f"Directory does not exist or cannot be accessed"
         logger.error(message)
         raise RemoteConnectionException(
             message=message, status=ConnectionTestStates.FAILED
@@ -279,10 +279,10 @@ def get_remote_report_folders(
     """Return a list of remote folders containing a config.json file."""
     client = get_client(remote_connection)
     remote_config_paths = find_folders_by_files(
-        client, remote_connection.path, [TEST_CONFIG_FILE]
+        client, remote_connection.reportPath, [TEST_CONFIG_FILE]
     )
     if not remote_config_paths:
-        error = f"No projects found at {remote_connection.path}"
+        error = f"No projects found at {remote_connection.reportPath}"
         logger.info(error)
         raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
     remote_folder_data = []
