@@ -66,13 +66,14 @@ const LocalFolderOptions: FC = () => {
     const { uploadLocalFolder, uploadLocalPerformanceFolder, checkRequiredFiles, filterReportFiles } =
         useLocalConnection();
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
-    const [isUploading, setIsUploading] = useState(false);
+    const [isUploadingReport, setIsUploadingReport] = useState(false);
     const [isUploadingPerformance, setIsPerformanceUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
     const [performanceFolderStatus, setPerformanceFolderStatus] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
-    const isLocalReportMounted = !isUploading && reportLocation === 'local' && tabSession?.active_report;
+    const isLocalReportMounted =
+        !isUploadingReport && !isUploadingPerformance && reportLocation === 'local' && tabSession?.active_report;
 
     /**
      * This is a temporrary solution until we support Safari
@@ -95,7 +96,7 @@ const LocalFolderOptions: FC = () => {
 
         let connectionStatus = connectionOkStatus;
 
-        setIsUploading(true);
+        setIsUploadingReport(true);
         setLocalUploadLabel(`${files.length} files selected.`);
 
         const response = await uploadLocalFolder(files);
@@ -110,7 +111,7 @@ const LocalFolderOptions: FC = () => {
         }
 
         queryClient.clear();
-        setIsUploading(false);
+        setIsUploadingReport(false);
         setFolderStatus(connectionStatus);
     };
 
@@ -157,7 +158,7 @@ const LocalFolderOptions: FC = () => {
     };
 
     useEffect(() => {
-        if (isUploading) {
+        if (isUploadingReport) {
             setFolderStatus({
                 status: ConnectionTestStates.PROGRESS,
                 message: 'Files uploading...',
@@ -170,7 +171,7 @@ const LocalFolderOptions: FC = () => {
                 message: 'Files uploading...',
             });
         }
-    }, [isUploading, isUploadingPerformance]);
+    }, [isUploadingReport, isUploadingPerformance]);
 
     return (
         <>
@@ -190,7 +191,7 @@ const LocalFolderOptions: FC = () => {
 
             <div>
                 <FormGroup
-                    label={<h3>Select report folder</h3>}
+                    label={<h3>Report folder</h3>}
                     subLabel='Select a local directory containing a report'
                 >
                     <div className='buttons-container'>
@@ -216,7 +217,7 @@ const LocalFolderOptions: FC = () => {
                             {(fileProgress) => (
                                 <FileStatusOverlay
                                     open={
-                                        isUploading ||
+                                        isUploadingReport ||
                                         [FileStatus.DOWNLOADING, FileStatus.COMPRESSING, FileStatus.STARTED].includes(
                                             fileProgress?.status,
                                         )
@@ -226,7 +227,7 @@ const LocalFolderOptions: FC = () => {
                             )}
                         </FileStatusWrapper>
 
-                        {folderStatus && !isUploading && (
+                        {folderStatus && !isUploadingReport && (
                             <div
                                 className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}
                             >
@@ -244,7 +245,7 @@ const LocalFolderOptions: FC = () => {
                 </FormGroup>
 
                 <FormGroup
-                    label={<h3>Select performance folder</h3>}
+                    label={<h3>Performance data folder</h3>}
                     subLabel='Select a local directory containing performance data (optional)'
                 >
                     <label
