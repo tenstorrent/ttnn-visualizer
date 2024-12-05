@@ -111,7 +111,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
             <DialogBody>
                 <FormGroup
                     label='Name'
-                    labelFor='text-input'
                     subLabel='Connection name'
                 >
                     <InputGroup
@@ -123,7 +122,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
                 <FormGroup
                     label='SSH Host'
-                    labelFor='text-input'
                     subLabel='SSH host name. E.g.: localhost'
                 >
                     <InputGroup
@@ -134,7 +132,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
                 <FormGroup
                     label='Username'
-                    labelFor='text-input'
                     subLabel='Username to connect with'
                 >
                     <InputGroup
@@ -147,7 +144,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
                 <FormGroup
                     label='SSH Port'
-                    labelFor='text-input'
                     subLabel='Port to use for the SSH connection. E.g.: port 22'
                 >
                     <InputGroup
@@ -167,7 +163,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                 <FormGroup
                     label='Report folder path'
-                    labelFor='text-input'
                     subLabel='Path to the remote folder with the report e.g. "$HOME/work/ll-sw"'
                 >
                     <InputGroup
@@ -179,7 +174,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                 <FormGroup
                     label='Performance folder path (optional)'
-                    labelFor='text-input'
                     subLabel='Path to the remote folder with the performance data  e.g. "$HOME/perf/env-123"'
                 >
                     <InputGroup
@@ -202,7 +196,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                         <FormGroup
                             label='Remote SQLite Binary Location'
-                            labelFor='text-input'
                             subLabel='SQLite Binary Location'
                         >
                             <InputGroup

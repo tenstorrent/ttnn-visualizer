@@ -8,8 +8,8 @@ import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
-import useRemoteConnection from '../../hooks/useRemote';
 import { isEqual } from '../../functions/math';
+import useRemoteConnection from '../../hooks/useRemote';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
@@ -52,6 +52,7 @@ const remoteFolderRenderer =
     ): ItemRenderer<RemoteFolder> =>
     (folder, { handleClick, modifiers }) => {
         const { persistentState } = useRemoteConnection();
+        const isUsingRemoteQuerying = persistentState.selectedConnection?.useRemoteQuerying;
 
         if (!modifiers.matchesPredicate) {
             return null;
@@ -101,7 +102,7 @@ const remoteFolderRenderer =
         const getLabelElement = () => (
             <>
                 <span className='test-name'>{getTestName(folder)}</span>
-                {statusIcon}
+                {!isUsingRemoteQuerying && statusIcon}
             </>
         );
 

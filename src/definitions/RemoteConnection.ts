@@ -18,9 +18,8 @@ export interface RemoteConnection {
 export interface RemoteFolder {
     testName: string;
     remotePath: string;
-    localPath: string;
     lastModified: number;
-    lastSynced?: number;
+    lastSynced?: number | null;
 }
 
 export interface SyncRemoteFolder {

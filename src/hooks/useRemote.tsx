@@ -38,7 +38,7 @@ const useRemoteConnection = () => {
         return connectionTestStates;
     };
 
-    const listRemoteFolders = async (connection?: RemoteConnection) => {
+    const listReportFolders = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
@@ -49,6 +49,34 @@ const useRemoteConnection = () => {
         );
 
         return response.data;
+    };
+
+    const listPerformanceFolders = (connection?: RemoteConnection): RemoteFolder[] => {
+        if (!connection || !connection.host || !connection.port) {
+            throw new Error('No connection provided');
+        }
+
+        return [
+            {
+                lastModified: 1721741616,
+                lastSynced: null,
+                remotePath: '/home/ctr-dblundell/perf/SEG_ENCODER/2024_11_29',
+                testName: 'SEG_ENCODER/2024_11_29',
+            },
+            {
+                lastModified: 1721741616,
+                lastSynced: null,
+                remotePath: '/home/ctr-dblundell/perf/SEG_ENCODER/2024_12_05',
+                testName: 'SEG_ENCODER/2024_11_29',
+            },
+        ];
+
+        // const response = await axiosInstance.post<RemoteFolder[]>(
+        //     `${import.meta.env.VITE_API_ROOT}/remote/performance`,
+        //     connection,
+        // );
+
+        // return response.data;
     };
 
     const syncRemoteFolder = async (connection?: RemoteConnection, remoteFolder?: RemoteFolder) => {
@@ -123,7 +151,8 @@ const useRemoteConnection = () => {
     return {
         testConnection,
         syncRemoteFolder,
-        listRemoteFolders,
+        listReportFolders,
+        listPerformanceFolders,
         mountRemoteFolder,
         fetchSqlitePath,
         persistentState,
