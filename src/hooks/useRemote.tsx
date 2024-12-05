@@ -67,10 +67,11 @@ const useRemoteConnection = () => {
                 lastModified: 1721741616,
                 lastSynced: null,
                 remotePath: '/home/ctr-dblundell/perf/SEG_ENCODER/2024_12_05',
-                testName: 'SEG_ENCODER/2024_11_29',
+                testName: '2024_12_05',
             },
         ];
 
+        // TODO: Fetch properly from the API
         // const response = await axiosInstance.post<RemoteFolder[]>(
         //     `${import.meta.env.VITE_API_ROOT}/remote/performance`,
         //     connection,
