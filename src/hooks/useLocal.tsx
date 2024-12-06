@@ -20,9 +20,9 @@ const useLocalConnection = () => {
         const fileArray = Array.from(files) as FileWithRelativePath[];
 
         // Filter out files in the excluded folders
-        const filteredFiles = fileArray.filter((file) => {
-            return !excludeFolders.some((folder) => file.webkitRelativePath?.includes(`/${folder}/`));
-        });
+        const filteredFiles = fileArray.filter(
+            (file) => !excludeFolders.some((folder) => file.webkitRelativePath?.includes(`/${folder}/`)),
+        );
 
         // Create a new DataTransfer object to hold the filtered files
         const dataTransfer = new DataTransfer();
@@ -48,6 +48,7 @@ const useLocalConnection = () => {
 
     const uploadLocalFolder = async (files: FileList) => {
         const formData = new FormData();
+
         Array.from(files).forEach((f) => {
             formData.append('files', f);
         });
@@ -74,6 +75,7 @@ const useLocalConnection = () => {
 
     const uploadLocalPerformanceFolder = async (files: FileList) => {
         const formData = new FormData();
+
         Array.from(files).forEach((f) => {
             formData.append('files', f);
         });

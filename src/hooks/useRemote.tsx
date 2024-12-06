@@ -116,15 +116,14 @@ const useRemoteConnection = () => {
         set selectedConnection(connection: RemoteConnection | undefined) {
             setAppConfig('selectedConnection', JSON.stringify(connection ?? null));
         },
-        getSavedReportFolders: (connection?: RemoteConnection) => {
-            return JSON.parse(getAppConfig(`${connection?.name} - reportFolders`) ?? '[]') as RemoteFolder[];
-        },
+        getSavedReportFolders: (connection?: RemoteConnection) =>
+            JSON.parse(getAppConfig(`${connection?.name} - reportFolders`) ?? '[]') as RemoteFolder[],
+
         setSavedReportFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
             setAppConfig(`${connection?.name} - reportFolders`, JSON.stringify(folders));
         },
-        getSavedPerformanceFolders: (connection?: RemoteConnection) => {
-            return JSON.parse(getAppConfig(`${connection?.name} - performanceFolders`) ?? '[]') as RemoteFolder[];
-        },
+        getSavedPerformanceFolders: (connection?: RemoteConnection) =>
+            JSON.parse(getAppConfig(`${connection?.name} - performanceFolders`) ?? '[]') as RemoteFolder[],
         setSavedPerformanceFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
             setAppConfig(`${connection?.name} - performanceFolders`, JSON.stringify(folders));
         },
