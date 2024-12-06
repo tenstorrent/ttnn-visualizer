@@ -90,6 +90,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                 buttonLabel='Save connection'
                 remoteConnection={selectedConnection}
             />
+
             <Button
                 icon={IconNames.LOCATE}
                 disabled={disabled || !selectedConnection}
