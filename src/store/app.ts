@@ -28,7 +28,7 @@ export const fileTransferProgressAtom = atom<FileProgress>({
     numberOfFiles: 0,
     percentOfCurrent: 0,
     finishedFiles: 0,
-    status: FileStatus.STARTED,
+    status: FileStatus.INACTIVE,
 });
 
 export const selectedDeviceAtom = atom<number | null>(0); // Assumes device_id always uses a zero based index
