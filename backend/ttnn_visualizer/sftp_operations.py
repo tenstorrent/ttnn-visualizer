@@ -167,6 +167,7 @@ def download_file_with_progress(
                 finished_files=finished_files,
                 status=FileStatus.DOWNLOADING,
             )
+            emit_file_status(progress, sid)
 
         # Perform the download
         sftp.get(remote_path, str(local_path), callback=download_progress_callback)
