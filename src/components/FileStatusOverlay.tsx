@@ -18,19 +18,23 @@ const FileStatusOverlay: React.FC<FileTransferOverlayProps> = () => {
     const { currentFileName, finishedFiles, numberOfFiles, percentOfCurrent, status } = progress;
     return (
         <Overlay
-            isOpen={[FileStatus.STARTED, FileStatus.COMPRESSING, FileStatus.DOWNLOADING].includes(status)}
+            isOpen={[FileStatus.STARTED, FileStatus.COMPRESSING, FileStatus.DOWNLOADING, FileStatus.UPLOADING].includes(
+                status,
+            )}
             hideCloseButton
             canEscapeKeyClose={false}
             canOutsideClickClose={false}
         >
             <div className='overlay'>
                 <h2>File Transfer Progress</h2>
-                <p>Current File: {currentFileName}</p>
-                <p>
-                    Files Transferred: {finishedFiles}/{numberOfFiles}
-                </p>
+                {currentFileName && <p>Current File: {currentFileName}</p>}
+                {numberOfFiles && (
+                    <p>
+                        Files Transferred: {finishedFiles}/{numberOfFiles}
+                    </p>
+                )}
                 <p>Current File Progress: {formatPercentage(percentOfCurrent)}%</p>
-                <p>Status: {status}</p>
+                {status && <p>Status: {status.valueOf()}</p>}
             </div>
 
             <ProgressBar progress={percentOfCurrent / 100} />
