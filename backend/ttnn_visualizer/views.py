@@ -364,7 +364,7 @@ def get_devices(session: TabSession):
 
 
 @api.route(
-    "/local/upload",
+    "/local/upload/report",
     methods=[
         "POST",
     ],
@@ -395,7 +395,6 @@ def create_upload_files():
         if missing_files:
             logger.warning(f"Missing required files: {', '.join(missing_files)}")
             return False
-
         return True
 
     def get_report_name_from_files(files):
@@ -505,7 +504,7 @@ def test_remote_folder():
     # Test Directory Configuration (perf)
     if not has_failures() and connection.performancePath:
         try:
-            check_remote_path_exists(connection, 'performancePath')
+            check_remote_path_exists(connection, "performancePath")
             add_status(ConnectionTestStates.OK.value, "Performance folder path exists")
         except RemoteConnectionException as e:
             add_status(ConnectionTestStates.FAILED.value, e.message)
