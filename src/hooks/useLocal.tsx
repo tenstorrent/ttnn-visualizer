@@ -16,6 +16,28 @@ export interface UploadProgress {
 type FileWithRelativePath = File & { webkitRelativePath?: string };
 
 const useLocalConnection = () => {
+    /**
+     * Retrieves the top level folder name from an array of uploaded files
+     * @param files
+     */
+    function getUploadedFolderName(files: FileList): string | null {
+        const fileArray = Array.from(files) as FileWithRelativePath[];
+        const relativePaths = fileArray.map((file) => file.webkitRelativePath);
+
+        if (relativePaths.length === 0) {
+            return null;
+        }
+
+        // Find the common root folder
+        const commonPath = relativePaths.reduce((common, path) => {
+            const commonSegments = common.split('/').filter((segment, index) => segment === path.split('/')[index]);
+            return commonSegments.join('/');
+        });
+
+        const folderSegments = commonPath.split('/');
+        return folderSegments.length >= 1 ? folderSegments[folderSegments.length - 1] : null;
+    }
+
     function filterReportFiles(files: FileList, excludeFolders: string[] = ['tensors']): FileList {
         // Convert FileList to an array
         const fileArray = Array.from(files) as FileWithRelativePath[];
@@ -33,7 +55,30 @@ const useLocalConnection = () => {
         return dataTransfer.files;
     }
 
-    const checkRequiredFiles = (files: FileList): boolean => {
+    const checkRequiredProfilerFiles = (files: FileList): boolean => {
+        // Required profiler files, including a pattern for `ops_perf_results`
+        const requiredFiles = ['profile_log_device.csv', 'tracy_profile_log_host.tracy'];
+        const opsPerfPrefix = 'ops_perf_results';
+
+        const fileSet = new Set<string>();
+
+        Array.from(files).forEach((file) => {
+            const pathParts = file.webkitRelativePath.split('/');
+            if (pathParts.length === 2) {
+                fileSet.add(pathParts[1]);
+            }
+        });
+
+        // Ensure all required files are present
+        const hasRequiredFiles = requiredFiles.every((file) => fileSet.has(file));
+
+        // Check for at least one `ops_perf_results` file
+        const hasOpsPerfFile = Array.from(fileSet).some((fileName) => fileName.startsWith(opsPerfPrefix));
+
+        return hasRequiredFiles && hasOpsPerfFile;
+    };
+
+    const checkRequiredReportFiles = (files: FileList): boolean => {
         const requiredFiles = ['db.sqlite', 'config.json'];
         const fileSet = new Set<string>();
 
@@ -86,13 +131,19 @@ const useLocalConnection = () => {
             });
     };
 
-    const uploadLocalPerformanceFolder = async (files: FileList) => {
+    const uploadLocalPerformanceFolder = async (files: FileList, uploadedReportName: string | null) => {
         const formData = new FormData();
         const store = getDefaultStore();
+
+        if (!uploadedReportName) {
+            throw new Error('Report name required for profiler file uploading');
+        }
 
         Array.from(files).forEach((f) => {
             formData.append('files', f);
         });
+
+        formData.append('reportName', uploadedReportName);
 
         return axiosInstance
             .post(`${import.meta.env.VITE_API_ROOT}/local/upload/profile`, formData, {
@@ -105,8 +156,8 @@ const useLocalConnection = () => {
                         const progress = Math.round((event.loaded * 100) / event.total);
                         store.set(fileTransferProgressAtom, {
                             percentOfCurrent: progress,
-                            currentFileName: '', // No filename for batch uploads; customize if needed
-                            finishedFiles: 0, // Update dynamically for partial uploads if necessary
+                            currentFileName: '',
+                            finishedFiles: 0,
                             numberOfFiles: files.length,
                             status: FileStatus.UPLOADING,
                         });
@@ -126,7 +177,9 @@ const useLocalConnection = () => {
     };
 
     return {
-        checkRequiredFiles,
+        getUploadedFolderName,
+        checkRequiredReportFiles,
+        checkRequiredProfilerFiles,
         uploadLocalFolder,
         uploadLocalPerformanceFolder,
         filterReportFiles,

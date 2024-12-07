@@ -41,6 +41,11 @@ const invalidReportStatus: ConnectionStatus = {
     message: 'Selected directory does not contain a valid report',
 };
 
+const invalidProfilerStatus: ConnectionStatus = {
+    status: ConnectionTestStates.FAILED,
+    message: 'Selected directory is not a valid profiler run',
+};
+
 const directoryErrorStatus: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
     message: 'Selected directory does not contain a valid report.',
@@ -51,9 +56,6 @@ const connectionFailedStatus: ConnectionStatus = {
     message: 'Unable to upload selected directory.',
 };
 
-// TODO Validate target report for performance data
-// We need to validate that either a report is uploaded already to attach the profiler directory
-// or ensure that there is already an active report
 const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
@@ -64,12 +66,20 @@ const LocalFolderOptions: FC = () => {
         initialData: null,
     });
 
-    const { uploadLocalFolder, uploadLocalPerformanceFolder, checkRequiredFiles, filterReportFiles } =
-        useLocalConnection();
+    const {
+        uploadLocalFolder,
+        uploadLocalPerformanceFolder,
+        checkRequiredReportFiles,
+        checkRequiredProfilerFiles,
+        filterReportFiles,
+        getUploadedFolderName,
+    } = useLocalConnection();
+
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
     const [isUploadingPerformance, setIsPerformanceUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
+    const [uploadedReportName, setUploadedReportName] = useState<string | null>(null);
     const [performanceFolderStatus, setPerformanceFolderStatus] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
@@ -90,7 +100,7 @@ const LocalFolderOptions: FC = () => {
         const { files: unfilteredFiles } = e.target;
         const files = filterReportFiles(unfilteredFiles);
 
-        if (!checkRequiredFiles(files)) {
+        if (!checkRequiredReportFiles(files)) {
             setFolderStatus(invalidReportStatus);
             return;
         }
@@ -100,6 +110,7 @@ const LocalFolderOptions: FC = () => {
         setIsUploadingReport(true);
         setLocalUploadLabel(`${files.length} files selected.`);
 
+        // TODO Get the report name from the successfully uploaded files
         const response = await uploadLocalFolder(files);
 
         if (response.status !== 200) {
@@ -107,6 +118,7 @@ const LocalFolderOptions: FC = () => {
         } else if (response?.data?.status !== ConnectionTestStates.OK) {
             connectionStatus = directoryErrorStatus;
         } else {
+            setUploadedReportName(getUploadedFolderName(files));
             setLocalUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
         }
@@ -124,8 +136,8 @@ const LocalFolderOptions: FC = () => {
         const { files: unfilteredFiles } = e.target;
         const files = filterReportFiles(unfilteredFiles);
 
-        if (!checkRequiredFiles(files)) {
-            setPerformanceFolderStatus(invalidReportStatus);
+        if (!checkRequiredProfilerFiles(files)) {
+            setPerformanceFolderStatus(invalidProfilerStatus);
             return;
         }
 
@@ -134,7 +146,7 @@ const LocalFolderOptions: FC = () => {
         setIsPerformanceUploading(true);
         setPerformanceDataUploadLabel(`${files.length} files selected`);
 
-        const response = await uploadLocalPerformanceFolder(files);
+        const response = await uploadLocalPerformanceFolder(files, uploadedReportName);
 
         if (response.status !== 200) {
             connectionStatus = connectionFailedStatus;
@@ -249,7 +261,7 @@ const LocalFolderOptions: FC = () => {
                             // eslint-disable-next-line react/no-unknown-property
                             directory=''
                             webkitdirectory=''
-                            disabled={isSafari}
+                            disabled={isSafari || !uploadedReportName}
                             onChange={handlePerformanceDirectoryOpen}
                         />
                         <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
