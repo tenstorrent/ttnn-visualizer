@@ -66,6 +66,7 @@ export interface TabSession {
 export enum FileStatus {
     DOWNLOADING = 'DOWNLOADING',
     FAILED = 'FAILED',
+    UPLOADING = 'UPLOADING',
     COMPRESSING = 'COMPRESSING',
     FINISHED = 'FINISHED',
     STARTED = 'STARTED',
