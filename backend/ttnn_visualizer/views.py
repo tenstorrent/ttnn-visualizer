@@ -398,32 +398,6 @@ def create_upload_files():
 
         return True
 
-    def emit_file_progress(
-        current_file_name, total_files, processed_files, percent, status, tab_id
-    ):
-        """Emit progress for a specific file."""
-        progress = FileProgress(
-            current_file_name=current_file_name,
-            number_of_files=total_files,
-            percent_of_current=percent,
-            finished_files=processed_files,
-            status=status,
-        )
-        if current_app.config["USE_WEBSOCKETS"]:
-            emit_file_status(progress, tab_id)
-
-    def emit_final_file_progress(total_files, processed_files, tab_id):
-        """Emit final progress status after all files are processed."""
-        final_progress = FileProgress(
-            current_file_name="",
-            number_of_files=total_files,
-            percent_of_current=100,
-            finished_files=processed_files,
-            status=FileStatus.FINISHED,
-        )
-        if current_app.config["USE_WEBSOCKETS"]:
-            emit_file_status(final_progress, tab_id)
-
     def get_report_name_from_files(files):
         """Extract the report name from the first file and return the report directory path."""
         unsplit_report_name = str(files[0].filename)
@@ -462,31 +436,11 @@ def create_upload_files():
             )
             destination_file.parent.mkdir(exist_ok=True, parents=True)
 
-        # Emit progress on each file save
-        emit_file_progress(
-            current_file_name,
-            total_files,
-            processed_files,
-            0,
-            FileStatus.DOWNLOADING,
-            tab_id,
-        )
-
         file.save(destination_file)
 
         processed_files += 1
-        emit_file_progress(
-            current_file_name,
-            total_files,
-            processed_files,
-            100,
-            FileStatus.DOWNLOADING,
-            tab_id,
-        )
 
-    # Update the session after all files are uploaded
     update_tab_session(tab_id=tab_id, active_report_data={"name": report_name})
-    emit_final_file_progress(total_files, processed_files, tab_id)
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
@@ -543,7 +497,7 @@ def test_remote_folder():
     # Test Directory Configuration
     if not has_failures():
         try:
-            check_remote_path_exists(connection, 'reportPath')
+            check_remote_path_exists(connection, "reportPath")
             add_status(ConnectionTestStates.OK.value, "Report folder path exists")
         except RemoteConnectionException as e:
             add_status(ConnectionTestStates.FAILED.value, e.message)
