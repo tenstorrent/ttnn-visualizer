@@ -20,11 +20,6 @@ from ttnn_visualizer.models import (
 )
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path, check_sqlite_path
-from ttnn_visualizer.sockets import (
-    FileProgress,
-    emit_file_status,
-    FileStatus,
-)
 from flask import request, current_app
 from pathlib import Path
 from http import HTTPStatus
@@ -52,6 +47,12 @@ from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.utils import (
     read_last_synced_file,
     timer,
+)
+
+from ttnn_visualizer.file_uploads import (
+    extract_report_name,
+    save_uploaded_files,
+    validate_files,
 )
 
 logger = logging.getLogger(__name__)
@@ -223,9 +224,7 @@ def get_config(session: TabSession):
 def tensors_list(session: TabSession):
     with DatabaseQueries(session) as db:
         device_id = request.args.get("device_id", None)
-        tensors = list(db.query_tensors(
-            filters={"device_id": device_id}
-        ))
+        tensors = list(db.query_tensors(filters={"device_id": device_id}))
         local_comparisons = list(db.query_tensor_comparisons())
         global_comparisons = list(db.query_tensor_comparisons(local=False))
         producers_consumers = list(db.query_producers_consumers())
@@ -363,83 +362,55 @@ def get_devices(session: TabSession):
         return serialize_devices(devices)
 
 
-@api.route(
-    "/local/upload/report",
-    methods=[
-        "POST",
-    ],
-)
-def create_upload_files():
-    """Handle file uploads and emit progress for each file."""
-
-    def validate_uploaded_report_files(files):
-        """Ensure specific files exist and have only one parent folder in their paths."""
-        found_files = set()
-        report_files = {"db.sqlite", "config.json"}
-
-        for file in files:
-            file_path = Path(file.filename)
-            if file_path.name in report_files:
-                found_files.add(file_path.name)
-                # Check that the file path has exactly one parent folder
-                if (
-                    len(file_path.parents) != 2
-                ):  # `2` means one parent folder plus the file itself
-                    logger.warning(
-                        f"File {file.filename} is not under a single parent folder."
-                    )
-                    return False
-
-        # Check if all specific files are found
-        missing_files = report_files - found_files
-        if missing_files:
-            logger.warning(f"Missing required files: {', '.join(missing_files)}")
-            return False
-        return True
-
-    def get_report_name_from_files(files):
-        """Extract the report name from the first file and return the report directory path."""
-        unsplit_report_name = str(files[0].filename)
-        report_name = unsplit_report_name.split("/")[0]
-
-        return report_name
-
+@api.route("/local/upload/report", methods=["POST"])
+def create_report_files():
     files = request.files.getlist("files")
+    report_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
-    if not validate_uploaded_report_files(files):
+    if not validate_files(files, {"db.sqlite", "config.json"}):
         return StatusMessage(
             status=ConnectionTestStates.FAILED,
             message="Invalid project directory.",
         ).model_dump()
 
-    report_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
-    report_name = get_report_name_from_files(files)
-
+    report_name = extract_report_name(files)
     logger.info(f"Writing report files to {report_directory}/{report_name}")
 
-    total_files = len(files)
-    processed_files = 0
+    save_uploaded_files(files, report_directory, report_name, flat_structure=True)
+
     tab_id = request.args.get("tabId")
-
-    for index, file in enumerate(files):
-        current_file_name = str(file.filename)
-        logger.info(f"Processing file: {current_file_name}")
-
-        destination_file = Path(report_directory).joinpath((str(current_file_name)))
-        logger.info(f"Writing file to {destination_file}")
-
-        # Create the directory if it doesn't exist
-        if not destination_file.parent.exists():
-            logger.info(
-                f"{destination_file.parent.name} does not exist. Creating directory"
-            )
-            destination_file.parent.mkdir(exist_ok=True, parents=True)
-
-        file.save(destination_file)
-
-        processed_files += 1
-
     update_tab_session(tab_id=tab_id, active_report_data={"name": report_name})
+
+    return StatusMessage(
+        status=ConnectionTestStates.OK, message="Success."
+    ).model_dump()
+
+
+@api.route("/local/upload/profile", methods=["POST"])
+def create_profile_files():
+    files = request.files.getlist("files")
+    report_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
+    report_name = request.values.get("reportName", None)
+
+    if not validate_files(
+        files,
+        {"profile_log_device.csv", "tracy_profile_log_host.tracy"},
+        pattern="ops_perf_results",
+    ):
+        return StatusMessage(
+            status=ConnectionTestStates.FAILED,
+            message="Invalid project directory.",
+        ).model_dump()
+
+    logger.info(f"Writing profile files to {report_directory}/{report_name}")
+
+    # Save files with their subdirectory structure, modifying top-level folder to "profiler"
+    save_uploaded_files(
+        files,
+        report_directory,
+        report_name,
+        modify_path=lambda p: Path("profiler").joinpath(*p.parts[1:]),
+    )
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
