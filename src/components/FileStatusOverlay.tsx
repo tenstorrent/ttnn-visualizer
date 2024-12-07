@@ -3,24 +3,22 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
 import React from 'react';
+import { useAtom } from 'jotai';
 import Overlay from './Overlay';
 import ProgressBar from './ProgressBar';
 import 'styles/components/FileStatusOverlay.scss';
-import { FileProgress } from '../model/APIData';
+import { fileTransferProgressAtom } from '../store/app';
+import { FileStatus } from '../model/APIData';
 
-interface FileTransferOverlayProps {
-    progress: FileProgress;
-    open: boolean;
-}
+interface FileTransferOverlayProps {}
 
-const FileStatusOverlay: React.FC<FileTransferOverlayProps> = ({ progress, open }) => {
+const FileStatusOverlay: React.FC<FileTransferOverlayProps> = () => {
     const formatPercentage = (percentage: number) => percentage.toFixed(2).padStart(5, '0');
-
-    const { status, currentFileName, finishedFiles, numberOfFiles, percentOfCurrent } = progress;
-
+    const [progress] = useAtom(fileTransferProgressAtom);
+    const { currentFileName, finishedFiles, numberOfFiles, percentOfCurrent, status } = progress;
     return (
         <Overlay
-            isOpen={open}
+            isOpen={[FileStatus.STARTED, FileStatus.COMPRESSING, FileStatus.DOWNLOADING].includes(status)}
             hideCloseButton
             canEscapeKeyClose={false}
             canOutsideClickClose={false}

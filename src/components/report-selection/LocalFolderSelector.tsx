@@ -14,9 +14,7 @@ import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
 import { reportLocationAtom, selectedDeviceAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import FileStatusWrapper from '../FileStatusOverlayWrapper';
 import FileStatusOverlay from '../FileStatusOverlay';
-import { FileStatus } from '../../model/APIData';
 import { fetchTabSession } from '../../hooks/useAPI';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
@@ -53,6 +51,9 @@ const connectionFailedStatus: ConnectionStatus = {
     message: 'Unable to upload selected directory.',
 };
 
+// TODO Validate target report for performance data
+// We need to validate that either a report is uploaded already to attach the profiler directory
+// or ensure that there is already an active report
 const LocalFolderOptions: FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
@@ -213,19 +214,7 @@ const LocalFolderOptions: FC = () => {
                             <span className='bp5-file-upload-input'>{localUploadLabel}</span>
                         </label>
 
-                        <FileStatusWrapper>
-                            {(fileProgress) => (
-                                <FileStatusOverlay
-                                    open={
-                                        isUploadingReport ||
-                                        [FileStatus.DOWNLOADING, FileStatus.COMPRESSING, FileStatus.STARTED].includes(
-                                            fileProgress?.status,
-                                        )
-                                    }
-                                    progress={fileProgress}
-                                />
-                            )}
-                        </FileStatusWrapper>
+                        <FileStatusOverlay />
 
                         {folderStatus && !isUploadingReport && (
                             <div
