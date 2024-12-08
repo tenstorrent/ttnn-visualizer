@@ -43,6 +43,7 @@ from ttnn_visualizer.sftp_operations import (
     check_remote_path_for_reports,
     get_remote_report_folders,
     check_remote_path_exists,
+    get_remote_profiler_folders,
 )
 from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.utils import (
@@ -358,6 +359,8 @@ def get_operation_buffers(operation_id, session: TabSession):
 @api.route("/profiler/device-log/zone/<zone>", methods=["GET"])
 @with_session
 def get_zone_statistics(zone, session: TabSession):
+    if not session.profiler_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
     with DeviceLogProfilerQueries(session) as csv:
         result = csv.query_zone_statistics(zone_name=zone, as_dict=True, limit=100)
         return jsonify(result)
@@ -467,6 +470,21 @@ def get_remote_folders():
             rf.lastSynced = read_last_synced_file(str(local_path))
             if not rf.lastSynced:
                 logger.info(f"{directory_name} not yet synced")
+
+        return [r.model_dump() for r in remote_folders]
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
+
+
+@api.route("/remote/profiles", methods=["POST"])
+def get_remote_profile_folders():
+    connection = RemoteConnection.model_validate(request.json, strict=False)
+    try:
+        remote_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
+            RemoteConnection.model_validate(connection, strict=False)
+        )
+
+        # TODO Add and check last synced property
 
         return [r.model_dump() for r in remote_folders]
     except RemoteConnectionException as e:
@@ -601,8 +619,10 @@ def use_remote_folder():
     data = request.get_json(force=True)
     connection = data.get("connection", None)
     folder = data.get("folder", None)
+
     if not connection or not folder:
         return Response(status=HTTPStatus.BAD_REQUEST)
+
     connection = RemoteConnection.model_validate(connection, strict=False)
     folder = RemoteReportFolder.model_validate(folder, strict=False)
     report_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
@@ -622,7 +642,7 @@ def use_remote_folder():
 
     update_tab_session(
         tab_id=tab_id,
-        active_report_data={"name": report_folder},
+        report_name=report_folder,
         remote_connection=connection,
         remote_folder=folder,
     )
