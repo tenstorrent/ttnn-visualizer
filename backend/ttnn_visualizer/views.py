@@ -9,6 +9,7 @@ from typing import List
 
 from flask import Blueprint, Response, jsonify
 
+from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries
 from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import RemoteConnectionException
@@ -352,6 +353,14 @@ def get_operation_buffers(operation_id, session: TabSession):
         if not operation:
             return Response(status=HTTPStatus.NOT_FOUND)
         return serialize_operation_buffers(operation, buffers)
+
+
+@api.route("/profiler/device-log/zone/<zone>", methods=["GET"])
+@with_session
+def get_zone_statistics(zone, session: TabSession):
+    with DeviceLogProfilerQueries(session) as csv:
+        result = csv.query_zone_statistics(zone_name=zone, as_dict=True, limit=100)
+        return jsonify(result)
 
 
 @api.route("/devices", methods=["GET"])
