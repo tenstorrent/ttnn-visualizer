@@ -264,7 +264,8 @@ class DeviceLogProfilerQueries:
 
         # Determine if this is a local or remote operation
         if is_remote and use_remote_querying:
-            file_path = f"{self.session.profiler_directory}/{self.DEVICE_LOG_FILE}"
+            remote_profiler_folder = self.session.remote_profile_folder
+            file_path = f"{remote_profiler_folder.remotePath}/{self.DEVICE_LOG_FILE}"
             self.runner = RemoteCSVQueryRunner(
                 file_path=file_path,
                 remote_connection=self.session.remote_connection,
