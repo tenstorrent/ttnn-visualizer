@@ -193,6 +193,23 @@ def get_remote_report_folder_from_config_path(
         )
 
 
+def get_remote_profile_folder(
+    sftp: SFTPClient, profile_folder: str
+) -> RemoteReportFolder:
+    """Read a remote config file and return RemoteFolder object."""
+    attributes = sftp.stat(str(profile_folder))
+    profile_name = profile_folder.split("/")[-1]
+    remote_path = profile_folder
+    last_modified = (
+        int(attributes.st_mtime) if attributes.st_mtime else int(time.time())
+    )
+    return RemoteReportFolder(
+        remotePath=str(remote_path),
+        testName=str(profile_name),
+        lastModified=last_modified,
+    )
+
+
 @remote_exception_handler
 def read_remote_file(
     remote_connection,
@@ -271,6 +288,26 @@ def find_folders_by_files(
                 matched_folders.append(str(dirname))
 
     return matched_folders
+
+
+@remote_exception_handler
+def get_remote_profiler_folders(
+    remote_connection: RemoteConnection,
+) -> List[RemoteReportFolder]:
+    """Return a list of remote folders containing a config.json file."""
+    client = get_client(remote_connection)
+    profiler_paths = find_folders_by_files(
+        client, remote_connection.performancePath, ["profile_log_device.csv"]
+    )
+    if not profiler_paths:
+        error = f"No profiler paths found at {remote_connection.performancePath}"
+        logger.info(error)
+        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
+    remote_folder_data = []
+    with client.open_sftp() as sftp:
+        for path in profiler_paths:
+            remote_folder_data.append(get_remote_profile_folder(sftp, path))
+        return remote_folder_data
 
 
 @remote_exception_handler
