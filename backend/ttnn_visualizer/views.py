@@ -391,7 +391,7 @@ def create_report_files():
     save_uploaded_files(files, report_directory, report_name)
 
     tab_id = request.args.get("tabId")
-    update_tab_session(tab_id=tab_id, report_name=report_name)
+    update_tab_session(tab_id=tab_id, report_name=report_name, clear_remote=True)
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."

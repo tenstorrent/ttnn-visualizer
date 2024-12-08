@@ -26,6 +26,7 @@ def update_tab_session(
     remote_connection=None,
     remote_folder=None,
     remote_profile_folder=None,
+    clear_remote=False,
 ):
     """
     Conditionally update the active report and related fields for a given tab session.
@@ -55,12 +56,21 @@ def update_tab_session(
             if remote_profile_folder:
                 session_data.remote_profile_folder = remote_profile_folder.model_dump()
 
+            if clear_remote:
+                session_data.remote_connection = None
+                session_data.remote_folder = None
+                session_data.remote_profile_folder = None
+
             # Update the report path if `report_name` or `remote_connection` changes
             session_data.report_path = get_report_path(
                 active_report,
                 current_app=current_app,
                 remote_connection=remote_connection,
             )
+
+            if report_name and not profile_name:
+                session_data.profiler_path = None
+                active_report.update({"profile_name": None})
 
             if active_report.get("report_name", None) and active_report.get(
                 "profile_name", None
@@ -71,6 +81,10 @@ def update_tab_session(
                     current_app=current_app,
                     report_name=active_report["report_name"],
                 )
+            else:
+                if report_name and not profile_name:
+                    session_data.profiler_path = None
+                    active_report.update({"profile_name": None})
 
         else:
             # Create a new tab session with the provided data
@@ -79,6 +93,11 @@ def update_tab_session(
                 active_report["report_name"] = report_name
             if profile_name:
                 active_report["profile_name"] = profile_name
+
+            if clear_remote:
+                remote_connection = None
+                remote_folder = None
+                remote_profile_folder = None
 
             session_data = TabSessionTable(
                 tab_id=tab_id,
@@ -92,6 +111,11 @@ def update_tab_session(
                     remote_connection.model_dump() if remote_connection else None
                 ),
                 remote_folder=remote_folder.model_dump() if remote_folder else None,
+                remote_profile_folder=(
+                    remote_profile_folder.model_dump()
+                    if remote_profile_folder
+                    else None
+                ),
             )
             db.session.add(session_data)
 
