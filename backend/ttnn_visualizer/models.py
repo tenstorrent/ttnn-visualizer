@@ -181,7 +181,7 @@ class StatusMessage(SerializeableModel):
 
 class ActiveReport(SerializeableModel):
     report_name: str
-    profiler_name: Optional[str] = None
+    profile_name: Optional[str] = None
 
 
 class RemoteReportFolder(SerializeableModel):
