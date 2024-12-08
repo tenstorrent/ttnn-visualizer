@@ -194,6 +194,7 @@ class RemoteReportFolder(SerializeableModel):
 class TabSession(BaseModel):
     tab_id: str
     report_path: Optional[str] = None
+    profiler_path: Optional[str] = None
     active_report: Optional[ActiveReport] = None
     remote_connection: Optional[RemoteConnection] = None
     remote_folder: Optional[RemoteReportFolder] = None
@@ -205,6 +206,7 @@ class TabSessionTable(db.Model):
     id = Column(Integer, primary_key=True)
     tab_id = Column(String, unique=True, nullable=False)
     report_path = Column(String)
+    profiler_path = Column(String, nullable=True)
     active_report = db.Column(MutableDict.as_mutable(JSON), nullable=False, default={})
     remote_connection = Column(JSON, nullable=True)
     remote_folder = Column(JSON, nullable=True)
@@ -216,12 +218,14 @@ class TabSessionTable(db.Model):
         remote_connection=None,
         remote_folder=None,
         report_path=None,
+        profiler_path=None,
     ):
         self.tab_id = tab_id
         self.active_report = active_report
         self.report_path = report_path
         self.remote_connection = remote_connection
         self.remote_folder = remote_folder
+        self.profiler_path = profiler_path
 
     def to_dict(self):
         return {
@@ -230,12 +234,16 @@ class TabSessionTable(db.Model):
             "active_report": self.active_report,
             "remote_connection": self.remote_connection,
             "report_path": self.report_path,
+            "profiler_path": self.profiler_path,
         }
 
     def to_pydantic(self) -> TabSession:
         return TabSession(
             tab_id=str(self.tab_id),
             report_path=str(self.report_path) if self.report_path is not None else None,
+            profiler_path=(
+                str(self.profiler_path) if self.profiler_path is not None else None
+            ),
             active_report=(
                 (ActiveReport(**self.active_report) if self.active_report else None)
                 if isinstance(self.active_report, dict)

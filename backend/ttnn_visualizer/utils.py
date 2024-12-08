@@ -43,6 +43,32 @@ def timer(f: Callable):
     return wrapper
 
 
+def get_profiler_path(profile_name, current_app, report_name=None):
+    """
+    Gets the profiler path for the given profile_name.
+
+    :param profile_name: The name of the profiler directory.
+    :param current_app: Flask current application object.
+    :param report_name: Optional name of the report directory under which the profiler resides.
+
+    :return: Profiler path as a string.
+    """
+    local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+
+    # Ensure report_name is provided or defaults to active_report's report_name
+    if report_name:
+        report_dir = local_dir / report_name / "profiler"
+    else:
+        raise ValueError(
+            "A report_name must be provided to determine the profiler path."
+        )
+
+    # Construct the profiler path
+    profiler_path = report_dir / profile_name
+
+    return str(profiler_path)
+
+
 def get_report_path(active_report, current_app, remote_connection=None):
     """
     Gets the report path for the given active_report object.

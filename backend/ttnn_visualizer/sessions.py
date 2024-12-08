@@ -6,7 +6,7 @@ from logging import getLogger
 
 from flask import request
 
-from ttnn_visualizer.utils import get_report_path
+from ttnn_visualizer.utils import get_report_path, get_profiler_path
 from ttnn_visualizer.models import (
     TabSessionTable,
 )
@@ -58,6 +58,17 @@ def update_tab_session(
                 current_app=current_app,
                 remote_connection=remote_connection,
             )
+
+            if active_report.get("report_name", None) and active_report.get(
+                "profile_name", None
+            ):
+                # Update the report path if `report_name` or `remote_connection` changes
+                session_data.profiler_path = get_profiler_path(
+                    profile_name=active_report["profile_name"],
+                    current_app=current_app,
+                    report_name=active_report["report_name"],
+                )
+
         else:
             # Create a new tab session with the provided data
             active_report = {}
