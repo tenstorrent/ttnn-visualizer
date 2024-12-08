@@ -252,8 +252,14 @@ class DeviceLogProfilerQueries:
         Determine the appropriate query runner based on the session's remote connection.
         """
 
+        is_remote = self.session.remote_connection
+        use_remote_querying = False
+
+        if is_remote:
+            use_remote_querying = self.session.remote_connection.useRemoteQuerying
+
         # Determine if this is a local or remote operation
-        if self.session.remote_connection:
+        if is_remote and use_remote_querying:
             file_path = f"{self.session.profiler_directory}/{self.DEVICE_LOG_FILE}"
             self.runner = RemoteCSVQueryRunner(
                 file_path=file_path,
@@ -261,10 +267,6 @@ class DeviceLogProfilerQueries:
                 offset=1,  # Skip the first line for device log files
             )
         else:
-            report_directory = Path(self.session.report_path).joinpath(
-                self.LOCAL_PROFILER_DIRECTORY
-            )
-
             self.runner = LocalCSVQueryRunner(
                 file_path=Path(self.session.profiler_path).joinpath(
                     self.DEVICE_LOG_FILE
@@ -273,7 +275,8 @@ class DeviceLogProfilerQueries:
             )
 
         self.runner.__enter__()
-        if not self.session.remote_connection:
+
+        if not is_remote or (is_remote and not use_remote_querying):
             self.runner.df.columns = self.DEVICE_LOG_COLUMNS
             self.runner.df.columns = self.runner.df.columns.str.strip()
 
