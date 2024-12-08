@@ -66,7 +66,7 @@ def get_report_path(active_report, current_app, remote_connection=None):
             base_dir = local_dir
 
         # Construct the full report path
-        report_path = Path(base_dir).joinpath(active_report.get("name"))
+        report_path = Path(base_dir).joinpath(active_report.get("report_name"))
         target_path = str(Path(report_path).joinpath(database_file_name))
 
         return target_path

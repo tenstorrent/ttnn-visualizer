@@ -376,10 +376,10 @@ def create_report_files():
     report_name = extract_report_name(files)
     logger.info(f"Writing report files to {report_directory}/{report_name}")
 
-    save_uploaded_files(files, report_directory, report_name, flat_structure=True)
+    save_uploaded_files(files, report_directory, report_name)
 
     tab_id = request.args.get("tabId")
-    update_tab_session(tab_id=tab_id, active_report_data={"name": report_name})
+    update_tab_session(tab_id=tab_id, report_name=report_name)
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
@@ -389,8 +389,9 @@ def create_report_files():
 @api.route("/local/upload/profile", methods=["POST"])
 def create_profile_files():
     files = request.files.getlist("files")
-    report_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
+    report_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
     report_name = request.values.get("reportName", None)
+    tab_id = request.args.get("tabId")
 
     if not validate_files(
         files,
@@ -402,15 +403,35 @@ def create_profile_files():
             message="Invalid project directory.",
         ).model_dump()
 
-    logger.info(f"Writing profile files to {report_directory}/{report_name}")
-
-    # Save files with their subdirectory structure, modifying top-level folder to "profiler"
-    save_uploaded_files(
-        files,
-        report_directory,
-        report_name,
-        modify_path=lambda p: Path("profiler").joinpath(*p.parts[1:]),
+    logger.info(
+        f"Writing profile files to {report_directory / report_name / 'profiler'}"
     )
+
+    # Construct the base directory with report_name first
+    target_directory = report_directory / report_name / "profiler"
+    target_directory.mkdir(parents=True, exist_ok=True)
+
+    if files:
+        first_file_path = Path(files[0].filename)
+        profiler_folder_name = first_file_path.parts[0]
+    else:
+        profiler_folder_name = None
+
+    updated_files = []
+    for file in files:
+        original_path = Path(file.filename)
+        updated_path = target_directory / original_path
+        updated_path.parent.mkdir(parents=True, exist_ok=True)
+        file.filename = str(updated_path)
+        updated_files.append(file)
+
+    save_uploaded_files(
+        updated_files,
+        str(report_directory),
+        report_name,
+    )
+
+    update_tab_session(tab_id=tab_id, profile_name=profiler_folder_name)
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."

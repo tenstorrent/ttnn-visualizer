@@ -10,6 +10,7 @@ from typing import Optional, Any
 
 from pydantic import BaseModel, Field
 from sqlalchemy import Integer, Column, String, JSON
+from sqlalchemy.ext.mutable import MutableDict
 
 from ttnn_visualizer.utils import SerializeableDataclass
 from ttnn_visualizer.enums import ConnectionTestStates
@@ -179,7 +180,8 @@ class StatusMessage(SerializeableModel):
 
 
 class ActiveReport(SerializeableModel):
-    name: str
+    report_name: str
+    profiler_name: Optional[str] = None
 
 
 class RemoteReportFolder(SerializeableModel):
@@ -203,7 +205,7 @@ class TabSessionTable(db.Model):
     id = Column(Integer, primary_key=True)
     tab_id = Column(String, unique=True, nullable=False)
     report_path = Column(String)
-    active_report = Column(JSON)
+    active_report = db.Column(MutableDict.as_mutable(JSON), nullable=False, default={})
     remote_connection = Column(JSON, nullable=True)
     remote_folder = Column(JSON, nullable=True)
 

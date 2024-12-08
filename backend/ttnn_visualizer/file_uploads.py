@@ -45,13 +45,15 @@ def extract_report_name(files):
 
 
 def save_uploaded_files(
-    files, report_directory, report_name, modify_path=None, flat_structure=False
+    files,
+    target_directory,
+    report_name,
 ):
     """
     Save uploaded files to the target directory.
 
     :param files: List of files to be saved.
-    :param report_directory: The base directory for saving the files.
+    :param target_directory: The base directory for saving the files.
     :param report_name: The report name to use for the directory.
     :param modify_path: Optional function to modify the file path before saving.
     :param flat_structure: If True, saves files directly under the report_name directory without subdirectories.
@@ -61,18 +63,8 @@ def save_uploaded_files(
         logger.info(f"Processing file: {current_file_name}")
 
         file_path = Path(current_file_name)
-        if modify_path:
-            file_path = modify_path(file_path)
 
-        # Adjust destination file path based on the flat_structure flag
-        if flat_structure:
-            destination_file = Path(report_directory).joinpath(
-                report_name, file_path.name
-            )
-        else:
-            destination_file = Path(report_directory).joinpath(
-                report_name, str(file_path)
-            )
+        destination_file = Path(target_directory).joinpath(report_name, str(file_path))
 
         logger.info(f"Writing file to {destination_file}")
 
