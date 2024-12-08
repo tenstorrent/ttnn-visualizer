@@ -300,7 +300,7 @@ class DeviceLogProfilerQueries:
         Example query: Filter rows by a specific timer_id and optionally return results as dictionaries.
         """
         return self.runner.execute_query(
-            columns=["timer_id", "zone name", "source file"],
+            columns=[],
             filters={"timer_id": timer_id},
             as_dict=as_dict,
         )
@@ -312,12 +312,14 @@ class DeviceLogProfilerQueries:
         Example query: Retrieve statistics for a specific zone name.
         """
         return self.runner.execute_query(
-            columns=[
-                "zone name",
-                "time[cycles since reset]",
-                "stat value",
-                "source file",
-            ],
+            columns=[],
+            # Example of returning only specific columns
+            # columns=[
+            #     "zone name",
+            #     "time[cycles since reset]",
+            #     "stat value",
+            #     "source file",
+            # ],
             filters={"zone name": zone_name},
             as_dict=as_dict,
             limit=limit,
