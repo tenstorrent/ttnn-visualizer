@@ -64,7 +64,7 @@ def save_uploaded_files(
 
         file_path = Path(current_file_name)
 
-        destination_file = Path(target_directory).joinpath(report_name, str(file_path))
+        destination_file = Path(target_directory).joinpath(str(file_path))
 
         logger.info(f"Writing file to {destination_file}")
 
