@@ -4,6 +4,7 @@
 
 import dataclasses
 import enum
+import json
 import logging
 from functools import wraps
 from pathlib import Path
@@ -163,3 +164,16 @@ def parse_memory_config(memory_config: Optional[str]) -> Optional[Dict[str, Any]
         "memory_layout": memory_layout,
         "shard_spec": shard_spec,
     }
+
+
+def read_version_from_package_json() -> str:
+    root_directory = Path(__file__).parent.parent.parent
+    file_path = root_directory / "package.json"
+    try:
+        with open(file_path, "r") as file:
+            content = json.load(file)
+            return content["version"]
+    except FileNotFoundError:
+        raise FileNotFoundError(f"The file {file_path} was not found.")
+    except KeyError:
+        raise KeyError("The 'version' key was not found in the package.json file.")

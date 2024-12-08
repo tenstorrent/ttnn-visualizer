@@ -198,6 +198,7 @@ class TabSession(BaseModel):
     active_report: Optional[ActiveReport] = None
     remote_connection: Optional[RemoteConnection] = None
     remote_folder: Optional[RemoteReportFolder] = None
+    remote_profile_folder: Optional[RemoteReportFolder] = None
 
 
 class TabSessionTable(db.Model):
@@ -210,6 +211,7 @@ class TabSessionTable(db.Model):
     active_report = db.Column(MutableDict.as_mutable(JSON), nullable=False, default={})
     remote_connection = Column(JSON, nullable=True)
     remote_folder = Column(JSON, nullable=True)
+    remote_profile_folder = Column(JSON, nullable=True)
 
     def __init__(
         self,
@@ -219,6 +221,7 @@ class TabSessionTable(db.Model):
         remote_folder=None,
         report_path=None,
         profiler_path=None,
+        remote_profile_folder=None,
     ):
         self.tab_id = tab_id
         self.active_report = active_report
@@ -226,6 +229,7 @@ class TabSessionTable(db.Model):
         self.remote_connection = remote_connection
         self.remote_folder = remote_folder
         self.profiler_path = profiler_path
+        self.remote_profile_folder = remote_profile_folder
 
     def to_dict(self):
         return {
@@ -233,6 +237,8 @@ class TabSessionTable(db.Model):
             "tab_id": self.tab_id,
             "active_report": self.active_report,
             "remote_connection": self.remote_connection,
+            "remote_folder": self.remote_folder,
+            "remote_profile_folder": self.remote_profile_folder,
             "report_path": self.report_path,
             "profiler_path": self.profiler_path,
         }
@@ -257,6 +263,13 @@ class TabSessionTable(db.Model):
             remote_folder=(
                 RemoteReportFolder.model_validate(self.remote_folder, strict=False)
                 if self.remote_folder is not None
+                else None
+            ),
+            remote_profile_folder=(
+                RemoteReportFolder.model_validate(
+                    self.remote_profile_folder, strict=False
+                )
+                if self.remote_profile_folder is not None
                 else None
             ),
         )

@@ -25,6 +25,7 @@ def update_tab_session(
     profile_name=None,
     remote_connection=None,
     remote_folder=None,
+    remote_profile_folder=None,
 ):
     """
     Conditionally update the active report and related fields for a given tab session.
@@ -51,6 +52,8 @@ def update_tab_session(
                 session_data.remote_connection = remote_connection.model_dump()
             if remote_folder:
                 session_data.remote_folder = remote_folder.model_dump()
+            if remote_profile_folder:
+                session_data.remote_profile_folder = remote_profile_folder.model_dump()
 
             # Update the report path if `report_name` or `remote_connection` changes
             session_data.report_path = get_report_path(

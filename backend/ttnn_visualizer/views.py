@@ -619,14 +619,21 @@ def use_remote_folder():
     data = request.get_json(force=True)
     connection = data.get("connection", None)
     folder = data.get("folder", None)
+    profile = data.get("profile", None)
 
     if not connection or not folder:
         return Response(status=HTTPStatus.BAD_REQUEST)
 
     connection = RemoteConnection.model_validate(connection, strict=False)
     folder = RemoteReportFolder.model_validate(folder, strict=False)
+    profile_name = None
+    remote_profile_folder = None
+    if profile:
+        remote_profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
+        profile_name = remote_profile_folder.testName
     report_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
     report_folder = Path(folder.remotePath).name
+
     connection_directory = Path(report_data_directory, connection.host, report_folder)
 
     if not connection.useRemoteQuerying and not connection_directory.exists():
@@ -643,8 +650,10 @@ def use_remote_folder():
     update_tab_session(
         tab_id=tab_id,
         report_name=report_folder,
+        profile_name=profile_name,
         remote_connection=connection,
         remote_folder=folder,
+        remote_profile_folder=remote_profile_folder,
     )
 
     return Response(status=HTTPStatus.OK)
