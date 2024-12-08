@@ -44,7 +44,9 @@ def timer(f: Callable):
     return wrapper
 
 
-def get_profiler_path(profile_name, current_app, report_name=None):
+def get_profiler_path(
+    profile_name, current_app, report_name=None, remote_connection=None
+):
     """
     Gets the profiler path for the given profile_name.
 
@@ -55,17 +57,26 @@ def get_profiler_path(profile_name, current_app, report_name=None):
     :return: Profiler path as a string.
     """
     local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+    remote_dir = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
+
+    # Check if there's an associated RemoteConnection
+    if remote_connection:
+        # Use the remote directory if a remote connection exists
+        base_dir = Path(remote_dir).joinpath(remote_connection.host)
+    else:
+        # Default to local directory if no remote connection is present
+        base_dir = local_dir
 
     # Ensure report_name is provided or defaults to active_report's report_name
     if report_name:
-        report_dir = local_dir / report_name / "profiler"
+        profile_dir = base_dir / report_name / "profiler"
     else:
         raise ValueError(
             "A report_name must be provided to determine the profiler path."
         )
 
     # Construct the profiler path
-    profiler_path = report_dir / profile_name
+    profiler_path = profile_dir / profile_name
 
     return str(profiler_path)
 

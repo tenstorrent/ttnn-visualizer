@@ -80,6 +80,7 @@ def update_tab_session(
                     profile_name=active_report["profile_name"],
                     current_app=current_app,
                     report_name=active_report["report_name"],
+                    remote_connection=remote_connection,
                 )
             else:
                 if report_name and not profile_name:
