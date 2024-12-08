@@ -63,7 +63,10 @@ class LocalCSVQueryRunner:
                 df_filtered = df_filtered[df_filtered[col] == value]
 
         # Select specified columns
-        result_df = df_filtered[columns]
+        if columns:
+            result_df = df_filtered[columns]
+        else:
+            result_df = df_filtered
 
         # Apply limit if specified
         if limit is not None:
@@ -73,6 +76,7 @@ class LocalCSVQueryRunner:
             sanitized_columns = {
                 col: col.replace(" ", "_") for col in result_df.columns
             }
+            result_df = result_df.copy()
             result_df.rename(columns=sanitized_columns, inplace=True)
             return result_df.to_dict(orient="records")
 
