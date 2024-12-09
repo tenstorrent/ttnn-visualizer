@@ -128,7 +128,6 @@ class RemoteCSVQueryRunner:
         headers = [
             col.strip().replace(" ", "_").lower() for col in raw_header.split(self.sep)
         ]
-        print(f"DEBUG: Sanitized headers: {headers}")
 
         # Build the AWK command for filtering
         awk_filter = ""
@@ -162,14 +161,24 @@ class RemoteCSVQueryRunner:
             [field.strip().strip('"') for field in line.split(self.sep)]
             for line in output.splitlines()
         ]
-        print(f"DEBUG: Retrieved {len(rows)} rows.")
-
         if as_dict:
             # Convert rows to dictionaries
             result = [dict(zip(headers, row)) for row in rows]
-            print(f"DEBUG: Converted rows to dictionaries.")
-            return result
 
+            if columns:
+                sanitized_columns = [
+                    col.strip().replace(" ", "_").lower() for col in columns
+                ]
+                result = [
+                    {
+                        key: value
+                        for key, value in row.items()
+                        if key in sanitized_columns
+                    }
+                    for row in result
+                ]
+                print(f"DEBUG: Filtered columns: {sanitized_columns}")
+            return result
         return rows
 
     def execute_query_raw(self, limit: int = None) -> List[str]:
