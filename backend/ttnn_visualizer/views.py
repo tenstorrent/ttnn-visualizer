@@ -372,7 +372,7 @@ def get_zone_statistics(zone, session: TabSession):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     with DeviceLogProfilerQueries(session) as csv:
-        result = csv.query_zone_statistics(zone_name=zone, as_dict=True, limit=100)
+        result = csv.query_zone_statistics(zone_name=zone, as_dict=True)
         return jsonify(result)
 
 
