@@ -123,10 +123,10 @@ const LocalFolderOptions: FC = () => {
         const { files: unfilteredFiles } = e.target;
         const files = filterReportFiles(unfilteredFiles);
 
-        if (!checkRequiredFiles(files)) {
-            setPerformanceFolderStatus(invalidReportStatus);
-            return;
-        }
+        // if (!checkRequiredFiles(files)) {
+        //     setPerformanceFolderStatus(invalidReportStatus);
+        //     return;
+        // }
 
         let connectionStatus = connectionOkStatus;
 

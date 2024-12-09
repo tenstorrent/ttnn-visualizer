@@ -3,9 +3,9 @@ import path, { join } from 'path';
 import react from '@vitejs/plugin-react';
 // @ts-expect-error don't have types declaration for node-build-scripts
 import { sassNodeModulesLoadPaths } from '@blueprintjs/node-build-scripts';
+import dsv from '@rollup/plugin-dsv';
 // @ts-expect-error don't have types declaration for legacySassSvgInlinerFactory
 import { legacySassSvgInlinerFactory } from './src/libs/blueprintjs/legacySassSvgInlinerFactory';
-// @ts-ignore not included in the project files in ts-config, which is fine
 import { version } from './package.json';
 
 // https://vitejs.dev/config/
@@ -17,7 +17,7 @@ export default defineConfig({
     define: {
         'import.meta.env.APP_VERSION': JSON.stringify(version),
     },
-    plugins: [react()],
+    plugins: [react(), dsv()],
     server: {
         proxy: {
             '/api': 'http://localhost:8000',

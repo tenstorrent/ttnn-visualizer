@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { useState } from 'react';
+import Papa from 'papaparse';
 import axiosInstance from '../libs/axiosInstance';
 
 export interface UploadProgress {
@@ -14,6 +15,8 @@ type FileWithRelativePath = File & { webkitRelativePath?: string };
 
 const useLocalConnection = () => {
     const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+
+    const [uploadedFiles, setUploadeFiles] = useState(0);
 
     function filterReportFiles(files: FileList, excludeFolders: string[] = ['tensors']): FileList {
         // Convert FileList to an array
@@ -49,10 +52,6 @@ const useLocalConnection = () => {
     const uploadLocalFolder = async (files: FileList) => {
         const formData = new FormData();
 
-        Array.from(files).forEach((f) => {
-            formData.append('files', f);
-        });
-
         return axiosInstance
             .post(`${import.meta.env.VITE_API_ROOT}/local/upload`, formData, {
                 headers: {
@@ -80,23 +79,32 @@ const useLocalConnection = () => {
             formData.append('files', f);
         });
 
-        return axiosInstance
-            .post(`${import.meta.env.VITE_API_ROOT}/local/upload/profile`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-                onUploadProgress(uploadStatus) {
-                    setUploadProgress({
-                        // uploadStatus.total could be zero with certain requests, but it's not a problem at the moment for us
-                        // https://github.com/axios/axios/issues/1591
-                        progress: (uploadStatus.loaded * 100) / uploadStatus.total!,
-                        estimated: uploadStatus.estimated,
-                    });
-                },
+        const fileList = Array.from(files);
+        const parsedFiles: any[] = [];
+
+        const parseFile = (file: File) => {
+            return new Promise((resolve, reject) => {
+                Papa.parse(file, {
+                    complete: (results) => {
+                        console.log('results', results);
+                        parsedFiles.push(results);
+                        resolve(results);
+                    },
+                    error: (error) => {
+                        reject(error);
+                    },
+                });
+            });
+        };
+
+        return Promise.all(fileList.map(parseFile))
+            .then(() => {
+                console.log('uploadLocalPerformanceFolder', parsedFiles);
+                return parsedFiles;
             })
-            .catch((error) => error)
-            .finally(() => {
-                setUploadProgress(null);
+            .catch((error) => {
+                console.error('Error parsing files:', error);
+                throw error;
             });
     };
 
