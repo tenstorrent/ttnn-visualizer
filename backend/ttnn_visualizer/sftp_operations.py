@@ -30,6 +30,7 @@ from ttnn_visualizer.ssh_client import get_client
 logger = logging.getLogger(__name__)
 
 TEST_CONFIG_FILE = "config.json"
+PROFILER_DIRECTORY = "profiler"
 REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
 
 
@@ -346,6 +347,34 @@ def sync_remote_folders(
     report_folder = Path(remote_folder_path).name
     destination_dir = Path(
         REPORT_DATA_DIRECTORY, path_prefix, remote_connection.host, report_folder
+    )
+    destination_dir.mkdir(parents=True, exist_ok=True)
+
+    sync_files_and_directories(
+        client, remote_folder_path, destination_dir, exclude_patterns, sid
+    )
+
+
+@remote_exception_handler
+def sync_remote_profiler_folders(
+    remote_connection: RemoteConnection,
+    path_prefix: str,
+    report: RemoteReportFolder,
+    profile: RemoteReportFolder,
+    exclude_patterns: Optional[List[str]] = None,
+    sid=None,
+):
+    client = get_client(remote_connection)
+    remote_folder_path = profile.remotePath
+    profile_folder = Path(remote_folder_path).name
+    report_folder = Path(report.remotePath).name
+    destination_dir = Path(
+        REPORT_DATA_DIRECTORY,
+        path_prefix,
+        remote_connection.host,
+        report_folder,
+        PROFILER_DIRECTORY,
+        profile_folder,
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
 
