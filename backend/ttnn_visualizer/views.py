@@ -44,6 +44,7 @@ from ttnn_visualizer.sftp_operations import (
     get_remote_report_folders,
     check_remote_path_exists,
     get_remote_profiler_folders,
+    sync_remote_profiler_folders,
 )
 from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.utils import (
@@ -480,15 +481,35 @@ def get_remote_folders():
 
 @api.route("/remote/profiles", methods=["POST"])
 def get_remote_profile_folders():
-    connection = RemoteConnection.model_validate(request.json, strict=False)
+
+    request_body = request.get_json()
+    connection = RemoteConnection.model_validate(
+        request_body.get("connection"), strict=False
+    )
+    report = RemoteReportFolder.model_validate(request_body.get("report"), strict=False)
+
     try:
-        remote_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
+        remote_profile_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
             RemoteConnection.model_validate(connection, strict=False)
         )
 
-        # TODO Add and check last synced property
+        for rf in remote_profile_folders:
+            directory_name = Path(report.remotePath).name
+            profile_name = Path(rf.remotePath).name
+            remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
+            local_path = (
+                Path(remote_data_directory)
+                .joinpath(connection.host)
+                .joinpath(directory_name)
+                .joinpath("profiler")
+                .joinpath(profile_name)
+            )
+            logger.info(f"Checking last synced for {directory_name}")
+            rf.lastSynced = read_last_synced_file(str(local_path))
+            if not rf.lastSynced:
+                logger.info(f"{directory_name} not yet synced")
 
-        return [r.model_dump() for r in remote_folders]
+        return [r.model_dump() for r in remote_profile_folders]
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
 
@@ -571,11 +592,27 @@ def sync_remote_folder():
         return jsonify({"error": "Invalid or missing JSON data"}), 400
 
     folder = request_body.get("folder")
+    profile = request_body.get("profile", None)
     tab_id = request.args.get("tabId", None)
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
     )
     remote_folder = RemoteReportFolder.model_validate(folder, strict=False)
+    if profile:
+        profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
+        try:
+            sync_remote_profiler_folders(
+                connection,
+                remote_dir,
+                report=remote_folder,
+                profile=profile_folder,
+                exclude_patterns=[r"/tensors(/|$)"],
+                sid=tab_id,
+            )
+
+        except RemoteConnectionException as e:
+            return Response(status=e.http_status, response=e.message)
+
     try:
         sync_remote_folders(
             connection,
