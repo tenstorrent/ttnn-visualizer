@@ -103,43 +103,52 @@ class RemoteCSVQueryRunner:
 
     def execute_query(
         self,
-        columns: List[str],
-        filters: Optional[Dict[str, str]] = None,
-        as_dict: bool = False,
+        filters: Optional[Dict[str, str]] = None,  # Allow unsanitized filter keys
+        as_dict: bool = False,  # Convert rows to dictionaries if True
         limit: int = None,
+        columns=None,
     ) -> Union[List[List[str]], List[Dict[str, str]]]:
         """
-        Execute a query to fetch specific columns with optional filters and limit.
-        :param columns: List of columns to fetch.
-        :param filters: Dictionary of column filters (e.g., {"column1": "value1"}).
+        Fetch rows with optional filtering and limit, returning either raw rows or dictionaries.
+        :param filters: Dictionary of unsanitized column filters (e.g., {"zone name": "BRISC-FW"}).
         :param as_dict: Whether to return results as a list of dictionaries.
         :param limit: Maximum number of rows to return.
-        :return: List of matching rows.
+        :return: List of rows as lists or dictionaries.
         """
         # Fetch header row, accounting for the offset
         header_cmd = f"head -n {self.offset + 1} {self.file_path} | tail -n 1"
         stdin, stdout, stderr = self.ssh_client.exec_command(header_cmd)
-        header = stdout.read().decode("utf-8").strip()
+        raw_header = stdout.read().decode("utf-8").strip()
         error = stderr.read().decode("utf-8").strip()
 
         if error:
             raise RuntimeError(f"Error fetching header row: {error}")
 
         # Sanitize headers
-        column_indices = {
-            name.strip(): index + 1 for index, name in enumerate(header.split(self.sep))
-        }
+        headers = [
+            col.strip().replace(" ", "_").lower() for col in raw_header.split(self.sep)
+        ]
+        print(f"DEBUG: Sanitized headers: {headers}")
+
+        # Build the AWK command for filtering
+        awk_filter = ""
+        if filters:
+            filter_conditions = []
+            for unsanitized_col, value in filters.items():
+                # Sanitize the filter key
+                sanitized_col = unsanitized_col.strip().replace(" ", "_").lower()
+                if sanitized_col in headers:
+                    col_idx = headers.index(sanitized_col) + 1
+                    filter_conditions.append(f'${col_idx} == "{value}"')
+                else:
+                    print(
+                        f"WARNING: Column '{unsanitized_col}' (sanitized: '{sanitized_col}') not found in headers."
+                    )
+            awk_filter = " && ".join(filter_conditions)
 
         # Build AWK command
-        awk_columns = self.build_awk_columns(column_indices, columns)
-        awk_filter = self.build_awk_filter(column_indices, filters) if filters else ""
         limit_clause = f"| head -n {limit}" if limit else ""
-
-        awk_cmd = (
-            f"awk -F'{self.sep}' 'NR > {self.offset + 1} && {awk_filter} {{print {awk_columns}}}' {self.file_path} {limit_clause}"
-            if filters
-            else f"awk -F'{self.sep}' 'NR > {self.offset + 1} {{print {awk_columns}}}' {self.file_path} {limit_clause}"
-        )
+        awk_cmd = f"awk -F'{self.sep}' 'NR > {self.offset + 1} {f'&& {awk_filter}' if awk_filter else ''} {{print}}' {self.file_path} {limit_clause}"
 
         stdin, stdout, stderr = self.ssh_client.exec_command(awk_cmd)
         output = stdout.read().decode("utf-8").strip()
@@ -148,11 +157,18 @@ class RemoteCSVQueryRunner:
         if error:
             raise RuntimeError(f"Error executing AWK command: {error}")
 
-        rows = [line.split(self.sep) for line in output.splitlines()]
+        # Split rows into lists of strings
+        rows = [
+            [field.strip().strip('"') for field in line.split(self.sep)]
+            for line in output.splitlines()
+        ]
+        print(f"DEBUG: Retrieved {len(rows)} rows.")
 
         if as_dict:
-            sanitized_columns = [col.strip().replace(" ", "_") for col in columns]
-            return [dict(zip(sanitized_columns, row)) for row in rows]
+            # Convert rows to dictionaries
+            result = [dict(zip(headers, row)) for row in rows]
+            print(f"DEBUG: Converted rows to dictionaries.")
+            return result
 
         return rows
 
