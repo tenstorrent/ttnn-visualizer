@@ -51,19 +51,26 @@ const useRemoteConnection = () => {
         return response.data;
     };
 
-    const listPerformanceFolders = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
+    const listPerformanceFolders = async (
+        connection?: RemoteConnection,
+        report?: RemoteFolder,
+    ): Promise<RemoteFolder[]> => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
-        const response = await axiosInstance.post<RemoteFolder[]>(
-            `${import.meta.env.VITE_API_ROOT}/remote/profiles`,
+        const response = await axiosInstance.post<RemoteFolder[]>(`${import.meta.env.VITE_API_ROOT}/remote/profiles`, {
             connection,
-        );
+            report,
+        });
 
         return response.data;
     };
 
-    const syncRemoteFolder = async (connection?: RemoteConnection, remoteFolder?: RemoteFolder) => {
+    const syncRemoteFolder = async (
+        connection?: RemoteConnection,
+        remoteFolder?: RemoteFolder,
+        remoteProfile?: RemoteFolder,
+    ) => {
         if (!connection || !connection.host || !connection.port || !connection.reportPath) {
             throw new Error('No connection provided');
         }
@@ -71,10 +78,10 @@ const useRemoteConnection = () => {
         if (!remoteFolder) {
             throw new Error('No remote folder provided');
         }
-
         return axiosInstance.post<RemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
             connection,
             folder: remoteFolder,
+            profile: remoteProfile,
         });
     };
 

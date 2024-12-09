@@ -222,7 +222,7 @@ const RemoteSyncConfigurator: FC = () => {
 
                             const fetchedReportFolders = await remote.listReportFolders(connection);
                             const fetchedPerformanceFolders = connection.performancePath
-                                ? await remote.listPerformanceFolders(connection)
+                                ? await remote.listPerformanceFolders(connection, selectedReportFolder)
                                 : [];
 
                             const updatedReportFolders = updateSavedReportFolders(connection, fetchedReportFolders);
@@ -250,7 +250,10 @@ const RemoteSyncConfigurator: FC = () => {
                                 );
                                 const fetchedPerformanceFolders = remote.persistentState.selectedConnection
                                     .performancePath
-                                    ? await remote.listPerformanceFolders(remote.persistentState.selectedConnection)
+                                    ? await remote.listPerformanceFolders(
+                                          remote.persistentState.selectedConnection,
+                                          selectedReportFolder,
+                                      )
                                     : [];
 
                                 const updatedReportsfolders = updateSavedReportFolders(
@@ -300,6 +303,7 @@ const RemoteSyncConfigurator: FC = () => {
                                             const { data: updatedFolder } = await remote.syncRemoteFolder(
                                                 remote.persistentState.selectedConnection,
                                                 selectedReportFolder,
+                                                selectedPerformanceFolder,
                                             );
 
                                             const savedRemoteFolders = remote.persistentState.getSavedReportFolders(
