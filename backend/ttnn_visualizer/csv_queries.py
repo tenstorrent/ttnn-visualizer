@@ -2,17 +2,13 @@
 #
 # SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
+import os
 from pathlib import Path
+from typing import List, Dict, Union, Optional
 
 import pandas as pd
 
-from typing import Union
-
 from ttnn_visualizer.models import TabSession
-
-
-from typing import Dict, List, Optional
-
 from ttnn_visualizer.ssh_client import get_client
 
 
@@ -23,6 +19,7 @@ class LocalCSVQueryRunner:
         self.df: Optional[pd.DataFrame] = None
 
     def __enter__(self):
+        # Load the CSV file
         self.df = pd.read_csv(self.file_path, skiprows=self.offset)
         return self
 
@@ -39,10 +36,13 @@ class LocalCSVQueryRunner:
     def execute_query(
         self,
         columns: List[str],
-        filters: Dict[str, str] = None,
+        filters: Dict[str, Union[str, None]] = None,
         as_dict: bool = False,
         limit: int = None,
-    ) -> Union[List[List[str]], List[Dict[str, str]]]:
+    ) -> Union[
+        List[List[Optional[Union[str, float, int]]]],
+        List[Dict[str, Optional[Union[str, float, int]]]],
+    ]:
         """
         Executes a query on the loaded DataFrame with optional limit.
         :param columns: List of columns to select.
@@ -60,7 +60,10 @@ class LocalCSVQueryRunner:
         df_filtered = self.df
         if filters:
             for col, value in filters.items():
-                df_filtered = df_filtered[df_filtered[col] == value]
+                if value is None:
+                    df_filtered = df_filtered[df_filtered[col].isna()]
+                else:
+                    df_filtered = df_filtered[df_filtered[col] == value]
 
         # Select specified columns
         if columns:
@@ -72,15 +75,18 @@ class LocalCSVQueryRunner:
         if limit is not None:
             result_df = result_df.head(limit)
 
+        # Replace NaN with None in the query results
+        sanitized_df = result_df.applymap(lambda x: None if pd.isna(x) else x)
+
         if as_dict:
             sanitized_columns = {
-                col: col.replace(" ", "_") for col in result_df.columns
+                col: col.replace(" ", "_") for col in sanitized_df.columns
             }
-            result_df = result_df.copy()
-            result_df.rename(columns=sanitized_columns, inplace=True)
-            return result_df.to_dict(orient="records")
+            sanitized_df = sanitized_df.copy()
+            sanitized_df.rename(columns=sanitized_columns, inplace=True)
+            return sanitized_df.to_dict(orient="records")
 
-        return result_df.values.tolist()
+        return sanitized_df.values.tolist()
 
 
 class RemoteCSVQueryRunner:
@@ -351,8 +357,137 @@ class DeviceLogProfilerQueries:
             limit=limit,
         )
 
-    def get_all_entries(self, as_dict: bool = False, limit: int = None) -> List[List[str]]:
+    def get_all_entries(
+        self, as_dict: bool = False, limit: int = None
+    ) -> List[List[str]]:
         """
         Fetch all entries from the device log.
         """
-        return self.runner.execute_query(columns=self.DEVICE_LOG_COLUMNS, as_dict=as_dict, limit=limit)
+        return self.runner.execute_query(
+            columns=self.DEVICE_LOG_COLUMNS, as_dict=as_dict, limit=limit
+        )
+
+
+class OpsPerformanceQueries:
+    PERF_RESULTS_PREFIX = "ops_perf_results"
+    PERF_RESULTS_COLUMNS = [
+        "OP CODE",
+        "OP TYPE",
+        "GLOBAL CALL COUNT",
+        "DEVICE ID",
+        "ATTRIBUTES",
+        "MATH FIDELITY",
+        "CORE COUNT",
+        "PARALLELIZATION STRATEGY",
+        "HOST START TS",
+        "HOST END TS",
+        "HOST DURATION [ns]",
+        "DEVICE FW START CYCLE",
+        "DEVICE FW END CYCLE",
+        "OP TO OP LATENCY [ns]",
+        "DEVICE FW DURATION [ns]",
+        "DEVICE KERNEL DURATION [ns]",
+        "DEVICE BRISC KERNEL DURATION [ns]",
+        "DEVICE NCRISC KERNEL DURATION [ns]",
+        "DEVICE TRISC0 KERNEL DURATION [ns]",
+        "DEVICE TRISC1 KERNEL DURATION [ns]",
+        "DEVICE TRISC2 KERNEL DURATION [ns]",
+        "DEVICE ERISC KERNEL DURATION [ns]",
+        "DEVICE COMPUTE CB WAIT FRONT [ns]",
+        "DEVICE COMPUTE CB RESERVE BACK [ns]",
+        "INPUT_0_W",
+        "INPUT_0_Z",
+        "INPUT_0_Y",
+        "INPUT_0_X",
+        "INPUT_0_LAYOUT",
+        "INPUT_0_DATATYPE",
+        "INPUT_0_MEMORY",
+        "INPUT_1_W",
+        "INPUT_1_Z",
+        "INPUT_1_Y",
+        "INPUT_1_X",
+        "INPUT_1_LAYOUT",
+        "INPUT_1_DATATYPE",
+        "INPUT_1_MEMORY",
+        "INPUT_2_W",
+        "INPUT_2_Z",
+        "INPUT_2_Y",
+        "INPUT_2_X",
+        "INPUT_2_LAYOUT",
+        "INPUT_2_DATATYPE",
+        "INPUT_2_MEMORY",
+        "OUTPUT_0_W",
+        "OUTPUT_0_Z",
+        "OUTPUT_0_Y",
+        "OUTPUT_0_X",
+        "OUTPUT_0_LAYOUT",
+        "OUTPUT_0_DATATYPE",
+        "OUTPUT_0_MEMORY",
+        "COMPUTE KERNEL SOURCE",
+        "COMPUTE KERNEL HASH",
+        "DATA MOVEMENT KERNEL SOURCE",
+        "DATA MOVEMENT KERNEL HASH",
+        "PM IDEAL [ns]",
+        "PM COMPUTE [ns]",
+        "PM BANDWIDTH [ns]",
+        "PM REQ I BW",
+        "PM REQ O BW",
+        "CompileProgram_TT_HOST_FUNC [ns]",
+        "HWCommandQueue_write_buffer_TT_HOST_FUNC [ns]",
+    ]
+
+    def __init__(self, session: TabSession):
+        """
+        Initialize the performance profiler with a session object.
+        """
+        self.session = session
+        self.runner = None
+
+    def __enter__(self):
+        """
+        Locate the correct CSV file and prepare the query runner.
+        """
+        profiler_path = Path(self.session.profiler_path)
+
+        # Find the latest file with the correct prefix
+        perf_files = list(profiler_path.glob(f"{self.PERF_RESULTS_PREFIX}_*.csv"))
+        if not perf_files:
+            raise FileNotFoundError("No performance results file found.")
+
+        # Use the latest file
+        latest_file = max(perf_files, key=os.path.getctime)
+        self.runner = LocalCSVQueryRunner(file_path=latest_file, offset=1)
+        self.runner.__enter__()
+
+        # Set up columns
+        self.runner.df.columns = self.PERF_RESULTS_COLUMNS
+        self.runner.df.columns = self.runner.df.columns.str.strip()
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Clean up resources when exiting the context.
+        """
+        if self.runner:
+            self.runner.__exit__(exc_type, exc_val, exc_tb)
+
+    def query_by_op_code(
+        self, op_code: str, as_dict: bool = False
+    ) -> Union[List[List[str]], List[Dict[str, str]]]:
+        """
+        Query for rows with a specific OP CODE.
+        """
+        return self.runner.execute_query(
+            filters={"OP CODE": op_code}, as_dict=as_dict, columns=None
+        )
+
+    def get_all_entries(
+        self, as_dict: bool = False, limit: int = None
+    ) -> List[List[str]]:
+        """
+        Fetch all entries from the performance log.
+        """
+        return self.runner.execute_query(
+            columns=self.PERF_RESULTS_COLUMNS, as_dict=as_dict, limit=limit
+        )
