@@ -69,7 +69,11 @@ def get_profiler_path(
 
     # Ensure report_name is provided or defaults to active_report's report_name
     if report_name:
-        profile_dir = base_dir / report_name / "profiler"
+        if not remote_connection:
+            profile_dir = base_dir / report_name / "profiler"
+        else:
+            profile_dir = base_dir / "profiler"
+
     else:
         raise ValueError(
             "A report_name must be provided to determine the profiler path."
