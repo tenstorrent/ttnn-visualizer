@@ -10,7 +10,6 @@ from typing import Union
 
 from ttnn_visualizer.models import TabSession
 
-
 from typing import Dict, List, Optional
 
 from ttnn_visualizer.ssh_client import get_client
@@ -201,7 +200,7 @@ class RemoteCSVQueryRunner:
         if error:
             raise RuntimeError(f"Error fetching raw rows: {error}")
 
-        return output.splitlines()[self.offset :]
+        return output.splitlines()[self.offset:]
 
     def get_csv_header(self) -> Dict[str, int]:
         """
@@ -356,3 +355,8 @@ class DeviceLogProfilerQueries:
         Fetch all entries from the device log.
         """
         return self.runner.execute_query(columns=self.DEVICE_LOG_COLUMNS, as_dict=as_dict, limit=limit)
+
+    def get_raw_csv(self) -> str:
+
+        with open(self.runner.file_path, "r") as f:
+            return f.read()

@@ -174,7 +174,6 @@ def operation_detail(operation_id, session):
 @with_session
 @timer
 def operation_history(session: TabSession):
-
     operation_history_filename = "operation_history.json"
     if session.remote_connection and session.remote_connection.useRemoteQuerying:
         if not session.remote_folder:
@@ -202,7 +201,6 @@ def operation_history(session: TabSession):
 @with_session
 @timer
 def get_config(session: TabSession):
-
     if session.remote_connection and session.remote_connection.useRemoteQuerying:
         if not session.remote_folder:
             return {}
@@ -297,7 +295,6 @@ def buffer_pages(session: TabSession):
 @with_session
 @timer
 def tensor_detail(tensor_id, session: TabSession):
-
     with DatabaseQueries(session) as db:
         tensors = list(db.query_tensors(filters={"tensor_id": tensor_id}))
         if not tensors:
@@ -309,7 +306,6 @@ def tensor_detail(tensor_id, session: TabSession):
 @api.route("/operation-buffers", methods=["GET"])
 @with_session
 def get_operations_buffers(session: TabSession):
-
     buffer_type = request.args.get("buffer_type", "")
     device_id = request.args.get("device_id", None)
     if buffer_type and str.isdigit(buffer_type):
@@ -330,7 +326,6 @@ def get_operations_buffers(session: TabSession):
 @api.route("/operation-buffers/<operation_id>", methods=["GET"])
 @with_session
 def get_operation_buffers(operation_id, session: TabSession):
-
     buffer_type = request.args.get("buffer_type", "")
     device_id = request.args.get("device_id", None)
     if buffer_type and str.isdigit(buffer_type):
@@ -356,6 +351,7 @@ def get_operation_buffers(operation_id, session: TabSession):
             return Response(status=HTTPStatus.NOT_FOUND)
         return serialize_operation_buffers(operation, buffers)
 
+
 @api.route("/profiler/device-log", methods=["GET"])
 @with_session
 def get_profiler_data(session: TabSession):
@@ -364,6 +360,20 @@ def get_profiler_data(session: TabSession):
     with DeviceLogProfilerQueries(session) as csv:
         result = csv.get_all_entries(as_dict=True)
         return jsonify(result)
+
+
+@api.route("/profiler/device-log-raw", methods=["GET"])
+@with_session
+def get_profiler_data_raw(session: TabSession):
+    if not session.profiler_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+    with DeviceLogProfilerQueries(session) as csv:
+        with DeviceLogProfilerQueries(session) as csv:
+            return Response(
+                csv.get_raw_csv(),
+                mimetype="text/csv",
+                headers={"Content-Disposition": "attachment; filename=profile_log_device.csv"}
+            )
 
 
 @api.route("/profiler/device-log/zone/<zone>", methods=["GET"])
@@ -490,7 +500,6 @@ def get_remote_folders():
 
 @api.route("/remote/profiles", methods=["POST"])
 def get_remote_profile_folders():
-
     request_body = request.get_json()
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
