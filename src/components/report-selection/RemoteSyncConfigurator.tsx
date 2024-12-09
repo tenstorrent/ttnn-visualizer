@@ -192,7 +192,6 @@ const RemoteSyncConfigurator: FC = () => {
                     }}
                 />
             </FormGroup>
-
             <FormGroup
                 label={<h3>Use remote sync server</h3>}
                 subLabel='Select remote server that will be used for syncing folders'
@@ -294,6 +293,7 @@ const RemoteSyncConfigurator: FC = () => {
                     loading={isLoading || isFetching}
                     updatingFolderList={isFetching}
                     onSelectFolder={setSelectedReportFolder}
+                    type='report'
                 >
                     {!isUsingRemoteQuerying && (
                         <Tooltip content='Sync remote folder'>
@@ -342,11 +342,10 @@ const RemoteSyncConfigurator: FC = () => {
                     )}
                 </RemoteFolderSelector>
             </FormGroup>
-
             {remote.persistentState.selectedConnection?.performancePath && (
                 <FormGroup
                     label={<h3>Performance data folder</h3>}
-                    subLabel={selectedPerformanceFolder?.testName || ''}
+                    subLabel='Select the performance folder you wish to view'
                 >
                     <RemoteFolderSelector
                         remoteFolder={selectedPerformanceFolder}
@@ -354,6 +353,7 @@ const RemoteSyncConfigurator: FC = () => {
                         loading={isLoading || isFetching}
                         updatingFolderList={isFetching}
                         onSelectFolder={setSelectedPerformanceFolder}
+                        type='performance'
                     >
                         {!isUsingRemoteQuerying && (
                             <Tooltip content='Sync remote folder'>
@@ -407,7 +407,6 @@ const RemoteSyncConfigurator: FC = () => {
                     </RemoteFolderSelector>
                 </FormGroup>
             )}
-
             <FormGroup>
                 <Button
                     disabled={!isRemoteReportMounted}

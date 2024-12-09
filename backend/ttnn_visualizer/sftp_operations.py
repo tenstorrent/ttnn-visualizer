@@ -30,6 +30,7 @@ from ttnn_visualizer.ssh_client import get_client
 logger = logging.getLogger(__name__)
 
 TEST_CONFIG_FILE = "config.json"
+TEST_PROFILER_FILE = "profile_log_device.csv"
 PROFILER_DIRECTORY = "profiler"
 REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
 
@@ -264,7 +265,11 @@ def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str)
         sftp.stat(getattr(remote_connection, path_key))
     except IOError as e:
         # Directory does not exist or is inaccessible
-        message = f"Directory does not exist or cannot be accessed"
+        if path_key == 'performancePath':
+            message = "Performance directory does not exist or cannot be accessed"
+        else:
+            message = "Report directory does not exist or cannot be accessed"
+
         logger.error(message)
         raise RemoteConnectionException(
             message=message, status=ConnectionTestStates.FAILED
@@ -295,10 +300,10 @@ def find_folders_by_files(
 def get_remote_profiler_folders(
     remote_connection: RemoteConnection,
 ) -> List[RemoteReportFolder]:
-    """Return a list of remote folders containing a config.json file."""
+    """Return a list of remote folders containing a profile_log_device file."""
     client = get_client(remote_connection)
     profiler_paths = find_folders_by_files(
-        client, remote_connection.performancePath, ["profile_log_device.csv"]
+        client, remote_connection.performancePath, [TEST_PROFILER_FILE]
     )
     if not profiler_paths:
         error = f"No profiler paths found at {remote_connection.performancePath}"
