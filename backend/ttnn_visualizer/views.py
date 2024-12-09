@@ -356,6 +356,15 @@ def get_operation_buffers(operation_id, session: TabSession):
             return Response(status=HTTPStatus.NOT_FOUND)
         return serialize_operation_buffers(operation, buffers)
 
+@api.route("/profiler/device-log", methods=["GET"])
+@with_session
+def get_profiler_data(session: TabSession):
+    if not session.profiler_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+    with DeviceLogProfilerQueries(session) as csv:
+        result = csv.get_all_entries(as_dict=True)
+        return jsonify(result)
+
 
 @api.route("/profiler/device-log/zone/<zone>", methods=["GET"])
 @with_session

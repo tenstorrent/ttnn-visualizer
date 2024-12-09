@@ -351,8 +351,8 @@ class DeviceLogProfilerQueries:
             limit=limit,
         )
 
-    def get_all_entries(self) -> List[List[str]]:
+    def get_all_entries(self, as_dict: bool = False, limit: int = None) -> List[List[str]]:
         """
         Fetch all entries from the device log.
         """
-        return self.runner.execute_query(columns=self.DEVICE_LOG_COLUMNS)
+        return self.runner.execute_query(columns=self.DEVICE_LOG_COLUMNS, as_dict=as_dict, limit=limit)
