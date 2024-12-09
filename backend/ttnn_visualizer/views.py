@@ -9,7 +9,7 @@ from typing import List
 
 from flask import Blueprint, Response, jsonify
 
-from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries
+from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries
 from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import RemoteConnectionException
@@ -358,7 +358,18 @@ def get_profiler_data(session: TabSession):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     with DeviceLogProfilerQueries(session) as csv:
-        result = csv.get_all_entries(as_dict=True)
+        result = csv.get_all_entries(as_dict=True, limit=100)
+        return jsonify(result)
+
+
+@api.route("/profiler/perf-results", methods=["GET"])
+@with_session
+def get_profiler_performance_data(session: TabSession):
+    if not session.profiler_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+    with OpsPerformanceQueries(session) as csv:
+        # result = csv.query_by_op_code(op_code="(torch) contiguous", as_dict=True)
+        result = csv.get_all_entries(as_dict=True, limit=100)
         return jsonify(result)
 
 
