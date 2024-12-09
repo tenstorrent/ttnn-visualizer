@@ -379,12 +379,11 @@ def get_profiler_data_raw(session: TabSession):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     with DeviceLogProfilerQueries(session) as csv:
-        with DeviceLogProfilerQueries(session) as csv:
-            return Response(
-                csv.get_raw_csv(),
-                mimetype="text/csv",
-                headers={"Content-Disposition": "attachment; filename=profile_log_device.csv"}
-            )
+        return Response(
+            csv.get_raw_csv(),
+            mimetype="text/csv",
+            headers={"Content-Disposition": "attachment; filename=profile_log_device.csv"}
+        )
 
 
 @api.route("/profiler/device-log/zone/<zone>", methods=["GET"])
