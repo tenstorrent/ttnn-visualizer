@@ -443,7 +443,9 @@ def create_profile_files():
         report_name,
     )
 
-    update_tab_session(tab_id=tab_id, profile_name=profiler_folder_name)
+    update_tab_session(
+        tab_id=tab_id, profile_name=profiler_folder_name, clear_remote=True
+    )
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
