@@ -115,6 +115,22 @@ export interface DeviceData {
     worker_l1_size: number;
 }
 
+export interface PerformanceData {
+    PCIe_slot: number;
+    RISC_processor_type: string; // Can we scope this down to a specific set of values?
+    core_x: number;
+    core_y: number;
+    run_ID: number;
+    run_host_ID: number;
+    source_file: string;
+    source_line: number;
+    stat_value: number;
+    'time[cycles_since_reset]': number;
+    timer_id: number;
+    zone_name: string; // Can we scope this down to a specific set of values?
+    zone_phase: 'begin' | 'end';
+}
+
 /** @description
  * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
  */
@@ -150,6 +166,12 @@ const fetchDevices = async () => {
     const { data: meta } = await axiosInstance.get<DeviceData[]>('/api/devices');
 
     return meta;
+};
+
+const fetchPerformanceData = async (): Promise<PerformanceData[]> => {
+    const { data } = await axiosInstance.get<PerformanceData[]>('/api/profiler/device-log');
+
+    return data;
 };
 
 export const useOperationsList = (deviceId?: number) => {
@@ -293,5 +315,12 @@ export const useBuffers = (bufferType: BufferType, deviceId: number | null) => {
     return useQuery({
         queryFn: () => fetchAllBuffers(bufferType, deviceId),
         queryKey: ['fetch-all-buffers', bufferType, deviceId],
+    });
+};
+
+export const usePerformance = () => {
+    return useQuery({
+        queryFn: () => fetchPerformanceData(),
+        queryKey: 'get-performance-data',
     });
 };
