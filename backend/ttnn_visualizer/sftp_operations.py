@@ -359,7 +359,6 @@ def sync_remote_folders(
 def sync_remote_profiler_folders(
     remote_connection: RemoteConnection,
     path_prefix: str,
-    report: RemoteReportFolder,
     profile: RemoteReportFolder,
     exclude_patterns: Optional[List[str]] = None,
     sid=None,
@@ -367,12 +366,10 @@ def sync_remote_profiler_folders(
     client = get_client(remote_connection)
     remote_folder_path = profile.remotePath
     profile_folder = Path(remote_folder_path).name
-    report_folder = Path(report.remotePath).name
     destination_dir = Path(
         REPORT_DATA_DIRECTORY,
         path_prefix,
         remote_connection.host,
-        report_folder,
         PROFILER_DIRECTORY,
         profile_folder,
     )

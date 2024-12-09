@@ -486,7 +486,6 @@ def get_remote_profile_folders():
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
     )
-    report = RemoteReportFolder.model_validate(request_body.get("report"), strict=False)
 
     try:
         remote_profile_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
@@ -494,20 +493,18 @@ def get_remote_profile_folders():
         )
 
         for rf in remote_profile_folders:
-            directory_name = Path(report.remotePath).name
             profile_name = Path(rf.remotePath).name
             remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
             local_path = (
                 Path(remote_data_directory)
                 .joinpath(connection.host)
-                .joinpath(directory_name)
                 .joinpath("profiler")
                 .joinpath(profile_name)
             )
-            logger.info(f"Checking last synced for {directory_name}")
+            logger.info(f"Checking last synced for {profile_name}")
             rf.lastSynced = read_last_synced_file(str(local_path))
             if not rf.lastSynced:
-                logger.info(f"{directory_name} not yet synced")
+                logger.info(f"{profile_name} not yet synced")
 
         return [r.model_dump() for r in remote_profile_folders]
     except RemoteConnectionException as e:
@@ -604,7 +601,6 @@ def sync_remote_folder():
             sync_remote_profiler_folders(
                 connection,
                 remote_dir,
-                report=remote_folder,
                 profile=profile_folder,
                 exclude_patterns=[r"/tensors(/|$)"],
                 sid=tab_id,
