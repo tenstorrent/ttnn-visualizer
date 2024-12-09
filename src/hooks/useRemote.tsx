@@ -51,16 +51,12 @@ const useRemoteConnection = () => {
         return response.data;
     };
 
-    const listPerformanceFolders = async (
-        connection?: RemoteConnection,
-        report?: RemoteFolder,
-    ): Promise<RemoteFolder[]> => {
+    const listPerformanceFolders = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
         const response = await axiosInstance.post<RemoteFolder[]>(`${import.meta.env.VITE_API_ROOT}/remote/profiles`, {
             connection,
-            report,
         });
 
         return response.data;

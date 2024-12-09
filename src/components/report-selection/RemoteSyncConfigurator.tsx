@@ -156,6 +156,15 @@ const RemoteSyncConfigurator: FC = () => {
                         setSelectedReportFolder(updatedSelectedFolder);
                     }
                 }
+                // Update existing performance folder
+                if (selectedPerformanceFolder) {
+                    const updatedSelectedPerformanceFolder = updatedPerformanceFolders.find(
+                        (f) => f.remotePath === selectedReportFolder?.remotePath,
+                    );
+                    if (updatedSelectedPerformanceFolder) {
+                        setSelectedPerformanceFolder(updatedSelectedPerformanceFolder);
+                    }
+                }
             } catch {
                 setIsRemoteOffline(true);
             } finally {
@@ -222,7 +231,7 @@ const RemoteSyncConfigurator: FC = () => {
 
                             const fetchedReportFolders = await remote.listReportFolders(connection);
                             const fetchedPerformanceFolders = connection.performancePath
-                                ? await remote.listPerformanceFolders(connection, selectedReportFolder)
+                                ? await remote.listPerformanceFolders(connection)
                                 : [];
 
                             const updatedReportFolders = updateSavedReportFolders(connection, fetchedReportFolders);
@@ -250,10 +259,7 @@ const RemoteSyncConfigurator: FC = () => {
                                 );
                                 const fetchedPerformanceFolders = remote.persistentState.selectedConnection
                                     .performancePath
-                                    ? await remote.listPerformanceFolders(
-                                          remote.persistentState.selectedConnection,
-                                          selectedReportFolder,
-                                      )
+                                    ? await remote.listPerformanceFolders(remote.persistentState.selectedConnection)
                                     : [];
 
                                 const updatedReportsfolders = updateSavedReportFolders(
@@ -340,7 +346,7 @@ const RemoteSyncConfigurator: FC = () => {
             {remote.persistentState.selectedConnection?.performancePath && (
                 <FormGroup
                     label={<h3>Performance data folder</h3>}
-                    subLabel='Select the performance data folder you wish to view'
+                    subLabel={selectedPerformanceFolder?.testName || ''}
                 >
                     <RemoteFolderSelector
                         remoteFolder={selectedPerformanceFolder}
@@ -366,6 +372,7 @@ const RemoteSyncConfigurator: FC = () => {
                                             if (remote.persistentState.selectedConnection) {
                                                 const { data: updatedFolder } = await remote.syncRemoteFolder(
                                                     remote.persistentState.selectedConnection,
+                                                    selectedReportFolder,
                                                     selectedPerformanceFolder,
                                                 );
 
