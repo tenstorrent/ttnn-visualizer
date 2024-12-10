@@ -338,13 +338,13 @@ export const useBuffers = (bufferType: BufferType, deviceId: number | null) => {
 export const useDeviceLog = () => {
     return useQuery({
         queryFn: () => fetchDeviceLogRaw(),
-        queryKey: 'get-device-log',
+        queryKey: 'get-device-log-raw',
     });
 };
 
 export const usePerformance = () => {
     return useQuery({
         queryFn: () => fetchPerformanceDataRaw(),
-        queryKey: 'get-performance-data',
+        queryKey: 'get-performance-data-raw',
     });
 };
