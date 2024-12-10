@@ -378,17 +378,12 @@ def get_profiler_performance_data(session: TabSession):
 def get_profiler_perf_results_data_raw(session: TabSession):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
-    if (
-        not session.remote_connection
-        or session.remote_connection
-        and not session.remote_connection.useRemoteQuerying
-    ):
-        content = OpsPerformanceQueries.get_raw_csv(session)
-        return Response(
-            content,
-            mimetype="text/csv",
-            headers={"Content-Disposition": "attachment; filename=op_perf_results.csv"},
-        )
+    content = OpsPerformanceQueries.get_raw_csv(session)
+    return Response(
+        content,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=op_perf_results.csv"},
+    )
 
 
 @api.route("/profiler/device-log/raw", methods=["GET"])

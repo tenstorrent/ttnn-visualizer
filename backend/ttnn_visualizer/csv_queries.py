@@ -362,6 +362,8 @@ class DeviceLogProfilerQueries:
 
     @staticmethod
     def get_raw_csv(session: TabSession):
+        from ttnn_visualizer.sftp_operations import read_remote_file
+
         if (
             not session.remote_connection
             or session.remote_connection
@@ -372,6 +374,12 @@ class DeviceLogProfilerQueries:
             )
             with open(file_path, "r") as f:
                 return f.read()
+        else:
+            profiler_folder = session.remote_profile_folder
+            return read_remote_file(
+                session.remote_connection,
+                f"{profiler_folder.remotePath}/{DeviceLogProfilerQueries.DEVICE_LOG_FILE}",
+            )
 
 
 class OpsPerformanceQueries:
@@ -481,11 +489,12 @@ class OpsPerformanceQueries:
 
     @staticmethod
     def get_remote_ops_perf_file_path(session):
-        from sftp_operations import resolve_file_path
+        from ttnn_visualizer.sftp_operations import resolve_file_path
 
+        remote_profile_folder = session.remote_profile_folder.remotePath
         return resolve_file_path(
             session.remote_connection,
-            f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}_*.csv",
+            f"{remote_profile_folder}/{OpsPerformanceQueries.PERF_RESULTS_PREFIX}*",
         )
 
     @staticmethod
