@@ -49,6 +49,32 @@ def start_background_task(task, *args):
             thread.start()
 
 
+def resolve_file_path(remote_connection, file_path: str) -> str:
+    """
+    Resolve the file path if it contains a wildcard ('*') by using glob on the remote machine.
+
+    :param session: A session object containing the remote connection information.
+    :param file_path: The file path, which may include wildcards.
+    :return: The resolved file path.
+    :raises FileNotFoundError: If no files match the pattern.
+    """
+    ssh_client = get_client(remote_connection)
+
+    if "*" in file_path:
+        command = f"ls -1 {file_path}"
+        stdin, stdout, stderr = ssh_client.exec_command(command)
+        files = stdout.read().decode().splitlines()
+        ssh_client.close()
+
+        if not files:
+            raise FileNotFoundError(f"No files found matching pattern: {file_path}")
+
+        # Return the first file found
+        return files[0]
+
+    return file_path
+
+
 def calculate_folder_size(client: SSHClient, folder_path: str) -> int:
     """Calculate the total size of the folder before compression."""
     stdin, stdout, stderr = client.exec_command(f"du -sb {folder_path}")
@@ -265,7 +291,7 @@ def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str)
         sftp.stat(getattr(remote_connection, path_key))
     except IOError as e:
         # Directory does not exist or is inaccessible
-        if path_key == 'performancePath':
+        if path_key == "performancePath":
             message = "Performance directory does not exist or cannot be accessed"
         else:
             message = "Report directory does not exist or cannot be accessed"
