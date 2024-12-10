@@ -2,95 +2,223 @@
 #
 # SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-import json
 from logging import getLogger
-from typing import Optional
 
-from flask import request, jsonify, current_app
+from flask import request
 
-from ttnn_visualizer.utils import get_report_path
+from ttnn_visualizer.utils import get_report_path, get_profiler_path
 from ttnn_visualizer.models import (
-    RemoteConnection,
-    RemoteReportFolder,
     TabSessionTable,
 )
 from ttnn_visualizer.extensions import db
 
 logger = getLogger(__name__)
 
+from flask import jsonify, current_app
+from sqlalchemy.exc import SQLAlchemyError
+import json
 
-def update_tab_session(
-    tab_id,
-    active_report_data,
-    remote_connection: Optional[RemoteConnection] = None,
-    remote_folder: Optional[RemoteReportFolder] = None,
+
+def update_existing_tab_session(
+    session_data,
+    report_name,
+    profile_name,
+    remote_connection,
+    remote_folder,
+    remote_profile_folder,
+    clear_remote,
 ):
-    """
-    Overwrite the active report for a given tab session or create a new session if one doesn't exist.
-    Store everything in the database using the TabSession model.
-    """
-    active_report = {"name": active_report_data.get("name")}
+    active_report = session_data.active_report or {}
 
-    # Query the database to find the existing tab session
-    session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
-    remote_folder_data = remote_folder.model_dump() if remote_folder else None
-    remote_connection_data = (
-        remote_connection.model_dump() if remote_connection else None
+    if report_name:
+        active_report["report_name"] = report_name
+    if profile_name:
+        active_report["profile_name"] = profile_name
+
+    session_data.active_report = active_report
+
+    if remote_connection:
+        session_data.remote_connection = remote_connection.model_dump()
+    if remote_folder:
+        session_data.remote_folder = remote_folder.model_dump()
+    if remote_profile_folder:
+        session_data.remote_profile_folder = remote_profile_folder.model_dump()
+
+    if clear_remote:
+        clear_remote_data(session_data)
+
+    update_paths(
+        session_data, active_report, remote_connection, report_name, profile_name
     )
-    report_path = get_report_path(
-        active_report, current_app=current_app, remote_connection=remote_connection
-    )
 
-    if session_data:
-        session_data.report_path = report_path
-        session_data.remote_folder = remote_folder_data
-        session_data.remote_connection = remote_connection_data
-        session_data.active_report = active_report
 
-    else:
-        # Create a new session entry
-        session_data = TabSessionTable(
-            tab_id=tab_id,
-            active_report=active_report,
-            report_path=report_path,
-            remote_connection=remote_connection_data,
-            remote_folder=remote_folder_data,
-        )
+def clear_remote_data(session_data):
+    session_data.remote_connection = None
+    session_data.remote_folder = None
+    session_data.remote_profile_folder = None
 
-        db.session.add(session_data)
 
+def handle_sqlalchemy_error(error):
+    current_app.logger.error(f"Failed to update tab session: {str(error)}")
+    db.session.rollback()
+
+
+def commit_and_log_session(session_data, tab_id):
     db.session.commit()
 
+    session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
     current_app.logger.info(
         f"Session data for tab {tab_id}: {json.dumps(session_data.to_dict(), indent=4)}"
     )
 
-    return jsonify({"message": "Tab session updated with new active report"}), 200
+
+def update_paths(
+    session_data, active_report, remote_connection, report_name, profile_name
+):
+    session_data.report_path = get_report_path(
+        active_report,
+        current_app=current_app,
+        remote_connection=remote_connection,
+    )
+
+    if active_report.get("report_name") and active_report.get("profile_name"):
+        session_data.profiler_path = get_profiler_path(
+            profile_name=active_report["profile_name"],
+            current_app=current_app,
+            report_name=active_report["report_name"],
+            remote_connection=remote_connection,
+        )
+    elif report_name and not profile_name:
+        session_data.profiler_path = None
+        active_report.update({"profile_name": None})
+
+
+def create_new_tab_session(
+    tab_id,
+    report_name,
+    profile_name,
+    remote_connection,
+    remote_folder,
+    remote_profile_folder,
+    clear_remote,
+):
+    active_report = {}
+    if report_name:
+        active_report["report_name"] = report_name
+    if profile_name:
+        active_report["profile_name"] = profile_name
+
+    if clear_remote:
+        remote_connection = None
+        remote_folder = None
+        remote_profile_folder = None
+
+    session_data = TabSessionTable(
+        tab_id=tab_id,
+        active_report=active_report,
+        report_path=get_report_path(
+            active_report,
+            current_app=current_app,
+            remote_connection=remote_connection,
+        ),
+        remote_connection=(
+            remote_connection.model_dump() if remote_connection else None
+        ),
+        remote_folder=remote_folder.model_dump() if remote_folder else None,
+        remote_profile_folder=(
+            remote_profile_folder.model_dump() if remote_profile_folder else None
+        ),
+    )
+    db.session.add(session_data)
+    return session_data
+
+
+def update_tab_session(
+    tab_id,
+    report_name=None,
+    profile_name=None,
+    remote_connection=None,
+    remote_folder=None,
+    remote_profile_folder=None,
+    clear_remote=False,
+):
+    try:
+        session_data = get_or_create_tab_session(tab_id)
+
+        if session_data:
+            update_existing_tab_session(
+                session_data,
+                report_name,
+                profile_name,
+                remote_connection,
+                remote_folder,
+                remote_profile_folder,
+                clear_remote,
+            )
+        else:
+            session_data = create_new_tab_session(
+                tab_id,
+                report_name,
+                profile_name,
+                remote_connection,
+                remote_folder,
+                remote_profile_folder,
+                clear_remote,
+            )
+
+        commit_and_log_session(session_data, tab_id)
+        return jsonify({"message": "Tab session updated successfully"}), 200
+
+    except SQLAlchemyError as e:
+        handle_sqlalchemy_error(e)
+        return jsonify({"error": "Failed to update tab session"}), 500
 
 
 def get_or_create_tab_session(
-    tab_id, active_report_data=None, remote_connection=None, remote_folder=None
+    tab_id,
+    report_name=None,
+    profile_name=None,
+    remote_connection=None,
+    remote_folder=None,
 ):
     """
     Retrieve an existing tab session or create a new one if it doesn't exist.
-    Uses the TabSession model to manage session data.
+    Uses the TabSession model to manage session data and supports conditional updates.
     """
-    # Query the database for the tab session
-    session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
+    try:
+        # Query the database for the tab session
+        session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
 
-    # If session doesn't exist, initialize it
-    if not session_data:
-        session_data = TabSessionTable(
-            tab_id=tab_id, active_report={}, remote_connection=None
-        )
-        db.session.add(session_data)
-        db.session.commit()
+        # If session doesn't exist, initialize it
+        if not session_data:
+            session_data = TabSessionTable(
+                tab_id=tab_id,
+                active_report={},
+                remote_connection=None,
+                remote_folder=None,
+            )
+            db.session.add(session_data)
+            db.session.commit()
 
-    # If active_report_data is provided, update the session with the new report
-    if active_report_data:
-        update_tab_session(tab_id, active_report_data, remote_connection, remote_folder)
+        # Update the session if any new data is provided
+        if report_name or profile_name or remote_connection or remote_folder:
+            update_tab_session(
+                tab_id=tab_id,
+                report_name=report_name,
+                profile_name=profile_name,
+                remote_connection=remote_connection,
+                remote_folder=remote_folder,
+            )
 
-    return session_data
+        # Query again to get the updated session data
+        session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
+
+        return session_data
+
+    except SQLAlchemyError as e:
+        current_app.logger.error(f"Failed to get or create tab session: {str(e)}")
+        db.session.rollback()
+        return None
 
 
 def get_tab_session():

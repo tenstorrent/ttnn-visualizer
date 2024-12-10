@@ -51,36 +51,22 @@ const useRemoteConnection = () => {
         return response.data;
     };
 
-    const listPerformanceFolders = (connection?: RemoteConnection): RemoteFolder[] => {
+    const listPerformanceFolders = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
+        const response = await axiosInstance.post<RemoteFolder[]>(`${import.meta.env.VITE_API_ROOT}/remote/profiles`, {
+            connection,
+        });
 
-        return [
-            {
-                lastModified: 1721741616,
-                lastSynced: null,
-                remotePath: '/home/ctr-dblundell/perf/SEG_ENCODER/2024_11_29',
-                testName: 'SEG_ENCODER/2024_11_29',
-            },
-            {
-                lastModified: 1721741616,
-                lastSynced: null,
-                remotePath: '/home/ctr-dblundell/perf/SEG_ENCODER/2024_12_05',
-                testName: '2024_12_05',
-            },
-        ];
-
-        // TODO: Fetch properly from the API
-        // const response = await axiosInstance.post<RemoteFolder[]>(
-        //     `${import.meta.env.VITE_API_ROOT}/remote/performance`,
-        //     connection,
-        // );
-
-        // return response.data;
+        return response.data;
     };
 
-    const syncRemoteFolder = async (connection?: RemoteConnection, remoteFolder?: RemoteFolder) => {
+    const syncRemoteFolder = async (
+        connection?: RemoteConnection,
+        remoteFolder?: RemoteFolder,
+        remoteProfile?: RemoteFolder,
+    ) => {
         if (!connection || !connection.host || !connection.port || !connection.reportPath) {
             throw new Error('No connection provided');
         }
@@ -88,17 +74,22 @@ const useRemoteConnection = () => {
         if (!remoteFolder) {
             throw new Error('No remote folder provided');
         }
-
         return axiosInstance.post<RemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
             connection,
             folder: remoteFolder,
+            profile: remoteProfile,
         });
     };
 
-    const mountRemoteFolder = async (connection: RemoteConnection, remoteFolder: RemoteFolder) => {
+    const mountRemoteFolder = async (
+        connection: RemoteConnection,
+        remoteFolder: RemoteFolder,
+        remoteProfile?: RemoteFolder,
+    ) => {
         return axiosInstance.post<MountRemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/use`, {
             connection,
             folder: remoteFolder,
+            profile: remoteProfile,
         });
     };
 

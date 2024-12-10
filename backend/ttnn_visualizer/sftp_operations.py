@@ -30,6 +30,8 @@ from ttnn_visualizer.ssh_client import get_client
 logger = logging.getLogger(__name__)
 
 TEST_CONFIG_FILE = "config.json"
+TEST_PROFILER_FILE = "profile_log_device.csv"
+PROFILER_DIRECTORY = "profiler"
 REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
 
 
@@ -45,6 +47,32 @@ def start_background_task(task, *args):
             # Use a basic thread if WebSockets are not enabled
             thread = Thread(target=task, args=args)
             thread.start()
+
+
+def resolve_file_path(remote_connection, file_path: str) -> str:
+    """
+    Resolve the file path if it contains a wildcard ('*') by using glob on the remote machine.
+
+    :param session: A session object containing the remote connection information.
+    :param file_path: The file path, which may include wildcards.
+    :return: The resolved file path.
+    :raises FileNotFoundError: If no files match the pattern.
+    """
+    ssh_client = get_client(remote_connection)
+
+    if "*" in file_path:
+        command = f"ls -1 {file_path}"
+        stdin, stdout, stderr = ssh_client.exec_command(command)
+        files = stdout.read().decode().splitlines()
+        ssh_client.close()
+
+        if not files:
+            raise FileNotFoundError(f"No files found matching pattern: {file_path}")
+
+        # Return the first file found
+        return files[0]
+
+    return file_path
 
 
 def calculate_folder_size(client: SSHClient, folder_path: str) -> int:
@@ -167,6 +195,7 @@ def download_file_with_progress(
                 finished_files=finished_files,
                 status=FileStatus.DOWNLOADING,
             )
+            emit_file_status(progress, sid)
 
         # Perform the download
         sftp.get(remote_path, str(local_path), callback=download_progress_callback)
@@ -190,6 +219,23 @@ def get_remote_report_folder_from_config_path(
                 int(attributes.st_mtime) if attributes.st_mtime else int(time.time())
             ),
         )
+
+
+def get_remote_profile_folder(
+    sftp: SFTPClient, profile_folder: str
+) -> RemoteReportFolder:
+    """Read a remote config file and return RemoteFolder object."""
+    attributes = sftp.stat(str(profile_folder))
+    profile_name = profile_folder.split("/")[-1]
+    remote_path = profile_folder
+    last_modified = (
+        int(attributes.st_mtime) if attributes.st_mtime else int(time.time())
+    )
+    return RemoteReportFolder(
+        remotePath=str(remote_path),
+        testName=str(profile_name),
+        lastModified=last_modified,
+    )
 
 
 @remote_exception_handler
@@ -245,7 +291,11 @@ def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str)
         sftp.stat(getattr(remote_connection, path_key))
     except IOError as e:
         # Directory does not exist or is inaccessible
-        message = f"Directory does not exist or cannot be accessed"
+        if path_key == "performancePath":
+            message = "Performance directory does not exist or cannot be accessed"
+        else:
+            message = "Report directory does not exist or cannot be accessed"
+
         logger.error(message)
         raise RemoteConnectionException(
             message=message, status=ConnectionTestStates.FAILED
@@ -270,6 +320,26 @@ def find_folders_by_files(
                 matched_folders.append(str(dirname))
 
     return matched_folders
+
+
+@remote_exception_handler
+def get_remote_profiler_folders(
+    remote_connection: RemoteConnection,
+) -> List[RemoteReportFolder]:
+    """Return a list of remote folders containing a profile_log_device file."""
+    client = get_client(remote_connection)
+    profiler_paths = find_folders_by_files(
+        client, remote_connection.performancePath, [TEST_PROFILER_FILE]
+    )
+    if not profiler_paths:
+        error = f"No profiler paths found at {remote_connection.performancePath}"
+        logger.info(error)
+        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
+    remote_folder_data = []
+    with client.open_sftp() as sftp:
+        for path in profiler_paths:
+            remote_folder_data.append(get_remote_profile_folder(sftp, path))
+        return remote_folder_data
 
 
 @remote_exception_handler
@@ -308,6 +378,31 @@ def sync_remote_folders(
     report_folder = Path(remote_folder_path).name
     destination_dir = Path(
         REPORT_DATA_DIRECTORY, path_prefix, remote_connection.host, report_folder
+    )
+    destination_dir.mkdir(parents=True, exist_ok=True)
+
+    sync_files_and_directories(
+        client, remote_folder_path, destination_dir, exclude_patterns, sid
+    )
+
+
+@remote_exception_handler
+def sync_remote_profiler_folders(
+    remote_connection: RemoteConnection,
+    path_prefix: str,
+    profile: RemoteReportFolder,
+    exclude_patterns: Optional[List[str]] = None,
+    sid=None,
+):
+    client = get_client(remote_connection)
+    remote_folder_path = profile.remotePath
+    profile_folder = Path(remote_folder_path).name
+    destination_dir = Path(
+        REPORT_DATA_DIRECTORY,
+        path_prefix,
+        remote_connection.host,
+        PROFILER_DIRECTORY,
+        profile_folder,
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
 

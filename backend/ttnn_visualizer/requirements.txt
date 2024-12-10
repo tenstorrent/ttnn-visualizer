@@ -12,6 +12,7 @@ flask-sqlalchemy
 flask-socketio
 gevent==24.10.2
 flask-session
+pandas
 wheel
 build
 
