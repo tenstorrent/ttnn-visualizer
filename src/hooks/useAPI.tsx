@@ -4,6 +4,7 @@
 
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
+import Papa, { ParseResult } from 'papaparse';
 import axiosInstance from '../libs/axiosInstance';
 import {
     Buffer,
@@ -168,10 +169,26 @@ const fetchDevices = async () => {
     return meta;
 };
 
-const fetchPerformanceData = async (): Promise<PerformanceData[]> => {
-    const { data } = await axiosInstance.get<PerformanceData[]>('/api/profiler/device-log');
+const fetchPerformanceDataRaw = async (): Promise<ParseResult<string>> => {
+    const { data } = await axiosInstance.get<string>('/api/profiler/perf-results/raw');
 
-    return data;
+    return new Promise<ParseResult<string>>((resolve, reject) => {
+        Papa.parse<string>(data, {
+            complete: (results) => resolve(results),
+            error: (error: Error) => reject(error),
+        });
+    });
+};
+
+const fetchDeviceLogRaw = async (): Promise<ParseResult<string>> => {
+    const { data } = await axiosInstance.get<string>('/api/profiler/device-log/raw');
+
+    return new Promise<ParseResult<string>>((resolve, reject) => {
+        Papa.parse<string>(data, {
+            complete: (results) => resolve(results),
+            error: (error: Error) => reject(error),
+        });
+    });
 };
 
 export const useOperationsList = (deviceId?: number) => {
@@ -318,9 +335,16 @@ export const useBuffers = (bufferType: BufferType, deviceId: number | null) => {
     });
 };
 
+export const useDeviceLog = () => {
+    return useQuery({
+        queryFn: () => fetchDeviceLogRaw(),
+        queryKey: 'get-device-log',
+    });
+};
+
 export const usePerformance = () => {
     return useQuery({
-        queryFn: () => fetchPerformanceData(),
+        queryFn: () => fetchPerformanceDataRaw(),
         queryKey: 'get-performance-data',
     });
 };

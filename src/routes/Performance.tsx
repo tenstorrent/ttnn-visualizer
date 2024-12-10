@@ -12,6 +12,7 @@ import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 export default function Performance() {
     const report = useReportMeta();
     const setMeta = useSetAtom(reportMetaAtom);
+    // const { data } = usePerformance();
 
     useClearSelectedBuffer();
 
