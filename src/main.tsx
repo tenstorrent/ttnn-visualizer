@@ -20,6 +20,7 @@ import Tensors from './routes/Tensors';
 import BufferSummary from './routes/BufferSummary';
 import { SocketProvider } from './libs/SocketProvider';
 import GraphView from './routes/GraphView';
+import Performance from './routes/Performance';
 
 const router = createBrowserRouter([
     {
@@ -54,6 +55,10 @@ const router = createBrowserRouter([
             {
                 path: 'graphtree/:operationId?',
                 element: <GraphView />,
+            },
+            {
+                path: 'performance',
+                element: <Performance />,
             },
         ],
     },
