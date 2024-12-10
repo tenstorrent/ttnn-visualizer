@@ -373,17 +373,35 @@ def get_profiler_performance_data(session: TabSession):
         return jsonify(result)
 
 
-@api.route("/profiler/device-log-raw", methods=["GET"])
+@api.route("/profiler/perf-results/raw", methods=["GET"])
+@with_session
+def get_profiler_perf_results_data_raw(session: TabSession):
+    if not session.profiler_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+    if (
+        not session.remote_connection
+        or session.remote_connection
+        and not session.remote_connection.useRemoteQuerying
+    ):
+        content = OpsPerformanceQueries.get_raw_csv(session)
+        return Response(
+            content,
+            mimetype="text/csv",
+            headers={"Content-Disposition": "attachment; filename=op_perf_results.csv"},
+        )
+
+
+@api.route("/profiler/device-log/raw", methods=["GET"])
 @with_session
 def get_profiler_data_raw(session: TabSession):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
-    with DeviceLogProfilerQueries(session) as csv:
-        return Response(
-            csv.get_raw_csv(),
-            mimetype="text/csv",
-            headers={"Content-Disposition": "attachment; filename=profile_log_device.csv"}
-        )
+    content = DeviceLogProfilerQueries.get_raw_csv(session)
+    return Response(
+        content,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=profile_log_device.csv"},
+    )
 
 
 @api.route("/profiler/device-log/zone/<zone>", methods=["GET"])

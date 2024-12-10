@@ -207,7 +207,7 @@ class RemoteCSVQueryRunner:
         if error:
             raise RuntimeError(f"Error fetching raw rows: {error}")
 
-        return output.splitlines()[self.offset:]
+        return output.splitlines()[self.offset :]
 
     def get_csv_header(self) -> Dict[str, int]:
         """
@@ -345,13 +345,6 @@ class DeviceLogProfilerQueries:
         """
         return self.runner.execute_query(
             columns=[],
-            # Example of returning only specific columns
-            # columns=[
-            #     "zone name",
-            #     "time[cycles since reset]",
-            #     "stat value",
-            #     "source file",
-            # ],
             filters={"zone name": zone_name},
             as_dict=as_dict,
             limit=limit,
@@ -366,6 +359,19 @@ class DeviceLogProfilerQueries:
         return self.runner.execute_query(
             columns=self.DEVICE_LOG_COLUMNS, as_dict=as_dict, limit=limit
         )
+
+    @staticmethod
+    def get_raw_csv(session: TabSession):
+        if (
+            not session.remote_connection
+            or session.remote_connection
+            and not session.remote_connection.useRemoteQuerying
+        ):
+            file_path = Path(
+                session.profiler_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE
+            )
+            with open(file_path, "r") as f:
+                return f.read()
 
 
 class OpsPerformanceQueries:
@@ -445,18 +451,11 @@ class OpsPerformanceQueries:
 
     def __enter__(self):
         """
-        Locate the correct CSV file and prepare the query runner.
+
+        :return:
         """
-        profiler_path = Path(self.session.profiler_path)
-
-        # Find the latest file with the correct prefix
-        perf_files = list(profiler_path.glob(f"{self.PERF_RESULTS_PREFIX}_*.csv"))
-        if not perf_files:
-            raise FileNotFoundError("No performance results file found.")
-
-        # Use the latest file
-        latest_file = max(perf_files, key=os.path.getctime)
-        self.runner = LocalCSVQueryRunner(file_path=latest_file, offset=1)
+        file_path = OpsPerformanceQueries.get_local_ops_perf_file_path(self.session)
+        self.runner = LocalCSVQueryRunner(file_path=file_path, offset=1)
         self.runner.__enter__()
 
         # Set up columns
@@ -464,6 +463,45 @@ class OpsPerformanceQueries:
         self.runner.df.columns = self.runner.df.columns.str.strip()
 
         return self
+
+    @staticmethod
+    def get_local_ops_perf_file_path(session):
+        profiler_path = Path(session.profiler_path)
+
+        # Find the latest file with the correct prefix
+        perf_files = list(
+            profiler_path.glob(f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}_*.csv")
+        )
+        if not perf_files:
+            raise FileNotFoundError("No performance results file found.")
+
+        # Use the latest file
+        latest_file = max(perf_files, key=os.path.getctime)
+        return str(latest_file)
+
+    @staticmethod
+    def get_remote_ops_perf_file_path(session):
+        from sftp_operations import resolve_file_path
+
+        return resolve_file_path(
+            session.remote_connection,
+            f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}_*.csv",
+        )
+
+    @staticmethod
+    def get_raw_csv(session):
+        from ttnn_visualizer.sftp_operations import read_remote_file
+
+        if (
+            not session.remote_connection
+            or session.remote_connection
+            and not session.remote_connection.useRemoteQuerying
+        ):
+            with open(OpsPerformanceQueries.get_local_ops_perf_file_path(session)) as f:
+                return f.read()
+        else:
+            path = OpsPerformanceQueries.get_remote_ops_perf_file_path(session)
+            return read_remote_file(session.remote_connection, path)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
@@ -491,8 +529,3 @@ class OpsPerformanceQueries:
         return self.runner.execute_query(
             columns=self.PERF_RESULTS_COLUMNS, as_dict=as_dict, limit=limit
         )
-
-    def get_raw_csv(self) -> str:
-
-        with open(self.runner.file_path, "r") as f:
-            return f.read()
