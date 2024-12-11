@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import Papa, { ParseResult } from 'papaparse';
@@ -21,7 +23,6 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig } from '../functions/parseMemoryConfig';
-import isValidNumber from '../functions/isValidNumber';
 
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
@@ -40,7 +41,7 @@ export const fetchBufferPages = async (
             operation_id: operationId,
             address,
             buffer_type: bufferType,
-            device_id: deviceId,
+            // device_id: deviceId,
         },
     });
     return response.data;
@@ -132,16 +133,13 @@ export interface PerformanceData {
     zone_phase: 'begin' | 'end';
 }
 
-/** @description
- * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
- */
 const fetchAllBuffers = async (
     bufferType: BufferType | null,
     deviceId: number | null,
 ): Promise<BuffersByOperationData[]> => {
     const params = {
         buffer_type: bufferType,
-        device_id: deviceId,
+        // device_id: deviceId,
     };
 
     const { data: buffers } = await axiosInstance.get<BuffersByOperationData[]>('/api/operation-buffers', {
@@ -213,11 +211,12 @@ export const useOperationDetails = (operationId: number | null, deviceId?: numbe
         },
     );
 
-    if (operationDetails.data) {
-        operationDetails.data.buffers = operationDetails.data.buffers.filter((buffer) =>
-            isValidNumber(deviceId) ? buffer.device_id === deviceId : true,
-        );
-    }
+    // TEMP removing device_id
+    // if (operationDetails.data) {
+    //     operationDetails.data.buffers = operationDetails.data.buffers.filter((buffer) =>
+    //         isValidNumber(deviceId) ? buffer.device_id === deviceId : true,
+    //     );
+    // }
 
     return {
         operation,
@@ -270,13 +269,12 @@ export const useBufferPages = (
         fetchBufferPages(operationId, address, bufferType, deviceId),
     );
 };
-
 export const fetchTensors = async (deviceId?: number | null): Promise<TensorData[]> => {
     try {
         const { data: tensorList } = await axiosInstance.get<TensorData[]>('/api/tensors', {
             maxRedirects: 1,
             params: {
-                device_id: deviceId,
+                // device_id: deviceId,
             },
         });
 
