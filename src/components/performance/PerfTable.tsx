@@ -37,10 +37,8 @@ const formatCell = (cell: Cell): React.JSX.Element | string => {
 
     let formatted = '';
     if (typeof cell.raw_value === 'string' && cell.raw_value.includes('Matmul')) {
-        const parts = cell.raw_value.split(' ', 2);
-        const opName = parts[0];
-        const size = parts.length > 1 ? parts[1] : '';
-        formatted = `${opName} ${size}`;
+        // there was a logic here to do something clever with Matmul size, removing it for now
+        formatted = `${cell.raw_value}`;
     } else if (typeof cell.raw_value === 'number') {
         const decimals = cell.decimals ?? 0;
         formatted = cell.raw_value.toFixed(decimals);
