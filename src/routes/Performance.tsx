@@ -5,14 +5,16 @@
 import { Helmet } from 'react-helmet-async';
 import { useSetAtom } from 'jotai';
 import { useEffect } from 'react';
-import { useReportMeta } from '../hooks/useAPI';
+import { usePerformance, useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom } from '../store/app';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
+import { PerformanceReport } from '../components/performance/PerfTable';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function Performance() {
     const report = useReportMeta();
     const setMeta = useSetAtom(reportMetaAtom);
-    // const { data } = usePerformance();
+    const { data: perfData, isLoading } = usePerformance();
 
     useClearSelectedBuffer();
 
@@ -23,11 +25,20 @@ export default function Performance() {
         }
     }, [report, setMeta]);
 
+    if (isLoading) {
+        return (
+            <div className='centered-loader'>
+                <LoadingSpinner />
+            </div>
+        );
+    }
+
     return (
         <>
             <Helmet title='Performance' />
 
-            <p>Hello</p>
+            {/* @ts-expect-error this shoudl be just fine */}
+            <PerformanceReport data={perfData?.data} />
         </>
     );
 }

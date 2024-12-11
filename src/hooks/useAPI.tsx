@@ -176,6 +176,7 @@ const fetchPerformanceDataRaw = async (): Promise<ParseResult<string>> => {
         Papa.parse<string>(data, {
             complete: (results) => resolve(results),
             error: (error: Error) => reject(error),
+            header: true,
         });
     });
 };
