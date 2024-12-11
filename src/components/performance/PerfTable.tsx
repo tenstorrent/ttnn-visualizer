@@ -1,5 +1,8 @@
-/* eslint camelcase: "off" */
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+/* eslint camelcase: "off" */
 import React, { FC, useMemo, useState } from 'react';
 import '../../scss/components/PerfTable.scss';
 import { Switch } from '@blueprintjs/core';
