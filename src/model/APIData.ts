@@ -58,7 +58,7 @@ export interface OperationDetailsData extends Operation {
 }
 
 export interface TabSession {
-    active_report?: { name: string };
+    active_report?: { profile_name?: string; report_name?: string };
     remote_connection?: RemoteConnection;
     remote_folder?: RemoteFolder;
 }
@@ -66,6 +66,7 @@ export interface TabSession {
 export enum FileStatus {
     DOWNLOADING = 'DOWNLOADING',
     FAILED = 'FAILED',
+    UPLOADING = 'UPLOADING',
     COMPRESSING = 'COMPRESSING',
     FINISHED = 'FINISHED',
     STARTED = 'STARTED',

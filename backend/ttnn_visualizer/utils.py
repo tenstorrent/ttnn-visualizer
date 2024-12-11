@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import dataclasses
 import enum
+import json
 import logging
 from functools import wraps
 from pathlib import Path
@@ -43,6 +44,47 @@ def timer(f: Callable):
     return wrapper
 
 
+def get_profiler_path(
+    profile_name, current_app, report_name=None, remote_connection=None
+):
+    """
+    Gets the profiler path for the given profile_name.
+
+    :param profile_name: The name of the profiler directory.
+    :param current_app: Flask current application object.
+    :param report_name: Optional name of the report directory under which the profiler resides.
+
+    :return: Profiler path as a string.
+    """
+    local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+    remote_dir = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
+
+    # Check if there's an associated RemoteConnection
+    if remote_connection:
+        # Use the remote directory if a remote connection exists
+        base_dir = Path(remote_dir).joinpath(remote_connection.host)
+    else:
+        # Default to local directory if no remote connection is present
+        base_dir = local_dir
+
+    # Ensure report_name is provided or defaults to active_report's report_name
+    if report_name:
+        if not remote_connection:
+            profile_dir = base_dir / report_name / "profiler"
+        else:
+            profile_dir = base_dir / "profiler"
+
+    else:
+        raise ValueError(
+            "A report_name must be provided to determine the profiler path."
+        )
+
+    # Construct the profiler path
+    profiler_path = profile_dir / profile_name
+
+    return str(profiler_path)
+
+
 def get_report_path(active_report, current_app, remote_connection=None):
     """
     Gets the report path for the given active_report object.
@@ -66,7 +108,7 @@ def get_report_path(active_report, current_app, remote_connection=None):
             base_dir = local_dir
 
         # Construct the full report path
-        report_path = Path(base_dir).joinpath(active_report.get("name"))
+        report_path = Path(base_dir).joinpath(active_report.get("report_name"))
         target_path = str(Path(report_path).joinpath(database_file_name))
 
         return target_path
@@ -137,3 +179,16 @@ def parse_memory_config(memory_config: Optional[str]) -> Optional[Dict[str, Any]
         "memory_layout": memory_layout,
         "shard_spec": shard_spec,
     }
+
+
+def read_version_from_package_json() -> str:
+    root_directory = Path(__file__).parent.parent.parent
+    file_path = root_directory / "package.json"
+    try:
+        with open(file_path, "r") as file:
+            content = json.load(file)
+            return content["version"]
+    except FileNotFoundError:
+        raise FileNotFoundError(f"The file {file_path} was not found.")
+    except KeyError:
+        raise KeyError("The 'version' key was not found in the package.json file.")

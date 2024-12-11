@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import React, { useState } from 'react';
 import { Button, ButtonGroup, Intent, Position, Switch, Tooltip } from '@blueprintjs/core';
@@ -49,8 +49,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         operationDetails: { data: operationDetails, isLoading, status },
     } = useOperationDetails(operationId, selectedDevice);
 
-    const { data: previousOperationDetails, isLoading: isPrevLoading } =
-        usePreviousOperationDetails(operationId).operationDetails;
+    const { data: previousOperationDetails, isLoading: isPrevLoading } = usePreviousOperationDetails(
+        operationId,
+        selectedDevice,
+    ).operationDetails;
 
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
     const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorAtom);

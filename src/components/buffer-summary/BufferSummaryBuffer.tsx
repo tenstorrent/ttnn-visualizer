@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useState } from 'react';
@@ -74,10 +74,21 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
                 <Tooltip
                     content={
                         <div>
-                            {buffer.address} ({toHex(buffer.address)})<br />
-                            Size: {formatSize(buffer.size)}
-                            <br />
-                            {tensor?.id ? `Tensor ${tensor.id}` : ''}
+                            <strong>
+                                <span style={{ fontSize: '20px', color: currentColour, marginRight: '2px' }}>
+                                    &#9632;
+                                </span>
+                                {buffer.address} ({toHex(buffer.address)})<br />
+                                Size: {formatSize(buffer.size)}
+                                <br />
+                                {tensor?.id ? `Tensor ${tensor.id}` : ''}
+                                {tensor?.memory_config?.memory_layout ? (
+                                    <>
+                                        <br />
+                                        {tensor?.memory_config?.memory_layout}
+                                    </>
+                                ) : null}
+                            </strong>
                         </div>
                     }
                     position={PopoverPosition.TOP}

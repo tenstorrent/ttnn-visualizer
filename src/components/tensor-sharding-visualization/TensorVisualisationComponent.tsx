@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import React, { useState } from 'react';
 import { Button, Card, Overlay2 } from '@blueprintjs/core';
@@ -14,7 +14,7 @@ import LoadingSpinner from '../LoadingSpinner';
 import { BufferPage } from '../../model/APIData';
 import SVGBufferRenderer from './SVGBufferRenderer';
 import { HistoricalTensor } from '../../model/Graph';
-import { getTensorColor } from '../../functions/colorGenerator';
+import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import getChartData, { pageDataToChunkArray } from '../../functions/getChartData';
 import { L1RenderConfiguration } from '../../definitions/PlotConfigurations';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
@@ -89,9 +89,14 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
             const tensor = tensorByAddress?.get(page.address);
             page.tensor_id = tensor?.id;
             page.color = getTensorColor(tensor?.id);
-        } else {
+        } else if (tensorId) {
+            page.tensor_id = tensorId;
             page.color = getTensorColor(tensorId);
         }
+        if (page.tensor_id === undefined) {
+            page.color = getBufferColor(page.address);
+        }
+
         buffersByBankId[page.bank_id].push(page);
         coordsByBankId[page.bank_id] = { x: page.core_x, y: page.core_y };
     });

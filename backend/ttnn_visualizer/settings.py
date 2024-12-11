@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import os
 from pathlib import Path
 
-from ttnn_visualizer.utils import str_to_bool
+from ttnn_visualizer.utils import str_to_bool, read_version_from_package_json
 
 
 class DefaultConfig(object):
@@ -17,13 +17,14 @@ class DefaultConfig(object):
 
     # Path Settings
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
+    VERSION = read_version_from_package_json()
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
     REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
     STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0
 
-    LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "true"))
+    LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "false"))
 
     # File Name Configs
     TEST_CONFIG_FILE = "config.json"
@@ -33,7 +34,9 @@ class DefaultConfig(object):
     USE_WEBSOCKETS = str_to_bool(os.getenv("USE_WEBSOCKETS", "true"))
 
     # SQL Alchemy Settings
-    SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(APPLICATION_DIR, 'ttnn.db')}"
+    SQLALCHEMY_DATABASE_URI = (
+        f"sqlite:///{os.path.join(APPLICATION_DIR, f"ttnn_{VERSION}.db")}"
+    )
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_size": 10,  # Adjust pool size as needed (default is 5)
         "max_overflow": 20,  # Allow overflow of the pool size if necessary

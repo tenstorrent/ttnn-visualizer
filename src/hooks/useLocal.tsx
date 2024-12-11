@@ -2,8 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { useState } from 'react';
+import { getDefaultStore } from 'jotai';
+import { AxiosProgressEvent } from 'axios';
 import axiosInstance from '../libs/axiosInstance';
+import { fileTransferProgressAtom } from '../store/app';
+import { FileStatus } from '../model/APIData';
 
 export interface UploadProgress {
     progress?: number;
@@ -13,15 +16,36 @@ export interface UploadProgress {
 type FileWithRelativePath = File & { webkitRelativePath?: string };
 
 const useLocalConnection = () => {
-    const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+    /**
+     * Retrieves the top level folder name from an array of uploaded files
+     * @param files
+     */
+    function getUploadedFolderName(files: FileList): string | null {
+        const fileArray = Array.from(files) as FileWithRelativePath[];
+        const relativePaths = fileArray.map((file) => file.webkitRelativePath);
+
+        if (relativePaths.length === 0) {
+            return null;
+        }
+
+        // Find the common root folder
+        const commonPath = relativePaths.reduce((common, path) => {
+            const commonSegments = common.split('/').filter((segment, index) => segment === path.split('/')[index]);
+            return commonSegments.join('/');
+        });
+
+        const folderSegments = commonPath.split('/');
+        return folderSegments.length >= 1 ? folderSegments[folderSegments.length - 1] : null;
+    }
+
     function filterReportFiles(files: FileList, excludeFolders: string[] = ['tensors']): FileList {
         // Convert FileList to an array
         const fileArray = Array.from(files) as FileWithRelativePath[];
 
         // Filter out files in the excluded folders
-        const filteredFiles = fileArray.filter((file) => {
-            return !excludeFolders.some((folder) => file.webkitRelativePath?.includes(`/${folder}/`));
-        });
+        const filteredFiles = fileArray.filter(
+            (file) => !excludeFolders.some((folder) => file.webkitRelativePath?.includes(`/${folder}/`)),
+        );
 
         // Create a new DataTransfer object to hold the filtered files
         const dataTransfer = new DataTransfer();
@@ -31,7 +55,30 @@ const useLocalConnection = () => {
         return dataTransfer.files;
     }
 
-    const checkRequiredFiles = (files: FileList): boolean => {
+    const checkRequiredProfilerFiles = (files: FileList): boolean => {
+        // Required profiler files, including a pattern for `ops_perf_results`
+        const requiredFiles = ['profile_log_device.csv', 'tracy_profile_log_host.tracy'];
+        const opsPerfPrefix = 'ops_perf_results';
+
+        const fileSet = new Set<string>();
+
+        Array.from(files).forEach((file) => {
+            const pathParts = file.webkitRelativePath.split('/');
+            if (pathParts.length === 2) {
+                fileSet.add(pathParts[1]);
+            }
+        });
+
+        // Ensure all required files are present
+        const hasRequiredFiles = requiredFiles.every((file) => fileSet.has(file));
+
+        // Check for at least one `ops_perf_results` file
+        const hasOpsPerfFile = Array.from(fileSet).some((fileName) => fileName.startsWith(opsPerfPrefix));
+
+        return hasRequiredFiles && hasOpsPerfFile;
+    };
+
+    const checkRequiredReportFiles = (files: FileList): boolean => {
         const requiredFiles = ['db.sqlite', 'config.json'];
         const fileSet = new Set<string>();
 
@@ -46,34 +93,95 @@ const useLocalConnection = () => {
     };
 
     const uploadLocalFolder = async (files: FileList) => {
+        const store = getDefaultStore();
         const formData = new FormData();
+
         Array.from(files).forEach((f) => {
             formData.append('files', f);
         });
 
         return axiosInstance
-            .post(`${import.meta.env.VITE_API_ROOT}/local/upload`, formData, {
+            .post(`${import.meta.env.VITE_API_ROOT}/local/upload/report`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
-                onUploadProgress(uploadStatus) {
-                    setUploadProgress({
-                        // uploadStatus.total could be zero with certain requests, but it's not a problem at the moment for us
-                        // https://github.com/axios/axios/issues/1591
-                        progress: (uploadStatus.loaded * 100) / uploadStatus.total!,
-                        estimated: uploadStatus.estimated,
-                    });
+                onUploadProgress: (event: AxiosProgressEvent) => {
+                    if (event && event.total !== null && event.total !== undefined) {
+                        const progress = Math.round((event.loaded * 100) / event.total);
+                        store.set(fileTransferProgressAtom, {
+                            percentOfCurrent: progress,
+                            currentFileName: '', // No filename for batch uploads; customize if needed
+                            finishedFiles: 0, // Update dynamically for partial uploads if necessary
+                            numberOfFiles: files.length,
+                            status: FileStatus.UPLOADING,
+                        });
+                    }
                 },
             })
+
+            .catch((error) => error)
             .finally(() => {
-                setUploadProgress(null);
+                store.set(fileTransferProgressAtom, {
+                    percentOfCurrent: 0,
+                    currentFileName: '',
+                    finishedFiles: 0,
+                    numberOfFiles: files.length,
+                    status: FileStatus.INACTIVE,
+                });
+            });
+    };
+
+    const uploadLocalPerformanceFolder = async (files: FileList, uploadedReportName: string | null) => {
+        const formData = new FormData();
+        const store = getDefaultStore();
+
+        if (!uploadedReportName) {
+            throw new Error('Report name required for profiler file uploading');
+        }
+
+        Array.from(files).forEach((f) => {
+            formData.append('files', f);
+        });
+
+        formData.append('reportName', uploadedReportName);
+
+        return axiosInstance
+            .post(`${import.meta.env.VITE_API_ROOT}/local/upload/profile`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+
+                onUploadProgress: (event: AxiosProgressEvent) => {
+                    if (event && event.total !== null && event.total !== undefined) {
+                        const progress = Math.round((event.loaded * 100) / event.total);
+                        store.set(fileTransferProgressAtom, {
+                            percentOfCurrent: progress,
+                            currentFileName: '',
+                            finishedFiles: 0,
+                            numberOfFiles: files.length,
+                            status: FileStatus.UPLOADING,
+                        });
+                    }
+                },
+            })
+            .catch((error) => error)
+            .finally(() => {
+                store.set(fileTransferProgressAtom, {
+                    percentOfCurrent: 0,
+                    currentFileName: '',
+                    finishedFiles: 0,
+                    numberOfFiles: files.length,
+                    status: FileStatus.INACTIVE,
+                });
             });
     };
 
     return {
-        checkRequiredFiles,
+        getUploadedFolderName,
+        checkRequiredReportFiles,
+        checkRequiredProfilerFiles,
         uploadLocalFolder,
-        uploadProgress,
+        uploadLocalPerformanceFolder,
         filterReportFiles,
     };
 };

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 set -e
 
 pip3 install --no-warn-script-location --no-cache-dir --user -r requirements.txt

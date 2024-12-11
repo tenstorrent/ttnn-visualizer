@@ -1,38 +1,40 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import React from 'react';
+import { useAtom } from 'jotai';
 import Overlay from './Overlay';
 import ProgressBar from './ProgressBar';
 import 'styles/components/FileStatusOverlay.scss';
-import { FileProgress } from '../model/APIData';
+import { fileTransferProgressAtom } from '../store/app';
+import { FileStatus } from '../model/APIData';
 
-interface FileTransferOverlayProps {
-    progress: FileProgress;
-    open: boolean;
-}
+interface FileTransferOverlayProps {}
 
-const FileStatusOverlay: React.FC<FileTransferOverlayProps> = ({ progress, open }) => {
+const FileStatusOverlay: React.FC<FileTransferOverlayProps> = () => {
     const formatPercentage = (percentage: number) => percentage.toFixed(2).padStart(5, '0');
-
-    const { status, currentFileName, finishedFiles, numberOfFiles, percentOfCurrent } = progress;
-
+    const [progress] = useAtom(fileTransferProgressAtom);
+    const { currentFileName, finishedFiles, numberOfFiles, percentOfCurrent, status } = progress;
     return (
         <Overlay
-            isOpen={open}
+            isOpen={[FileStatus.STARTED, FileStatus.COMPRESSING, FileStatus.DOWNLOADING, FileStatus.UPLOADING].includes(
+                status,
+            )}
             hideCloseButton
             canEscapeKeyClose={false}
             canOutsideClickClose={false}
         >
             <div className='overlay'>
                 <h2>File Transfer Progress</h2>
-                <p>Current File: {currentFileName}</p>
-                <p>
-                    Files Transferred: {finishedFiles}/{numberOfFiles}
-                </p>
+                {currentFileName && <p>Current File: {currentFileName}</p>}
+                {numberOfFiles && (
+                    <p>
+                        Files Transferred: {finishedFiles}/{numberOfFiles}
+                    </p>
+                )}
                 <p>Current File Progress: {formatPercentage(percentOfCurrent)}%</p>
-                <p>Status: {status}</p>
+                {status && <p>Status: {status.valueOf()}</p>}
             </div>
 
             <ProgressBar progress={percentOfCurrent / 100} />

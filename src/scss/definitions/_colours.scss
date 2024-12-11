@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 @use '@blueprintjs/colors/lib/scss/colors' as *;
 
@@ -146,5 +146,7 @@ $tt-buffers: $tt-sand;
 $tt-buffers-active: $tt-sand-tint-1;
 $tt-graph: $tt-red;
 $tt-graph-active: $tt-red-tint-1;
+$tt-performance: $tt-green;
+$tt-performance-active: $tt-green-tint-1;
 $tt-tensix-active: #fffc00;
 $tt-bg-highlight: $tt-slate-accent;

@@ -2,8 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
+import Papa, { ParseResult } from 'papaparse';
 import axiosInstance from '../libs/axiosInstance';
 import {
     Buffer,
@@ -39,7 +42,7 @@ export const fetchBufferPages = async (
             operation_id: operationId,
             address,
             buffer_type: bufferType,
-            device_id: deviceId,
+            // device_id: deviceId,
         },
     });
     return response.data;
@@ -115,16 +118,29 @@ export interface DeviceData {
     worker_l1_size: number;
 }
 
-/** @description
- * this is a temporary method to fetch all buffers for all operations. it may not be used in the future
- */
+export interface PerformanceData {
+    PCIe_slot: number;
+    RISC_processor_type: string; // Can we scope this down to a specific set of values?
+    core_x: number;
+    core_y: number;
+    run_ID: number;
+    run_host_ID: number;
+    source_file: string;
+    source_line: number;
+    stat_value: number;
+    'time[cycles_since_reset]': number;
+    timer_id: number;
+    zone_name: string; // Can we scope this down to a specific set of values?
+    zone_phase: 'begin' | 'end';
+}
+
 const fetchAllBuffers = async (
     bufferType: BufferType | null,
     deviceId: number | null,
 ): Promise<BuffersByOperationData[]> => {
     const params = {
         buffer_type: bufferType,
-        device_id: deviceId,
+        // device_id: deviceId,
     };
 
     const { data: buffers } = await axiosInstance.get<BuffersByOperationData[]>('/api/operation-buffers', {
@@ -152,6 +168,29 @@ const fetchDevices = async () => {
     return meta;
 };
 
+const fetchPerformanceDataRaw = async (): Promise<ParseResult<string>> => {
+    const { data } = await axiosInstance.get<string>('/api/profiler/perf-results/raw');
+
+    return new Promise<ParseResult<string>>((resolve, reject) => {
+        Papa.parse<string>(data, {
+            complete: (results) => resolve(results),
+            error: (error: Error) => reject(error),
+            header: true,
+        });
+    });
+};
+
+const fetchDeviceLogRaw = async (): Promise<ParseResult<string>> => {
+    const { data } = await axiosInstance.get<string>('/api/profiler/device-log/raw');
+
+    return new Promise<ParseResult<string>>((resolve, reject) => {
+        Papa.parse<string>(data, {
+            complete: (results) => resolve(results),
+            error: (error: Error) => reject(error),
+        });
+    });
+};
+
 export const useOperationsList = (deviceId?: number) => {
     return useQuery<OperationDescription[], AxiosError>({
         queryFn: () => fetchOperations(deviceId),
@@ -173,6 +212,7 @@ export const useOperationDetails = (operationId: number | null, deviceId?: numbe
         },
     );
 
+    // TEMP removing device_id
     if (operationDetails.data) {
         operationDetails.data.buffers = operationDetails.data.buffers.filter((buffer) =>
             isValidNumber(deviceId) ? buffer.device_id === deviceId : true,
@@ -185,7 +225,7 @@ export const useOperationDetails = (operationId: number | null, deviceId?: numbe
     };
 };
 
-export const usePreviousOperationDetails = (operationId: number) => {
+export const usePreviousOperationDetails = (operationId: number, deviceId?: number | null) => {
     // TODO: change to return array and number of previous operations
     const { data: operations } = useOperationsList();
 
@@ -193,7 +233,7 @@ export const usePreviousOperationDetails = (operationId: number) => {
         return operationList[index + 1]?.id === operationId;
     });
 
-    return useOperationDetails(operation ? operation.id : null);
+    return useOperationDetails(operation ? operation.id : null, deviceId);
 };
 
 export const usePreviousOperation = (operationId: number) => {
@@ -230,13 +270,12 @@ export const useBufferPages = (
         fetchBufferPages(operationId, address, bufferType, deviceId),
     );
 };
-
 export const fetchTensors = async (deviceId?: number | null): Promise<TensorData[]> => {
     try {
         const { data: tensorList } = await axiosInstance.get<TensorData[]>('/api/tensors', {
             maxRedirects: 1,
             params: {
-                device_id: deviceId,
+                // device_id: deviceId,
             },
         });
 
@@ -293,5 +332,26 @@ export const useBuffers = (bufferType: BufferType, deviceId: number | null) => {
     return useQuery({
         queryFn: () => fetchAllBuffers(bufferType, deviceId),
         queryKey: ['fetch-all-buffers', bufferType, deviceId],
+    });
+};
+
+export const useDeviceLog = () => {
+    return useQuery({
+        queryFn: () => fetchDeviceLogRaw(),
+        queryKey: 'get-device-log-raw',
+    });
+};
+
+export const usePerformance = () => {
+    return useQuery({
+        queryFn: () => fetchPerformanceDataRaw(),
+        queryKey: 'get-performance-data-raw',
+    });
+};
+
+export const useSession = () => {
+    return useQuery('tabSession', {
+        queryFn: () => fetchTabSession(),
+        initialData: null,
     });
 };

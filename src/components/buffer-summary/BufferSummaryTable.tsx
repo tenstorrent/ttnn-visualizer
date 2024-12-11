@@ -291,7 +291,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
 }
 
 const getCellText = (buffer: SummaryTableBuffer, key: COLUMN_KEYS) => {
-    let textValue = buffer[key].toString();
+    let textValue = buffer[key]?.toString() || '';
 
     if (key === 'tensor_id') {
         textValue = buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : '';

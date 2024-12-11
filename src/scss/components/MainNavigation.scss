@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 @use 'styles/definitions/colours' as *;
 
@@ -56,6 +56,10 @@
 
         &.graph-button {
             @include button-styles($tt-graph, $tt-graph-active, 'graph');
+        }
+
+        &.performance-button {
+            @include button-styles($tt-performance, $tt-performance-active, 'lightning');
         }
     }
 }

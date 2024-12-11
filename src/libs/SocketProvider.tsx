@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 /* eslint-disable no-console */
 import React, { ReactNode, createContext, useEffect } from 'react';
 import { Socket, io } from 'socket.io-client';
+import { useAtom } from 'jotai';
 import { getOrCreateTabId } from './axiosInstance';
+import { fileTransferProgressAtom } from '../store/app';
+import { FileProgress, FileStatus } from '../model/APIData';
 
 // Define the type for the socket
 export type SocketContextType = Socket | null;
@@ -22,9 +25,14 @@ interface SocketProviderProps {
 }
 
 export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
+    const [_, setFileTransferProgress] = useAtom(fileTransferProgressAtom);
+    const tabId = getOrCreateTabId();
+
     useEffect(() => {
         // Debugging: Listen for connection and disconnection events
         socket.on('connect', () => {
+            setFileTransferProgress((previous: FileProgress) => ({ ...previous, status: FileStatus.INACTIVE }));
+
             console.log(`Socket connected with ID: ${socket.id}`);
         });
 
@@ -40,6 +48,19 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
             console.log(`Socket reconnected after ${attemptNumber} attempts`);
         });
 
+        // Handle file transfer progress from the socket
+        socket.on('fileTransferProgress', (data) => {
+            if (data.tab_id === tabId) {
+                setFileTransferProgress({
+                    currentFileName: data.current_file_name,
+                    numberOfFiles: data.number_of_files,
+                    percentOfCurrent: data.percent_of_current,
+                    finishedFiles: data.finished_files,
+                    status: data.status,
+                });
+            }
+        });
+
         /* For debugging socket messages */
         // socket.onAny((eventName: string, data: any ) => {
         //     console.info(`Socket ${eventName}: ${JSON.stringify(data)}`);
@@ -53,7 +74,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
             socket.off('connect_error');
             socket.off('reconnect');
         };
-    }, []);
+    }, [tabId, setFileTransferProgress]);
 
     return <SocketContext.Provider value={socket}>{children}</SocketContext.Provider>;
 };

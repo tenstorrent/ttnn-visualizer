@@ -9,7 +9,8 @@ export interface RemoteConnection {
     username: string;
     host: string;
     port: number;
-    path: string;
+    reportPath: string;
+    performancePath?: string;
     sqliteBinaryPath?: string;
     useRemoteQuerying: boolean;
 }
@@ -17,9 +18,8 @@ export interface RemoteConnection {
 export interface RemoteFolder {
     testName: string;
     remotePath: string;
-    localPath: string;
     lastModified: number;
-    lastSynced?: number;
+    lastSynced?: number | null;
 }
 
 export interface SyncRemoteFolder {

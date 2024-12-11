@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import dataclasses
 import enum
@@ -10,6 +10,7 @@ from typing import Optional, Any
 
 from pydantic import BaseModel, Field
 from sqlalchemy import Integer, Column, String, JSON
+from sqlalchemy.ext.mutable import MutableDict
 
 from ttnn_visualizer.utils import SerializeableDataclass
 from ttnn_visualizer.enums import ConnectionTestStates
@@ -167,7 +168,8 @@ class RemoteConnection(SerializeableModel):
     username: str
     host: str
     port: int = Field(ge=1, le=65535)
-    path: str
+    reportPath: str
+    performancePath: Optional[str] = None
     sqliteBinaryPath: Optional[str] = None
     useRemoteQuerying: bool = False
 
@@ -178,7 +180,8 @@ class StatusMessage(SerializeableModel):
 
 
 class ActiveReport(SerializeableModel):
-    name: str
+    report_name: str
+    profile_name: Optional[str] = None
 
 
 class RemoteReportFolder(SerializeableModel):
@@ -191,9 +194,11 @@ class RemoteReportFolder(SerializeableModel):
 class TabSession(BaseModel):
     tab_id: str
     report_path: Optional[str] = None
+    profiler_path: Optional[str] = None
     active_report: Optional[ActiveReport] = None
     remote_connection: Optional[RemoteConnection] = None
     remote_folder: Optional[RemoteReportFolder] = None
+    remote_profile_folder: Optional[RemoteReportFolder] = None
 
 
 class TabSessionTable(db.Model):
@@ -202,9 +207,11 @@ class TabSessionTable(db.Model):
     id = Column(Integer, primary_key=True)
     tab_id = Column(String, unique=True, nullable=False)
     report_path = Column(String)
-    active_report = Column(JSON)
+    profiler_path = Column(String, nullable=True)
+    active_report = db.Column(MutableDict.as_mutable(JSON), nullable=False, default={})
     remote_connection = Column(JSON, nullable=True)
     remote_folder = Column(JSON, nullable=True)
+    remote_profile_folder = Column(JSON, nullable=True)
 
     def __init__(
         self,
@@ -213,12 +220,16 @@ class TabSessionTable(db.Model):
         remote_connection=None,
         remote_folder=None,
         report_path=None,
+        profiler_path=None,
+        remote_profile_folder=None,
     ):
         self.tab_id = tab_id
         self.active_report = active_report
         self.report_path = report_path
         self.remote_connection = remote_connection
         self.remote_folder = remote_folder
+        self.profiler_path = profiler_path
+        self.remote_profile_folder = remote_profile_folder
 
     def to_dict(self):
         return {
@@ -226,13 +237,19 @@ class TabSessionTable(db.Model):
             "tab_id": self.tab_id,
             "active_report": self.active_report,
             "remote_connection": self.remote_connection,
+            "remote_folder": self.remote_folder,
+            "remote_profile_folder": self.remote_profile_folder,
             "report_path": self.report_path,
+            "profiler_path": self.profiler_path,
         }
 
     def to_pydantic(self) -> TabSession:
         return TabSession(
             tab_id=str(self.tab_id),
             report_path=str(self.report_path) if self.report_path is not None else None,
+            profiler_path=(
+                str(self.profiler_path) if self.profiler_path is not None else None
+            ),
             active_report=(
                 (ActiveReport(**self.active_report) if self.active_report else None)
                 if isinstance(self.active_report, dict)
@@ -246,6 +263,13 @@ class TabSessionTable(db.Model):
             remote_folder=(
                 RemoteReportFolder.model_validate(self.remote_folder, strict=False)
                 if self.remote_folder is not None
+                else None
+            ),
+            remote_profile_folder=(
+                RemoteReportFolder.model_validate(
+                    self.remote_profile_folder, strict=False
+                )
+                if self.remote_profile_folder is not None
                 else None
             ),
         )
