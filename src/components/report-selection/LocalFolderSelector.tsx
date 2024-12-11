@@ -8,14 +8,14 @@ import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
 import 'styles/components/FolderPicker.scss';
 import { useNavigate } from 'react-router';
-import { useQuery, useQueryClient } from 'react-query';
+import { useQueryClient } from 'react-query';
 import { useAtom, useSetAtom } from 'jotai';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
 import { reportLocationAtom, selectedDeviceAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
-import { fetchTabSession } from '../../hooks/useAPI';
+import { useSession } from '../../hooks/useAPI';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -61,10 +61,7 @@ const LocalFolderOptions: FC = () => {
     const queryClient = useQueryClient();
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
-    const { data: tabSession } = useQuery('tabSession', {
-        queryFn: fetchTabSession,
-        initialData: null,
-    });
+    const { data: tabSession } = useSession();
 
     const {
         uploadLocalFolder,
@@ -79,12 +76,17 @@ const LocalFolderOptions: FC = () => {
     const [isUploadingReport, setIsUploadingReport] = useState(false);
     const [isUploadingPerformance, setIsPerformanceUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
-    const [uploadedReportName, setUploadedReportName] = useState<string | null>(null);
+    const [uploadedReportName, setUploadedReportName] = useState<string | null>(
+        tabSession?.active_report?.report_name ?? null,
+    );
     const [performanceFolderStatus, setPerformanceFolderStatus] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
     const isLocalReportMounted =
-        !isUploadingReport && !isUploadingPerformance && reportLocation === 'local' && tabSession?.active_report;
+        !isUploadingReport &&
+        !isUploadingPerformance &&
+        reportLocation === 'local' &&
+        tabSession?.active_report?.report_name;
 
     /**
      * This is a temporrary solution until we support Safari
@@ -249,38 +251,42 @@ const LocalFolderOptions: FC = () => {
                     label={<h3>Performance data folder</h3>}
                     subLabel='Select a local directory containing performance data (optional)'
                 >
-                    <label
-                        className='bp5-file-input'
-                        htmlFor='local-performance-upload'
-                    >
-                        <input
-                            id='local-performance-upload'
-                            type='file'
-                            multiple
-                            /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
-                            // eslint-disable-next-line react/no-unknown-property
-                            directory=''
-                            webkitdirectory=''
-                            disabled={isSafari || !uploadedReportName}
-                            onChange={handlePerformanceDirectoryOpen}
-                        />
-                        <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
-                    </label>
-
-                    {performanceFolderStatus && !isUploadingPerformance && (
-                        <div
-                            className={`verify-connection-item status-${ConnectionTestStates[performanceFolderStatus.status]}`}
+                    <div className='buttons-container'>
+                        <label
+                            className='bp5-file-input'
+                            htmlFor='local-performance-upload'
                         >
-                            <Icon
-                                className='connection-status-icon'
-                                icon={ICON_MAP[performanceFolderStatus.status]}
-                                size={20}
-                                intent={INTENT_MAP[performanceFolderStatus.status]}
+                            <input
+                                id='local-performance-upload'
+                                type='file'
+                                multiple
+                                /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
+                                // eslint-disable-next-line react/no-unknown-property
+                                directory=''
+                                webkitdirectory=''
+                                disabled={
+                                    isSafari || (!tabSession?.active_report?.profile_name && !isLocalReportMounted)
+                                }
+                                onChange={handlePerformanceDirectoryOpen}
                             />
+                            <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
+                        </label>
 
-                            <span className='connection-status-text'>{performanceFolderStatus.message}</span>
-                        </div>
-                    )}
+                        {performanceFolderStatus && !isUploadingPerformance && (
+                            <div
+                                className={`verify-connection-item status-${ConnectionTestStates[performanceFolderStatus.status]}`}
+                            >
+                                <Icon
+                                    className='connection-status-icon'
+                                    icon={ICON_MAP[performanceFolderStatus.status]}
+                                    size={20}
+                                    intent={INTENT_MAP[performanceFolderStatus.status]}
+                                />
+
+                                <span className='connection-status-text'>{performanceFolderStatus.message}</span>
+                            </div>
+                        )}
+                    </div>
                 </FormGroup>
 
                 <Button

@@ -29,7 +29,7 @@ $tt-pending: $tt-yellow;
 }
 
 .verify-connection-item {
-    display: flex;
+    display: inline-flex;
     gap: 2px;
 
     .connection-status-icon {

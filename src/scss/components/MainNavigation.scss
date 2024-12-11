@@ -57,5 +57,9 @@
         &.graph-button {
             @include button-styles($tt-graph, $tt-graph-active, 'graph');
         }
+
+        &.performance-button {
+            @include button-styles($tt-performance, $tt-performance-active, 'lightning');
+        }
     }
 }
