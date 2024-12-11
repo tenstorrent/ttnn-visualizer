@@ -47,7 +47,7 @@ function Layout() {
                     </Link>
 
                     <div className='current-data'>
-                        {meta?.report_name && (
+                        {meta?.report_name && tabSession?.active_report && (
                             <Tooltip
                                 content={meta.report_name}
                                 className='report-title'

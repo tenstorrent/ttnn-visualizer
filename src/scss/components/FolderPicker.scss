@@ -28,6 +28,7 @@
         min-height: fit-content;
         flex-basis: 45%;
         flex-grow: 0;
+        max-width: 600px;
 
         & > .bp5-icon {
             color: $tt-grey-4;
