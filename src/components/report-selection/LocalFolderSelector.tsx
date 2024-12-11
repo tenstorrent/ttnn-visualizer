@@ -76,7 +76,9 @@ const LocalFolderOptions: FC = () => {
     const [isUploadingReport, setIsUploadingReport] = useState(false);
     const [isUploadingPerformance, setIsPerformanceUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
-    const [uploadedReportName, setUploadedReportName] = useState<string | null>(null);
+    const [uploadedReportName, setUploadedReportName] = useState<string | null>(
+        tabSession?.active_report?.report_name ?? null,
+    );
     const [performanceFolderStatus, setPerformanceFolderStatus] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
@@ -262,7 +264,9 @@ const LocalFolderOptions: FC = () => {
                                 // eslint-disable-next-line react/no-unknown-property
                                 directory=''
                                 webkitdirectory=''
-                                disabled={isSafari || !tabSession?.active_report?.profile_name}
+                                disabled={
+                                    isSafari || (!tabSession?.active_report?.profile_name && !isLocalReportMounted)
+                                }
                                 onChange={handlePerformanceDirectoryOpen}
                             />
                             <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
