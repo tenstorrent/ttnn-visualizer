@@ -34,12 +34,15 @@
             gap: 5px;
         }
 
-        .report-title {
+        .title {
             font-size: 12px;
-            text-overflow: ellipsis;
-            overflow: hidden;
-            white-space: nowrap;
-            max-width: 300px;
+
+            &.is-lengthy {
+                text-overflow: ellipsis;
+                overflow: hidden;
+                white-space: nowrap;
+                max-width: 250px;
+            }
         }
     }
 }
