@@ -25,6 +25,6 @@
         "@blueprintjs": [ "./node_modules/@blueprintjs" ]
     }
   },
-  "include": ["vite.config.ts", "src"],
+  "include": ["vite.config.ts", "src", "package.json"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
