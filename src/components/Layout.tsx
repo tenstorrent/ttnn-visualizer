@@ -8,6 +8,7 @@ import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
+import classNames from 'classnames';
 import TenstorrentLogo from './TenstorrentLogo';
 import ROUTES from '../definitions/routes';
 import { reportMetaAtom } from '../store/app';
@@ -21,6 +22,8 @@ const BounceIn = cssTransition({
     collapseDuration: 0,
     collapse: true,
 });
+
+const MAX_TITLE_LENGTH = 20;
 
 function Layout() {
     const appVersion = import.meta.env.APP_VERSION;
@@ -50,18 +53,26 @@ function Layout() {
                         {meta?.report_name && tabSession?.active_report && (
                             <Tooltip
                                 content={meta.report_name}
-                                className='report-title'
+                                className={classNames('title', {
+                                    'is-lengthy': meta.report_name.length > MAX_TITLE_LENGTH,
+                                })}
                             >
-                                <span>{meta.report_name}</span>
+                                <span>
+                                    <strong>Report:</strong> {meta.report_name}
+                                </span>
                             </Tooltip>
                         )}
 
                         {tabSession?.active_report?.profile_name && (
                             <Tooltip
                                 content={tabSession?.active_report?.profile_name}
-                                className='report-title'
+                                className={classNames('title', {
+                                    'is-lengthy': tabSession?.active_report?.profile_name.length > MAX_TITLE_LENGTH,
+                                })}
                             >
-                                <span>{tabSession?.active_report?.profile_name}</span>
+                                <span>
+                                    <strong>Performance:</strong> {tabSession?.active_report?.profile_name}
+                                </span>
                             </Tooltip>
                         )}
                     </div>
