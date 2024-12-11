@@ -249,38 +249,40 @@ const LocalFolderOptions: FC = () => {
                     label={<h3>Performance data folder</h3>}
                     subLabel='Select a local directory containing performance data (optional)'
                 >
-                    <label
-                        className='bp5-file-input'
-                        htmlFor='local-performance-upload'
-                    >
-                        <input
-                            id='local-performance-upload'
-                            type='file'
-                            multiple
-                            /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
-                            // eslint-disable-next-line react/no-unknown-property
-                            directory=''
-                            webkitdirectory=''
-                            disabled={isSafari || !uploadedReportName}
-                            onChange={handlePerformanceDirectoryOpen}
-                        />
-                        <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
-                    </label>
-
-                    {performanceFolderStatus && !isUploadingPerformance && (
-                        <div
-                            className={`verify-connection-item status-${ConnectionTestStates[performanceFolderStatus.status]}`}
+                    <div className='buttons-container'>
+                        <label
+                            className='bp5-file-input'
+                            htmlFor='local-performance-upload'
                         >
-                            <Icon
-                                className='connection-status-icon'
-                                icon={ICON_MAP[performanceFolderStatus.status]}
-                                size={20}
-                                intent={INTENT_MAP[performanceFolderStatus.status]}
+                            <input
+                                id='local-performance-upload'
+                                type='file'
+                                multiple
+                                /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
+                                // eslint-disable-next-line react/no-unknown-property
+                                directory=''
+                                webkitdirectory=''
+                                disabled={isSafari || !uploadedReportName}
+                                onChange={handlePerformanceDirectoryOpen}
                             />
+                            <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
+                        </label>
 
-                            <span className='connection-status-text'>{performanceFolderStatus.message}</span>
-                        </div>
-                    )}
+                        {performanceFolderStatus && !isUploadingPerformance && (
+                            <div
+                                className={`verify-connection-item status-${ConnectionTestStates[performanceFolderStatus.status]}`}
+                            >
+                                <Icon
+                                    className='connection-status-icon'
+                                    icon={ICON_MAP[performanceFolderStatus.status]}
+                                    size={20}
+                                    intent={INTENT_MAP[performanceFolderStatus.status]}
+                                />
+
+                                <span className='connection-status-text'>{performanceFolderStatus.message}</span>
+                            </div>
+                        )}
+                    </div>
                 </FormGroup>
 
                 <Button
