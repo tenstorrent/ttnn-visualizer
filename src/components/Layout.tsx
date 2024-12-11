@@ -12,6 +12,7 @@ import TenstorrentLogo from './TenstorrentLogo';
 import ROUTES from '../definitions/routes';
 import { reportMetaAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
+import { useSession } from '../hooks/useAPI';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -24,6 +25,7 @@ const BounceIn = cssTransition({
 function Layout() {
     const appVersion = import.meta.env.APP_VERSION;
     const meta = useAtomValue(reportMetaAtom);
+    const { data: tabSession } = useSession();
 
     return (
         <div className={Classes.DARK}>
@@ -44,14 +46,25 @@ function Layout() {
                         <p className='version'>v{appVersion}</p>
                     </Link>
 
-                    {meta?.report_name && (
-                        <Tooltip
-                            content={meta.report_name}
-                            className='report-title'
-                        >
-                            <span>{meta.report_name}</span>
-                        </Tooltip>
-                    )}
+                    <div className='current-data'>
+                        {meta?.report_name && tabSession?.active_report && (
+                            <Tooltip
+                                content={meta.report_name}
+                                className='report-title'
+                            >
+                                <span>{meta.report_name}</span>
+                            </Tooltip>
+                        )}
+
+                        {tabSession?.active_report?.profile_name && (
+                            <Tooltip
+                                content={tabSession?.active_report?.profile_name}
+                                className='report-title'
+                            >
+                                <span>{tabSession?.active_report?.profile_name}</span>
+                            </Tooltip>
+                        )}
+                    </div>
 
                     <MainNavigation />
                 </nav>

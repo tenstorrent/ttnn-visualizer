@@ -28,6 +28,12 @@
             }
         }
 
+        .current-data {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
         .report-title {
             font-size: 12px;
             text-overflow: ellipsis;

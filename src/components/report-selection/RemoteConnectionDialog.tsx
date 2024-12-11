@@ -36,10 +36,16 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     buttonLabel = 'Add connection',
     remoteConnection,
 }) => {
-    const defaultConnection = remoteConnection ?? { name: '', host: '', port: 22, path: '', username: '' };
+    const defaultConnection = remoteConnection ?? {
+        name: '',
+        host: '',
+        port: 22,
+        reportPath: '',
+        username: '',
+    };
     const defaultConnectionTests: ConnectionStatus[] = [
         { status: ConnectionTestStates.IDLE, message: 'Test connection' },
-        { status: ConnectionTestStates.IDLE, message: 'Test remote folder path' },
+        { status: ConnectionTestStates.IDLE, message: 'Test report folder path' },
     ];
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
@@ -64,10 +70,14 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     const testConnectionStatus = async () => {
         setIsTestingconnection(true);
 
-        const sshProgressStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing connection' };
-        const folderProgressStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing remote folder path' };
+        const sshStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing connection' };
+        const reportFolderStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing report folder path' };
+        const performanceFolderStatus = {
+            status: ConnectionTestStates.PROGRESS,
+            message: 'Testing performance folder path',
+        };
 
-        setConnectionTests([sshProgressStatus, folderProgressStatus]);
+        setConnectionTests([sshStatus, reportFolderStatus, performanceFolderStatus]);
 
         try {
             const statuses = await testConnection(connection);
@@ -76,7 +86,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
             // TODO: Look at error handling
             setConnectionTests([
                 { status: ConnectionTestStates.FAILED, message: 'Connection failed' },
-                { status: ConnectionTestStates.FAILED, message: 'Remote folder path failed' },
+                { status: ConnectionTestStates.FAILED, message: 'Report folder path failed' },
             ]);
         } finally {
             setIsTestingconnection(false);
@@ -101,7 +111,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
             <DialogBody>
                 <FormGroup
                     label='Name'
-                    labelFor='text-input'
                     subLabel='Connection name'
                 >
                     <InputGroup
@@ -113,7 +122,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
                 <FormGroup
                     label='SSH Host'
-                    labelFor='text-input'
                     subLabel='SSH host name. E.g.: localhost'
                 >
                     <InputGroup
@@ -124,7 +132,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
                 <FormGroup
                     label='Username'
-                    labelFor='text-input'
                     subLabel='Username to connect with'
                 >
                     <InputGroup
@@ -137,7 +144,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
                 <FormGroup
                     label='SSH Port'
-                    labelFor='text-input'
                     subLabel='Port to use for the SSH connection. E.g.: port 22'
                 >
                     <InputGroup
@@ -156,14 +162,24 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
 
                 <FormGroup
-                    label='Remote Folder path'
-                    labelFor='text-input'
-                    subLabel='Path to the remote folder. E.g.: "$HOME/work/ll-sw"'
+                    label='Report folder path'
+                    subLabel='Path to the remote folder with the report e.g. "$HOME/work/ll-sw"'
                 >
                     <InputGroup
                         key='path'
-                        value={connection.path}
-                        onChange={(e) => setConnection({ ...connection, path: e.target.value })}
+                        value={connection.reportPath}
+                        onChange={(e) => setConnection({ ...connection, reportPath: e.target.value })}
+                    />
+                </FormGroup>
+
+                <FormGroup
+                    label='Performance folder path (optional)'
+                    subLabel='Path to the remote folder with the performance data  e.g. "$HOME/perf/env-123"'
+                >
+                    <InputGroup
+                        key='path'
+                        value={connection.performancePath}
+                        onChange={(e) => setConnection({ ...connection, performancePath: e.target.value })}
                     />
                 </FormGroup>
 
@@ -180,7 +196,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                         <FormGroup
                             label='Remote SQLite Binary Location'
-                            labelFor='text-input'
                             subLabel='SQLite Binary Location'
                         >
                             <InputGroup
@@ -203,12 +218,12 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                 <fieldset>
                     <legend>Test Connection</legend>
-                    {connectionTests.map((v) => {
+                    {connectionTests.map((test, index) => {
                         return (
                             <ConnectionTestMessage
-                                key={v.message}
-                                status={v.status}
-                                message={v.message}
+                                key={`${test.message}-${index}`}
+                                status={test.status}
+                                message={test.message}
                             />
                         );
                     })}

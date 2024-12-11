@@ -9,6 +9,7 @@ from typing import List
 
 from flask import Blueprint, Response, jsonify
 
+from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries
 from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import RemoteConnectionException
@@ -20,11 +21,6 @@ from ttnn_visualizer.models import (
 )
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path, check_sqlite_path
-from ttnn_visualizer.sockets import (
-    FileProgress,
-    emit_file_status,
-    FileStatus,
-)
 from flask import request, current_app
 from pathlib import Path
 from http import HTTPStatus
@@ -47,11 +43,19 @@ from ttnn_visualizer.sftp_operations import (
     check_remote_path_for_reports,
     get_remote_report_folders,
     check_remote_path_exists,
+    get_remote_profiler_folders,
+    sync_remote_profiler_folders,
 )
 from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.utils import (
     read_last_synced_file,
     timer,
+)
+
+from ttnn_visualizer.file_uploads import (
+    extract_report_name,
+    save_uploaded_files,
+    validate_files,
 )
 
 logger = logging.getLogger(__name__)
@@ -170,7 +174,6 @@ def operation_detail(operation_id, session):
 @with_session
 @timer
 def operation_history(session: TabSession):
-
     operation_history_filename = "operation_history.json"
     if session.remote_connection and session.remote_connection.useRemoteQuerying:
         if not session.remote_folder:
@@ -198,7 +201,6 @@ def operation_history(session: TabSession):
 @with_session
 @timer
 def get_config(session: TabSession):
-
     if session.remote_connection and session.remote_connection.useRemoteQuerying:
         if not session.remote_folder:
             return {}
@@ -223,9 +225,7 @@ def get_config(session: TabSession):
 def tensors_list(session: TabSession):
     with DatabaseQueries(session) as db:
         device_id = request.args.get("device_id", None)
-        tensors = list(db.query_tensors(
-            filters={"device_id": device_id}
-        ))
+        tensors = list(db.query_tensors(filters={"device_id": device_id}))
         local_comparisons = list(db.query_tensor_comparisons())
         global_comparisons = list(db.query_tensor_comparisons(local=False))
         producers_consumers = list(db.query_producers_consumers())
@@ -295,7 +295,6 @@ def buffer_pages(session: TabSession):
 @with_session
 @timer
 def tensor_detail(tensor_id, session: TabSession):
-
     with DatabaseQueries(session) as db:
         tensors = list(db.query_tensors(filters={"tensor_id": tensor_id}))
         if not tensors:
@@ -307,7 +306,6 @@ def tensor_detail(tensor_id, session: TabSession):
 @api.route("/operation-buffers", methods=["GET"])
 @with_session
 def get_operations_buffers(session: TabSession):
-
     buffer_type = request.args.get("buffer_type", "")
     device_id = request.args.get("device_id", None)
     if buffer_type and str.isdigit(buffer_type):
@@ -328,7 +326,6 @@ def get_operations_buffers(session: TabSession):
 @api.route("/operation-buffers/<operation_id>", methods=["GET"])
 @with_session
 def get_operation_buffers(operation_id, session: TabSession):
-
     buffer_type = request.args.get("buffer_type", "")
     device_id = request.args.get("device_id", None)
     if buffer_type and str.isdigit(buffer_type):
@@ -355,6 +352,63 @@ def get_operation_buffers(operation_id, session: TabSession):
         return serialize_operation_buffers(operation, buffers)
 
 
+@api.route("/profiler/device-log", methods=["GET"])
+@with_session
+def get_profiler_data(session: TabSession):
+    if not session.profiler_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+    with DeviceLogProfilerQueries(session) as csv:
+        result = csv.get_all_entries(as_dict=True, limit=100)
+        return jsonify(result)
+
+
+@api.route("/profiler/perf-results", methods=["GET"])
+@with_session
+def get_profiler_performance_data(session: TabSession):
+    if not session.profiler_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+    with OpsPerformanceQueries(session) as csv:
+        # result = csv.query_by_op_code(op_code="(torch) contiguous", as_dict=True)
+        result = csv.get_all_entries(as_dict=True, limit=100)
+        return jsonify(result)
+
+
+@api.route("/profiler/perf-results/raw", methods=["GET"])
+@with_session
+def get_profiler_perf_results_data_raw(session: TabSession):
+    if not session.profiler_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+    content = OpsPerformanceQueries.get_raw_csv(session)
+    return Response(
+        content,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=op_perf_results.csv"},
+    )
+
+
+@api.route("/profiler/device-log/raw", methods=["GET"])
+@with_session
+def get_profiler_data_raw(session: TabSession):
+    if not session.profiler_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+    content = DeviceLogProfilerQueries.get_raw_csv(session)
+    return Response(
+        content,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=profile_log_device.csv"},
+    )
+
+
+@api.route("/profiler/device-log/zone/<zone>", methods=["GET"])
+@with_session
+def get_zone_statistics(zone, session: TabSession):
+    if not session.profiler_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+    with DeviceLogProfilerQueries(session) as csv:
+        result = csv.query_zone_statistics(zone_name=zone, as_dict=True)
+        return jsonify(result)
+
+
 @api.route("/devices", methods=["GET"])
 @with_session
 def get_devices(session: TabSession):
@@ -363,130 +417,78 @@ def get_devices(session: TabSession):
         return serialize_devices(devices)
 
 
-@api.route(
-    "/local/upload",
-    methods=[
-        "POST",
-    ],
-)
-def create_upload_files():
-    """Handle file uploads and emit progress for each file."""
-
-    def validate_uploaded_report_files(files):
-        """Ensure specific files exist and have only one parent folder in their paths."""
-        found_files = set()
-        report_files = {"db.sqlite", "config.json"}
-
-        for file in files:
-            file_path = Path(file.filename)
-            if file_path.name in report_files:
-                found_files.add(file_path.name)
-                # Check that the file path has exactly one parent folder
-                if (
-                    len(file_path.parents) != 2
-                ):  # `2` means one parent folder plus the file itself
-                    logger.warning(
-                        f"File {file.filename} is not under a single parent folder."
-                    )
-                    return False
-
-        # Check if all specific files are found
-        missing_files = report_files - found_files
-        if missing_files:
-            logger.warning(f"Missing required files: {', '.join(missing_files)}")
-            return False
-
-        return True
-
-    def emit_file_progress(
-        current_file_name, total_files, processed_files, percent, status, tab_id
-    ):
-        """Emit progress for a specific file."""
-        progress = FileProgress(
-            current_file_name=current_file_name,
-            number_of_files=total_files,
-            percent_of_current=percent,
-            finished_files=processed_files,
-            status=status,
-        )
-        if current_app.config["USE_WEBSOCKETS"]:
-            emit_file_status(progress, tab_id)
-
-    def emit_final_file_progress(total_files, processed_files, tab_id):
-        """Emit final progress status after all files are processed."""
-        final_progress = FileProgress(
-            current_file_name="",
-            number_of_files=total_files,
-            percent_of_current=100,
-            finished_files=processed_files,
-            status=FileStatus.FINISHED,
-        )
-        if current_app.config["USE_WEBSOCKETS"]:
-            emit_file_status(final_progress, tab_id)
-
-    def get_report_name_from_files(files):
-        """Extract the report name from the first file and return the report directory path."""
-        unsplit_report_name = str(files[0].filename)
-        report_name = unsplit_report_name.split("/")[0]
-
-        return report_name
-
+@api.route("/local/upload/report", methods=["POST"])
+def create_report_files():
     files = request.files.getlist("files")
+    report_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
-    if not validate_uploaded_report_files(files):
+    if not validate_files(files, {"db.sqlite", "config.json"}):
         return StatusMessage(
             status=ConnectionTestStates.FAILED,
             message="Invalid project directory.",
         ).model_dump()
 
-    report_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
-    report_name = get_report_name_from_files(files)
-
+    report_name = extract_report_name(files)
     logger.info(f"Writing report files to {report_directory}/{report_name}")
 
-    total_files = len(files)
-    processed_files = 0
+    save_uploaded_files(files, report_directory, report_name)
+
+    tab_id = request.args.get("tabId")
+    update_tab_session(tab_id=tab_id, report_name=report_name, clear_remote=True)
+
+    return StatusMessage(
+        status=ConnectionTestStates.OK, message="Success."
+    ).model_dump()
+
+
+@api.route("/local/upload/profile", methods=["POST"])
+def create_profile_files():
+    files = request.files.getlist("files")
+    report_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+    report_name = request.values.get("reportName", None)
     tab_id = request.args.get("tabId")
 
-    for index, file in enumerate(files):
-        current_file_name = str(file.filename)
-        logger.info(f"Processing file: {current_file_name}")
+    if not validate_files(
+        files,
+        {"profile_log_device.csv", "tracy_profile_log_host.tracy"},
+        pattern="ops_perf_results",
+    ):
+        return StatusMessage(
+            status=ConnectionTestStates.FAILED,
+            message="Invalid project directory.",
+        ).model_dump()
 
-        destination_file = Path(report_directory).joinpath((str(current_file_name)))
-        logger.info(f"Writing file to {destination_file}")
+    logger.info(
+        f"Writing profile files to {report_directory / report_name / 'profiler'}"
+    )
 
-        # Create the directory if it doesn't exist
-        if not destination_file.parent.exists():
-            logger.info(
-                f"{destination_file.parent.name} does not exist. Creating directory"
-            )
-            destination_file.parent.mkdir(exist_ok=True, parents=True)
+    # Construct the base directory with report_name first
+    target_directory = report_directory / report_name / "profiler"
+    target_directory.mkdir(parents=True, exist_ok=True)
 
-        # Emit progress on each file save
-        emit_file_progress(
-            current_file_name,
-            total_files,
-            processed_files,
-            0,
-            FileStatus.DOWNLOADING,
-            tab_id,
-        )
+    if files:
+        first_file_path = Path(files[0].filename)
+        profiler_folder_name = first_file_path.parts[0]
+    else:
+        profiler_folder_name = None
 
-        file.save(destination_file)
+    updated_files = []
+    for file in files:
+        original_path = Path(file.filename)
+        updated_path = target_directory / original_path
+        updated_path.parent.mkdir(parents=True, exist_ok=True)
+        file.filename = str(updated_path)
+        updated_files.append(file)
 
-        processed_files += 1
-        emit_file_progress(
-            current_file_name,
-            total_files,
-            processed_files,
-            100,
-            FileStatus.DOWNLOADING,
-            tab_id,
-        )
+    save_uploaded_files(
+        updated_files,
+        str(report_directory),
+        report_name,
+    )
 
-    # Update the session after all files are uploaded
-    update_tab_session(tab_id=tab_id, active_report_data={"name": report_name})
-    emit_final_file_progress(total_files, processed_files, tab_id)
+    update_tab_session(
+        tab_id=tab_id, profile_name=profiler_folder_name, clear_remote=True
+    )
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
@@ -519,6 +521,37 @@ def get_remote_folders():
         return Response(status=e.http_status, response=e.message)
 
 
+@api.route("/remote/profiles", methods=["POST"])
+def get_remote_profile_folders():
+    request_body = request.get_json()
+    connection = RemoteConnection.model_validate(
+        request_body.get("connection"), strict=False
+    )
+
+    try:
+        remote_profile_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
+            RemoteConnection.model_validate(connection, strict=False)
+        )
+
+        for rf in remote_profile_folders:
+            profile_name = Path(rf.remotePath).name
+            remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
+            local_path = (
+                Path(remote_data_directory)
+                .joinpath(connection.host)
+                .joinpath("profiler")
+                .joinpath(profile_name)
+            )
+            logger.info(f"Checking last synced for {profile_name}")
+            rf.lastSynced = read_last_synced_file(str(local_path))
+            if not rf.lastSynced:
+                logger.info(f"{profile_name} not yet synced")
+
+        return [r.model_dump() for r in remote_profile_folders]
+    except RemoteConnectionException as e:
+        return Response(status=e.http_status, response=e.message)
+
+
 @api.route("/remote/test", methods=["POST"])
 def test_remote_folder():
     connection_data = request.json
@@ -536,15 +569,23 @@ def test_remote_folder():
     # Test SSH Connection
     try:
         get_client(connection)
-        add_status(ConnectionTestStates.OK.value, "SSH connection established.")
+        add_status(ConnectionTestStates.OK.value, "SSH connection established")
     except RemoteConnectionException as e:
         add_status(ConnectionTestStates.FAILED.value, e.message)
 
     # Test Directory Configuration
     if not has_failures():
         try:
-            check_remote_path_exists(connection)
-            add_status(ConnectionTestStates.OK.value, "Remote folder path exists.")
+            check_remote_path_exists(connection, "reportPath")
+            add_status(ConnectionTestStates.OK.value, "Report folder path exists")
+        except RemoteConnectionException as e:
+            add_status(ConnectionTestStates.FAILED.value, e.message)
+
+    # Test Directory Configuration (perf)
+    if not has_failures() and connection.performancePath:
+        try:
+            check_remote_path_exists(connection, "performancePath")
+            add_status(ConnectionTestStates.OK.value, "Performance folder path exists")
         except RemoteConnectionException as e:
             add_status(ConnectionTestStates.FAILED.value, e.message)
 
@@ -589,11 +630,26 @@ def sync_remote_folder():
         return jsonify({"error": "Invalid or missing JSON data"}), 400
 
     folder = request_body.get("folder")
+    profile = request_body.get("profile", None)
     tab_id = request.args.get("tabId", None)
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
     )
     remote_folder = RemoteReportFolder.model_validate(folder, strict=False)
+    if profile:
+        profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
+        try:
+            sync_remote_profiler_folders(
+                connection,
+                remote_dir,
+                profile=profile_folder,
+                exclude_patterns=[r"/tensors(/|$)"],
+                sid=tab_id,
+            )
+
+        except RemoteConnectionException as e:
+            return Response(status=e.http_status, response=e.message)
+
     try:
         sync_remote_folders(
             connection,
@@ -639,12 +695,21 @@ def use_remote_folder():
     data = request.get_json(force=True)
     connection = data.get("connection", None)
     folder = data.get("folder", None)
+    profile = data.get("profile", None)
+
     if not connection or not folder:
         return Response(status=HTTPStatus.BAD_REQUEST)
+
     connection = RemoteConnection.model_validate(connection, strict=False)
     folder = RemoteReportFolder.model_validate(folder, strict=False)
+    profile_name = None
+    remote_profile_folder = None
+    if profile:
+        remote_profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
+        profile_name = remote_profile_folder.testName
     report_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
     report_folder = Path(folder.remotePath).name
+
     connection_directory = Path(report_data_directory, connection.host, report_folder)
 
     if not connection.useRemoteQuerying and not connection_directory.exists():
@@ -660,9 +725,11 @@ def use_remote_folder():
 
     update_tab_session(
         tab_id=tab_id,
-        active_report_data={"name": report_folder},
+        report_name=report_folder,
+        profile_name=profile_name,
         remote_connection=connection,
         remote_folder=folder,
+        remote_profile_folder=remote_profile_folder,
     )
 
     return Response(status=HTTPStatus.OK)

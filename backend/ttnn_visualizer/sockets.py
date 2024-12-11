@@ -60,8 +60,11 @@ def emit_file_status(progress: FileProgress, tab_id=None):
         last_emit_time = time.time()
         data = progress.to_dict()
         data.update({"tab_id": tab_id})
-        if socketio is not None and hasattr(socketio, "emit"):
-            socketio.emit(Messages.FILE_TRANSFER_PROGRESS, data, to=tab_id)
+        try:
+            if socketio is not None and hasattr(socketio, "emit"):
+                socketio.emit(Messages.FILE_TRANSFER_PROGRESS, data, to=tab_id)
+        except NameError:
+            pass  # Can silently pass since we know the NameError is from sockets being disabled
 
     # Cancel any existing debounce timer if it exists and is still active
     if debounce_timer and isinstance(debounce_timer, threading.Timer):
