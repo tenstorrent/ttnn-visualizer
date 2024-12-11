@@ -8,14 +8,14 @@ import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
 import 'styles/components/FolderPicker.scss';
 import { useNavigate } from 'react-router';
-import { useQuery, useQueryClient } from 'react-query';
+import { useQueryClient } from 'react-query';
 import { useAtom, useSetAtom } from 'jotai';
 import ROUTES from '../../definitions/routes';
 import useLocalConnection from '../../hooks/useLocal';
 import { reportLocationAtom, selectedDeviceAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
-import { fetchTabSession } from '../../hooks/useAPI';
+import { useSession } from '../../hooks/useAPI';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -61,10 +61,7 @@ const LocalFolderOptions: FC = () => {
     const queryClient = useQueryClient();
     const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
-    const { data: tabSession } = useQuery('tabSession', {
-        queryFn: fetchTabSession,
-        initialData: null,
-    });
+    const { data: tabSession } = useSession();
 
     const {
         uploadLocalFolder,
@@ -84,7 +81,10 @@ const LocalFolderOptions: FC = () => {
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
     const isLocalReportMounted =
-        !isUploadingReport && !isUploadingPerformance && reportLocation === 'local' && tabSession?.active_report;
+        !isUploadingReport &&
+        !isUploadingPerformance &&
+        reportLocation === 'local' &&
+        tabSession?.active_report?.report_name;
 
     /**
      * This is a temporrary solution until we support Safari
@@ -262,7 +262,7 @@ const LocalFolderOptions: FC = () => {
                                 // eslint-disable-next-line react/no-unknown-property
                                 directory=''
                                 webkitdirectory=''
-                                disabled={isSafari || !uploadedReportName}
+                                disabled={isSafari || !tabSession?.active_report?.profile_name}
                                 onChange={handlePerformanceDirectoryOpen}
                             />
                             <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
