@@ -23,6 +23,7 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig } from '../functions/parseMemoryConfig';
+import isValidNumber from '../functions/isValidNumber';
 
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
@@ -212,11 +213,11 @@ export const useOperationDetails = (operationId: number | null, deviceId?: numbe
     );
 
     // TEMP removing device_id
-    // if (operationDetails.data) {
-    //     operationDetails.data.buffers = operationDetails.data.buffers.filter((buffer) =>
-    //         isValidNumber(deviceId) ? buffer.device_id === deviceId : true,
-    //     );
-    // }
+    if (operationDetails.data) {
+        operationDetails.data.buffers = operationDetails.data.buffers.filter((buffer) =>
+            isValidNumber(deviceId) ? buffer.device_id === deviceId : true,
+        );
+    }
 
     return {
         operation,
@@ -224,7 +225,7 @@ export const useOperationDetails = (operationId: number | null, deviceId?: numbe
     };
 };
 
-export const usePreviousOperationDetails = (operationId: number) => {
+export const usePreviousOperationDetails = (operationId: number, deviceId?: number | null) => {
     // TODO: change to return array and number of previous operations
     const { data: operations } = useOperationsList();
 
@@ -232,7 +233,7 @@ export const usePreviousOperationDetails = (operationId: number) => {
         return operationList[index + 1]?.id === operationId;
     });
 
-    return useOperationDetails(operation ? operation.id : null);
+    return useOperationDetails(operation ? operation.id : null, deviceId);
 };
 
 export const usePreviousOperation = (operationId: number) => {

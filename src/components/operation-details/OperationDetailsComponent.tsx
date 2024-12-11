@@ -49,8 +49,10 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         operationDetails: { data: operationDetails, isLoading, status },
     } = useOperationDetails(operationId, selectedDevice);
 
-    const { data: previousOperationDetails, isLoading: isPrevLoading } =
-        usePreviousOperationDetails(operationId).operationDetails;
+    const { data: previousOperationDetails, isLoading: isPrevLoading } = usePreviousOperationDetails(
+        operationId,
+        selectedDevice,
+    ).operationDetails;
 
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
     const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorAtom);
