@@ -5,17 +5,13 @@
 import { Alignment, Button, Navbar } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
-import { useQuery } from 'react-query';
 import ROUTES from '../definitions/routes';
-import { fetchTabSession } from '../hooks/useAPI';
+import { useSession } from '../hooks/useAPI';
 import 'styles/components/MainNavigation.scss';
 
 function MainNavigation() {
     const navigate = useNavigate();
-    const { data: tabSession } = useQuery('tabSession', {
-        queryFn: fetchTabSession,
-        initialData: null,
-    });
+    const { data: tabSession } = useSession();
 
     const handleNavigate = (path: string) => {
         navigate(path);

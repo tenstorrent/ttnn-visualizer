@@ -27,6 +27,8 @@
         justify-content: stretch;
         min-height: fit-content;
         flex-basis: 45%;
+        flex-grow: 0;
+        max-width: 600px;
 
         & > .bp5-icon {
             color: $tt-grey-4;
@@ -39,10 +41,9 @@
         }
 
         .buttons-container {
-            display: flex;
+            display: inline-flex;
             flex-wrap: wrap;
             gap: 5px;
-            align-items: center;
         }
 
         .remote-connection-select .bp5-button-text,

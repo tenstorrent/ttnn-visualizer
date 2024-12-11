@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { defineConfig } from 'vite';
 import path, { join } from 'path';
 import react from '@vitejs/plugin-react';

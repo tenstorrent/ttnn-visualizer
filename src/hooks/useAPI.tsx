@@ -349,3 +349,10 @@ export const usePerformance = () => {
         queryKey: 'get-performance-data-raw',
     });
 };
+
+export const useSession = () => {
+    return useQuery('tabSession', {
+        queryFn: () => fetchTabSession(),
+        initialData: null,
+    });
+};
