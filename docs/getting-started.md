@@ -3,7 +3,7 @@
 ## Prerequisites
 
 Visualizer requires a preexisting report generated. Please refer to
-[TT-Metallium](https://docs.tenstorrent.com/tt-metalium/latest/installing.html),
+[TT-Metallium](https://docs.tenstorrent.com/tt-metalium/latest/get_started/get_started.html),
 [TT-NN](https://docs.tenstorrent.com/ttnn/latest/ttnn/get_started.html) and
 [TT-NN models](https://docs.tenstorrent.com/ttnn/latest/tt_metal_models/get_started.html#running-an-example-model)
 on how to run models and generate reports.
