@@ -53,7 +53,7 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
     const setFocusedBuffer = () => {
         setSelectedTensor(tensor?.id === selectedTensor ? null : tensor?.id ?? null);
         setSelectedAddress(tensor?.address === selectedTensor ? null : tensor?.address ?? buffer.address);
-        createToast(tensor?.address ?? buffer.address, tensor?.id ?? undefined);
+        createToast(tensor?.address ?? buffer.address, tensor?.id);
     };
 
     const handleFocusBuffer = (address: number) => {
