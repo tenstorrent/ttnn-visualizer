@@ -22,7 +22,7 @@ import {
     defaultTensorData,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
-import parseMemoryConfig, { MemoryConfig } from '../functions/parseMemoryConfig';
+import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import isValidNumber from '../functions/isValidNumber';
 
 export const fetchTabSession = async (): Promise<TabSession | null> => {
@@ -81,7 +81,7 @@ const fetchOperations = async (deviceId?: number): Promise<OperationDescription[
     return operationList.map((operation) => ({
         ...operation,
         arguments: operation.arguments.map((argument) =>
-            argument.name === 'memory_config'
+            argument.name === 'memory_config' || memoryConfigPattern.test(argument.value)
                 ? {
                       ...argument,
                       parsedValue: argument.value ? (parseMemoryConfig(argument.value) as MemoryConfig) : null,
