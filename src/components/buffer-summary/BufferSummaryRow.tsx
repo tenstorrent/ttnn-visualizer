@@ -36,14 +36,14 @@ function BufferSummaryRow({
                 margin: memoryStart > 0 ? `0 ${computedPadding}%` : '0',
             }}
         >
-            {buffers.map((buffer: Buffer) => {
+            {buffers.map((buffer: Buffer, index: number) => {
                 const size = (buffer.size / computedMemorySize) * SCALE;
                 const position = ((buffer.address - memoryStart) / computedMemorySize) * SCALE;
                 const tensor = tensorList.get(buffer.address);
 
                 return (
                     <BufferSummaryBuffer
-                        key={`${operationId}-${buffer.address}`}
+                        key={`${operationId}-${buffer.address}-${index}`}
                         buffer={buffer}
                         size={size}
                         position={position}
