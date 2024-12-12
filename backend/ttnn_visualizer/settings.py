@@ -5,7 +5,7 @@
 import os
 from pathlib import Path
 
-from ttnn_visualizer.utils import str_to_bool
+from ttnn_visualizer.utils import str_to_bool, read_version_from_package_json
 
 
 class DefaultConfig(object):
@@ -17,14 +17,14 @@ class DefaultConfig(object):
 
     # Path Settings
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
-    VERSION = "0.14.2"
+    VERSION = read_version_from_package_json()
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
     REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
     STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0
 
-    LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "false"))
+    LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "true"))
 
     # File Name Configs
     TEST_CONFIG_FILE = "config.json"

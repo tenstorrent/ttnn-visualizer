@@ -1,2 +1,4 @@
 graft backend/ttnn_visualizer/static
 prune backend/ttnn_visualizer/data
+include ttnn_visualizer/package.json
+include package.json

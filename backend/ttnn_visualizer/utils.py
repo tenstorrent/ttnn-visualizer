@@ -183,12 +183,15 @@ def parse_memory_config(memory_config: Optional[str]) -> Optional[Dict[str, Any]
 
 def read_version_from_package_json() -> str:
     root_directory = Path(__file__).parent.parent.parent
+    print(root_directory)
     file_path = root_directory / "package.json"
     try:
         with open(file_path, "r") as file:
             content = json.load(file)
-            return content["version"]
+            return content.get("version", "0.0.0")
     except FileNotFoundError:
-        raise FileNotFoundError(f"The file {file_path} was not found.")
+        print(f"Warning: {file_path} not found. Using default version.")
+        return "0.0.0"
     except KeyError:
-        raise KeyError("The 'version' key was not found in the package.json file.")
+        print("Warning: 'version' key not found in package.json. Using default version.")
+        return "0.0.0"
