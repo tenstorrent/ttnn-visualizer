@@ -35,11 +35,15 @@ For more information please refer to
 
 The final output should be a folder including at least a `config.json` and a `db.sqlite` file.
 
+<img width="909" alt="Screenshot 2024-12-13 at 12 29 24 PM" src="https://github.com/user-attachments/assets/ab31892a-2779-4fe1-9ad5-0f35f8329f9a" />
+
 ### Performance traces
 
 TTNN Visualizer supports the reading of TT Metal performance traces. The expected output should be a folder container at least `profile_log_device.csv` and another csv with the performance results.
 
 Consult the TT Metal documentation on [how to generate a performance trace](https://github.com/tenstorrent/tt-metal/tree/main/models/perf#generating-performance-traces).
+
+<img width="916" alt="Screenshot 2024-12-13 at 12 29 44 PM" src="https://github.com/user-attachments/assets/8209f500-7913-41dc-8952-c1307e7720c3" />
 
 ## Installing as a Python Wheel
 
