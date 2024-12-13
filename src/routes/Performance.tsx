@@ -10,6 +10,7 @@ import { reportMetaAtom } from '../store/app';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import { PerformanceReport } from '../components/performance/PerfTable';
 import LoadingSpinner from '../components/LoadingSpinner';
+import PerformanceOperationTypesChart from '../components/PerformanceOperationTypesChart';
 
 export default function Performance() {
     const report = useReportMeta();
@@ -37,8 +38,11 @@ export default function Performance() {
         <>
             <Helmet title='Performance' />
 
-            {/* @ts-expect-error this shoudl be just fine */}
+            {/* @ts-expect-error this should be just fine */}
             <PerformanceReport data={perfData?.data} />
+
+            {/* @ts-expect-error this should be just fine */}
+            <PerformanceOperationTypesChart data={perfData?.data} />
         </>
     );
 }
