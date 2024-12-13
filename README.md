@@ -81,8 +81,8 @@ Unzip the files into their own directories and select them with the local folder
 [report](https://github.com/user-attachments/files/17996491/segformer_decoder_good.zip)
 
 **Llama mlp**
-[report](https://github.com/user-attachments/files/17996491/segformer_decoder_good.zip)
-[performance data](https://github.com/user-attachments/files/17996491/segformer_decoder_good.zip)
+[report](https://github.com/user-attachments/files/18129462/llama_mlp.zip)
+[performance trace](https://github.com/user-attachments/files/18129457/llama_mlp_tracy.zip)
 
 ## Contributing
 
