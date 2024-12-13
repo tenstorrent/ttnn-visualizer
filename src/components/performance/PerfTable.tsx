@@ -6,6 +6,7 @@
 import React, { FC, useMemo, useState } from 'react';
 import '../../scss/components/PerfTable.scss';
 import { Switch } from '@blueprintjs/core';
+import { formatSize, toSecondsPretty } from '../../functions/math';
 
 export interface RowData {
     [key: string]: string | number | null | undefined;
@@ -44,7 +45,7 @@ const formatCell = (cell: Cell): React.JSX.Element | string => {
         formatted = `${cell.raw_value}`;
     } else if (typeof cell.raw_value === 'number') {
         const decimals = cell.decimals ?? 0;
-        formatted = cell.raw_value.toFixed(decimals);
+        formatted = formatSize(Number(cell.raw_value.toFixed(decimals))); // cell.raw_value.toFixed(decimals);
     } else {
         formatted = String(cell.raw_value);
     }
@@ -223,6 +224,9 @@ const analyze_matmul = (row: RowData) => {
 
 // Main analysis of ops
 const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
+    // to render device id if expanded multidevice
+    // const device_id = row['DEVICE ID'];
+
     const op_code_val = String(row['OP CODE'] || '');
     const device_time_val = (Number(row['DEVICE FW DURATION [ns]']) || 0) / 1000;
     let dispatch_time_val: number | null = null;
@@ -243,6 +247,8 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
     let in0_block_w: Cell = { raw_value: null };
     let out_subblock_h: Cell = { raw_value: null };
     let out_subblock_w: Cell = { raw_value: null };
+
+    // console.log(op_to_op_latency_val);
 
     if (op_code_val.includes('Matmul')) {
         const {
@@ -276,6 +282,7 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
         is_dram_sharded_cell = { raw_value: is_dram_sharded };
         // Program config
         const attributes = String(row.ATTRIBUTES || '');
+        // console.log(attributes);
         const in0match = attributes.match(/in0_block_w=(\d+)/);
         if (in0match) {
             in0_block_w = { raw_value: Number(in0match[1]) };
@@ -297,8 +304,8 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
             'Total %': { raw_value: null },
             Bound: bound,
             'OP Code': { raw_value: op_code },
-            'Device Time': { raw_value: device_time_val, unit: 'us', decimals: 0 },
-            'Dispatch Time': { raw_value: dispatch_time_val, unit: 'us', decimals: 0 },
+            'Device Time': { raw_value: device_time_val, unit: 'µs', decimals: 0 },
+            'Dispatch Time': { raw_value: dispatch_time_val, unit: 'µs', decimals: 0 },
             Cores: { raw_value: Number(row['CORE COUNT']) },
             DRAM: dram_speed,
             'DRAM %': dram_percentage,
@@ -320,8 +327,8 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
         'Total %': { raw_value: null },
         Bound: bound,
         'OP Code': { raw_value: op_code_val },
-        'Device Time': { raw_value: device_time_val || null, unit: 'us', decimals: 0 },
-        'Dispatch Time': { raw_value: dispatch_time_val, unit: 'us', decimals: 0 },
+        'Device Time': { raw_value: device_time_val || null, unit: 'µs', decimals: 0 },
+        'Dispatch Time': { raw_value: dispatch_time_val, unit: 'µs', decimals: 0 },
         Cores: { raw_value: Number(row['CORE COUNT']) || null },
         DRAM: dram_speed,
         'DRAM %': dram_percentage,
@@ -509,7 +516,8 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
 
         let deviceOps = 0;
         let hostOps = 0;
-        df.forEach((r) => {
+        df.forEach((r, index) => {
+            r.ORIGINAL_ID = index + 2;
             if (String(r['OP CODE']).includes('(torch)') || String(r['OP CODE']) === '') {
                 hostOps++;
             } else {
@@ -544,13 +552,15 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         let rows: ProcessedRow[] = [];
         let prevRow: RowData | null = null;
 
-        df.forEach((r, i) => {
+        df.forEach((r) => {
             const opData = analyze_op(r, prevRow);
             // console.log(op_data);
-            opData.ID = { raw_value: i + 2 }; // Simulate original row number
+            opData.ID.raw_value = String(r.ORIGINAL_ID);
             rows.push(opData);
             prevRow = r;
         });
+
+        // console.log(df);
 
         add_derived_columns(rows);
         add_derived_columns(rows); // after any filtering if needed
@@ -640,6 +650,263 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         return mergedBlocks;
     }
 
+    const calcDispatchOps = (rows: ProcessedRow[]) => {
+        const highDispatchOps = rows
+            .map((op_data: ProcessedRow, idx: number) => [idx + 1, op_data] as [number, ProcessedRow])
+            .filter(([_, op_data]) => {
+                const val = op_data['Dispatch Time'].raw_value;
+                return val !== null && val !== undefined && typeof val === 'number' && val > 100; // 6.5;
+            });
+
+        if (highDispatchOps.length === 0) {
+            return null; // No high dispatch overhead ops, so no advice section
+        }
+
+        // Compute the max dispatch overhead
+        const max_dispatch_overhead = highDispatchOps.reduce((acc, [_, op_data]) => {
+            const val = op_data['Dispatch Time'].raw_value as number;
+            return acc + (val - 6);
+        }, 0);
+
+        // Compute total_duration as sum of device times + dispatch times
+        const total_device_time = rows.reduce((acc, r) => {
+            const val = r['Device Time'].raw_value;
+            return acc + (typeof val === 'number' ? val : 0);
+        }, 0);
+        const total_dispatch_time = rows.reduce((acc, r) => {
+            const val = r['Dispatch Time'].raw_value;
+            return acc + (typeof val === 'number' ? val : 0);
+        }, 0);
+
+        const total_duration = total_device_time + total_dispatch_time;
+        const percentage_saved = (max_dispatch_overhead / total_duration) * 100;
+        return (
+            <div
+                style={{ color: '#fff', marginTop: '1rem' }}
+                className='perf-table'
+            >
+                <h4>High Dispatch Overhead</h4>
+                <hr style={{ border: '1px solid #555', margin: '0.5rem 0' }} />
+
+                <table
+                    className='monospace'
+                    style={{ borderCollapse: 'collapse', width: '100%', background: '#222' }}
+                >
+                    <thead>
+                        <tr>
+                            {visibleHeaders.map((h) => (
+                                <th
+                                    key={h}
+                                    style={{ textAlign: 'left', borderBottom: '1px solid #555', padding: '0.25rem' }}
+                                >
+                                    {h}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {highDispatchOps.map(([rowIndex, op_data]) => (
+                            <tr key={rowIndex}>
+                                {visibleHeaders.map((h) => (
+                                    <td
+                                        key={h}
+                                        style={{ borderBottom: '1px solid #333', padding: '0.25rem' }}
+                                    >
+                                        {formatCell(op_data[h])}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+
+                <p>
+                    These ops have &gt; 6µs dispatch latency. Running with tracing could save{' '}
+                    {formatSize(Number(max_dispatch_overhead.toFixed(0)))} µs {toSecondsPretty(max_dispatch_overhead)} (
+                    {percentage_saved.toFixed(1)}% of overall time).
+                </p>
+                <p>Alternatively, try moving runtime args in the kernels to compile-time args.</p>
+            </div>
+        );
+    };
+
+    const calculateMatmul = (rows: ProcessedRow[]) => {
+        const matmul_ops = rows.filter((op_data) => {
+            const opCodeVal = op_data['OP Code'].raw_value;
+            return typeof opCodeVal === 'string' && opCodeVal.includes('Matmul');
+        });
+
+        if (matmul_ops.length === 0) {
+            return null; // No matmul ops, no advice
+        }
+
+        return (
+            <div
+                className='perf-table'
+                style={{ color: '#fff', fontFamily: 'monospace', marginTop: '1rem' }}
+            >
+                <h3>Matmul Optimization</h3>
+                <hr style={{ border: '1px solid #555', margin: '0.5rem 0' }} />
+
+                <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                    <thead>
+                        <tr>
+                            {visibleHeaders.map((h) => (
+                                <th
+                                    key={h}
+                                    style={{ textAlign: 'left', borderBottom: '1px solid #555', padding: '0.25rem' }}
+                                >
+                                    {h}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {matmul_ops.map((op_data: { [x: string]: Cell }, i: React.Key | null | undefined) => {
+                            // Determine the color from OP Code
+                            const opCodeColor = op_data['OP Code'].color === 'grey' ? 'grey' : 'white';
+
+                            // Extract needed fields
+                            const math_fidelity_raw = op_data['Math Fidelity'].raw_value;
+                            const math_fidelity =
+                                typeof math_fidelity_raw === 'string' ? math_fidelity_raw.split(' ')[0] : undefined;
+
+                            const output_datatype = op_data['Output Datatype'].raw_value as string | undefined;
+                            const input_0_datatype = op_data['Input 0 Datatype'].raw_value as string | undefined;
+                            const input_1_datatype = op_data['Input 1 Datatype'].raw_value as string | undefined;
+                            const cores = op_data.Cores.raw_value as number | undefined;
+                            const fidelity_results = evaluate_fidelity(
+                                input_0_datatype || '',
+                                input_1_datatype || '',
+                                output_datatype || '',
+                                math_fidelity,
+                            );
+                            const [fidelity_evaluation, fidelity_advice] = fidelity_results;
+
+                            const boundVal = op_data.Bound.raw_value as string | undefined;
+                            const flops_pct = op_data['FLOPs %'].raw_value as number | undefined;
+                            const dram_sharded = op_data['DRAM Sharded'].raw_value as boolean | undefined;
+                            const input_0_memory = op_data['Input 0 Memory'].raw_value as string | undefined;
+                            const inner_dim_block = op_data['Inner Dim Block Size'].raw_value as number | undefined;
+                            const out_h = op_data['Output Subblock H'].raw_value as number | undefined;
+                            const out_w = op_data['Output Subblock W'].raw_value as number | undefined;
+
+                            // Compute advice lines
+                            const advice: string[] = [];
+
+                            if (boundVal === 'DRAM' || boundVal === 'BOTH') {
+                                if (!dram_sharded) {
+                                    advice.push(
+                                        '- Try a DRAM-sharded program config (MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig) to improve throughput further',
+                                    );
+                                }
+                                if (fidelity_evaluation === 'too_low' && flops_pct !== undefined && flops_pct < 40) {
+                                    if (fidelity_advice) {
+                                        advice.push(`- ${fidelity_advice}`);
+                                    }
+                                }
+                                if (fidelity_evaluation === 'too_high' && fidelity_advice) {
+                                    advice.push(`- ${fidelity_advice}`);
+                                }
+                            } else if (boundVal === 'FLOP' || boundVal === 'BOTH') {
+                                if (cores !== undefined && cores < 64) {
+                                    advice.push(`- Increase grid size (currently using ${cores})`);
+                                }
+                                if (fidelity_evaluation === 'too_high' && fidelity_advice) {
+                                    advice.push(`- ${fidelity_advice}`);
+                                }
+                            } else if (boundVal === 'SLOW') {
+                                if (input_0_memory && !input_0_memory.includes('L1')) {
+                                    advice.push(`- If possible place input 0 in L1 (currently in ${input_0_memory})`);
+                                }
+
+                                let all_good = true;
+                                if (inner_dim_block === undefined && out_h === undefined && out_w === undefined) {
+                                    advice.push(
+                                        '- No program_config specified, try using one to override in0_block_w and out_subblock_h/w',
+                                    );
+                                } else {
+                                    if (inner_dim_block !== undefined) {
+                                        if (inner_dim_block < 2) {
+                                            advice.push(
+                                                `- in0_block_w=${inner_dim_block} is small, try in0_block_w=2 or above`,
+                                            );
+                                            all_good = false;
+                                        }
+                                    } else {
+                                        advice.push('- No inner dim block size found');
+                                        all_good = false;
+                                    }
+
+                                    if (out_h !== undefined && out_w !== undefined) {
+                                        const out_area = out_h * out_w;
+                                        if (out_area < 2) {
+                                            advice.push(
+                                                `- Output subblock ${out_h}x${out_w} is small, try out_subblock_h * out_subblock_w >= 2 if possible`,
+                                            );
+                                            all_good = false;
+                                        }
+                                    } else {
+                                        advice.push('- No output subblock size found');
+                                        all_good = false;
+                                    }
+
+                                    if (all_good) {
+                                        advice.push(
+                                            `- in0_block_w=${inner_dim_block} and output subblock ${out_h}x${out_w} look good 🤷`,
+                                        );
+                                    }
+                                    if (fidelity_advice) {
+                                        advice.push(`- ${fidelity_advice}`);
+                                    }
+                                }
+                            }
+
+                            // If no advice, print "✅ Optimized"
+                            const adviceContent =
+                                advice.length > 0 ? (
+                                    advice.map((item, idx) => (
+                                        <div
+                                            key={idx}
+                                            style={{ color: opCodeColor }}
+                                        >
+                                            {item}
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div style={{ color: opCodeColor }}>✅ Optimized</div>
+                                );
+
+                            return (
+                                <React.Fragment key={i}>
+                                    <tr>
+                                        {visibleHeaders.map((h) => (
+                                            <td
+                                                key={h}
+                                                style={{ borderBottom: '1px solid #333', padding: '0.25rem' }}
+                                            >
+                                                {formatCell(op_data[h])}
+                                            </td>
+                                        ))}
+                                    </tr>
+
+                                    <tr>
+                                        <td
+                                            colSpan={visibleHeaders.length}
+                                            style={{ padding: '0.5rem 0' }}
+                                        >
+                                            {adviceContent}
+                                        </td>
+                                    </tr>
+                                </React.Fragment>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        );
+    };
+
     return (
         <>
             <Switch
@@ -659,6 +926,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                 className='perf-table'
                 style={{ background: '#222', color: '#fff', padding: '1rem' }}
             >
+                <h3>Performance report</h3>
                 <table
                     className='monospace'
                     style={{ borderCollapse: 'collapse', width: '100%' }}
@@ -692,10 +960,9 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                 </table>
             </div>
             <hr />
-            {/* this is not working correctly atm */}
-            {/* <aside> */}
-            {/*    Total device ops: {deviceOpsCount}, Total host ops: {hostOpsCount}{' '} */}
-            {/* </aside> */}
+            {calcDispatchOps(processedRows)}
+            <hr />
+            {calculateMatmul(processedRows)}
         </>
     );
 };

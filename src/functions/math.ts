@@ -11,6 +11,17 @@ export const formatSize = (number: number): string => {
     return new Intl.NumberFormat('en-US').format(number);
 };
 
+/**
+ * Convert microseconds to seconds and format it to 3 decimal places
+ * returns empty string if us is less than min
+ */
+export const toSecondsPretty = (us: number, min: number = 1000): string => {
+    if (us < min) {
+        return '';
+    }
+    return `( ${(us / 1_000_000).toFixed(3)}s )`;
+};
+
 export const prettyPrintAddress = (address: number | null, memorySize: number): string => {
     if (address === null) {
         return 'NULL';
