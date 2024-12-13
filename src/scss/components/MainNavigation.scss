@@ -11,7 +11,7 @@
         color: $color;
     }
 
-    &.bp5-minimal {
+    &.bp5-minimal:not([disabled]) {
         &:hover {
             background-color: rgba($color, 0.2);
             color: $color;

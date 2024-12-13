@@ -7,6 +7,8 @@ export interface ShardSpec {
     shape?: [number, number];
     orientation?: string;
     halo?: number;
+    mode?: string;
+    physical_shard_shape?: string;
 }
 
 export interface MemoryConfig {
@@ -18,14 +20,23 @@ export enum TensorMemoryLayout {
     'INTERLEAVED' = 'TensorMemoryLayout::INTERLEAVED',
     'HEIGHT_SHARDED' = 'TensorMemoryLayout::HEIGHT_SHARDED',
     'BLOCK_SHARDED' = 'TensorMemoryLayout::BLOCK_SHARDED',
+    'WIDTH_SHARDED' = 'TensorMemoryLayout::WIDTH_SHARDED',
 }
 
-export type MemoryKeys = 'shard_spec' | 'memory_layout' | 'grid' | 'shape' | 'orientation' | 'halo';
+export type MemoryKeys =
+    | 'shard_spec'
+    | 'memory_layout'
+    | 'grid'
+    | 'shape'
+    | 'orientation'
+    | 'halo'
+    | 'mode'
+    | 'physical_shard_shape';
 
-const memoryConfigPattern = /MemoryConfig\((.*)\)$/;
+export const memoryConfigPattern = /MemoryConfig\((.*)\)$/;
 const memoryLayoutPattern = /memory_layout=([A-Za-z_:]+)/;
 const shardSpecPattern =
-    /shard_spec=ShardSpec\(grid=\{(\[.*?\])\},shape=\{(\d+),\s*(\d+)\},orientation=ShardOrientation::([A-Z_]+),halo=(\d+)\)/;
+    /shard_spec=ShardSpec\((?:grid=\{(\[.*?\])\},?)?(?:shape=\{(\d+), (\d+)\},?)?(?:orientation=ShardOrientation::([A-Za-z_]+),?)?(?:halo=(\d+),?)?(?:mode=ShardMode::([A-Z_]+),?)?(?:physical_shard_shape=std::([A-Za-z_]+),?)?/;
 
 const parseMemoryConfig = (string: string): MemoryConfig | null => {
     const match = string.match(memoryConfigPattern);
@@ -43,6 +54,8 @@ const parseMemoryConfig = (string: string): MemoryConfig | null => {
                   shape: [parseInt(shardSpecMatch[2], 10), parseInt(shardSpecMatch[3], 10)],
                   orientation: shardSpecMatch[4],
                   halo: parseInt(shardSpecMatch[5], 10),
+                  mode: shardSpecMatch[6],
+                  physical_shard_shape: shardSpecMatch[7],
               }
             : 'std::nullopt';
 
@@ -62,6 +75,8 @@ export const MEMORY_CONFIG_HEADERS = {
     shape: 'Shape',
     orientation: 'ShardOrientation',
     halo: 'Halo',
+    mode: 'Mode',
+    physical_shard_shape: 'PhysicalShardShape',
 };
 
 export function getMemoryConfigHeader(key: MemoryKeys) {

@@ -29,7 +29,7 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
         }
     };
 
-    if (argument.name === 'memory_config' && argument?.parsedValue) {
+    if (argument?.parsedValue) {
         return (
             <table className='ttnn-table alt-two-tone-rows buffer-table'>
                 <tbody>
