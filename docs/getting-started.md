@@ -28,7 +28,7 @@ pytest --disable-warnings --input-path="path/to/input.json" path/to/test_file.py
 ```
 
 For more information please refer to
-[TT-Metallium](https://docs.tenstorrent.com/tt-metalium/latest/get_started/get_started.html),
+[TT-Metalium](https://docs.tenstorrent.com/tt-metalium/latest/get_started/get_started.html),
 [TT-NN](https://docs.tenstorrent.com/ttnn/latest/ttnn/get_started.html) and
 [TT-NN models](https://docs.tenstorrent.com/ttnn/latest/tt_metal_models/get_started.html#running-an-example-model)
  documentation.
