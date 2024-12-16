@@ -737,18 +737,21 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         });
 
         if (matmul_ops.length === 0) {
-            return null; // No matmul ops, no advice
+            return null;
         }
 
         return (
             <div
                 className='perf-table'
-                style={{ color: '#fff', fontFamily: 'monospace', marginTop: '1rem' }}
+                style={{ color: '#fff', marginTop: '1rem' }}
             >
                 <h3>Matmul Optimization</h3>
                 <hr style={{ border: '1px solid #555', margin: '0.5rem 0' }} />
 
-                <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <table
+                    className='monospace'
+                    style={{ borderCollapse: 'collapse', width: '100%' }}
+                >
                     <thead>
                         <tr>
                             {visibleHeaders.map((h) => (
@@ -779,17 +782,17 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                                 input_0_datatype || '',
                                 input_1_datatype || '',
                                 output_datatype || '',
-                                math_fidelity,
+                                math_fidelity || '',
                             );
                             const [fidelity_evaluation, fidelity_advice] = fidelity_results;
 
-                            const boundVal = op_data.Bound.raw_value as string | undefined;
-                            const flops_pct = op_data['FLOPs %'].raw_value as number | undefined;
-                            const dram_sharded = op_data['DRAM Sharded'].raw_value as boolean | undefined;
-                            const input_0_memory = op_data['Input 0 Memory'].raw_value as string | undefined;
-                            const inner_dim_block = op_data['Inner Dim Block Size'].raw_value as number | undefined;
-                            const out_h = op_data['Output Subblock H'].raw_value as number | undefined;
-                            const out_w = op_data['Output Subblock W'].raw_value as number | undefined;
+                            const boundVal = op_data.Bound.raw_value as string | null;
+                            const flops_pct = op_data['FLOPs %'].raw_value as number | null;
+                            const dram_sharded = op_data['DRAM Sharded'].raw_value as boolean | null;
+                            const input_0_memory = op_data['Input 0 Memory'].raw_value as string | null;
+                            const inner_dim_block = op_data['Inner Dim Block Size'].raw_value as number | null;
+                            const out_h = op_data['Output Subblock H'].raw_value as number | null;
+                            const out_w = op_data['Output Subblock W'].raw_value as number | null;
 
                             // Compute advice lines
                             const advice: string[] = [];
@@ -800,7 +803,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                                         '- Try a DRAM-sharded program config (MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig) to improve throughput further',
                                     );
                                 }
-                                if (fidelity_evaluation === 'too_low' && flops_pct !== undefined && flops_pct < 40) {
+                                if (fidelity_evaluation === 'too_low' && flops_pct !== null && flops_pct < 40) {
                                     if (fidelity_advice) {
                                         advice.push(`- ${fidelity_advice}`);
                                     }
@@ -821,12 +824,12 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                                 }
 
                                 let all_good = true;
-                                if (inner_dim_block === undefined && out_h === undefined && out_w === undefined) {
+                                if (inner_dim_block === null && out_h === null && out_w === null) {
                                     advice.push(
                                         '- No program_config specified, try using one to override in0_block_w and out_subblock_h/w',
                                     );
                                 } else {
-                                    if (inner_dim_block !== undefined) {
+                                    if (inner_dim_block !== null) {
                                         if (inner_dim_block < 2) {
                                             advice.push(
                                                 `- in0_block_w=${inner_dim_block} is small, try in0_block_w=2 or above`,
@@ -838,7 +841,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                                         all_good = false;
                                     }
 
-                                    if (out_h !== undefined && out_w !== undefined) {
+                                    if (out_h !== null && out_w !== null) {
                                         const out_area = out_h * out_w;
                                         if (out_area < 2) {
                                             advice.push(
@@ -862,13 +865,12 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                                 }
                             }
 
-                            // If no advice, print "✅ Optimized"
                             const adviceContent =
                                 advice.length > 0 ? (
                                     advice.map((item, idx) => (
                                         <div
                                             key={idx}
-                                            style={{ color: opCodeColor }}
+                                            style={{ paddingLeft: '1rem', color: opCodeColor }}
                                         >
                                             {item}
                                         </div>
