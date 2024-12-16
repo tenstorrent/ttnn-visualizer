@@ -37,7 +37,7 @@ export default function Performance() {
         <>
             <Helmet title='Performance' />
 
-            {/* @ts-expect-error this shoudl be just fine */}
+            {/* @ts-expect-error this should be just fine */}
             <PerformanceReport data={perfData?.data} />
         </>
     );
