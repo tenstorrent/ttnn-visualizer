@@ -1,5 +1,6 @@
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData } from 'plotly.js';
+import { useMemo } from 'react';
 import { RowData } from './performance/PerfTable';
 
 interface PerformanceOperationTypesChartProps {
@@ -28,6 +29,8 @@ const CONFIG: Partial<Config> = {
     responsive: true,
 };
 
+const HOST_OP_MARKER = '(torch)';
+
 function PerformanceOperationTypesChart({ data }: PerformanceOperationTypesChartProps) {
     const operationTypes = data
         ?.filter((row) => !isHostOperation(row?.['OP CODE'] as string | undefined))
@@ -46,12 +49,16 @@ function PerformanceOperationTypesChart({ data }: PerformanceOperationTypesChart
             {} as Record<string, number>,
         );
 
-    const chartData = {
-        values: Object.values(operationTypes ?? []),
-        labels: Object.keys(operationTypes ?? []),
-        type: 'pie',
-        textinfo: 'percent',
-    } as Partial<PlotData>;
+    const chartData = useMemo(
+        () =>
+            ({
+                values: Object.values(operationTypes ?? []),
+                labels: Object.keys(operationTypes ?? []),
+                type: 'pie',
+                textinfo: 'percent',
+            }) as Partial<PlotData>,
+        [operationTypes],
+    );
 
     return (
         <>
@@ -66,6 +73,6 @@ function PerformanceOperationTypesChart({ data }: PerformanceOperationTypesChart
     );
 }
 
-const isHostOperation = (operation?: string) => operation?.includes('(torch)') || operation === '';
+const isHostOperation = (operation?: string) => operation?.includes(HOST_OP_MARKER) || operation === '';
 
 export default PerformanceOperationTypesChart;
