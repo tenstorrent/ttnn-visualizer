@@ -24,7 +24,7 @@ const analyze_matmul = (row: RowData) => {
 
     let total_data_size_bytes = 0;
 
-    const getVal = (key: string) => Number(row[key] || 0);
+    const getVal = (key: keyof RowData) => Number(row[key] || 0);
 
     if (input_0_from_dram) {
         total_data_size_bytes +=
