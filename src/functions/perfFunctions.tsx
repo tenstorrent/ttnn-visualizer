@@ -6,7 +6,7 @@
 import React from 'react';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { formatSize } from './math';
-import { Cell, MathFidelity, ProcessedRow } from '../definitions/PerfTable';
+import { Cell, MathFidelity, ProcessedRow, RowData } from '../definitions/PerfTable';
 
 const colored = (text: string, color?: string) => {
     if (!text) {
@@ -232,4 +232,29 @@ export const color_row = (op_data: ProcessedRow, min_percentage: number) => {
         }
     }
     return op_data;
+};
+
+export const mergeMultideviceRows = (rows: RowData[]): RowData[] => {
+    const blockByDevice = rows.reduce(
+        (acc, row) => {
+            const deviceId = Number(row['DEVICE ID']);
+            const opType = String(row['OP TYPE'] || '');
+            if (opType === 'tt_dnn_device') {
+                acc[deviceId] = acc[deviceId] || [];
+                acc[deviceId].push(row);
+            }
+            return acc;
+        },
+        {} as Record<number, RowData[]>,
+    );
+
+    const deviceIds = Object.keys(blockByDevice).map(Number).sort();
+    const count = blockByDevice[deviceIds[0]].length;
+
+    return Array.from({ length: count }, (_, i) => {
+        const blocks = deviceIds.map((id) => blockByDevice[id][i]);
+        return blocks.reduce((bestRow, currRow) =>
+            (currRow['DEVICE FW DURATION [ns]'] || 0) > (bestRow['DEVICE FW DURATION [ns]'] || 0) ? currRow : bestRow,
+        );
+    });
 };

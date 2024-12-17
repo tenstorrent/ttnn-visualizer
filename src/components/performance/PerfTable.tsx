@@ -13,6 +13,7 @@ import {
     evaluate_fidelity,
     formatCell,
     get_datatype_size,
+    mergeMultideviceRows,
     tflops_per_core,
 } from '../../functions/perfFunctions';
 import { Cell, MathFidelity, ProcessedRow, RowData } from '../../definitions/PerfTable';
@@ -122,8 +123,6 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
     let out_subblock_h: Cell = { raw_value: null };
     let out_subblock_w: Cell = { raw_value: null };
 
-    // console.log(op_to_op_latency_val);
-
     if (op_code_val.includes('Matmul')) {
         const {
             dram_speed_gb_s,
@@ -136,7 +135,6 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
             input_0_datatype,
             input_1_datatype,
             output_datatype,
-            // core_count, /** not used atm */
         } = analyze_matmul(row);
 
         dram_speed = { raw_value: dram_speed_gb_s, unit: 'GB/s', decimals: 0 };
@@ -156,7 +154,6 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
         is_dram_sharded_cell = { raw_value: is_dram_sharded };
         // Program config
         const attributes = String(row.ATTRIBUTES || '');
-        // console.log(attributes);
         const in0match = attributes.match(/in0_block_w=(\d+)/);
         if (in0match) {
             in0_block_w = { raw_value: Number(in0match[1]) };
@@ -170,7 +167,6 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
             out_subblock_w = { raw_value: Number(outWmatch[1]) };
         }
 
-        // Append size to OP Code
         const op_code = `${op_code_val} ${String(size)}`;
 
         return {
@@ -277,37 +273,21 @@ interface PerformanceReportProps {
 }
 
 export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercentage = 0.5 }) => {
-    const [deviceOpsCount, setDeviceOpsCount] = useState<number>(0);
-    const [hostOpsCount, setHostOpsCount] = useState<number>(0);
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     const [showHostOps, setShowHostOps] = useState<boolean>(false);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, setIsMultiDevice] = useState<boolean>(false);
+
     const processedRows = useMemo(() => {
         if (data === undefined) {
             return [];
         }
         let df = data.slice();
 
-        let deviceOps = 0;
-        let hostOps = 0;
         df.forEach((r, index) => {
             r.ORIGINAL_ID = index + 2;
-            if (String(r['OP CODE']).includes('(torch)') || String(r['OP CODE']) === '') {
-                hostOps++;
-            } else {
-                deviceOps++;
-            }
         });
-
-        setHostOpsCount(hostOps);
-        setDeviceOpsCount(deviceOps);
-
-        // eslint-disable-next-line no-unused-expressions
-        hostOpsCount;
-        // eslint-disable-next-line no-unused-expressions
-        deviceOpsCount;
 
         if (df.length > 0 && 'HOST START TS' in df[0]) {
             df = df.sort((a, b) => Number(a['HOST START TS'] || 0) - Number(b['HOST START TS'] || 0));
@@ -317,7 +297,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         setIsMultiDevice(uniqueDeviceIDs.length > 1);
         if (uniqueDeviceIDs.length > 1 && mergeDeviceData) {
             // console.info(`Detected data from ${uniqueDeviceIDs.length} devices. Merging device data...`);
-            df = mergeDeviceRows(df);
+            df = mergeMultideviceRows(df);
         }
 
         // Filter out host ops if we should
@@ -339,7 +319,6 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         // console.log(df);
 
         add_derived_columns(rows);
-        add_derived_columns(rows); // after any filtering if needed
         rows = rows.map((r) => color_row(r, minPercentage));
 
         // const highDispatchOps = rows
@@ -357,9 +336,9 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         }
 
         return rows;
-    }, [data, deviceOpsCount, hostOpsCount, mergeDeviceData, minPercentage, showHostOps, hiliteHighDispatch]);
+    }, [data, mergeDeviceData, minPercentage, showHostOps, hiliteHighDispatch]);
 
-    const visibleHeaders = [
+    const baseHeaders = [
         'ID',
         'Total %',
         'Bound',
@@ -373,77 +352,11 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         'FLOPs %',
         'Math Fidelity',
     ];
-    if (hiliteHighDispatch) {
-        visibleHeaders.splice(5, 0, 'Slow');
-    }
+    const visibleHeaders = hiliteHighDispatch
+        ? [...baseHeaders.slice(0, 5), 'Slow', ...baseHeaders.slice(5)]
+        : baseHeaders;
 
-    function mergeDeviceRows(rows: RowData[]): RowData[] {
-        const blockByDevice: Record<number, Array<[string, RowData]>> = {};
-
-        // Group rows by device ID for "tt_dnn_device" ops
-        for (const row of rows) {
-            const opType = String(row['OP TYPE'] || '');
-            if (opType === 'tt_dnn_device') {
-                const deviceId = Number(row['DEVICE ID']);
-                if (!blockByDevice[deviceId]) {
-                    blockByDevice[deviceId] = [];
-                }
-                const opName = String(row['OP CODE'] || '');
-                blockByDevice[deviceId].push([opName, row]);
-            }
-        }
-
-        const deviceIds = Object.keys(blockByDevice)
-            .map(Number)
-            .sort((a, b) => a - b);
-
-        // Ensure all device arrays have the same length before zipping
-        const lengths = deviceIds.map((did) => blockByDevice[did].length);
-        const uniqueLengths = new Set(lengths);
-        if (uniqueLengths.size > 1) {
-            throw new Error('Inconsistent number of rows per device ID. Cannot merge.');
-        }
-
-        const mergedBlocks: RowData[] = [];
-        const count = lengths[0]; // all have the same length
-
-        for (let i = 0; i < count; i++) {
-            const blocks = deviceIds.map((did) => blockByDevice[did][i]);
-            // blocks is an array of tuples [opName, row] for each device at index i
-            const opName = blocks[0][0];
-            const isCollective = opName.includes('AllGather') || opName.includes('ReduceScatter');
-
-            if (isCollective) {
-                // For collective ops, pick minimum duration
-                let minBlock = blocks[0];
-                for (const blk of blocks) {
-                    if (
-                        Number(blk[1]['DEVICE FW DURATION [ns]'] || Infinity) <
-                        Number(minBlock[1]['DEVICE FW DURATION [ns]'] || Infinity)
-                    ) {
-                        minBlock = blk;
-                    }
-                }
-                mergedBlocks.push(minBlock[1]);
-            } else {
-                // For non-collective ops, pick maximum duration
-                let maxBlock = blocks[0];
-                for (const blk of blocks) {
-                    if (
-                        Number(blk[1]['DEVICE FW DURATION [ns]'] || -Infinity) >
-                        Number(maxBlock[1]['DEVICE FW DURATION [ns]'] || -Infinity)
-                    ) {
-                        maxBlock = blk;
-                    }
-                }
-                mergedBlocks.push(maxBlock[1]);
-            }
-        }
-
-        return mergedBlocks;
-    }
-
-    const calcMatmulAdvice = (op_data: ProcessedRow) => {
+    const getMatmulOptimizationAdvice = (op_data: ProcessedRow) => {
         const opCodeColor = op_data['OP Code'].color === 'grey' ? 'grey' : 'white';
 
         // Extract needed fields
@@ -610,7 +523,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
             />
             <Switch
                 className='expand-button'
-                label={provideMatmulAdvice ? 'Hide matmul advice' : 'Show matmul advice'}
+                label={provideMatmulAdvice ? 'Hide Matmul optimization analysis' : 'Show Matmul optimization analysis'}
                 onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
                 checked={provideMatmulAdvice}
             />
@@ -660,7 +573,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                                             colSpan={visibleHeaders.length}
                                             style={{ padding: '0.25rem' }}
                                         >
-                                            {calcMatmulAdvice(row)}
+                                            {getMatmulOptimizationAdvice(row)}
                                         </td>
                                     </tr>
                                 )}
