@@ -8,9 +8,8 @@ import { useEffect } from 'react';
 import { usePerformance, useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom } from '../store/app';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
-import PerformanceScatterChart from '../components/PerformanceScatterChart';
-import { PerformanceReport } from '../components/performance/PerfTable';
 import LoadingSpinner from '../components/LoadingSpinner';
+import PerformanceMixedChart from '../components/PerformanceMixedChart';
 
 export default function Performance() {
     const report = useReportMeta();
@@ -39,10 +38,10 @@ export default function Performance() {
             <Helmet title='Performance' />
 
             {/* @ts-expect-error this should be just fine */}
-            <PerformanceReport data={perfData?.data} />
+            {/* <PerformanceReport data={perfData?.data} /> */}
 
             {/* @ts-expect-error this should be just fine */}
-            <PerformanceScatterChart data={perfData?.data} />
+            <PerformanceMixedChart data={perfData?.data} />
         </>
     );
 }
