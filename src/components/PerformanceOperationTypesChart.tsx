@@ -65,15 +65,15 @@ function PerformanceOperationTypesChart({ data }: PerformanceOperationTypesChart
     );
 
     return (
-        <>
-            <h2>Operation Types Pie Chart</h2>
+        <div>
+            <h3>Operation Types Pie Chart</h3>
 
             <Plot
                 data={[chartData]}
                 layout={LAYOUT}
                 config={CONFIG}
             />
-        </>
+        </div>
     );
 }
 

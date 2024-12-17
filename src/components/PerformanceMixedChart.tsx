@@ -99,6 +99,8 @@ function PerformanceMixedChart({ data }: PerformanceMixedChartProps) {
                 x: filteredOps?.map((_row, index) => index + 1),
                 y: filteredOps?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
                 type: 'bar',
+                hovertemplate: `Operation number: %{x}<br />Device Kernel Duration: %{y} ns`,
+                name: '',
             }) as Partial<PlotData>,
         [filteredOps],
     );
@@ -109,13 +111,15 @@ function PerformanceMixedChart({ data }: PerformanceMixedChartProps) {
                 x: filteredOps?.map((_row, index) => index + 1),
                 y: filteredOps?.map((row) => getUtilization(row, deviceConfiguration)).filter((value) => value !== -1),
                 yaxis: 'y2',
+                hovertemplate: `Duration: %{x} ns<br />Utilization: %{y}`,
+                name: '',
             }) as Partial<PlotData>,
         [filteredOps, deviceConfiguration],
     );
 
     return (
         <div className='scatter-chart'>
-            <h2>Device Kernel Duration vs Utilization (MatMul)</h2>
+            <h3>Device Kernel Duration vs Utilization (MatMul)</h3>
 
             <div className='chart-controls'>
                 <span>Select Configuration:</span>

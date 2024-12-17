@@ -4,14 +4,22 @@
 
 import { Helmet } from 'react-helmet-async';
 import { useSetAtom } from 'jotai';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Button, Intent } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import { usePerformance, useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom } from '../store/app';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceMixedChart from '../components/PerformanceMixedChart';
+import PerformanceOperationTypesChart from '../components/PerformanceOperationTypesChart';
+import PerformanceScatterChart from '../components/PerformanceScatterChart';
+import Overlay from '../components/Overlay';
+import { PerformanceReport } from '../components/performance/PerfTable';
+import 'styles/components/Performance.scss';
 
 export default function Performance() {
+    const [isOpen, setIsOpen] = useState(false);
     const report = useReportMeta();
     const setMeta = useSetAtom(reportMetaAtom);
     const { data: perfData, isLoading } = usePerformance();
@@ -34,14 +42,41 @@ export default function Performance() {
     }
 
     return (
-        <>
+        <div className='performance'>
             <Helmet title='Performance' />
 
-            {/* @ts-expect-error this should be just fine */}
-            {/* <PerformanceReport data={perfData?.data} /> */}
+            <h1 className='page-title'>Performance analysis</h1>
+
+            <header className='button-container'>
+                <Button
+                    text='View graphs'
+                    icon={IconNames.GROUPED_BAR_CHART}
+                    onClick={() => setIsOpen(true)}
+                    disabled={!perfData?.data}
+                    intent={Intent.PRIMARY}
+                />
+            </header>
+
+            <Overlay
+                isOpen={isOpen}
+                onClose={() => setIsOpen(false)}
+            >
+                <h2>MatMul Operations</h2>
+
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    {/* @ts-expect-error this should be just fine */}
+                    <PerformanceMixedChart data={perfData?.data} />
+
+                    {/* @ts-expect-error this should be just fine */}
+                    <PerformanceScatterChart data={perfData?.data} />
+
+                    {/* @ts-expect-error this should be just fine */}
+                    <PerformanceOperationTypesChart data={perfData?.data} />
+                </div>
+            </Overlay>
 
             {/* @ts-expect-error this should be just fine */}
-            <PerformanceMixedChart data={perfData?.data} />
-        </>
+            <PerformanceReport data={perfData?.data} />
+        </div>
     );
 }

@@ -85,14 +85,14 @@ function PerformanceScatterChart({ data }: PerformanceScatterChartProps) {
                 marker: {
                     size: 10,
                 },
-                hovertemplate: `Duration: %{x} ns<br />Utilization: %{y}`,
+                hovertemplate: `Duration: %{x}ns<br />Utilization: %{y}`,
             }) as Partial<PlotData>,
         [filteredOps, deviceConfiguration],
     );
 
     return (
         <div className='scatter-chart'>
-            <h2>Device Kernel Duration vs Utilization (MatMul)</h2>
+            <h3>Device Kernel Duration vs Utilization (MatMul)</h3>
 
             <div className='chart-controls'>
                 <span>Select Configuration:</span>
