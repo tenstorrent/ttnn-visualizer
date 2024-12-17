@@ -97,11 +97,7 @@ const analyze_matmul = (row: RowData) => {
     };
 };
 
-// Main analysis of ops
 const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
-    // to render device id if expanded multidevice
-    // const device_id = row['DEVICE ID'];
-
     const op_code_val = String(row['OP CODE'] || '');
     const device_time_val = (Number(row['DEVICE FW DURATION [ns]']) || 0) / 1000;
     let dispatch_time_val: number | null = null;
@@ -152,7 +148,7 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
         input_0_datatype_cell = { raw_value: input_0_datatype };
         input_1_datatype_cell = { raw_value: input_1_datatype };
         is_dram_sharded_cell = { raw_value: is_dram_sharded };
-        // Program config
+
         const attributes = String(row.ATTRIBUTES || '');
         const in0match = attributes.match(/in0_block_w=(\d+)/);
         if (in0match) {
@@ -263,7 +259,7 @@ const getUniqueDeviceIDs = (rows: RowData[]): number[] => {
             ids.add(Number(row['DEVICE ID']));
         }
     }
-    return Array.from(ids);
+    return [...ids];
 };
 
 // The main React component
@@ -310,18 +306,14 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
 
         df.forEach((r) => {
             const opData = analyze_op(r, prevRow);
-            // console.log(op_data);
             opData.ID.raw_value = String(r.ORIGINAL_ID);
             rows.push(opData);
             prevRow = r;
         });
 
-        // console.log(df);
-
         add_derived_columns(rows);
         rows = rows.map((r) => color_row(r, minPercentage));
 
-        // const highDispatchOps = rows
         if (hiliteHighDispatch) {
             rows.forEach((op_data: ProcessedRow) => {
                 const val = op_data['Dispatch Time'].raw_value;
@@ -356,6 +348,126 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         ? [...baseHeaders.slice(0, 5), 'Slow', ...baseHeaders.slice(5)]
         : baseHeaders;
 
+    const calcDispatchOps = (rows: ProcessedRow[]) => {
+        const highDispatchOps = rows
+            .map((op_data: ProcessedRow, idx: number) => [idx + 1, op_data] as [number, ProcessedRow])
+            .filter(([_, op_data]) => {
+                const val = op_data['Dispatch Time'].raw_value;
+                return val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
+            });
+
+        if (highDispatchOps.length === 0) {
+            return null; // No high dispatch overhead ops, so no advice section
+        }
+
+        // Compute the max dispatch overhead
+        const max_dispatch_overhead = highDispatchOps.reduce((acc, [_, op_data]) => {
+            const val = op_data['Dispatch Time'].raw_value as number;
+            return acc + (val - 6);
+        }, 0);
+
+        // Compute total_duration as sum of device times + dispatch times
+        const total_device_time = rows.reduce((acc, r) => {
+            const val = r['Device Time'].raw_value;
+            return acc + (typeof val === 'number' ? val : 0);
+        }, 0);
+        const total_dispatch_time = rows.reduce((acc, r) => {
+            const val = r['Dispatch Time'].raw_value;
+            return acc + (typeof val === 'number' ? val : 0);
+        }, 0);
+
+        const total_duration = total_device_time + total_dispatch_time;
+        const percentage_saved = (max_dispatch_overhead / total_duration) * 100;
+
+        return (
+            <div>
+                <p>
+                    Marked ops have &gt; 6µs dispatch latency. Running with tracing could save{' '}
+                    {formatSize(Number(max_dispatch_overhead.toFixed(0)))} µs {toSecondsPretty(max_dispatch_overhead)} (
+                    {percentage_saved.toFixed(1)}% of overall time).
+                </p>
+                <p>Alternatively, try moving runtime args in the kernels to compile-time args.</p>
+            </div>
+        );
+    };
+    return (
+        <>
+            <Switch
+                className='expand-button'
+                label={!mergeDeviceData ? 'Expanded device data' : 'Merged device data'}
+                onChange={() => setMergeDeviceData(!mergeDeviceData)}
+                checked={mergeDeviceData && isMultiDevice}
+                disabled={!isMultiDevice}
+            />
+            <Switch
+                className='expand-button'
+                label={showHostOps ? 'Hide host ops' : 'Show host ops'}
+                onChange={() => setShowHostOps(!showHostOps)}
+                checked={showHostOps}
+            />
+            <Switch
+                className='expand-button'
+                label={provideMatmulAdvice ? 'Hide Matmul optimization analysis' : 'Show Matmul optimization analysis'}
+                onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                checked={provideMatmulAdvice}
+            />
+            <Switch
+                className='expand-button'
+                label='Highlight high dispatch ops'
+                onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                checked={hiliteHighDispatch}
+            />
+            <div
+                className='perf-table'
+                style={{ background: '#222', color: '#fff', padding: '1rem' }}
+            >
+                <h3>Performance report</h3>
+                <table
+                    className='monospace'
+                    style={{ borderCollapse: 'collapse', width: '100%' }}
+                >
+                    <thead>
+                        <tr>
+                            {visibleHeaders.map((h) => (
+                                <th
+                                    key={h}
+                                    style={{ textAlign: 'left', borderBottom: '1px solid #555' }}
+                                >
+                                    {h}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {processedRows.map((row, i) => (
+                            <>
+                                <tr key={i}>
+                                    {visibleHeaders.map((h) => (
+                                        <td
+                                            key={h}
+                                            style={{ borderBottom: '1px solid #333', padding: '0.25rem' }}
+                                        >
+                                            {formatCell(row[h])}
+                                        </td>
+                                    ))}
+                                </tr>
+                                {provideMatmulAdvice && row['OP Code'].raw_value?.toString().includes('Matmul') && (
+                                    <MatmulAdvice
+                                        row={row}
+                                        colSpan={visibleHeaders.length}
+                                    />
+                                )}
+                            </>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <hr />
+            {hiliteHighDispatch && calcDispatchOps(processedRows)}
+        </>
+    );
+};
+const MatmulAdvice: FC<{ row: ProcessedRow; colSpan: number }> = ({ row, colSpan }) => {
     const getMatmulOptimizationAdvice = (op_data: ProcessedRow) => {
         const opCodeColor = op_data['OP Code'].color === 'grey' ? 'grey' : 'white';
 
@@ -464,126 +576,14 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
             <div style={{ color: opCodeColor }}>✅ Optimized</div>
         );
     };
-    const calcDispatchOps = (rows: ProcessedRow[]) => {
-        const highDispatchOps = rows
-            .map((op_data: ProcessedRow, idx: number) => [idx + 1, op_data] as [number, ProcessedRow])
-            .filter(([_, op_data]) => {
-                const val = op_data['Dispatch Time'].raw_value;
-                return val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
-            });
-
-        if (highDispatchOps.length === 0) {
-            return null; // No high dispatch overhead ops, so no advice section
-        }
-
-        // Compute the max dispatch overhead
-        const max_dispatch_overhead = highDispatchOps.reduce((acc, [_, op_data]) => {
-            const val = op_data['Dispatch Time'].raw_value as number;
-            return acc + (val - 6);
-        }, 0);
-
-        // Compute total_duration as sum of device times + dispatch times
-        const total_device_time = rows.reduce((acc, r) => {
-            const val = r['Device Time'].raw_value;
-            return acc + (typeof val === 'number' ? val : 0);
-        }, 0);
-        const total_dispatch_time = rows.reduce((acc, r) => {
-            const val = r['Dispatch Time'].raw_value;
-            return acc + (typeof val === 'number' ? val : 0);
-        }, 0);
-
-        const total_duration = total_device_time + total_dispatch_time;
-        const percentage_saved = (max_dispatch_overhead / total_duration) * 100;
-
-        return (
-            <div>
-                <p>
-                    Marked ops have &gt; 6µs dispatch latency. Running with tracing could save{' '}
-                    {formatSize(Number(max_dispatch_overhead.toFixed(0)))} µs {toSecondsPretty(max_dispatch_overhead)} (
-                    {percentage_saved.toFixed(1)}% of overall time).
-                </p>
-                <p>Alternatively, try moving runtime args in the kernels to compile-time args.</p>
-            </div>
-        );
-    };
     return (
-        <>
-            <Switch
-                className='expand-button'
-                label={!mergeDeviceData ? 'Expanded device data' : 'Merged device data'}
-                onChange={() => setMergeDeviceData(!mergeDeviceData)}
-                checked={mergeDeviceData && isMultiDevice}
-                disabled={!isMultiDevice}
-            />
-            <Switch
-                className='expand-button'
-                label={showHostOps ? 'Hide host ops' : 'Show host ops'}
-                onChange={() => setShowHostOps(!showHostOps)}
-                checked={showHostOps}
-            />
-            <Switch
-                className='expand-button'
-                label={provideMatmulAdvice ? 'Hide Matmul optimization analysis' : 'Show Matmul optimization analysis'}
-                onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
-                checked={provideMatmulAdvice}
-            />
-            <Switch
-                className='expand-button'
-                label='Highlight high dispatch ops'
-                onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
-                checked={hiliteHighDispatch}
-            />
-            <div
-                className='perf-table'
-                style={{ background: '#222', color: '#fff', padding: '1rem' }}
+        <tr>
+            <td
+                colSpan={colSpan}
+                style={{ padding: '0.25rem' }}
             >
-                <h3>Performance report</h3>
-                <table
-                    className='monospace'
-                    style={{ borderCollapse: 'collapse', width: '100%' }}
-                >
-                    <thead>
-                        <tr>
-                            {visibleHeaders.map((h) => (
-                                <th
-                                    key={h}
-                                    style={{ textAlign: 'left', borderBottom: '1px solid #555' }}
-                                >
-                                    {h}
-                                </th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {processedRows.map((row, i) => (
-                            <>
-                                <tr key={i}>
-                                    {visibleHeaders.map((h) => (
-                                        <td
-                                            key={h}
-                                            style={{ borderBottom: '1px solid #333', padding: '0.25rem' }}
-                                        >
-                                            {formatCell(row[h])}
-                                        </td>
-                                    ))}
-                                </tr>
-                                {provideMatmulAdvice && row['OP Code'].raw_value?.toString().includes('Matmul') && (
-                                    <tr>
-                                        <td
-                                            colSpan={visibleHeaders.length}
-                                            style={{ padding: '0.25rem' }}
-                                        >
-                                            {getMatmulOptimizationAdvice(row)}
-                                        </td>
-                                    </tr>
-                                )}
-                            </>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-            <hr />
-            {hiliteHighDispatch && calcDispatchOps(processedRows)}
-        </>
+                {getMatmulOptimizationAdvice(row)}
+            </td>
+        </tr>
     );
 };
