@@ -35,6 +35,10 @@ def update_existing_tab_session(
     if profile_name:
         active_report["profile_name"] = profile_name
 
+    # Handle case of newly uploaded report - need to clear associated profile
+    if report_name and active_report.get("profile_name", None):
+        active_report.pop("profile_name", None)
+
     session_data.active_report = active_report
 
     if remote_connection:
@@ -44,6 +48,7 @@ def update_existing_tab_session(
     if remote_profile_folder:
         session_data.remote_profile_folder = remote_profile_folder.model_dump()
 
+    # Used to unset remote connection data on new report
     if clear_remote:
         clear_remote_data(session_data)
 
