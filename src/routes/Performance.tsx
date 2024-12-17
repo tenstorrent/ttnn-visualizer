@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { usePerformance, useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom } from '../store/app';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
+import PerformanceScatterChart from '../components/PerformanceScatterChart';
 import { PerformanceReport } from '../components/performance/PerfTable';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -39,6 +40,9 @@ export default function Performance() {
 
             {/* @ts-expect-error this should be just fine */}
             <PerformanceReport data={perfData?.data} />
+
+            {/* @ts-expect-error this should be just fine */}
+            <PerformanceScatterChart data={perfData?.data} />
         </>
     );
 }
