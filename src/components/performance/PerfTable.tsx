@@ -502,42 +502,40 @@ const MatmulAdvice: FC<{ row: ProcessedRow; colSpan: number }> = ({ row, colSpan
         if (boundVal === 'DRAM' || boundVal === 'BOTH') {
             if (!dram_sharded) {
                 advice.push(
-                    '- Try a DRAM-sharded program config (MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig) to improve throughput further',
+                    'Try a DRAM-sharded program config (MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig) to improve throughput further',
                 );
             }
             if (fidelity_evaluation === 'too_low' && flops_pct !== null && flops_pct < 40) {
                 if (fidelity_advice) {
-                    advice.push(`- ${fidelity_advice}`);
+                    advice.push(`${fidelity_advice}`);
                 }
             }
             if (fidelity_evaluation === 'too_high' && fidelity_advice) {
-                advice.push(`- ${fidelity_advice}`);
+                advice.push(`${fidelity_advice}`);
             }
         } else if (boundVal === 'FLOP' || boundVal === 'BOTH') {
             if (cores !== undefined && cores < 64) {
-                advice.push(`- Increase grid size (currently using ${cores})`);
+                advice.push(`Increase grid size (currently using ${cores})`);
             }
             if (fidelity_evaluation === 'too_high' && fidelity_advice) {
-                advice.push(`- ${fidelity_advice}`);
+                advice.push(`${fidelity_advice}`);
             }
         } else if (boundVal === 'SLOW') {
             if (input_0_memory && !input_0_memory.includes('L1')) {
-                advice.push(`- If possible place input 0 in L1 (currently in ${input_0_memory})`);
+                advice.push(`If possible place input 0 in L1 (currently in ${input_0_memory})`);
             }
 
             let all_good = true;
             if (inner_dim_block === null && out_h === null && out_w === null) {
-                advice.push(
-                    '- No program_config specified, try using one to override in0_block_w and out_subblock_h/w',
-                );
+                advice.push('No program_config specified, try using one to override in0_block_w and out_subblock_h/w');
             } else {
                 if (inner_dim_block !== null) {
                     if (inner_dim_block < 2) {
-                        advice.push(`- in0_block_w=${inner_dim_block} is small, try in0_block_w=2 or above`);
+                        advice.push(`in0_block_w=${inner_dim_block} is small, try in0_block_w=2 or above`);
                         all_good = false;
                     }
                 } else {
-                    advice.push('- No inner dim block size found');
+                    advice.push('No inner dim block size found');
                     all_good = false;
                 }
 
@@ -545,35 +543,39 @@ const MatmulAdvice: FC<{ row: ProcessedRow; colSpan: number }> = ({ row, colSpan
                     const out_area = out_h * out_w;
                     if (out_area < 2) {
                         advice.push(
-                            `- Output subblock ${out_h}x${out_w} is small, try out_subblock_h * out_subblock_w >= 2 if possible`,
+                            `Output subblock ${out_h}x${out_w} is small, try out_subblock_h * out_subblock_w >= 2 if possible`,
                         );
                         all_good = false;
                     }
                 } else {
-                    advice.push('- No output subblock size found');
+                    advice.push('No output subblock size found');
                     all_good = false;
                 }
 
                 if (all_good) {
-                    advice.push(`- in0_block_w=${inner_dim_block} and output subblock ${out_h}x${out_w} look good 🤷`);
+                    advice.push(`in0_block_w=${inner_dim_block} and output subblock ${out_h}x${out_w} look good 🤷`);
                 }
                 if (fidelity_advice) {
-                    advice.push(`- ${fidelity_advice}`);
+                    advice.push(`${fidelity_advice}`);
                 }
             }
         }
 
         return advice.length > 0 ? (
-            advice.map((item, idx) => (
-                <div
-                    key={idx}
-                    style={{ paddingLeft: '1rem', color: opCodeColor }}
-                >
-                    {item}
-                </div>
-            ))
+            <ul>
+                {advice.map((item, idx) => (
+                    <li
+                        key={idx}
+                        style={{ paddingLeft: '1rem', color: opCodeColor }}
+                    >
+                        {item}
+                    </li>
+                ))}
+            </ul>
         ) : (
-            <div style={{ color: opCodeColor }}>✅ Optimized</div>
+            <ul>
+                <li style={{ color: opCodeColor }}>✅ Optimized</li>
+            </ul>
         );
     };
     return (
