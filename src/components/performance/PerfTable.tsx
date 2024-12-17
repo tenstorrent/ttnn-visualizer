@@ -9,6 +9,7 @@ import { Switch } from '@blueprintjs/core';
 
 export interface RowData {
     [key: string]: string | number | null | undefined;
+    ['OP CODE']?: string;
 }
 
 interface Cell {
