@@ -7,11 +7,13 @@
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import Papa, { ParseResult } from 'papaparse';
+import { useMemo } from 'react';
 import axiosInstance from '../libs/axiosInstance';
 import {
     Buffer,
     BufferData,
     BufferPage,
+    NodeType,
     OperationDescription,
     OperationDetailsData,
     ReportMetaData,
@@ -254,6 +256,24 @@ export const useNextOperation = (operationId: number) => {
     });
 
     return operation ? { id: operation.id, name: operation.name } : undefined;
+};
+
+export const useGetDeviceOperationsList = () => {
+    const { data: operations } = useOperationsList();
+
+    return useMemo(() => {
+        return (
+            (operations &&
+                operations.map((operation) => {
+                    const ops = operation.device_operations
+                        .filter((op) => op.node_type === NodeType.function_start)
+                        .map((deviceOperation) => deviceOperation.params.name)
+                        .filter((opName) => !opName.includes('(torch)') && !opName.includes('::') && opName !== '');
+                    return { id: operation.id, name: operation.name, ops };
+                })) ||
+            []
+        );
+    }, [operations]);
 };
 
 export const useReportMeta = () => {
