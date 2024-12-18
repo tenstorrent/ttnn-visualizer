@@ -3,152 +3,28 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 /* eslint camelcase: "off" */
-import React, { FC, useMemo, useState } from 'react';
+import { FC, useMemo, useState } from 'react';
 import '../../scss/components/PerfTable.scss';
 import { Switch } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import { formatSize, toSecondsPretty } from '../../functions/math';
+import {
+    color_row,
+    evaluate_fidelity,
+    formatCell,
+    get_datatype_size,
+    mergeMultideviceRows,
+    tflops_per_core,
+} from '../../functions/perfFunctions';
+import { Cell, MathFidelity, ProcessedRow, RowData } from '../../definitions/PerfTable';
 
-export interface RowData {
-    [key: string]: string | number | null | undefined;
-}
-
-interface Cell {
-    raw_value: string | number | null | undefined | boolean;
-    unit?: string;
-    decimals?: number;
-    color?: string;
-}
-
-interface ProcessedRow {
-    [key: string]: Cell;
-}
-
-// Utility functions
-const colored = (text: string, color?: string) => {
-    if (!text) {
-        return text;
-    }
-    if (color) {
-        return <span className={color}>{text}</span>;
-    }
-    return <span>{text}</span>;
-};
-
-const formatCell = (cell: Cell): React.JSX.Element | string => {
-    if (cell.raw_value == null || cell.raw_value === '') {
-        return '';
-    }
-
-    let formatted = '';
-    if (typeof cell.raw_value === 'string' && cell.raw_value.includes('Matmul')) {
-        // there was a logic here to do something clever with Matmul size, removing it for now
-        formatted = `${cell.raw_value}`;
-    } else if (typeof cell.raw_value === 'number') {
-        const decimals = cell.decimals ?? 0;
-        formatted = cell.raw_value.toFixed(decimals);
-    } else {
-        formatted = String(cell.raw_value);
-    }
-
-    if (cell.unit) {
-        formatted += ` ${cell.unit}`;
-    }
-
-    return colored(formatted, cell.color);
-};
-
-const tflops_per_core = (math_fidelity: string): number => {
-    if (math_fidelity === 'HiFi4') {
-        return 74 / 72;
-    }
-    if (math_fidelity === 'HiFi2') {
-        return 148 / 72;
-    }
-    if (math_fidelity === 'LoFi') {
-        return 262 / 72;
-    }
-
-    return 0;
-    // throw new Error(`Unknown math fidelity: ${math_fidelity}`);
-};
-
-const get_datatype_size = (datatype: string): number => {
-    const match = datatype.match(/\d+/);
-    return match ? parseInt(match[0], 10) / 8 : 4;
-};
-
-function evaluate_fidelity(
-    input_0_datatype: string,
-    input_1_datatype: string,
-    output_datatype: string,
-    math_fidelity: string,
-): [string, string | null] {
-    const mantissa_bits: Record<string, number> = {
-        BFLOAT16: 8,
-        BFLOAT8_B: 7,
-        BFLOAT4_B: 3,
-    };
-
-    const in0_bits = mantissa_bits[input_0_datatype];
-    const in1_bits = mantissa_bits[input_1_datatype];
-    const out_bits = mantissa_bits[output_datatype];
-
-    if (in0_bits === 8 && out_bits >= 7) {
-        if (math_fidelity === 'HiFi4') {
-            return ['sufficient', 'HiFi2 may also work and has 2x the throughput of HiFi4'];
-        }
-        if (math_fidelity === 'HiFi2') {
-            return ['too_low', 'If your matmuls are not FLOP-bound use HiFi4 with BF16 activations for full accuracy'];
-        }
-        if (math_fidelity === 'LoFi') {
-            return ['too_low', 'Use HiFi2 or HiFi4 with BF16 activations for improved accuracy'];
-        }
-    } else if (in0_bits === 8 && out_bits === 3) {
-        if (math_fidelity === 'HiFi4') {
-            return ['too_high', 'HiFi2 is very likely to work for BFP8 output and has 2x the throughput of HiFi4'];
-        }
-        if (math_fidelity === 'HiFi2') {
-            return ['sufficient', 'LoFi might also be sufficient with BFP4 output and has almost 2x the throughput'];
-        }
-        if (math_fidelity === 'LoFi') {
-            return ['too_low', 'HiFi2 may give better accuracy for large matmuls with many intermediate accumulations'];
-        }
-    } else if (in1_bits >= 7 && out_bits >= 7) {
-        if (math_fidelity === 'HiFi4') {
-            return ['too_high', 'HiFi2 is sufficient for BFP8 multiplication and faster'];
-        }
-        if (math_fidelity === 'HiFi2') {
-            return ['sufficient', null];
-        }
-        if (math_fidelity === 'LoFi') {
-            return ['too_low', 'HiFi2 is recommended for accuracy; LoFi discards low bits of weights'];
-        }
-    } else if (in1_bits >= 7 && out_bits === 3) {
-        if (math_fidelity === 'HiFi4') {
-            return ['too_high', 'HiFi2 is sufficient and 2x throughput'];
-        }
-        if (math_fidelity === 'HiFi2') {
-            return ['sufficient', 'LoFi might also be sufficient (BFP4 output) and has almost 2x throughput'];
-        }
-        if (math_fidelity === 'LoFi') {
-            return ['too_low', 'HiFi2 may give slightly better accuracy for large matmuls'];
-        }
-    } else if (in1_bits === 3) {
-        if (math_fidelity === 'LoFi') {
-            return ['sufficient', null];
-        }
-        return ['too_high', 'LoFi is sufficient with BFP4 weights'];
-    }
-    return ['unknown', `Using ${math_fidelity} for ${input_0_datatype}/${input_1_datatype} => ${output_datatype}`];
-}
-
-// Analyze matmul similar to Python version (simplified)
 const analyze_matmul = (row: RowData) => {
     const input_0_from_dram = String(row.INPUT_0_MEMORY || '').includes('DRAM');
     const input_1_from_dram = String(row.INPUT_1_MEMORY || '').includes('DRAM');
 
     let total_data_size_bytes = 0;
 
-    const getVal = (key: string) => Number(row[key] || 0);
+    const getVal = (key: keyof RowData) => Number(row[key] || 0);
 
     if (input_0_from_dram) {
         total_data_size_bytes +=
@@ -181,7 +57,7 @@ const analyze_matmul = (row: RowData) => {
         total_data_size_bytes > 0 && duration_s > 0 ? total_data_size_bytes / duration_s / 1e9 : null;
 
     let core_count = getVal('CORE COUNT');
-    const math_fidelity = String(row['MATH FIDELITY'] || '');
+    const math_fidelity = String(row['MATH FIDELITY'] || '') as MathFidelity;
 
     const attributes = String(row.ATTRIBUTES || '');
     const is_dram_sharded = attributes.includes('MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig');
@@ -221,7 +97,6 @@ const analyze_matmul = (row: RowData) => {
     };
 };
 
-// Main analysis of ops
 const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
     const op_code_val = String(row['OP CODE'] || '');
     const device_time_val = (Number(row['DEVICE FW DURATION [ns]']) || 0) / 1000;
@@ -256,7 +131,6 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
             input_0_datatype,
             input_1_datatype,
             output_datatype,
-            // core_count, /** not used atm */
         } = analyze_matmul(row);
 
         dram_speed = { raw_value: dram_speed_gb_s, unit: 'GB/s', decimals: 0 };
@@ -274,7 +148,7 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
         input_0_datatype_cell = { raw_value: input_0_datatype };
         input_1_datatype_cell = { raw_value: input_1_datatype };
         is_dram_sharded_cell = { raw_value: is_dram_sharded };
-        // Program config
+
         const attributes = String(row.ATTRIBUTES || '');
         const in0match = attributes.match(/in0_block_w=(\d+)/);
         if (in0match) {
@@ -289,7 +163,6 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
             out_subblock_w = { raw_value: Number(outWmatch[1]) };
         }
 
-        // Append size to OP Code
         const op_code = `${op_code_val} ${String(size)}`;
 
         return {
@@ -297,8 +170,8 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
             'Total %': { raw_value: null },
             Bound: bound,
             'OP Code': { raw_value: op_code },
-            'Device Time': { raw_value: device_time_val, unit: 'us', decimals: 0 },
-            'Dispatch Time': { raw_value: dispatch_time_val, unit: 'us', decimals: 0 },
+            'Device Time': { raw_value: device_time_val, unit: 'µs', decimals: 0 },
+            'Dispatch Time': { raw_value: dispatch_time_val, unit: 'µs', decimals: 0 },
             Cores: { raw_value: Number(row['CORE COUNT']) },
             DRAM: dram_speed,
             'DRAM %': dram_percentage,
@@ -320,8 +193,8 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
         'Total %': { raw_value: null },
         Bound: bound,
         'OP Code': { raw_value: op_code_val },
-        'Device Time': { raw_value: device_time_val || null, unit: 'us', decimals: 0 },
-        'Dispatch Time': { raw_value: dispatch_time_val, unit: 'us', decimals: 0 },
+        'Device Time': { raw_value: device_time_val || null, unit: 'µs', decimals: 0 },
+        'Dispatch Time': { raw_value: dispatch_time_val, unit: 'µs', decimals: 0 },
         Cores: { raw_value: Number(row['CORE COUNT']) || null },
         DRAM: dram_speed,
         'DRAM %': dram_percentage,
@@ -386,107 +259,7 @@ const getUniqueDeviceIDs = (rows: RowData[]): number[] => {
             ids.add(Number(row['DEVICE ID']));
         }
     }
-    return Array.from(ids);
-};
-
-const color_row = (op_data: ProcessedRow, min_percentage: number) => {
-    const percentage = op_data['Total %'].raw_value as number | null;
-
-    if (percentage != null && percentage < min_percentage) {
-        // grey out entire row
-        // eslint-disable-next-line guard-for-in
-        for (const k in op_data) {
-            op_data[k].color = 'grey';
-        }
-    } else {
-        const op_code_str = String(op_data['OP Code'].raw_value || '');
-        const op_colors: { [key: string]: string } = {
-            '(torch)': 'red',
-            Matmul: 'magenta',
-            LayerNorm: 'cyan',
-            AllGather: 'cyan',
-            AllReduce: 'cyan',
-            ScaledDotProductAttentionDecode: 'blue',
-            ScaledDotProductAttentionGQADecode: 'blue',
-            NlpCreateHeadsDeviceOperation: 'blue',
-            NLPConcatHeadsDecodeDeviceOperation: 'blue',
-            UpdateCache: 'blue',
-        };
-        let matched = false;
-        for (const o in op_colors) {
-            if (op_code_str.includes(o)) {
-                op_data['OP Code'].color = op_colors[o];
-                matched = true;
-                break;
-            }
-        }
-        if (!matched) {
-            op_data['OP Code'].color = 'white';
-        }
-
-        const num_cores = op_data.Cores.raw_value as number | null;
-        if (num_cores != null) {
-            if (num_cores < 10) {
-                op_data.Cores.color = 'red';
-            } else if (num_cores === 64) {
-                op_data.Cores.color = 'green';
-            }
-        } else {
-            op_data.Cores.color = 'grey';
-        }
-
-        const bound = String(op_data.Bound.raw_value || '');
-        if (bound === 'DRAM') {
-            op_data.Bound.color = 'green';
-            op_data.DRAM.color = 'green';
-            op_data['DRAM %'].color = 'green';
-        } else if (bound === 'FLOP') {
-            op_data.Bound.color = 'green';
-            op_data.FLOPs.color = 'green';
-            op_data['FLOPs %'].color = 'green';
-        } else if (bound === 'SLOW') {
-            op_data.Bound.color = 'yellow';
-            const dram_p = op_data['DRAM %'].raw_value as number | null;
-            const flops_p = op_data['FLOPs %'].raw_value as number | null;
-            if (dram_p != null && flops_p != null) {
-                if (dram_p > flops_p) {
-                    op_data.DRAM.color = 'yellow';
-                    op_data['DRAM %'].color = 'yellow';
-                } else {
-                    op_data.FLOPs.color = 'yellow';
-                    op_data['FLOPs %'].color = 'yellow';
-                }
-            }
-        } else if (bound === 'HOST') {
-            op_data.Bound.color = 'red';
-        }
-
-        // Dispatch time >6.5us?
-        const dispatch_time = op_data['Dispatch Time'].raw_value as number | null;
-        if (dispatch_time != null && dispatch_time > 6.5) {
-            op_data['Dispatch Time'].color = 'red';
-        }
-
-        // Math Fidelity evaluation
-        if (op_code_str.includes('Matmul') && op_data['Math Fidelity'].raw_value) {
-            const parts = String(op_data['Math Fidelity'].raw_value).split(' ');
-            const math_fidelity = parts[0];
-            const input_0_dt = String(op_data['Input 0 Datatype'].raw_value || '');
-            const input_1_dt = String(op_data['Input 1 Datatype'].raw_value || '');
-            const output_dt = String(op_data['Output Datatype'].raw_value || '');
-            const [fidelity_eval] = evaluate_fidelity(input_0_dt, input_1_dt, output_dt, math_fidelity);
-            if (fidelity_eval === 'sufficient') {
-                op_data['Math Fidelity'].color = 'green';
-            } else if (fidelity_eval === 'too_high') {
-                op_data['Math Fidelity'].color = 'red';
-            } else if (fidelity_eval === 'too_low') {
-                op_data['Math Fidelity'].color = 'cyan';
-            } else {
-                op_data['Math Fidelity'].color = 'white';
-            }
-        }
-    }
-    return op_data;
+    return [...ids];
 };
 
 // The main React component
@@ -496,34 +269,21 @@ interface PerformanceReportProps {
 }
 
 export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercentage = 0.5 }) => {
-    const [deviceOpsCount, setDeviceOpsCount] = useState<number>(0);
-    const [hostOpsCount, setHostOpsCount] = useState<number>(0);
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     const [showHostOps, setShowHostOps] = useState<boolean>(false);
+    const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
+    const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, setIsMultiDevice] = useState<boolean>(false);
+
     const processedRows = useMemo(() => {
         if (data === undefined) {
             return [];
         }
         let df = data.slice();
 
-        let deviceOps = 0;
-        let hostOps = 0;
-        df.forEach((r) => {
-            if (String(r['OP CODE']).includes('(torch)') || String(r['OP CODE']) === '') {
-                hostOps++;
-            } else {
-                deviceOps++;
-            }
+        df.forEach((r, index) => {
+            r.ORIGINAL_ID = index + 2;
         });
-
-        setHostOpsCount(hostOps);
-        setDeviceOpsCount(deviceOps);
-
-        // eslint-disable-next-line no-unused-expressions
-        hostOpsCount;
-        // eslint-disable-next-line no-unused-expressions
-        deviceOpsCount;
 
         if (df.length > 0 && 'HOST START TS' in df[0]) {
             df = df.sort((a, b) => Number(a['HOST START TS'] || 0) - Number(b['HOST START TS'] || 0));
@@ -533,7 +293,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         setIsMultiDevice(uniqueDeviceIDs.length > 1);
         if (uniqueDeviceIDs.length > 1 && mergeDeviceData) {
             // console.info(`Detected data from ${uniqueDeviceIDs.length} devices. Merging device data...`);
-            df = mergeDeviceRows(df);
+            df = mergeMultideviceRows(df);
         }
 
         // Filter out host ops if we should
@@ -544,22 +304,33 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         let rows: ProcessedRow[] = [];
         let prevRow: RowData | null = null;
 
-        df.forEach((r, i) => {
+        df.forEach((r) => {
             const opData = analyze_op(r, prevRow);
-            // console.log(op_data);
-            opData.ID = { raw_value: i + 2 }; // Simulate original row number
+            opData.ID.raw_value = String(r.ORIGINAL_ID);
             rows.push(opData);
             prevRow = r;
         });
 
         add_derived_columns(rows);
-        add_derived_columns(rows); // after any filtering if needed
         rows = rows.map((r) => color_row(r, minPercentage));
 
-        return rows;
-    }, [data, deviceOpsCount, hostOpsCount, mergeDeviceData, minPercentage, showHostOps]);
+        if (hiliteHighDispatch) {
+            rows.forEach((op_data: ProcessedRow) => {
+                const val = op_data['Dispatch Time'].raw_value;
+                const highDispatch = val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
+                op_data.Slow = {
+                    raw_value: null,
+                    icon: highDispatch ? IconNames.WARNING_SIGN : undefined,
+                    tooltip: highDispatch ? 'Op with > 6µs dispatch latency' : undefined,
+                    iconColor: '#ff0',
+                };
+            });
+        }
 
-    const visibleHeaders = [
+        return rows;
+    }, [data, mergeDeviceData, minPercentage, showHostOps, hiliteHighDispatch]);
+
+    const baseHeaders = [
         'ID',
         'Total %',
         'Bound',
@@ -573,73 +344,52 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         'FLOPs %',
         'Math Fidelity',
     ];
+    const visibleHeaders = hiliteHighDispatch
+        ? [...baseHeaders.slice(0, 5), 'Slow', ...baseHeaders.slice(5)]
+        : baseHeaders;
 
-    function mergeDeviceRows(rows: RowData[]): RowData[] {
-        const blockByDevice: Record<number, Array<[string, RowData]>> = {};
+    const calcDispatchOps = (rows: ProcessedRow[]) => {
+        const highDispatchOps = rows
+            .map((op_data: ProcessedRow, idx: number) => [idx + 1, op_data] as [number, ProcessedRow])
+            .filter(([_, op_data]) => {
+                const val = op_data['Dispatch Time'].raw_value;
+                return val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
+            });
 
-        // Group rows by device ID for "tt_dnn_device" ops
-        for (const row of rows) {
-            const opType = String(row['OP TYPE'] || '');
-            if (opType === 'tt_dnn_device') {
-                const deviceId = Number(row['DEVICE ID']);
-                if (!blockByDevice[deviceId]) {
-                    blockByDevice[deviceId] = [];
-                }
-                const opName = String(row['OP CODE'] || '');
-                blockByDevice[deviceId].push([opName, row]);
-            }
+        if (highDispatchOps.length === 0) {
+            return null; // No high dispatch overhead ops, so no advice section
         }
 
-        const deviceIds = Object.keys(blockByDevice)
-            .map(Number)
-            .sort((a, b) => a - b);
+        // Compute the max dispatch overhead
+        const max_dispatch_overhead = highDispatchOps.reduce((acc, [_, op_data]) => {
+            const val = op_data['Dispatch Time'].raw_value as number;
+            return acc + (val - 6);
+        }, 0);
 
-        // Ensure all device arrays have the same length before zipping
-        const lengths = deviceIds.map((did) => blockByDevice[did].length);
-        const uniqueLengths = new Set(lengths);
-        if (uniqueLengths.size > 1) {
-            throw new Error('Inconsistent number of rows per device ID. Cannot merge.');
-        }
+        // Compute total_duration as sum of device times + dispatch times
+        const total_device_time = rows.reduce((acc, r) => {
+            const val = r['Device Time'].raw_value;
+            return acc + (typeof val === 'number' ? val : 0);
+        }, 0);
+        const total_dispatch_time = rows.reduce((acc, r) => {
+            const val = r['Dispatch Time'].raw_value;
+            return acc + (typeof val === 'number' ? val : 0);
+        }, 0);
 
-        const mergedBlocks: RowData[] = [];
-        const count = lengths[0]; // all have the same length
+        const total_duration = total_device_time + total_dispatch_time;
+        const percentage_saved = (max_dispatch_overhead / total_duration) * 100;
 
-        for (let i = 0; i < count; i++) {
-            const blocks = deviceIds.map((did) => blockByDevice[did][i]);
-            // blocks is an array of tuples [opName, row] for each device at index i
-            const opName = blocks[0][0];
-            const isCollective = opName.includes('AllGather') || opName.includes('ReduceScatter');
-
-            if (isCollective) {
-                // For collective ops, pick minimum duration
-                let minBlock = blocks[0];
-                for (const blk of blocks) {
-                    if (
-                        Number(blk[1]['DEVICE FW DURATION [ns]'] || Infinity) <
-                        Number(minBlock[1]['DEVICE FW DURATION [ns]'] || Infinity)
-                    ) {
-                        minBlock = blk;
-                    }
-                }
-                mergedBlocks.push(minBlock[1]);
-            } else {
-                // For non-collective ops, pick maximum duration
-                let maxBlock = blocks[0];
-                for (const blk of blocks) {
-                    if (
-                        Number(blk[1]['DEVICE FW DURATION [ns]'] || -Infinity) >
-                        Number(maxBlock[1]['DEVICE FW DURATION [ns]'] || -Infinity)
-                    ) {
-                        maxBlock = blk;
-                    }
-                }
-                mergedBlocks.push(maxBlock[1]);
-            }
-        }
-
-        return mergedBlocks;
-    }
-
+        return (
+            <div>
+                <p>
+                    Marked ops have &gt; 6µs dispatch latency. Running with tracing could save{' '}
+                    {formatSize(Number(max_dispatch_overhead.toFixed(0)))} µs {toSecondsPretty(max_dispatch_overhead)} (
+                    {percentage_saved.toFixed(1)}% of overall time).
+                </p>
+                <p>Alternatively, try moving runtime args in the kernels to compile-time args.</p>
+            </div>
+        );
+    };
     return (
         <>
             <Switch
@@ -651,14 +401,27 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
             />
             <Switch
                 className='expand-button'
-                label={showHostOps ? 'Showing host ops' : 'Hiding host ops'}
+                label={showHostOps ? 'Hide host ops' : 'Show host ops'}
                 onChange={() => setShowHostOps(!showHostOps)}
                 checked={showHostOps}
+            />
+            <Switch
+                className='expand-button'
+                label={provideMatmulAdvice ? 'Hide Matmul optimization analysis' : 'Show Matmul optimization analysis'}
+                onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                checked={provideMatmulAdvice}
+            />
+            <Switch
+                className='expand-button'
+                label='Highlight high dispatch ops'
+                onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                checked={hiliteHighDispatch}
             />
             <div
                 className='perf-table'
                 style={{ background: '#222', color: '#fff', padding: '1rem' }}
             >
+                <h3>Performance report</h3>
                 <table
                     className='monospace'
                     style={{ borderCollapse: 'collapse', width: '100%' }}
@@ -677,25 +440,152 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                     </thead>
                     <tbody>
                         {processedRows.map((row, i) => (
-                            <tr key={i}>
-                                {visibleHeaders.map((h) => (
-                                    <td
-                                        key={h}
-                                        style={{ borderBottom: '1px solid #333', padding: '0.25rem' }}
-                                    >
-                                        {formatCell(row[h])}
-                                    </td>
-                                ))}
-                            </tr>
+                            <>
+                                <tr key={i}>
+                                    {visibleHeaders.map((h) => (
+                                        <td
+                                            key={h}
+                                            style={{ borderBottom: '1px solid #333', padding: '0.25rem' }}
+                                        >
+                                            {formatCell(row[h])}
+                                        </td>
+                                    ))}
+                                </tr>
+                                {provideMatmulAdvice && row['OP Code'].raw_value?.toString().includes('Matmul') && (
+                                    <MatmulAdvice
+                                        row={row}
+                                        colSpan={visibleHeaders.length}
+                                    />
+                                )}
+                            </>
                         ))}
                     </tbody>
                 </table>
             </div>
             <hr />
-            {/* this is not working correctly atm */}
-            {/* <aside> */}
-            {/*    Total device ops: {deviceOpsCount}, Total host ops: {hostOpsCount}{' '} */}
-            {/* </aside> */}
+            {hiliteHighDispatch && calcDispatchOps(processedRows)}
         </>
+    );
+};
+const MatmulAdvice: FC<{ row: ProcessedRow; colSpan: number }> = ({ row, colSpan }) => {
+    const getMatmulOptimizationAdvice = (op_data: ProcessedRow) => {
+        const opCodeColor = op_data['OP Code'].color === 'grey' ? 'grey' : 'white';
+
+        // Extract needed fields
+        const math_fidelity_raw = op_data['Math Fidelity'].raw_value;
+        const math_fidelity =
+            typeof math_fidelity_raw === 'string' ? (math_fidelity_raw.split(' ')[0] as MathFidelity) : undefined;
+
+        const output_datatype = op_data['Output Datatype'].raw_value as string | undefined;
+        const input_0_datatype = op_data['Input 0 Datatype'].raw_value as string | undefined;
+        const input_1_datatype = op_data['Input 1 Datatype'].raw_value as string | undefined;
+        const cores = op_data.Cores.raw_value as number | undefined;
+        const fidelity_results = evaluate_fidelity(
+            input_0_datatype || '',
+            input_1_datatype || '',
+            output_datatype || '',
+            math_fidelity || '',
+        );
+        const [fidelity_evaluation, fidelity_advice] = fidelity_results;
+
+        const boundVal = op_data.Bound.raw_value as string | null;
+        const flops_pct = op_data['FLOPs %'].raw_value as number | null;
+        const dram_sharded = op_data['DRAM Sharded'].raw_value as boolean | null;
+        const input_0_memory = op_data['Input 0 Memory'].raw_value as string | null;
+        const inner_dim_block = op_data['Inner Dim Block Size'].raw_value as number | null;
+        const out_h = op_data['Output Subblock H'].raw_value as number | null;
+        const out_w = op_data['Output Subblock W'].raw_value as number | null;
+
+        // Compute advice lines
+        const advice: string[] = [];
+
+        if (boundVal === 'DRAM' || boundVal === 'BOTH') {
+            if (!dram_sharded) {
+                advice.push(
+                    'Try a DRAM-sharded program config (MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig) to improve throughput further',
+                );
+            }
+            if (fidelity_evaluation === 'too_low' && flops_pct !== null && flops_pct < 40) {
+                if (fidelity_advice) {
+                    advice.push(`${fidelity_advice}`);
+                }
+            }
+            if (fidelity_evaluation === 'too_high' && fidelity_advice) {
+                advice.push(`${fidelity_advice}`);
+            }
+        } else if (boundVal === 'FLOP' || boundVal === 'BOTH') {
+            if (cores !== undefined && cores < 64) {
+                advice.push(`Increase grid size (currently using ${cores})`);
+            }
+            if (fidelity_evaluation === 'too_high' && fidelity_advice) {
+                advice.push(`${fidelity_advice}`);
+            }
+        } else if (boundVal === 'SLOW') {
+            if (input_0_memory && !input_0_memory.includes('L1')) {
+                advice.push(`If possible place input 0 in L1 (currently in ${input_0_memory})`);
+            }
+
+            let all_good = true;
+            if (inner_dim_block === null && out_h === null && out_w === null) {
+                advice.push('No program_config specified, try using one to override in0_block_w and out_subblock_h/w');
+            } else {
+                if (inner_dim_block !== null) {
+                    if (inner_dim_block < 2) {
+                        advice.push(`in0_block_w=${inner_dim_block} is small, try in0_block_w=2 or above`);
+                        all_good = false;
+                    }
+                } else {
+                    advice.push('No inner dim block size found');
+                    all_good = false;
+                }
+
+                if (out_h !== null && out_w !== null) {
+                    const out_area = out_h * out_w;
+                    if (out_area < 2) {
+                        advice.push(
+                            `Output subblock ${out_h}x${out_w} is small, try out_subblock_h * out_subblock_w >= 2 if possible`,
+                        );
+                        all_good = false;
+                    }
+                } else {
+                    advice.push('No output subblock size found');
+                    all_good = false;
+                }
+
+                if (all_good) {
+                    advice.push(`in0_block_w=${inner_dim_block} and output subblock ${out_h}x${out_w} look good 🤷`);
+                }
+                if (fidelity_advice) {
+                    advice.push(`${fidelity_advice}`);
+                }
+            }
+        }
+
+        return advice.length > 0 ? (
+            <ul>
+                {advice.map((item, idx) => (
+                    <li
+                        key={idx}
+                        style={{ paddingLeft: '1rem', color: opCodeColor }}
+                    >
+                        {item}
+                    </li>
+                ))}
+            </ul>
+        ) : (
+            <ul>
+                <li style={{ color: opCodeColor }}>✅ Optimized</li>
+            </ul>
+        );
+    };
+    return (
+        <tr>
+            <td
+                colSpan={colSpan}
+                style={{ padding: '0.25rem' }}
+            >
+                {getMatmulOptimizationAdvice(row)}
+            </td>
+        </tr>
     );
 };
