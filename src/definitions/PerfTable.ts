@@ -43,6 +43,7 @@ export interface RowData {
     'MATH FIDELITY'?: string;
     ATTRIBUTES?: string;
     'OP TYPE'?: string;
+    'PM IDEAL [ns]'?: number;
 
     ORIGINAL_ID?: number;
 }

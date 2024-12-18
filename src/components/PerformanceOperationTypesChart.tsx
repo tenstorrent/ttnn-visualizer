@@ -5,7 +5,7 @@
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { RowData } from './performance/PerfTable';
+import { RowData } from '../definitions/PerfTable';
 
 interface PerformanceOperationTypesChartProps {
     data?: RowData[];
@@ -35,9 +35,22 @@ const CONFIG: Partial<Config> = {
 
 const HOST_OP_MARKER = '(torch)';
 
+const OP_TYPES = {
+    MatMul: 'MatMul',
+    Conv: 'Conv',
+    InterleavedToSharded: 'I2S',
+    MaxPool: 'MaxPool',
+    Move: 'Move',
+    Reduce: 'Reduce',
+    Reshard: 'Reshard',
+    'Tile/Untile': 'Tile/Untile',
+    Binary: 'Binary',
+    Halo: 'Halo',
+};
+
 function PerformanceOperationTypesChart({ data }: PerformanceOperationTypesChartProps) {
     const operationTypes = data
-        ?.filter((row) => !isHostOperation(row?.['OP CODE'] as string | undefined))
+        ?.filter((row) => isDesiredOperationType(row?.['OP CODE']))
         .reduce(
             (types, operation) => {
                 const operationCode = operation['OP CODE'] as string;
@@ -77,6 +90,9 @@ function PerformanceOperationTypesChart({ data }: PerformanceOperationTypesChart
     );
 }
 
-const isHostOperation = (operation?: string) => operation?.includes(HOST_OP_MARKER) || operation === '';
+const isDesiredOperationType = (operation?: string): boolean =>
+    !operation?.includes(HOST_OP_MARKER) &&
+    Object.keys(OP_TYPES).some((type) => operation?.toLowerCase().includes(type?.toLowerCase() ?? '')) &&
+    operation !== '';
 
 export default PerformanceOperationTypesChart;
