@@ -145,13 +145,12 @@ function PerformanceOperationKernelUtilizationChart({ data }: PerformanceOperati
                 </Select>
             </div>
 
-            <div>
-                <Plot
-                    data={[chartDataDuration, chartDataUtilization]}
-                    layout={LAYOUT}
-                    config={CONFIG}
-                />
-            </div>
+            <Plot
+                data={[chartDataDuration, chartDataUtilization]}
+                layout={LAYOUT}
+                config={CONFIG}
+                useResizeHandler
+            />
         </div>
     );
 }

@@ -85,7 +85,7 @@ function PerformanceScatterChart({ data }: PerformanceScatterChartProps) {
                 marker: {
                     size: 10,
                 },
-                hovertemplate: `Duration: %{x}ns<br />Utilization: %{y}`,
+                hovertemplate: `Duration: %{x} ns<br />Utilization: %{y}`,
             }) as Partial<PlotData>,
         [filteredOps, deviceConfiguration],
     );
@@ -118,13 +118,12 @@ function PerformanceScatterChart({ data }: PerformanceScatterChartProps) {
                 </Select>
             </div>
 
-            <div>
-                <Plot
-                    data={[chartData]}
-                    layout={LAYOUT}
-                    config={CONFIG}
-                />
-            </div>
+            <Plot
+                data={[chartData]}
+                layout={LAYOUT}
+                config={CONFIG}
+                useResizeHandler
+            />
         </div>
     );
 }
@@ -137,9 +136,9 @@ const isMatMulConv = (operation?: string): boolean => {
 };
 
 const getUtilization = (row: RowData, deviceConfiguration: DeviceConfiguration): number => {
-    const ideal = row['PM IDEAL [ns]'];
-    const kernelDuration = row['DEVICE KERNEL DURATION [ns]'];
-    const coreCount = row['CORE COUNT'];
+    const ideal = row['PM IDEAL [ns]'] ? parseInt(row['PM IDEAL [ns]'], 10) : null;
+    const kernelDuration = row['DEVICE KERNEL DURATION [ns]'] ? parseInt(row['DEVICE KERNEL DURATION [ns]'], 10) : null;
+    const coreCount = row['CORE COUNT'] ? parseInt(row['CORE COUNT'], 10) : null;
 
     if (!isValidNumber(ideal) || !isValidNumber(kernelDuration) || !isValidNumber(coreCount)) {
         return -1;
