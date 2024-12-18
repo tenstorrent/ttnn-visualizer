@@ -17,6 +17,7 @@ const LEGEND_COLOUR = '#FFF';
 const LAYOUT: Partial<Layout> = {
     autosize: true,
     height: 450,
+    width: 740,
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
     margin: {

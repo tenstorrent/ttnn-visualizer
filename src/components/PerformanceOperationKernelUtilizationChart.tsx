@@ -19,8 +19,8 @@ const DESIRED_OP_CODES = ['matmul', 'conv'];
 
 const LAYOUT: Partial<Layout> = {
     autosize: true,
-    dragmode: false,
     height: 450,
+    width: 740,
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
     showlegend: false,
