@@ -61,7 +61,7 @@ export default function Performance() {
                 isOpen={isOpen}
                 onClose={() => setIsOpen(false)}
             >
-                <h2>MatMul Operations</h2>
+                <h2>Matmul Operations</h2>
 
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     {/* @ts-expect-error this should be just fine */}

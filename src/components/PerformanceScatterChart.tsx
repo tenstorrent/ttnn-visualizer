@@ -94,10 +94,10 @@ function PerformanceScatterChart({ data }: PerformanceScatterChartProps) {
 
     return (
         <div className='scatter-chart'>
-            <h3>Device Kernel Duration vs Utilization (MatMul)</h3>
+            <h3>Device Kernel Duration vs Utilization (Matmul)</h3>
 
             <div className='chart-controls'>
-                <span>Select Configuration:</span>
+                <span>Select Architecture:</span>
 
                 <Select
                     items={[DeviceConfiguration.Wormhole, DeviceConfiguration.Grayskull]}

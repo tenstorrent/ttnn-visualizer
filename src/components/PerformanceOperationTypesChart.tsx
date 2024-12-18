@@ -79,7 +79,7 @@ function PerformanceOperationTypesChart({ data }: PerformanceOperationTypesChart
 
     return (
         <div>
-            <h3>Operation Types</h3>
+            <h3>Operation by Type</h3>
 
             <Plot
                 data={[chartData]}

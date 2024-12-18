@@ -79,18 +79,18 @@ const CONFIG: Partial<Config> = {
     responsive: true,
 };
 
-enum DeviceConfiguration {
+enum DeviceArchitecture {
     Grayskull = 'Grayskull',
     Wormhole = 'Wormhole',
 }
 
 const CORE_COUNT = {
-    [DeviceConfiguration.Grayskull]: 108,
-    [DeviceConfiguration.Wormhole]: 64,
+    [DeviceArchitecture.Grayskull]: 108,
+    [DeviceArchitecture.Wormhole]: 64,
 };
 
 function PerformanceOperationKernelUtilizationChart({ data }: PerformanceOperationKernelUtilizationChartProps) {
-    const [deviceConfiguration, setDeviceConfiguration] = useState(DeviceConfiguration.Wormhole);
+    const [deviceConfiguration, setDeviceConfiguration] = useState(DeviceArchitecture.Wormhole);
 
     const filteredOps = data?.filter((row) => isDesiredOperation(row?.['OP CODE'] as string | undefined));
 
@@ -123,10 +123,10 @@ function PerformanceOperationKernelUtilizationChart({ data }: PerformanceOperati
             <h3>Operation Device Kernel Duration + Utilization (MatMul)</h3>
 
             <div className='chart-controls'>
-                <span>Select Configuration:</span>
+                <span>Select Architecture:</span>
 
                 <Select
-                    items={[DeviceConfiguration.Wormhole, DeviceConfiguration.Grayskull]}
+                    items={[DeviceArchitecture.Wormhole, DeviceArchitecture.Grayskull]}
                     // eslint-disable-next-line react/no-unstable-nested-components
                     itemRenderer={(value) => (
                         <MenuItem
@@ -162,7 +162,7 @@ const isDesiredOperation = (operation?: string): boolean => {
     return DESIRED_OP_CODES.some((code) => opCode?.includes(code));
 };
 
-const getUtilization = (row: RowData, deviceConfiguration: DeviceConfiguration): number => {
+const getUtilization = (row: RowData, deviceConfiguration: DeviceArchitecture): number => {
     const ideal = typeof row['PM IDEAL [ns]'] === 'string' ? parseInt(row['PM IDEAL [ns]'], 10) : NaN;
     const kernelDuration =
         typeof row['DEVICE KERNEL DURATION [ns]'] === 'string' ? parseInt(row['DEVICE KERNEL DURATION [ns]'], 10) : NaN;
