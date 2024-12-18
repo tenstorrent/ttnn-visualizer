@@ -15,7 +15,7 @@ export default function Performance() {
     const report = useReportMeta();
     const setMeta = useSetAtom(reportMetaAtom);
     const { data: perfData, isLoading } = usePerformance();
-
+    // const ops = useGetDeviceOperationsList();
     useClearSelectedBuffer();
 
     // Needs to be in a useEffect to avoid a bad setState call
