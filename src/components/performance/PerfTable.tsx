@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 /* eslint camelcase: "off" */
-import { FC, useMemo, useState } from 'react';
+import React, { FC, useMemo, useState } from 'react';
 import '../../scss/components/PerfTable.scss';
 import { Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -440,7 +440,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                     </thead>
                     <tbody>
                         {processedRows.map((row, i) => (
-                            <>
+                            <React.Fragment key={i}>
                                 <tr key={i}>
                                     {visibleHeaders.map((h) => (
                                         <td
@@ -453,11 +453,12 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                                 </tr>
                                 {provideMatmulAdvice && row['OP Code'].raw_value?.toString().includes('Matmul') && (
                                     <MatmulAdvice
+                                        key={`matmul-advice-${i}`}
                                         row={row}
                                         colSpan={visibleHeaders.length}
                                     />
                                 )}
-                            </>
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>
@@ -574,7 +575,12 @@ const MatmulAdvice: FC<{ row: ProcessedRow; colSpan: number }> = ({ row, colSpan
             </ul>
         ) : (
             <ul>
-                <li style={{ color: opCodeColor }}>✅ Optimized</li>
+                <li
+                    key={1}
+                    style={{ color: opCodeColor }}
+                >
+                    ✅ Optimized
+                </li>
             </ul>
         );
     };
