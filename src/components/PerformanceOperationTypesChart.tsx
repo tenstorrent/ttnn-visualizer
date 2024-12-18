@@ -5,7 +5,7 @@
 import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { RowData } from './performance/PerfTable';
+import { RowData } from '../definitions/PerfTable';
 
 interface PerformanceOperationTypesChartProps {
     data?: RowData[];
