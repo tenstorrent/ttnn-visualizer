@@ -186,7 +186,15 @@ const fetchDeviceLogRaw = async (): Promise<ParseResult<string>> => {
     const { data } = await axiosInstance.get<string>('/api/profiler/device-log/raw');
 
     return new Promise<ParseResult<string>>((resolve, reject) => {
-        Papa.parse<string>(data, {
+        const rows = data.split('\n');
+        const csv = rows.slice(1); // Remove the first row
+        const headers = csv!
+            .shift()!
+            .split(/,\s{1,2}/)
+            .join(','); // headers without spaces
+        const processedCsv = [headers, ...csv].join('\n');
+        Papa.parse<string>(processedCsv, {
+            header: true,
             complete: (results) => resolve(results),
             error: (error: Error) => reject(error),
         });
