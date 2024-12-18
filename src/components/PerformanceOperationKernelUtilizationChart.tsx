@@ -20,15 +20,16 @@ const DESIRED_OP_CODES = ['matmul', 'conv'];
 const LAYOUT: Partial<Layout> = {
     autosize: true,
     dragmode: false,
+    height: 450,
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
+    showlegend: false,
     margin: {
         l: 70,
         r: 70,
         b: 50,
         t: 0,
     },
-    showlegend: false,
     xaxis: {
         gridcolor: GRID_COLOUR,
         linecolor: LINE_COLOUR,
