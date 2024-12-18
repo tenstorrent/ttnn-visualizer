@@ -47,7 +47,7 @@ def extract_report_name(files):
 def save_uploaded_files(
     files,
     target_directory,
-    report_name,
+    report_name=None,
 ):
     """
     Save uploaded files to the target directory.

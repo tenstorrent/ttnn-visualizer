@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import React, { JSX } from 'react';
+import React, { Fragment, JSX } from 'react';
 import { Icon, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai/index';
@@ -154,7 +154,7 @@ const DeviceOperationsFullRender: React.FC<{
                 } else if (nodeType === NodeType.circular_buffer_allocate) {
                     const cb = node.params;
                     operationContent = (
-                        <>
+                        <Fragment key={`${cb.address}-${index}`}>
                             {!consecutiveCBsOutput && (
                                 <>
                                     <hr />
@@ -163,7 +163,6 @@ const DeviceOperationsFullRender: React.FC<{
                             )}
                             <MemoryLegendElement
                                 chunk={{ address: parseInt(cb.address, 10), size: parseInt(cb.size, 10) }}
-                                key={cb.address}
                                 memSize={details.l1_sizes[0]} // TODO: fix to device specific value
                                 selectedTensorAddress={selectedAddress}
                                 operationDetails={details}
@@ -172,7 +171,7 @@ const DeviceOperationsFullRender: React.FC<{
                             />
                             {memoryInfo}
                             <br />
-                        </>
+                        </Fragment>
                     );
                     consecutiveCBsOutput = true;
                 }

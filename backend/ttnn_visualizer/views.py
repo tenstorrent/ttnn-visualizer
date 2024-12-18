@@ -445,7 +445,6 @@ def create_report_files():
 def create_profile_files():
     files = request.files.getlist("files")
     report_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
-    report_name = request.values.get("reportName", None)
     tab_id = request.args.get("tabId")
 
     if not validate_files(
@@ -458,12 +457,10 @@ def create_profile_files():
             message="Invalid project directory.",
         ).model_dump()
 
-    logger.info(
-        f"Writing profile files to {report_directory / report_name / 'profiler'}"
-    )
+    logger.info(f"Writing profile files to {report_directory} / 'profiles'")
 
     # Construct the base directory with report_name first
-    target_directory = report_directory / report_name / "profiler"
+    target_directory = report_directory / "profiles"
     target_directory.mkdir(parents=True, exist_ok=True)
 
     if files:
@@ -483,7 +480,6 @@ def create_profile_files():
     save_uploaded_files(
         updated_files,
         str(report_directory),
-        report_name,
     )
 
     update_tab_session(

@@ -1,0 +1,11 @@
+.scatter-chart {
+    margin-bottom: 20px;
+
+    .chart-controls {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 5px;
+        margin-bottom: 25px;
+    }
+}

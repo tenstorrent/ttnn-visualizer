@@ -7,11 +7,13 @@
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import Papa, { ParseResult } from 'papaparse';
+import { useMemo } from 'react';
 import axiosInstance from '../libs/axiosInstance';
 import {
     Buffer,
     BufferData,
     BufferPage,
+    NodeType,
     OperationDescription,
     OperationDetailsData,
     ReportMetaData,
@@ -22,7 +24,7 @@ import {
     defaultTensorData,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
-import parseMemoryConfig, { MemoryConfig } from '../functions/parseMemoryConfig';
+import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import isValidNumber from '../functions/isValidNumber';
 
 export const fetchTabSession = async (): Promise<TabSession | null> => {
@@ -81,7 +83,7 @@ const fetchOperations = async (deviceId?: number): Promise<OperationDescription[
     return operationList.map((operation) => ({
         ...operation,
         arguments: operation.arguments.map((argument) =>
-            argument.name === 'memory_config'
+            argument.name === 'memory_config' || memoryConfigPattern.test(argument.value)
                 ? {
                       ...argument,
                       parsedValue: argument.value ? (parseMemoryConfig(argument.value) as MemoryConfig) : null,
@@ -184,7 +186,15 @@ const fetchDeviceLogRaw = async (): Promise<ParseResult<string>> => {
     const { data } = await axiosInstance.get<string>('/api/profiler/device-log/raw');
 
     return new Promise<ParseResult<string>>((resolve, reject) => {
-        Papa.parse<string>(data, {
+        const rows = data.split('\n');
+        const csv = rows.slice(1); // Remove the first row
+        const headers = csv!
+            .shift()!
+            .split(/,\s{1,2}/)
+            .join(','); // headers without spaces
+        const processedCsv = [headers, ...csv].join('\n');
+        Papa.parse<string>(processedCsv, {
+            header: true,
             complete: (results) => resolve(results),
             error: (error: Error) => reject(error),
         });
@@ -256,6 +266,57 @@ export const useNextOperation = (operationId: number) => {
     return operation ? { id: operation.id, name: operation.name } : undefined;
 };
 
+export const useGetDeviceOperationsListByOp = () => {
+    const { data: operations } = useOperationsList();
+
+    return useMemo(() => {
+        return (
+            operations
+                ?.map((operation) => {
+                    const ops = operation.device_operations
+                        .filter((op) => op.node_type === NodeType.function_start)
+                        .map((deviceOperation) => deviceOperation.params.name)
+                        .filter(
+                            (opName) =>
+                                !opName.includes('(torch)') &&
+                                !opName.includes('::') &&
+                                !opName.includes('ttnn.') &&
+                                opName !== '',
+                        );
+                    return { id: operation.id, name: operation.name, ops };
+                })
+                .filter((data) => {
+                    return data.ops.length > 0;
+                }) || []
+        );
+    }, [operations]);
+};
+
+export const useGetDeviceOperationsList = () => {
+    const { data: operations } = useOperationsList();
+
+    return useMemo(() => {
+        return (
+            operations
+                ?.map((operation) => {
+                    return operation.device_operations
+                        .filter((op) => op.node_type === NodeType.function_start)
+                        .map((deviceOperation) => deviceOperation.params.name)
+                        .filter(
+                            (opName) =>
+                                !opName.includes('(torch)') &&
+                                !opName.includes('::') &&
+                                !opName.includes('ttnn.') &&
+                                opName !== '',
+                        )
+                        .map((op) => {
+                            return { name: op, id: operation.id, operationName: operation.name };
+                        });
+                })
+                .flat() || []
+        );
+    }, [operations]);
+};
 export const useReportMeta = () => {
     return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
 };
