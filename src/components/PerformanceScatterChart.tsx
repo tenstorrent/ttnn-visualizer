@@ -3,9 +3,9 @@ import { useMemo, useState } from 'react';
 import { Select } from '@blueprintjs/select';
 import { Button, MenuItem } from '@blueprintjs/core';
 import Plot from 'react-plotly.js';
-import { RowData } from './performance/PerfTable';
 import isValidNumber from '../functions/isValidNumber';
 import 'styles/components/PerformanceScatterChart.scss';
+import { RowData } from '../definitions/PerfTable';
 
 interface PerformanceScatterChartProps {
     data?: RowData[];
@@ -137,10 +137,9 @@ const isMatMulConv = (operation?: string): boolean => {
 };
 
 const getUtilization = (row: RowData, deviceConfiguration: DeviceConfiguration): number => {
-    const ideal = typeof row['PM IDEAL [ns]'] === 'string' ? parseInt(row['PM IDEAL [ns]'], 10) : NaN;
-    const kernelDuration =
-        typeof row['DEVICE KERNEL DURATION [ns]'] === 'string' ? parseInt(row['DEVICE KERNEL DURATION [ns]'], 10) : NaN;
-    const coreCount = typeof row['CORE COUNT'] === 'string' ? parseInt(row['CORE COUNT'], 10) : NaN;
+    const ideal = row['PM IDEAL [ns]'];
+    const kernelDuration = row['DEVICE KERNEL DURATION [ns]'];
+    const coreCount = row['CORE COUNT'];
 
     if (!isValidNumber(ideal) || !isValidNumber(kernelDuration) || !isValidNumber(coreCount)) {
         return -1;
