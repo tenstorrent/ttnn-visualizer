@@ -69,16 +69,12 @@ const LocalFolderOptions: FC = () => {
         checkRequiredReportFiles,
         checkRequiredProfilerFiles,
         filterReportFiles,
-        getUploadedFolderName,
     } = useLocalConnection();
 
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
     const [isUploadingPerformance, setIsPerformanceUploading] = useState(false);
     const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
-    const [uploadedReportName, setUploadedReportName] = useState<string | null>(
-        tabSession?.active_report?.report_name ?? null,
-    );
     const [performanceFolderStatus, setPerformanceFolderStatus] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
@@ -120,7 +116,6 @@ const LocalFolderOptions: FC = () => {
         } else if (response?.data?.status !== ConnectionTestStates.OK) {
             connectionStatus = directoryErrorStatus;
         } else {
-            setUploadedReportName(getUploadedFolderName(files));
             setLocalUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
         }
@@ -148,7 +143,7 @@ const LocalFolderOptions: FC = () => {
         setIsPerformanceUploading(true);
         setPerformanceDataUploadLabel(`${files.length} files selected`);
 
-        const response = await uploadLocalPerformanceFolder(files, uploadedReportName);
+        const response = await uploadLocalPerformanceFolder(files);
 
         if (response.status !== 200) {
             connectionStatus = connectionFailedStatus;
@@ -264,9 +259,7 @@ const LocalFolderOptions: FC = () => {
                                 // eslint-disable-next-line react/no-unknown-property
                                 directory=''
                                 webkitdirectory=''
-                                disabled={
-                                    isSafari || (!tabSession?.active_report?.profile_name && !isLocalReportMounted)
-                                }
+                                disabled={isSafari}
                                 onChange={handlePerformanceDirectoryOpen}
                             />
                             <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>

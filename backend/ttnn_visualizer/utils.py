@@ -44,9 +44,7 @@ def timer(f: Callable):
     return wrapper
 
 
-def get_profiler_path(
-    profile_name, current_app, report_name=None, remote_connection=None
-):
+def get_profiler_path(profile_name, current_app, remote_connection=None):
     """
     Gets the profiler path for the given profile_name.
 
