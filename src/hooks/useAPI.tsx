@@ -271,25 +271,23 @@ export const useGetDeviceOperationsListByOp = () => {
 
     return useMemo(() => {
         return (
-            (operations &&
-                operations
-                    .map((operation) => {
-                        const ops = operation.device_operations
-                            .filter((op) => op.node_type === NodeType.function_start)
-                            .map((deviceOperation) => deviceOperation.params.name)
-                            .filter(
-                                (opName) =>
-                                    !opName.includes('(torch)') &&
-                                    !opName.includes('::') &&
-                                    !opName.includes('ttnn.') &&
-                                    opName !== '',
-                            );
-                        return { id: operation.id, name: operation.name, ops };
-                    })
-                    .filter((data) => {
-                        return data.ops.length > 0;
-                    })) ||
-            []
+            operations
+                ?.map((operation) => {
+                    const ops = operation.device_operations
+                        .filter((op) => op.node_type === NodeType.function_start)
+                        .map((deviceOperation) => deviceOperation.params.name)
+                        .filter(
+                            (opName) =>
+                                !opName.includes('(torch)') &&
+                                !opName.includes('::') &&
+                                !opName.includes('ttnn.') &&
+                                opName !== '',
+                        );
+                    return { id: operation.id, name: operation.name, ops };
+                })
+                .filter((data) => {
+                    return data.ops.length > 0;
+                }) || []
         );
     }, [operations]);
 };
@@ -299,25 +297,23 @@ export const useGetDeviceOperationsList = () => {
 
     return useMemo(() => {
         return (
-            (operations &&
-                operations
-                    .map((operation) => {
-                        return operation.device_operations
-                            .filter((op) => op.node_type === NodeType.function_start)
-                            .map((deviceOperation) => deviceOperation.params.name)
-                            .filter(
-                                (opName) =>
-                                    !opName.includes('(torch)') &&
-                                    !opName.includes('::') &&
-                                    !opName.includes('ttnn.') &&
-                                    opName !== '',
-                            )
-                            .map((op) => {
-                                return { name: op, id: operation.id, operationName: operation.name };
-                            });
-                    })
-                    .flat()) ||
-            []
+            operations
+                ?.map((operation) => {
+                    return operation.device_operations
+                        .filter((op) => op.node_type === NodeType.function_start)
+                        .map((deviceOperation) => deviceOperation.params.name)
+                        .filter(
+                            (opName) =>
+                                !opName.includes('(torch)') &&
+                                !opName.includes('::') &&
+                                !opName.includes('ttnn.') &&
+                                opName !== '',
+                        )
+                        .map((op) => {
+                            return { name: op, id: operation.id, operationName: operation.name };
+                        });
+                })
+                .flat() || []
         );
     }, [operations]);
 };
