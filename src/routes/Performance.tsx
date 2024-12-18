@@ -11,7 +11,7 @@ import { usePerformance, useReportMeta } from '../hooks/useAPI';
 import { reportMetaAtom } from '../store/app';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
-import PerformanceMixedChart from '../components/PerformanceMixedChart';
+import PerformanceOperationKernelUtilizationChart from '../components/PerformanceOperationKernelUtilizationChart';
 import PerformanceOperationTypesChart from '../components/PerformanceOperationTypesChart';
 import PerformanceScatterChart from '../components/PerformanceScatterChart';
 import Overlay from '../components/Overlay';
@@ -65,7 +65,7 @@ export default function Performance() {
 
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     {/* @ts-expect-error this should be just fine */}
-                    <PerformanceMixedChart data={perfData?.data} />
+                    <PerformanceOperationKernelUtilizationChart data={perfData?.data} />
 
                     {/* @ts-expect-error this should be just fine */}
                     <PerformanceScatterChart data={perfData?.data} />

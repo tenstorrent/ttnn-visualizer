@@ -3,11 +3,11 @@ import { useMemo, useState } from 'react';
 import { Select } from '@blueprintjs/select';
 import { Button, MenuItem } from '@blueprintjs/core';
 import Plot from 'react-plotly.js';
-import { RowData } from './performance/PerfTable';
 import isValidNumber from '../functions/isValidNumber';
 import 'styles/components/PerformanceScatterChart.scss';
+import { RowData } from '../definitions/PerfTable';
 
-interface PerformanceMixedChartProps {
+interface PerformanceOperationKernelUtilizationChartProps {
     data?: RowData[];
 }
 
@@ -88,7 +88,7 @@ const CORE_COUNT = {
     [DeviceConfiguration.Wormhole]: 64,
 };
 
-function PerformanceMixedChart({ data }: PerformanceMixedChartProps) {
+function PerformanceOperationKernelUtilizationChart({ data }: PerformanceOperationKernelUtilizationChartProps) {
     const [deviceConfiguration, setDeviceConfiguration] = useState(DeviceConfiguration.Wormhole);
 
     const filteredOps = data?.filter((row) => isDesiredOperation(row?.['OP CODE'] as string | undefined));
@@ -119,7 +119,7 @@ function PerformanceMixedChart({ data }: PerformanceMixedChartProps) {
 
     return (
         <div className='scatter-chart'>
-            <h3>Device Kernel Duration vs Utilization (MatMul)</h3>
+            <h3>Operation Device Kernel Duration + Utilization (MatMul)</h3>
 
             <div className='chart-controls'>
                 <span>Select Configuration:</span>
@@ -175,4 +175,4 @@ const getUtilization = (row: RowData, deviceConfiguration: DeviceConfiguration):
     return (ideal / kernelDuration) * (CORE_COUNT[deviceConfiguration] / coreCount);
 };
 
-export default PerformanceMixedChart;
+export default PerformanceOperationKernelUtilizationChart;
