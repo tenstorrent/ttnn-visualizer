@@ -83,7 +83,7 @@ const useRemoteConnection = () => {
 
     const mountRemoteFolder = async (
         connection: RemoteConnection,
-        remoteFolder: RemoteFolder,
+        remoteFolder?: RemoteFolder,
         remoteProfile?: RemoteFolder,
     ) => {
         return axiosInstance.post<MountRemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/use`, {

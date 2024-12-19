@@ -23,6 +23,9 @@ $tt-pending: $tt-yellow;
     }
 
     fieldset {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
         border: solid 1px $tt-grey-5;
         border-radius: 5px;
     }
@@ -31,6 +34,10 @@ $tt-pending: $tt-yellow;
 .verify-connection-item {
     display: inline-flex;
     gap: 2px;
+
+    &:last-of-type {
+        margin-bottom: 10px;
+    }
 
     .connection-status-icon {
         animation: 0.7s steps(2) infinite alternate both;

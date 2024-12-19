@@ -31,7 +31,7 @@ const formatRemoteFolderName = (folder: RemoteFolder, type: FolderTypes, selecte
 
     const pathToReplace = paths[type]!;
 
-    return folder.remotePath.replace(pathToReplace, '');
+    return folder.remotePath.toLowerCase().replace(pathToReplace.toLowerCase(), '');
 };
 
 const getTestName = (folder: RemoteFolder) => {
