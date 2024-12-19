@@ -6,11 +6,10 @@ import { atomWithStorage } from 'jotai/utils';
 import { atom } from 'jotai';
 import { FileProgress, FileStatus, ReportMetaData } from '../model/APIData';
 
-const reportLocationKey = 'reportLocation';
 const showHexKey = 'showHex';
 
 export const reportMetaAtom = atom<ReportMetaData | null>(null);
-export const reportLocationAtom = atomWithStorage<'local' | 'remote' | null>(reportLocationKey, null);
+export const reportLocationAtom = atom<'local' | 'remote' | null>(null);
 export const activeReportAtom = atom<string | null>(null);
 export const activePerformanceTraceAtom = atom<string | null>(null);
 export const showHexAtom = atomWithStorage<boolean>(showHexKey, false);

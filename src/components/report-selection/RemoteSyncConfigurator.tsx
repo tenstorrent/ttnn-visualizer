@@ -309,7 +309,7 @@ const RemoteSyncConfigurator: FC = () => {
 
                         if (
                             remote.persistentState.selectedConnection &&
-                            (!isUsingRemoteQuerying || (isUsingRemoteQuerying && isRemoteFolderOutdated(folder)))
+                            (isUsingRemoteQuerying || (!isUsingRemoteQuerying && !isRemoteFolderOutdated(folder)))
                         ) {
                             const response = await remote.mountRemoteFolder(
                                 remote.persistentState.selectedConnection,
@@ -411,7 +411,7 @@ const RemoteSyncConfigurator: FC = () => {
 
                             if (
                                 remote.persistentState.selectedConnection &&
-                                (!isUsingRemoteQuerying || (isUsingRemoteQuerying && isRemoteFolderOutdated(folder)))
+                                (isUsingRemoteQuerying || (!isUsingRemoteQuerying && !isRemoteFolderOutdated(folder)))
                             ) {
                                 const response = await remote.mountRemoteFolder(
                                     remote.persistentState.selectedConnection,
