@@ -2,20 +2,17 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Button, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
+import { FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
 import 'styles/components/FolderPicker.scss';
-import { useNavigate } from 'react-router';
 import { useQueryClient } from 'react-query';
-import { useAtom, useSetAtom } from 'jotai';
-import ROUTES from '../../definitions/routes';
+import { useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
-import { reportLocationAtom, selectedDeviceAtom } from '../../store/app';
+import { activePerformanceTraceAtom, activeReportAtom, reportLocationAtom, selectedDeviceAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
-import { useSession } from '../../hooks/useAPI';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -57,11 +54,11 @@ const connectionFailedStatus: ConnectionStatus = {
 };
 
 const LocalFolderOptions: FC = () => {
-    const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const [reportLocation, setReportLocation] = useAtom(reportLocationAtom);
+    const setReportLocation = useSetAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
-    const { data: tabSession } = useSession();
+    const setActiveReport = useSetAtom(activeReportAtom);
+    const setActivePerformanceTrace = useSetAtom(activePerformanceTraceAtom);
 
     const {
         uploadLocalFolder,
@@ -78,11 +75,11 @@ const LocalFolderOptions: FC = () => {
     const [performanceFolderStatus, setPerformanceFolderStatus] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
-    const isLocalReportMounted =
-        !isUploadingReport &&
-        !isUploadingPerformance &&
-        reportLocation === 'local' &&
-        tabSession?.active_report?.report_name;
+    // const isLocalReportMounted =
+    //     !isUploadingReport &&
+    //     !isUploadingPerformance &&
+    //     reportLocation === 'local' &&
+    //     tabSession?.active_report?.report_name;
 
     /**
      * This is a temporrary solution until we support Safari
@@ -118,6 +115,8 @@ const LocalFolderOptions: FC = () => {
         } else {
             setLocalUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
+            setSelectedDevice(0);
+            setActiveReport(getFolderPath(files));
         }
 
         queryClient.clear();
@@ -152,19 +151,12 @@ const LocalFolderOptions: FC = () => {
         } else {
             setPerformanceDataUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
+            setActivePerformanceTrace(getFolderPath(files));
         }
 
         queryClient.clear();
         setIsPerformanceUploading(false);
         setPerformanceFolderStatus(connectionStatus);
-    };
-
-    const viewOperation = () => {
-        // keeping this here temporarily until proven otherwise
-        queryClient.clear();
-        setSelectedDevice(0);
-
-        navigate(ROUTES.OPERATIONS);
     };
 
     useEffect(() => {
@@ -281,17 +273,11 @@ const LocalFolderOptions: FC = () => {
                         )}
                     </div>
                 </FormGroup>
-
-                <Button
-                    disabled={!isLocalReportMounted}
-                    onClick={viewOperation}
-                    icon={IconNames.EYE_OPEN}
-                >
-                    View report
-                </Button>
             </div>
         </>
     );
 };
+
+const getFolderPath = (files: FileList) => files[0].webkitRelativePath.split('/')[0];
 
 export default LocalFolderOptions;

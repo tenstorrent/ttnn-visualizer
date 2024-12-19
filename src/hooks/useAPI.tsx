@@ -410,9 +410,10 @@ export const usePerformance = () => {
     });
 };
 
-export const useSession = () => {
-    return useQuery('tabSession', {
+export const useSession = (reportName: string | null, profileName: string | null) => {
+    return useQuery({
         queryFn: () => fetchTabSession(),
+        queryKey: ['get-session', reportName, profileName],
         initialData: null,
     });
 };

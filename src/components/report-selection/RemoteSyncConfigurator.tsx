@@ -71,6 +71,9 @@ const RemoteSyncConfigurator: FC = () => {
         remote.persistentState.setSavedReportFolders(connection, mergedFolders);
         setReportFolders(mergedFolders);
 
+        // @TODO: Set active reports
+        // console.log('updateSavedReportFolders', selectedReportFolder, selectedPerformanceFolder);
+
         return mergedFolders;
     };
 
@@ -91,6 +94,9 @@ const RemoteSyncConfigurator: FC = () => {
 
         remote.persistentState.setSavedPerformanceFolders(connection, mergedFolders);
         setRemotePerformanceFolders(mergedFolders);
+
+        // @TODO: Set active reports
+        // console.log('updateSavedPerformanceFolders', selectedReportFolder, selectedPerformanceFolder);
 
         return mergedFolders;
     };
@@ -117,6 +123,9 @@ const RemoteSyncConfigurator: FC = () => {
                 queryClient.clear();
                 setReportLocation('remote');
                 setSelectedDevice(0);
+
+                // @TODO: Set active reports
+                // console.log('view report', selectedReportFolder, selectedPerformanceFolder);
 
                 navigate(ROUTES.OPERATIONS);
             }
