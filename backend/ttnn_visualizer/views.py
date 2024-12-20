@@ -631,7 +631,7 @@ def sync_remote_folder():
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
     )
-    remote_folder = RemoteReportFolder.model_validate(folder, strict=False)
+
     if profile:
         profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
         try:
@@ -651,6 +651,8 @@ def sync_remote_folder():
             return Response(status=e.http_status, response=e.message)
 
     try:
+        remote_folder = RemoteReportFolder.model_validate(folder, strict=False)
+
         sync_remote_folders(
             connection,
             remote_folder.remotePath,

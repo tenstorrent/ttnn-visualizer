@@ -71,7 +71,7 @@ const useRemoteConnection = () => {
             throw new Error('No connection provided');
         }
 
-        if (!remoteFolder) {
+        if (!remoteFolder && !remoteProfile) {
             throw new Error('No remote folder provided');
         }
         return axiosInstance.post<RemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
