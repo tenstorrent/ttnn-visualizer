@@ -11,7 +11,7 @@ import 'react-toastify/dist/ReactToastify.min.css';
 import classNames from 'classnames';
 import TenstorrentLogo from './TenstorrentLogo';
 import ROUTES from '../definitions/routes';
-import { activePerformanceTraceAtom, activeReportAtom, reportLocationAtom } from '../store/app';
+import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
 
 const BounceIn = cssTransition({
@@ -26,7 +26,6 @@ const MAX_TITLE_LENGTH = 20;
 
 function Layout() {
     const appVersion = import.meta.env.APP_VERSION;
-    const reportLocation = useAtomValue(reportLocationAtom);
     const activeReport = useAtomValue(activeReportAtom);
     const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
 
@@ -52,19 +51,6 @@ function Layout() {
                 </nav>
 
                 <div className='current-data'>
-                    {reportLocation && (
-                        <Tooltip
-                            content={reportLocation}
-                            className={classNames('title', {
-                                'is-lengthy': reportLocation.length > MAX_TITLE_LENGTH,
-                            })}
-                        >
-                            <span>
-                                <strong>Location:</strong> {reportLocation}
-                            </span>
-                        </Tooltip>
-                    )}
-
                     {activeReport && (
                         <Tooltip
                             content={activeReport}
