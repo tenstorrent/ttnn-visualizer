@@ -317,6 +317,8 @@ export const useGetDeviceOperationsList = () => {
         );
     }, [operations]);
 };
+
+// Not currently used anymore
 export const useReportMeta = () => {
     return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
 };
