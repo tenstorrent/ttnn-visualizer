@@ -18,10 +18,10 @@ export interface RowData {
     'DEVICE ID'?: number;
     'HOST START TS'?: number;
     'DEVICE FW DURATION [ns]'?: number;
-    'DEVICE KERNEL DURATION [ns]'?: number;
+    'DEVICE KERNEL DURATION [ns]'?: string;
     'OP CODE'?: string;
     'OP TO OP LATENCY [ns]'?: number;
-    'CORE COUNT'?: number;
+    'CORE COUNT'?: string;
     INPUT_0_W?: number;
     INPUT_0_X?: number;
     INPUT_0_Y?: number;
@@ -43,7 +43,7 @@ export interface RowData {
     'MATH FIDELITY'?: string;
     ATTRIBUTES?: string;
     'OP TYPE'?: string;
-    'PM IDEAL [ns]'?: number;
+    'PM IDEAL [ns]'?: string;
 
     ORIGINAL_ID?: number;
 }

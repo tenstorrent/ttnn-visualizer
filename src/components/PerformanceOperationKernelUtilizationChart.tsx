@@ -7,12 +7,15 @@ import isValidNumber from '../functions/isValidNumber';
 import 'styles/components/PerformanceScatterChart.scss';
 import { RowData } from '../definitions/PerfTable';
 
-interface PerformanceScatterChartProps {
+interface PerformanceOperationKernelUtilizationChartProps {
     data?: RowData[];
 }
 
-const GRID_COLOUR = '#575757';
+const GRID_COLOUR = 'transparent';
+const LINE_COLOUR = '#575757';
 const LEGEND_COLOUR = '#FFF';
+
+const DESIRED_OP_CODES = ['matmul', 'conv'];
 
 const LAYOUT: Partial<Layout> = {
     autosize: true,
@@ -20,15 +23,28 @@ const LAYOUT: Partial<Layout> = {
     width: 740,
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
+    showlegend: false,
     margin: {
-        l: 60,
-        r: 0,
+        l: 70,
+        r: 70,
         b: 50,
         t: 0,
     },
     xaxis: {
         gridcolor: GRID_COLOUR,
-        linecolor: GRID_COLOUR,
+        linecolor: LINE_COLOUR,
+        title: {
+            text: 'Operation Number',
+            font: {
+                color: LEGEND_COLOUR,
+            },
+        },
+        color: LEGEND_COLOUR,
+        zerolinecolor: 'transparent',
+    },
+    yaxis: {
+        gridcolor: GRID_COLOUR,
+        linecolor: LINE_COLOUR,
         title: {
             text: 'Device Kernel Duration (ns)',
             font: {
@@ -40,9 +56,9 @@ const LAYOUT: Partial<Layout> = {
         color: LEGEND_COLOUR,
         zerolinecolor: 'transparent',
     },
-    yaxis: {
+    yaxis2: {
         gridcolor: GRID_COLOUR,
-        linecolor: GRID_COLOUR,
+        linecolor: LINE_COLOUR,
         title: {
             text: 'Utilization (%)',
             font: {
@@ -52,6 +68,8 @@ const LAYOUT: Partial<Layout> = {
         tickformat: '.0%',
         hoverformat: '.2%',
         color: LEGEND_COLOUR,
+        overlaying: 'y',
+        side: 'right',
     },
 };
 
@@ -61,46 +79,54 @@ const CONFIG: Partial<Config> = {
     responsive: true,
 };
 
-enum DeviceConfiguration {
+enum DeviceArchitecture {
     Grayskull = 'Grayskull',
     Wormhole = 'Wormhole',
 }
 
 const CORE_COUNT = {
-    [DeviceConfiguration.Grayskull]: 108,
-    [DeviceConfiguration.Wormhole]: 64,
+    [DeviceArchitecture.Grayskull]: 108,
+    [DeviceArchitecture.Wormhole]: 64,
 };
 
-function PerformanceScatterChart({ data }: PerformanceScatterChartProps) {
-    const [deviceConfiguration, setDeviceConfiguration] = useState(DeviceConfiguration.Wormhole);
+function PerformanceOperationKernelUtilizationChart({ data }: PerformanceOperationKernelUtilizationChartProps) {
+    const [deviceConfiguration, setDeviceConfiguration] = useState(DeviceArchitecture.Wormhole);
 
-    const filteredOps = data?.filter((row) => isMatMulConv(row?.['OP CODE'] as string | undefined));
+    const filteredOps = data?.filter((row) => isDesiredOperation(row?.['OP CODE'] as string | undefined));
 
-    const chartData = useMemo(
+    const chartDataDuration = useMemo(
         () =>
             ({
-                x: filteredOps?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
-                y: filteredOps?.map((row) => getUtilization(row, deviceConfiguration)).filter((value) => value !== -1),
-                mode: 'markers',
-                type: 'scatter',
+                x: filteredOps?.map((_row, index) => index + 1),
+                y: filteredOps?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
+                type: 'bar',
+                hovertemplate: `Operation number: %{x}<br />Device Kernel Duration: %{y} ns`,
                 name: '',
-                marker: {
-                    size: 10,
-                },
+            }) as Partial<PlotData>,
+        [filteredOps],
+    );
+
+    const chartDataUtilization = useMemo(
+        () =>
+            ({
+                x: filteredOps?.map((_row, index) => index + 1),
+                y: filteredOps?.map((row) => getUtilization(row, deviceConfiguration)).filter((value) => value !== -1),
+                yaxis: 'y2',
                 hovertemplate: `Duration: %{x} ns<br />Utilization: %{y}`,
+                name: '',
             }) as Partial<PlotData>,
         [filteredOps, deviceConfiguration],
     );
 
     return (
         <div className='scatter-chart'>
-            <h3>Device Kernel Duration vs Utilization (Matmul)</h3>
+            <h3>Operation Device Kernel Duration + Utilization (MatMul)</h3>
 
             <div className='chart-controls'>
                 <span>Select Architecture:</span>
 
                 <Select
-                    items={[DeviceConfiguration.Wormhole, DeviceConfiguration.Grayskull]}
+                    items={[DeviceArchitecture.Wormhole, DeviceArchitecture.Grayskull]}
                     // eslint-disable-next-line react/no-unstable-nested-components
                     itemRenderer={(value) => (
                         <MenuItem
@@ -121,7 +147,7 @@ function PerformanceScatterChart({ data }: PerformanceScatterChartProps) {
             </div>
 
             <Plot
-                data={[chartData]}
+                data={[chartDataDuration, chartDataUtilization]}
                 layout={LAYOUT}
                 config={CONFIG}
                 useResizeHandler
@@ -130,17 +156,17 @@ function PerformanceScatterChart({ data }: PerformanceScatterChartProps) {
     );
 }
 
-const isMatMulConv = (operation?: string): boolean => {
+const isDesiredOperation = (operation?: string): boolean => {
     const opCode = operation?.toLowerCase();
-    const keywords = ['matmul', 'conv'];
 
-    return keywords.some((keyword) => opCode?.includes(keyword));
+    return DESIRED_OP_CODES.some((code) => opCode?.includes(code));
 };
 
-const getUtilization = (row: RowData, deviceConfiguration: DeviceConfiguration): number => {
-    const ideal = row['PM IDEAL [ns]'] ? parseInt(row['PM IDEAL [ns]'], 10) : null;
-    const kernelDuration = row['DEVICE KERNEL DURATION [ns]'] ? parseInt(row['DEVICE KERNEL DURATION [ns]'], 10) : null;
-    const coreCount = row['CORE COUNT'] ? parseInt(row['CORE COUNT'], 10) : null;
+const getUtilization = (row: RowData, deviceConfiguration: DeviceArchitecture): number => {
+    const ideal = typeof row['PM IDEAL [ns]'] === 'string' ? parseInt(row['PM IDEAL [ns]'], 10) : NaN;
+    const kernelDuration =
+        typeof row['DEVICE KERNEL DURATION [ns]'] === 'string' ? parseInt(row['DEVICE KERNEL DURATION [ns]'], 10) : NaN;
+    const coreCount = typeof row['CORE COUNT'] === 'string' ? parseInt(row['CORE COUNT'], 10) : NaN;
 
     if (!isValidNumber(ideal) || !isValidNumber(kernelDuration) || !isValidNumber(coreCount)) {
         return -1;
@@ -149,4 +175,4 @@ const getUtilization = (row: RowData, deviceConfiguration: DeviceConfiguration):
     return (ideal / kernelDuration) * (CORE_COUNT[deviceConfiguration] / coreCount);
 };
 
-export default PerformanceScatterChart;
+export default PerformanceOperationKernelUtilizationChart;
