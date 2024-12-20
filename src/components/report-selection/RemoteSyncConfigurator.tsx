@@ -16,6 +16,7 @@ import { activePerformanceTraceAtom, activeReportAtom, reportLocationAtom, selec
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
+import createToastNotification from '../../functions/createToastNotification';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
@@ -318,11 +319,13 @@ const RemoteSyncConfigurator: FC = () => {
                             );
 
                             if (response.status === 200) {
+                                const fileName = folder.testName;
                                 queryClient.clear();
                                 setReportLocation('remote');
                                 setSelectedDevice(0);
-                                setActiveReport(folder.testName ?? null);
-                                setActivePerformanceTrace(selectedPerformanceFolder?.testName ?? null);
+                                setActiveReport(fileName);
+                                setActivePerformanceTrace(fileName);
+                                createToastNotification('Active performance data', fileName);
                             }
                         }
                     }}
@@ -382,11 +385,13 @@ const RemoteSyncConfigurator: FC = () => {
                                             );
 
                                             if (response.status === 200) {
+                                                const fileName = selectedReportFolder.testName;
                                                 queryClient.clear();
                                                 setReportLocation('remote');
                                                 setSelectedDevice(0);
-                                                setActiveReport(selectedReportFolder?.testName ?? null);
-                                                setActivePerformanceTrace(selectedPerformanceFolder?.testName ?? null);
+                                                setActiveReport(fileName);
+                                                setActivePerformanceTrace(fileName);
+                                                createToastNotification('Active performance data', fileName);
                                             }
                                         }
                                     }
@@ -420,11 +425,13 @@ const RemoteSyncConfigurator: FC = () => {
                                 );
 
                                 if (response.status === 200) {
+                                    const fileName = folder?.testName;
                                     queryClient.clear();
                                     setReportLocation('remote');
                                     setSelectedDevice(0);
                                     setActiveReport(selectedReportFolder?.testName ?? null);
-                                    setActivePerformanceTrace(folder.testName ?? null);
+                                    setActivePerformanceTrace(fileName);
+                                    createToastNotification('Active performance data', fileName);
                                 }
                             }
                         }}
@@ -482,18 +489,6 @@ const RemoteSyncConfigurator: FC = () => {
                     </RemoteFolderSelector>
                 </FormGroup>
             )}
-
-            {/* {!isUsingRemoteQuerying ? (
-                <FormGroup>
-                    <Button
-                        disabled={!isRemoteReportMounted}
-                        onClick={viewReport}
-                        icon={IconNames.EYE_OPEN}
-                    >
-                        View report
-                    </Button>
-                </FormGroup>
-            ) : null} */}
         </>
     );
 };

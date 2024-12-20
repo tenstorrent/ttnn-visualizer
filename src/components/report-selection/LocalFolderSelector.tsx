@@ -13,6 +13,7 @@ import useLocalConnection from '../../hooks/useLocal';
 import { activePerformanceTraceAtom, activeReportAtom, reportLocationAtom, selectedDeviceAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
+import createToastNotification from '../../functions/createToastNotification';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -75,12 +76,6 @@ const LocalFolderOptions: FC = () => {
     const [performanceFolderStatus, setPerformanceFolderStatus] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
-    // const isLocalReportMounted =
-    //     !isUploadingReport &&
-    //     !isUploadingPerformance &&
-    //     reportLocation === 'local' &&
-    //     tabSession?.active_report?.report_name;
-
     /**
      * This is a temporrary solution until we support Safari
      */
@@ -113,10 +108,12 @@ const LocalFolderOptions: FC = () => {
         } else if (response?.data?.status !== ConnectionTestStates.OK) {
             connectionStatus = directoryErrorStatus;
         } else {
+            const fileName = getReportName(files);
             setLocalUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
             setSelectedDevice(0);
-            setActiveReport(getFolderPath(files));
+            setActiveReport(fileName);
+            createToastNotification('Active report', fileName);
         }
 
         queryClient.clear();
@@ -149,9 +146,11 @@ const LocalFolderOptions: FC = () => {
         } else if (response?.data?.status !== ConnectionTestStates.OK) {
             connectionStatus = directoryErrorStatus;
         } else {
+            const fileName = getReportName(files);
             setPerformanceDataUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
-            setActivePerformanceTrace(getFolderPath(files));
+            setActivePerformanceTrace(fileName);
+            createToastNotification('Active performance data', fileName);
         }
 
         queryClient.clear();
@@ -278,6 +277,6 @@ const LocalFolderOptions: FC = () => {
     );
 };
 
-const getFolderPath = (files: FileList) => files[0].webkitRelativePath.split('/')[0];
+const getReportName = (files: FileList) => files[0].webkitRelativePath.split('/')[0];
 
 export default LocalFolderOptions;
