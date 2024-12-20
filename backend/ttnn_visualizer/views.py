@@ -643,6 +643,10 @@ def sync_remote_folder():
                 sid=tab_id,
             )
 
+            profile_folder.lastSynced = int(time.time())
+
+            return profile_folder.model_dump()
+
         except RemoteConnectionException as e:
             return Response(status=e.http_status, response=e.message)
 
@@ -654,11 +658,13 @@ def sync_remote_folder():
             exclude_patterns=[r"/tensors(/|$)"],
             sid=tab_id,
         )
+
+        remote_folder.lastSynced = int(time.time())
+
+        return remote_folder.model_dump()
+
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
-
-    remote_folder.lastSynced = int(time.time())
-    return remote_folder.model_dump()
 
 
 @api.route("/remote/sqlite/detect-path", methods=["POST"])

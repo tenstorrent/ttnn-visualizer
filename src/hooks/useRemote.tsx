@@ -113,19 +113,25 @@ const useRemoteConnection = () => {
         setSavedReportFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
             setAppConfig(`${connection?.name} - reportFolders`, JSON.stringify(folders));
         },
+        deleteSavedReportFolders: (connection?: RemoteConnection) => {
+            deleteAppConfig(`${connection?.name} - reportFolders`);
+        },
         getSavedPerformanceFolders: (connection?: RemoteConnection) =>
             JSON.parse(getAppConfig(`${connection?.name} - performanceFolders`) ?? '[]') as RemoteFolder[],
         setSavedPerformanceFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
             setAppConfig(`${connection?.name} - performanceFolders`, JSON.stringify(folders));
         },
-        updateSavedRemoteFoldersConnection(oldConnection?: RemoteConnection, newConnection?: RemoteConnection) {
-            const folders = this.getSavedReportFolders(oldConnection);
-
-            this.deleteSavedRemoteFolders(oldConnection);
-            this.setSavedReportFolders(newConnection, folders);
+        deleteSavedPerformanceFolders: (connection?: RemoteConnection) => {
+            deleteAppConfig(`${connection?.name} - performanceFolders`);
         },
-        deleteSavedRemoteFolders: (connection?: RemoteConnection) => {
-            deleteAppConfig(`${connection?.name} - remoteFolders`);
+        updateSavedRemoteFoldersConnection(oldConnection?: RemoteConnection, newConnection?: RemoteConnection) {
+            const reportFolders = this.getSavedReportFolders(oldConnection);
+            const performanceFolders = this.getSavedPerformanceFolders(oldConnection);
+
+            this.deleteSavedReportFolders(oldConnection);
+            this.deleteSavedPerformanceFolders(oldConnection);
+            this.setSavedReportFolders(newConnection, reportFolders);
+            this.setSavedPerformanceFolders(newConnection, performanceFolders);
         },
     };
 

@@ -5,11 +5,11 @@
 import { RemoteFolder } from '../definitions/RemoteConnection';
 
 const isRemoteFolderOutdated = (folder: RemoteFolder) => {
-    if (!folder.lastSynced) {
+    const { lastSynced, lastModified } = folder;
+
+    if (!lastSynced) {
         return true;
     }
-    const { lastSynced } = folder;
-    const { lastModified } = folder;
 
     return lastModified > lastSynced;
 };

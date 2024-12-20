@@ -20,7 +20,6 @@ import createToastNotification from '../../functions/createToastNotification';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
-    // const navigate = useNavigate();
     const queryClient = useQueryClient();
 
     const setReportLocation = useSetAtom(reportLocationAtom);
@@ -76,9 +75,6 @@ const RemoteSyncConfigurator: FC = () => {
         remote.persistentState.setSavedReportFolders(connection, mergedFolders);
         setReportFolders(mergedFolders);
 
-        // @TODO: Set active reports
-        // console.log('updateSavedReportFolders', selectedReportFolder, selectedPerformanceFolder);
-
         return mergedFolders;
     };
 
@@ -87,7 +83,7 @@ const RemoteSyncConfigurator: FC = () => {
             return [];
         }
 
-        const savedFolders = remote.persistentState.getSavedReportFolders(connection);
+        const savedFolders = remote.persistentState.getSavedPerformanceFolders(connection);
         const mergedFolders = (updatedFolders ?? []).map((updatedFolder) => {
             const existingFolder = savedFolders?.find((f) => f.remotePath === updatedFolder.remotePath);
 
@@ -99,9 +95,6 @@ const RemoteSyncConfigurator: FC = () => {
 
         remote.persistentState.setSavedPerformanceFolders(connection, mergedFolders);
         setRemotePerformanceFolders(mergedFolders);
-
-        // @TODO: Set active reports
-        // console.log('updateSavedPerformanceFolders', selectedReportFolder, selectedPerformanceFolder);
 
         return mergedFolders;
     };
@@ -116,76 +109,9 @@ const RemoteSyncConfigurator: FC = () => {
         });
     };
 
-    // const viewReport = async () => {
-    //     if (remote.persistentState.selectedConnection && selectedReportFolder) {
-    //         const response = await remote.mountRemoteFolder(
-    //             remote.persistentState.selectedConnection,
-    //             selectedReportFolder,
-    //             selectedPerformanceFolder,
-    //         );
-
-    //         if (response.status === 200) {
-    //             queryClient.clear();
-    //             setReportLocation('remote');
-    //             setSelectedDevice(0);
-    //             setActiveReport(selectedReportFolder.testName ?? null);
-    //             setActivePerformanceTrace(selectedPerformanceFolder?.testName ?? null);
-
-    //             navigate(ROUTES.OPERATIONS);
-    //         }
-    //     }
-    // };
-
     const isUsingRemoteQuerying = remote.persistentState.selectedConnection?.useRemoteQuerying;
     const isLoading = isSyncingReportFolder || isSyncingPerformanceFolder;
     const isDisabled = isFetching || isLoading;
-
-    // const isRemoteReportMounted =
-    //     !isDisabled &&
-    //     reportFolderList?.length > 0 &&
-    //     selectedReportFolder &&
-    //     (isUsingRemoteQuerying || !isRemoteFolderOutdated(selectedReportFolder));
-
-    // useEffect(() => {
-    //     (async () => {
-    //         try {
-    //             setIsFetching(true);
-
-    //             const updatedRemoteFolders = await remote.listReportFolders(remote.persistentState.selectedConnection);
-    //             const updatedPerformanceFolders = await remote.listPerformanceFolders(
-    //                 remote.persistentState.selectedConnection,
-    //             );
-
-    //             setIsRemoteOffline(false);
-    //             updateSavedReportFolders(remote.persistentState.selectedConnection!, updatedRemoteFolders);
-    //             updateSavedPerformanceFolders(remote.persistentState.selectedConnection!, updatedPerformanceFolders);
-
-    //             // Update existing folder
-    //             if (selectedReportFolder) {
-    //                 const updatedSelectedFolder = updatedRemoteFolders.find(
-    //                     (f) => f.remotePath === selectedReportFolder?.remotePath,
-    //                 );
-    //                 if (updatedSelectedFolder) {
-    //                     setSelectedReportFolder(updatedSelectedFolder);
-    //                 }
-    //             }
-    //             // Update existing performance folder
-    //             if (selectedPerformanceFolder) {
-    //                 const updatedSelectedPerformanceFolder = updatedPerformanceFolders.find(
-    //                     (f) => f.remotePath === selectedReportFolder?.remotePath,
-    //                 );
-    //                 if (updatedSelectedPerformanceFolder) {
-    //                     setSelectedPerformanceFolder(updatedSelectedPerformanceFolder);
-    //                 }
-    //             }
-    //         } catch {
-    //             setIsRemoteOffline(true);
-    //         } finally {
-    //             setIsFetching(false);
-    //         }
-    //     })();
-    //     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // }, []);
 
     return (
         <>
@@ -229,7 +155,8 @@ const RemoteSyncConfigurator: FC = () => {
 
                         updatedConnections.splice(findConnectionIndex(connection), 1);
                         remote.persistentState.savedConnectionList = updatedConnections;
-                        remote.persistentState.deleteSavedRemoteFolders(connection);
+                        remote.persistentState.deleteSavedReportFolders(connection);
+                        remote.persistentState.deleteSavedPerformanceFolders(connection);
 
                         updateSelectedConnection(updatedConnections[0]);
                         setSelectedReportFolder(undefined);
@@ -324,8 +251,7 @@ const RemoteSyncConfigurator: FC = () => {
                                 setReportLocation('remote');
                                 setSelectedDevice(0);
                                 setActiveReport(fileName);
-                                setActivePerformanceTrace(fileName);
-                                createToastNotification('Active performance data', fileName);
+                                createToastNotification('Active report data', fileName);
                             }
                         }
                     }}
@@ -390,7 +316,6 @@ const RemoteSyncConfigurator: FC = () => {
                                                 setReportLocation('remote');
                                                 setSelectedDevice(0);
                                                 setActiveReport(fileName);
-                                                setActivePerformanceTrace(fileName);
                                                 createToastNotification('Active performance data', fileName);
                                             }
                                         }
@@ -401,6 +326,7 @@ const RemoteSyncConfigurator: FC = () => {
                     )}
                 </RemoteFolderSelector>
             </FormGroup>
+
             {remote.persistentState.selectedConnection?.performancePath && (
                 <FormGroup
                     label={<h3>Performance data folder</h3>}
@@ -429,7 +355,6 @@ const RemoteSyncConfigurator: FC = () => {
                                     queryClient.clear();
                                     setReportLocation('remote');
                                     setSelectedDevice(0);
-                                    setActiveReport(selectedReportFolder?.testName ?? null);
                                     setActivePerformanceTrace(fileName);
                                     createToastNotification('Active performance data', fileName);
                                 }
@@ -458,9 +383,10 @@ const RemoteSyncConfigurator: FC = () => {
                                                     selectedPerformanceFolder,
                                                 );
 
-                                                const savedRemoteFolders = remote.persistentState.getSavedReportFolders(
-                                                    remote.persistentState.selectedConnection,
-                                                );
+                                                const savedRemoteFolders =
+                                                    remote.persistentState.getSavedPerformanceFolders(
+                                                        remote.persistentState.selectedConnection,
+                                                    );
 
                                                 const updatedFolderIndex = savedRemoteFolders.findIndex(
                                                     (f) => f.remotePath === selectedPerformanceFolder?.remotePath,
@@ -468,19 +394,41 @@ const RemoteSyncConfigurator: FC = () => {
 
                                                 savedRemoteFolders[updatedFolderIndex] = updatedFolder;
 
-                                                updateSavedReportFolders(
+                                                updateSavedPerformanceFolders(
                                                     remote.persistentState.selectedConnection,
                                                     savedRemoteFolders,
                                                 );
 
                                                 setSelectedPerformanceFolder(savedRemoteFolders[updatedFolderIndex]);
+
+                                                if (
+                                                    remote.persistentState.selectedConnection &&
+                                                    selectedPerformanceFolder &&
+                                                    (isUsingRemoteQuerying ||
+                                                        (!isUsingRemoteQuerying &&
+                                                            isRemoteFolderOutdated(selectedPerformanceFolder)))
+                                                ) {
+                                                    const response = await remote.mountRemoteFolder(
+                                                        remote.persistentState.selectedConnection,
+                                                        selectedReportFolder,
+                                                        selectedPerformanceFolder,
+                                                    );
+
+                                                    if (response.status === 200) {
+                                                        const fileName = selectedPerformanceFolder?.testName;
+                                                        queryClient.clear();
+                                                        setReportLocation('remote');
+                                                        setSelectedDevice(0);
+                                                        setActivePerformanceTrace(fileName);
+                                                        createToastNotification('Active performance data', fileName);
+                                                    }
+                                                }
                                             }
                                         } catch {
                                             // eslint-disable-next-line no-alert
                                             alert('Unable to sync remote folder');
                                         } finally {
                                             setIsSyncingPerformanceFolder(false);
-                                            setReportLocation('remote');
                                         }
                                     }}
                                 />

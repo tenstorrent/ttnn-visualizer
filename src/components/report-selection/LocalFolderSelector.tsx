@@ -150,7 +150,7 @@ const LocalFolderOptions: FC = () => {
             setPerformanceDataUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
             setActivePerformanceTrace(fileName);
-            createToastNotification('Active performance data', fileName);
+            createToastNotification('Active performance trace', fileName);
         }
 
         queryClient.clear();
