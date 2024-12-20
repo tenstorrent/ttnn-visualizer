@@ -271,7 +271,6 @@ const RemoteSyncConfigurator: FC = () => {
                                             const { data: updatedFolder } = await remote.syncRemoteFolder(
                                                 remote.persistentState.selectedConnection,
                                                 selectedReportFolder,
-                                                selectedPerformanceFolder,
                                             );
 
                                             const savedRemoteFolders = remote.persistentState.getSavedReportFolders(
@@ -379,7 +378,7 @@ const RemoteSyncConfigurator: FC = () => {
                                             if (remote.persistentState.selectedConnection) {
                                                 const { data: updatedFolder } = await remote.syncRemoteFolder(
                                                     remote.persistentState.selectedConnection,
-                                                    selectedReportFolder,
+                                                    undefined,
                                                     selectedPerformanceFolder,
                                                 );
 
