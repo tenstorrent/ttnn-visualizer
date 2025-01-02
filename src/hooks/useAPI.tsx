@@ -305,6 +305,8 @@ export const useGetDeviceOperationsList = () => {
         );
     }, [operations]);
 };
+
+// Not currently used anymore
 export const useReportMeta = () => {
     return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
 };
@@ -398,9 +400,10 @@ export const usePerformance = () => {
     });
 };
 
-export const useSession = () => {
-    return useQuery('tabSession', {
+export const useSession = (reportName: string | null, profileName: string | null) => {
+    return useQuery({
         queryFn: () => fetchTabSession(),
+        queryKey: ['get-session', reportName, profileName],
         initialData: null,
     });
 };

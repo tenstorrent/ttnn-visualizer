@@ -5,27 +5,27 @@
 import json
 import logging
 import re
+import time
 from pathlib import Path
 from stat import S_ISDIR
-import time
+from threading import Thread
 from typing import List, Optional
 
-from threading import Thread
 from flask import current_app
 from paramiko.client import SSHClient
 from paramiko.sftp_client import SFTPClient
 
-from ttnn_visualizer.utils import update_last_synced
+from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.exceptions import NoProjectsException, RemoteConnectionException
+from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
 from ttnn_visualizer.sockets import (
     FileProgress,
     FileStatus,
     emit_file_status,
 )
-from ttnn_visualizer.decorators import remote_exception_handler
-from ttnn_visualizer.exceptions import NoProjectsException, RemoteConnectionException
-from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
 from ttnn_visualizer.ssh_client import get_client
+from ttnn_visualizer.utils import update_last_synced
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,81 @@ def calculate_folder_size(client: SSHClient, folder_path: str) -> int:
     stdin, stdout, stderr = client.exec_command(f"du -sb {folder_path}")
     size_info = stdout.read().decode().strip().split("\t")[0]
     return int(size_info)
+
+
+def get_cluster_desc_path(ssh_client) -> Optional[str]:
+    """
+    List all folders matching '/tmp/umd_*' on the remote machine, filter for those containing
+    'cluster_descriptor.yaml', and return the full path to the most recently modified YAML file.
+
+    :param remote_connection: RemoteConnection object containing SSH connection details.
+    :return: Full path to the most recently modified 'cluster_descriptor.yaml' file, or None.
+    """
+    latest_yaml_path = None
+    latest_mod_time = 0
+    cluster_desc_file = "cluster_descriptor.yaml"
+
+    try:
+        # Command to list all folders matching '/tmp/umd_*'
+        list_folders_command = "ls -1d /tmp/umd_* 2>/dev/null"
+        stdin, stdout, stderr = ssh_client.exec_command(list_folders_command)
+
+        # Get the list of folders
+        folder_paths = stdout.read().decode().splitlines()
+
+        if not folder_paths:
+            logger.info("No folders found matching the pattern '/tmp/umd_*'")
+            return None
+
+        # Check each folder for 'cluster_descriptor.yaml' and track the most recent one
+        with ssh_client.open_sftp() as sftp:
+            for folder in folder_paths:
+                yaml_file_path = f"{folder}/{cluster_desc_file}"
+                try:
+                    # Check if 'cluster_descriptor.yaml' exists and get its modification time
+                    attributes = sftp.stat(yaml_file_path)
+                    mod_time = attributes.st_mtime  # Modification time
+
+                    # Update the latest file if this one is newer
+                    if mod_time > latest_mod_time:
+                        latest_mod_time = mod_time
+                        latest_yaml_path = yaml_file_path
+                        logger.info(
+                            f"Found newer {cluster_desc_file}': {yaml_file_path}"
+                        )
+
+                except FileNotFoundError:
+                    logger.debug(f"'{cluster_desc_file}' not found in: {folder}")
+                    continue
+
+        if latest_yaml_path:
+            logger.info(
+                f"Most recently modified {cluster_desc_file}: {latest_yaml_path}"
+            )
+        else:
+            logger.info(
+                f"No {cluster_desc_file} files found in any '/tmp/umd_*' folders"
+            )
+        return latest_yaml_path
+
+    except Exception as e:
+        logger.error(f"Error retrieving {cluster_desc_file} path: {e}")
+        raise RemoteConnectionException(
+            message=f"Failed to get '{cluster_desc_file}' path",
+            status=ConnectionTestStates.FAILED,
+        )
+    finally:
+        ssh_client.close()
+
+
+@remote_exception_handler
+def get_cluster_desc(remote_connection: RemoteConnection):
+    client = get_client(remote_connection)
+    cluster_path = get_cluster_desc_path(client)
+    if cluster_path:
+        return read_remote_file(remote_connection, cluster_path)
+    else:
+        return None
 
 
 def walk_sftp_directory(sftp: SFTPClient, remote_path: str):

@@ -15,6 +15,7 @@ flask-session
 pandas
 wheel
 build
+PyYAML==6.0.2
 
 # Dev dependencies
 mypy
