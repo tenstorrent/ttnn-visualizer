@@ -12,6 +12,8 @@ import { selectedDeviceAtom } from '../store/app';
 import isValidNumber from '../functions/isValidNumber';
 import 'styles/components/DeviceSelector.scss';
 
+// KEEPING THIS FOR NOW - Device selection works differently than we thought but we might reuse this in the future
+
 function DeviceSelector() {
     const { data: devices } = useDevices();
 

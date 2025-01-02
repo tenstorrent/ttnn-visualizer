@@ -7,14 +7,14 @@ import { FC, useEffect, useState } from 'react';
 import { AnchorButton, Button, FormGroup, Tooltip } from '@blueprintjs/core';
 
 import { IconNames } from '@blueprintjs/icons';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import { useQueryClient } from 'react-query';
 import { useNavigate } from 'react-router';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import ROUTES from '../../definitions/routes';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemote from '../../hooks/useRemote';
-import { reportLocationAtom, selectedDeviceAtom } from '../../store/app';
+import { reportLocationAtom } from '../../store/app';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
@@ -25,7 +25,6 @@ const RemoteSyncConfigurator: FC = () => {
     const queryClient = useQueryClient();
 
     const [_, setReportLocation] = useAtom(reportLocationAtom);
-    const setSelectedDevice = useSetAtom(selectedDeviceAtom);
     const [isRemoteOffline, setIsRemoteOffline] = useState(false);
 
     const [isFetching, setIsFetching] = useState(false);
@@ -116,7 +115,6 @@ const RemoteSyncConfigurator: FC = () => {
             if (response.status === 200) {
                 queryClient.clear();
                 setReportLocation('remote');
-                setSelectedDevice(0);
 
                 navigate(ROUTES.OPERATIONS);
             }
