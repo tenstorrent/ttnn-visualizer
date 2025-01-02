@@ -131,19 +131,13 @@ const useLocalConnection = () => {
             });
     };
 
-    const uploadLocalPerformanceFolder = async (files: FileList, uploadedReportName: string | null) => {
+    const uploadLocalPerformanceFolder = async (files: FileList) => {
         const formData = new FormData();
         const store = getDefaultStore();
-
-        if (!uploadedReportName) {
-            throw new Error('Report name required for profiler file uploading');
-        }
 
         Array.from(files).forEach((f) => {
             formData.append('files', f);
         });
-
-        formData.append('reportName', uploadedReportName);
 
         return axiosInstance
             .post(`${import.meta.env.VITE_API_ROOT}/local/upload/profile`, formData, {

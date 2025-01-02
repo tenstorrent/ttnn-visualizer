@@ -3,12 +3,10 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Helmet } from 'react-helmet-async';
-import { useSetAtom } from 'jotai';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { usePerformance, useReportMeta } from '../hooks/useAPI';
-import { reportMetaAtom } from '../store/app';
+import { usePerformance } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceOperationKernelUtilizationChart from '../components/PerformanceOperationKernelUtilizationChart';
@@ -20,18 +18,9 @@ import 'styles/components/Performance.scss';
 
 export default function Performance() {
     const [isOpen, setIsOpen] = useState(false);
-    const report = useReportMeta();
-    const setMeta = useSetAtom(reportMetaAtom);
     const { data: perfData, isLoading } = usePerformance();
     // const ops = useGetDeviceOperationsList();
     useClearSelectedBuffer();
-
-    // Needs to be in a useEffect to avoid a bad setState call
-    useEffect(() => {
-        if (report.status === 'success' && report.data) {
-            setMeta(report.data);
-        }
-    }, [report, setMeta]);
 
     if (isLoading) {
         return (

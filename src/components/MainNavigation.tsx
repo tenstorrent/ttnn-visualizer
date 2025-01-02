@@ -5,20 +5,22 @@
 import { Alignment, Button, Navbar } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
+import { useAtomValue } from 'jotai';
 import ROUTES from '../definitions/routes';
-import { useSession } from '../hooks/useAPI';
 import 'styles/components/MainNavigation.scss';
+import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 
 function MainNavigation() {
     const navigate = useNavigate();
-    const { data: tabSession } = useSession();
+    const activeReport = useAtomValue(activeReportAtom);
+    const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
 
     const handleNavigate = (path: string) => {
         navigate(path);
     };
 
-    const hasActiveReport = tabSession?.active_report?.report_name;
-    const hasActiveProfile = tabSession?.active_report?.profile_name;
+    const hasActiveReport = !!activeReport;
+    const hasActiveProfile = !!activePerformanceTrace;
 
     return (
         <Navbar className='navbar'>

@@ -13,6 +13,7 @@
 .folder-picker-options {
     display: flex;
     flex-wrap: wrap;
+    width: 100%;
     gap: 20px;
     justify-content: center;
     align-items: stretch;
@@ -28,7 +29,7 @@
         min-height: fit-content;
         flex-basis: 45%;
         flex-grow: 0;
-        max-width: 600px;
+        max-width: 550px;
 
         & > .bp5-icon {
             color: $tt-grey-4;

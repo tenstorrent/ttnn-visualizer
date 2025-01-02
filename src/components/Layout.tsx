@@ -11,9 +11,8 @@ import 'react-toastify/dist/ReactToastify.min.css';
 import classNames from 'classnames';
 import TenstorrentLogo from './TenstorrentLogo';
 import ROUTES from '../definitions/routes';
-import { reportMetaAtom } from '../store/app';
+import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
-import { useSession } from '../hooks/useAPI';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -27,8 +26,8 @@ const MAX_TITLE_LENGTH = 20;
 
 function Layout() {
     const appVersion = import.meta.env.APP_VERSION;
-    const meta = useAtomValue(reportMetaAtom);
-    const { data: tabSession } = useSession();
+    const activeReport = useAtomValue(activeReportAtom);
+    const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
 
     return (
         <div className={Classes.DARK}>
@@ -48,37 +47,36 @@ function Layout() {
                         <TenstorrentLogo />
                         <p className='version'>v{appVersion}</p>
                     </Link>
-
-                    <div className='current-data'>
-                        {meta?.report_name && tabSession?.active_report && (
-                            <Tooltip
-                                content={meta.report_name}
-                                className={classNames('title', {
-                                    'is-lengthy': meta.report_name.length > MAX_TITLE_LENGTH,
-                                })}
-                            >
-                                <span>
-                                    <strong>Report:</strong> {meta.report_name}
-                                </span>
-                            </Tooltip>
-                        )}
-
-                        {tabSession?.active_report?.profile_name && (
-                            <Tooltip
-                                content={tabSession?.active_report?.profile_name}
-                                className={classNames('title', {
-                                    'is-lengthy': tabSession?.active_report?.profile_name.length > MAX_TITLE_LENGTH,
-                                })}
-                            >
-                                <span>
-                                    <strong>Performance:</strong> {tabSession?.active_report?.profile_name}
-                                </span>
-                            </Tooltip>
-                        )}
-                    </div>
-
                     <MainNavigation />
                 </nav>
+
+                <div className='current-data'>
+                    {activeReport && (
+                        <Tooltip
+                            content={activeReport}
+                            className={classNames('title', {
+                                'is-lengthy': activeReport.length > MAX_TITLE_LENGTH,
+                            })}
+                        >
+                            <span>
+                                <strong>Report:</strong> {activeReport}
+                            </span>
+                        </Tooltip>
+                    )}
+
+                    {activePerformanceTrace && (
+                        <Tooltip
+                            content={activePerformanceTrace}
+                            className={classNames('title', {
+                                'is-lengthy': activePerformanceTrace.length > MAX_TITLE_LENGTH,
+                            })}
+                        >
+                            <span>
+                                <strong>Performance:</strong> {activePerformanceTrace}
+                            </span>
+                        </Tooltip>
+                    )}
+                </div>
             </header>
 
             <main>

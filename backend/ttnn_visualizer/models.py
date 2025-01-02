@@ -180,7 +180,7 @@ class StatusMessage(SerializeableModel):
 
 
 class ActiveReport(SerializeableModel):
-    report_name: str
+    report_name: Optional[str] = None
     profile_name: Optional[str] = None
 
 
