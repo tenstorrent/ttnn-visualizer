@@ -566,7 +566,7 @@ def get_cluster_description_file(session: TabSession):
     try:
         cluster_desc_file = get_cluster_desc(session.remote_connection)
         if not cluster_desc_file:
-            return jsonify({"error": "cluster_desc.yaml not found"}), 404
+            return jsonify({"error": "cluster_descriptor.yaml not found"}), 404
         yaml_data = yaml.safe_load(cluster_desc_file.decode("utf-8"))
         return jsonify(yaml_data), 200
 

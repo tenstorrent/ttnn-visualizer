@@ -85,14 +85,14 @@ def calculate_folder_size(client: SSHClient, folder_path: str) -> int:
 def get_cluster_desc_path(ssh_client) -> Optional[str]:
     """
     List all folders matching '/tmp/umd_*' on the remote machine, filter for those containing
-    'cluster_desc.yaml', and return the full path to the most recently modified YAML file.
+    'cluster_descriptor.yaml', and return the full path to the most recently modified YAML file.
 
     :param remote_connection: RemoteConnection object containing SSH connection details.
-    :return: Full path to the most recently modified 'cluster_desc.yaml' file, or None.
+    :return: Full path to the most recently modified 'cluster_descriptor.yaml' file, or None.
     """
     latest_yaml_path = None
     latest_mod_time = 0
-    cluster_desc_file = "cluster_desc.yaml"
+    cluster_desc_file = "cluster_descriptor.yaml"
 
     try:
         # Command to list all folders matching '/tmp/umd_*'
@@ -106,12 +106,12 @@ def get_cluster_desc_path(ssh_client) -> Optional[str]:
             logger.info("No folders found matching the pattern '/tmp/umd_*'")
             return None
 
-        # Check each folder for 'cluster_desc.yaml' and track the most recent one
+        # Check each folder for 'cluster_descriptor.yaml' and track the most recent one
         with ssh_client.open_sftp() as sftp:
             for folder in folder_paths:
                 yaml_file_path = f"{folder}/{cluster_desc_file}"
                 try:
-                    # Check if 'cluster_desc.yaml' exists and get its modification time
+                    # Check if 'cluster_descriptor.yaml' exists and get its modification time
                     attributes = sftp.stat(yaml_file_path)
                     mod_time = attributes.st_mtime  # Modification time
 
