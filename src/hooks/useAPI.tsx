@@ -221,7 +221,7 @@ export const useOperationDetails = (operationId: number | null) => {
         },
     );
 
-    // TEMP removing device_id
+    // TEMP device id handling
     if (operationDetails.data) {
         operationDetails.data.buffers = operationDetails.data.buffers.filter((buffer) =>
             isValidNumber(deviceId) ? buffer.device_id === deviceId : true,
