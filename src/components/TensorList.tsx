@@ -8,7 +8,7 @@ import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Button, ButtonGroup, Checkbox, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom } from 'jotai';
 import { MultiSelect } from '@blueprintjs/select';
 import SearchField from './SearchField';
 import LoadingSpinner from './LoadingSpinner';
@@ -18,14 +18,13 @@ import { Tensor } from '../model/Graph';
 import { TensorData } from '../model/APIData';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
-import { expandedTensorsAtom, selectedDeviceAtom } from '../store/app';
+import { expandedTensorsAtom } from '../store/app';
 import ListItem from './ListItem';
 import '@blueprintjs/select/lib/css/blueprint-select.css';
 import 'styles/components/ListView.scss';
 import 'styles/components/TensorList.scss';
 import BufferDetails from './BufferDetails';
 import isValidNumber from '../functions/isValidNumber';
-import DeviceSelector from './DeviceSelector';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -43,10 +42,9 @@ const TensorList = () => {
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [bufferTypeFilters, setBufferTypeFilters] = useState<BufferType[]>([]);
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
-    const selectedDevice = useAtomValue(selectedDeviceAtom);
 
     const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
-    const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors(selectedDevice);
+    const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
 
     // TODO: Figure out an initial scroll position based on last used tensor
     const virtualizer = useVirtualizer({
@@ -211,8 +209,6 @@ const TensorList = () => {
                         resetOnSelect
                     />
                 </ButtonGroup>
-
-                <DeviceSelector />
 
                 {!isTensorsLoading && !isOperationsLoading ? (
                     <p className='result-count'>

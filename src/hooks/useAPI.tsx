@@ -136,13 +136,9 @@ export interface PerformanceData {
     zone_phase: 'begin' | 'end';
 }
 
-const fetchAllBuffers = async (
-    bufferType: BufferType | null,
-    deviceId: number | null,
-): Promise<BuffersByOperationData[]> => {
+const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
     const params = {
         buffer_type: bufferType,
-        // device_id: deviceId,
     };
 
     const { data: buffers } = await axiosInstance.get<BuffersByOperationData[]>('/api/operation-buffers', {
@@ -201,17 +197,20 @@ const fetchDeviceLogRaw = async (): Promise<ParseResult<string>> => {
     });
 };
 
-export const useOperationsList = (deviceId?: number) => {
+export const useOperationsList = () => {
     return useQuery<OperationDescription[], AxiosError>({
-        queryFn: () => fetchOperations(deviceId),
-        queryKey: ['get-operations', deviceId],
+        queryFn: () => fetchOperations(),
+        queryKey: ['get-operations'],
         retry: false,
     });
 };
 
-export const useOperationDetails = (operationId: number | null, deviceId?: number | null) => {
+export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
     const operation = operations?.filter((_operation) => _operation.id === operationId)[0];
+
+    // TEMP device id handling
+    const deviceId = 0;
 
     const operationDetails = useQuery<OperationDetailsData>(
         ['get-operation-detail', operationId, deviceId],
@@ -222,7 +221,7 @@ export const useOperationDetails = (operationId: number | null, deviceId?: numbe
         },
     );
 
-    // TEMP removing device_id
+    // TEMP device id handling
     if (operationDetails.data) {
         operationDetails.data.buffers = operationDetails.data.buffers.filter((buffer) =>
             isValidNumber(deviceId) ? buffer.device_id === deviceId : true,
@@ -235,7 +234,7 @@ export const useOperationDetails = (operationId: number | null, deviceId?: numbe
     };
 };
 
-export const usePreviousOperationDetails = (operationId: number, deviceId?: number | null) => {
+export const usePreviousOperationDetails = (operationId: number) => {
     // TODO: change to return array and number of previous operations
     const { data: operations } = useOperationsList();
 
@@ -243,7 +242,7 @@ export const usePreviousOperationDetails = (operationId: number, deviceId?: numb
         return operationList[index + 1]?.id === operationId;
     });
 
-    return useOperationDetails(operation ? operation.id : null, deviceId);
+    return useOperationDetails(operation ? operation.id : null);
 };
 
 export const usePreviousOperation = (operationId: number) => {
@@ -391,10 +390,10 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
     });
 };
 
-export const useBuffers = (bufferType: BufferType, deviceId: number | null) => {
+export const useBuffers = (bufferType: BufferType) => {
     return useQuery({
-        queryFn: () => fetchAllBuffers(bufferType, deviceId),
-        queryKey: ['fetch-all-buffers', bufferType, deviceId],
+        queryFn: () => fetchAllBuffers(bufferType),
+        queryKey: ['fetch-all-buffers', bufferType],
     });
 };
 
