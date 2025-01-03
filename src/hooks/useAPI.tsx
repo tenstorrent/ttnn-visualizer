@@ -25,6 +25,7 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
+import isValidNumber from '../functions/isValidNumber';
 
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
@@ -208,14 +209,24 @@ export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
     const operation = operations?.filter((_operation) => _operation.id === operationId)[0];
 
+    // TEMP device id handling
+    const deviceId = 0;
+
     const operationDetails = useQuery<OperationDetailsData>(
-        ['get-operation-detail', operationId],
+        ['get-operation-detail', operationId, deviceId],
         () => fetchOperationDetails(operationId),
         {
             retry: 2,
             retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
         },
     );
+
+    // TEMP removing device_id
+    if (operationDetails.data) {
+        operationDetails.data.buffers = operationDetails.data.buffers.filter((buffer) =>
+            isValidNumber(deviceId) ? buffer.device_id === deviceId : true,
+        );
+    }
 
     return {
         operation,
