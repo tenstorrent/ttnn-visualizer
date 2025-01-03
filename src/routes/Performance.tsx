@@ -14,8 +14,8 @@ import PerformanceOperationTypesChart from '../components/PerformanceOperationTy
 import PerformanceScatterChart from '../components/PerformanceScatterChart';
 import { PerformanceReport } from '../components/performance/PerfTable';
 import 'styles/components/Performance.scss';
-import PerformanceDeviceRuntimeChart from '../components/PerformanceDeviceRuntimeChart';
 import { DeviceArchitecture } from '../model/APIData';
+import PerformanceCoreCountUtilizationChart from '../components/PerformanceCoreCountUtilizationChart';
 
 export default function Performance() {
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformance();
@@ -60,9 +60,17 @@ export default function Performance() {
                     icon={IconNames.TIMELINE_AREA_CHART}
                     panel={
                         <div className='graph-container'>
-                            <PerformanceDeviceRuntimeChart
+                            {/* <PerformanceDeviceRuntimeChart
                                 // @ts-expect-error this should be just fine
                                 data={perfData?.data}
+                            /> */}
+
+                            <h2>MatMul Operations</h2>
+
+                            <PerformanceCoreCountUtilizationChart
+                                // @ts-expect-error this should be just fine
+                                data={perfData?.data}
+                                architecture={architecture}
                             />
 
                             <PerformanceOperationKernelUtilizationChart
