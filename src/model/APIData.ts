@@ -247,7 +247,4 @@ export interface BufferPage {
     color?: string;
 }
 
-export enum DeviceArchitecture {
-    Grayskull = 'Grayskull',
-    Wormhole = 'Wormhole',
-}
+export type DeviceArchitecture = 'wormhole_b0' | 'grayskull';

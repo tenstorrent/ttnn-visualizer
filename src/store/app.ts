@@ -30,5 +30,5 @@ export const fileTransferProgressAtom = atom<FileProgress>({
     status: FileStatus.INACTIVE,
 });
 
-export const selectedDeviceAtom = atom<number | null>(0); // Assumes device_id always uses a zero based index
+export const selectedDeviceAtom = atom<number | null>(0); // Assumes device_id always uses a zero based index (NOT REALLY USED AT THE MOMENT)
 export const renderMemoryLayoutAtom = atom<boolean>(false);

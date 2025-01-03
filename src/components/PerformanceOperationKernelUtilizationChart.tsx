@@ -130,8 +130,8 @@ const isDesiredOperation = (operation?: string): boolean => {
 
 const getUtilization = (row: RowData, architecture: DeviceArchitecture): number => {
     const CORE_COUNT = {
-        [DeviceArchitecture.Grayskull]: 108,
-        [DeviceArchitecture.Wormhole]: 64,
+        grayskull: 108,
+        wormhole_b0: 64,
     };
 
     const ideal = typeof row['PM IDEAL [ns]'] === 'string' ? parseInt(row['PM IDEAL [ns]'], 10) : NaN;

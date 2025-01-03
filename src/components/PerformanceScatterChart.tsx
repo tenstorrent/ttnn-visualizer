@@ -102,8 +102,8 @@ const isMatMulConv = (operation?: string): boolean => {
 
 const getUtilization = (row: RowData, architecture: DeviceArchitecture): number => {
     const CORE_COUNT = {
-        [DeviceArchitecture.Grayskull]: 108,
-        [DeviceArchitecture.Wormhole]: 64,
+        grayskull: 108,
+        wormhole_b0: 64,
     };
 
     const ideal = row['PM IDEAL [ns]'] ? parseInt(row['PM IDEAL [ns]'], 10) : null;

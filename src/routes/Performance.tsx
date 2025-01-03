@@ -6,7 +6,7 @@ import { Helmet } from 'react-helmet-async';
 import { useState } from 'react';
 import { Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { usePerformance } from '../hooks/useAPI';
+import { useDeviceLog, usePerformance } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceOperationKernelUtilizationChart from '../components/PerformanceOperationKernelUtilizationChart';
@@ -19,14 +19,11 @@ import { DeviceArchitecture } from '../model/APIData';
 
 export default function Performance() {
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformance();
-    // const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
+    const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
     const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-2');
     useClearSelectedBuffer();
 
-    if (
-        isLoadingPerformance
-        // || isLoadingDeviceLog
-    ) {
+    if (isLoadingPerformance || isLoadingDeviceLog) {
         return (
             <div className='centered-loader'>
                 <LoadingSpinner />
@@ -34,8 +31,7 @@ export default function Performance() {
         );
     }
 
-    // TEMP until we grab it from DeviceLog
-    const architecture = DeviceArchitecture.Grayskull;
+    const architecture = (deviceLog?.deviceMeta?.architecture ?? 'wormhole_b0') as DeviceArchitecture;
 
     return (
         <div className='performance'>
@@ -67,7 +63,6 @@ export default function Performance() {
                             <PerformanceDeviceRuntimeChart
                                 // @ts-expect-error this should be just fine
                                 data={perfData?.data}
-                                architecture={architecture}
                             />
 
                             <PerformanceOperationKernelUtilizationChart
@@ -76,8 +71,11 @@ export default function Performance() {
                                 architecture={architecture}
                             />
 
-                            {/* @ts-expect-error this should be just fine */}
-                            <PerformanceScatterChart data={perfData?.data} />
+                            <PerformanceScatterChart
+                                // @ts-expect-error this should be just fine
+                                data={perfData?.data}
+                                architecture={architecture}
+                            />
 
                             {/* @ts-expect-error this should be just fine */}
                             <PerformanceOperationTypesChart data={perfData?.data} />
