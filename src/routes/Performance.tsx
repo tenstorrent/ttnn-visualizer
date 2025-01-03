@@ -14,19 +14,28 @@ import PerformanceOperationTypesChart from '../components/PerformanceOperationTy
 import PerformanceScatterChart from '../components/PerformanceScatterChart';
 import { PerformanceReport } from '../components/performance/PerfTable';
 import 'styles/components/Performance.scss';
+import PerformanceDeviceRuntimeChart from '../components/PerformanceDeviceRuntimeChart';
+import { DeviceArchitecture } from '../model/APIData';
 
 export default function Performance() {
-    const { data: perfData, isLoading } = usePerformance();
+    const { data: perfData, isLoading: isLoadingPerformance } = usePerformance();
+    // const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
     const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-2');
     useClearSelectedBuffer();
 
-    if (isLoading) {
+    if (
+        isLoadingPerformance
+        // || isLoadingDeviceLog
+    ) {
         return (
             <div className='centered-loader'>
                 <LoadingSpinner />
             </div>
         );
     }
+
+    // TEMP until we grab it from DeviceLog
+    const architecture = DeviceArchitecture.Grayskull;
 
     return (
         <div className='performance'>
@@ -55,8 +64,17 @@ export default function Performance() {
                     icon={IconNames.TIMELINE_AREA_CHART}
                     panel={
                         <div className='graph-container'>
-                            {/* @ts-expect-error this should be just fine */}
-                            <PerformanceOperationKernelUtilizationChart data={perfData?.data} />
+                            <PerformanceDeviceRuntimeChart
+                                // @ts-expect-error this should be just fine
+                                data={perfData?.data}
+                                architecture={architecture}
+                            />
+
+                            <PerformanceOperationKernelUtilizationChart
+                                // @ts-expect-error this should be just fine
+                                data={perfData?.data}
+                                architecture={architecture}
+                            />
 
                             {/* @ts-expect-error this should be just fine */}
                             <PerformanceScatterChart data={perfData?.data} />

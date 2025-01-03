@@ -1,14 +1,14 @@
 import { Config, Layout, PlotData } from 'plotly.js';
-import { useMemo, useState } from 'react';
-import { Select } from '@blueprintjs/select';
-import { Button, MenuItem } from '@blueprintjs/core';
+import { useMemo } from 'react';
 import Plot from 'react-plotly.js';
 import isValidNumber from '../functions/isValidNumber';
 import 'styles/components/PerformanceScatterChart.scss';
 import { RowData } from '../definitions/PerfTable';
+import { DeviceArchitecture } from '../model/APIData';
 
 interface PerformanceOperationKernelUtilizationChartProps {
     data?: RowData[];
+    architecture: DeviceArchitecture;
 }
 
 const GRID_COLOUR = 'transparent';
@@ -63,7 +63,7 @@ const LAYOUT: Partial<Layout> = {
                 color: LEGEND_COLOUR,
             },
         },
-        tickformat: '.0%',
+        tickformat: '.2%',
         hoverformat: '.2%',
         color: LEGEND_COLOUR,
         overlaying: 'y',
@@ -77,19 +77,10 @@ const CONFIG: Partial<Config> = {
     responsive: true,
 };
 
-enum DeviceArchitecture {
-    Grayskull = 'Grayskull',
-    Wormhole = 'Wormhole',
-}
-
-const CORE_COUNT = {
-    [DeviceArchitecture.Grayskull]: 108,
-    [DeviceArchitecture.Wormhole]: 64,
-};
-
-function PerformanceOperationKernelUtilizationChart({ data }: PerformanceOperationKernelUtilizationChartProps) {
-    const [deviceConfiguration, setDeviceConfiguration] = useState(DeviceArchitecture.Wormhole);
-
+function PerformanceOperationKernelUtilizationChart({
+    data,
+    architecture,
+}: PerformanceOperationKernelUtilizationChartProps) {
     const filteredOps = data?.filter((row) => isDesiredOperation(row?.['OP CODE'] as string | undefined));
 
     const chartDataDuration = useMemo(
@@ -108,41 +99,17 @@ function PerformanceOperationKernelUtilizationChart({ data }: PerformanceOperati
         () =>
             ({
                 x: filteredOps?.map((_row, index) => index + 1),
-                y: filteredOps?.map((row) => getUtilization(row, deviceConfiguration)).filter((value) => value !== -1),
+                y: filteredOps?.map((row) => getUtilization(row, architecture)).filter((value) => value !== -1),
                 yaxis: 'y2',
                 hovertemplate: `Duration: %{x} ns<br />Utilization: %{y}`,
                 name: '',
             }) as Partial<PlotData>,
-        [filteredOps, deviceConfiguration],
+        [filteredOps, architecture],
     );
 
     return (
         <div className='scatter-chart'>
             <h3>Operation Device Kernel Duration + Utilization (MatMul)</h3>
-
-            <div className='chart-controls'>
-                <span>Select Architecture:</span>
-
-                <Select
-                    items={[DeviceArchitecture.Wormhole, DeviceArchitecture.Grayskull]}
-                    // eslint-disable-next-line react/no-unstable-nested-components
-                    itemRenderer={(value) => (
-                        <MenuItem
-                            key={value}
-                            text={value}
-                            label={value}
-                            onClick={() => setDeviceConfiguration(value)}
-                        />
-                    )}
-                    filterable={false}
-                    onItemSelect={setDeviceConfiguration}
-                >
-                    <Button
-                        text={deviceConfiguration}
-                        outlined
-                    />
-                </Select>
-            </div>
 
             <Plot
                 className='chart'
@@ -161,7 +128,12 @@ const isDesiredOperation = (operation?: string): boolean => {
     return DESIRED_OP_CODES.some((code) => opCode?.includes(code));
 };
 
-const getUtilization = (row: RowData, deviceConfiguration: DeviceArchitecture): number => {
+const getUtilization = (row: RowData, architecture: DeviceArchitecture): number => {
+    const CORE_COUNT = {
+        [DeviceArchitecture.Grayskull]: 108,
+        [DeviceArchitecture.Wormhole]: 64,
+    };
+
     const ideal = typeof row['PM IDEAL [ns]'] === 'string' ? parseInt(row['PM IDEAL [ns]'], 10) : NaN;
     const kernelDuration =
         typeof row['DEVICE KERNEL DURATION [ns]'] === 'string' ? parseInt(row['DEVICE KERNEL DURATION [ns]'], 10) : NaN;
@@ -171,7 +143,7 @@ const getUtilization = (row: RowData, deviceConfiguration: DeviceArchitecture): 
         return -1;
     }
 
-    return (ideal / kernelDuration) * (CORE_COUNT[deviceConfiguration] / coreCount);
+    return (ideal / kernelDuration) * (CORE_COUNT[architecture] / coreCount);
 };
 
 export default PerformanceOperationKernelUtilizationChart;
