@@ -19,6 +19,7 @@ import 'styles/components/Performance.scss';
 export default function Performance() {
     const [isOpen, setIsOpen] = useState(false);
     const { data: perfData, isLoading } = usePerformance();
+    // const { data: deviceData } = useDeviceLog();
     // const ops = useGetDeviceOperationsList();
     useClearSelectedBuffer();
 
