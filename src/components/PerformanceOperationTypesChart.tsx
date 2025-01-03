@@ -6,6 +6,7 @@ import Plot from 'react-plotly.js';
 import { Config, Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { RowData } from '../definitions/PerfTable';
+import 'styles/components/PerformanceOperationTypesChart.scss';
 
 interface PerformanceOperationTypesChartProps {
     data?: RowData[];
@@ -78,13 +79,15 @@ function PerformanceOperationTypesChart({ data }: PerformanceOperationTypesChart
     );
 
     return (
-        <div>
+        <div className='operation-types-chart'>
             <h3>Operation by Type</h3>
 
             <Plot
+                className='chart'
                 data={[chartData]}
                 layout={LAYOUT}
                 config={CONFIG}
+                useResizeHandler
             />
         </div>
     );

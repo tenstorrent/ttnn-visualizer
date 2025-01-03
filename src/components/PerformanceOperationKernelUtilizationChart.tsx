@@ -19,8 +19,6 @@ const DESIRED_OP_CODES = ['matmul', 'conv'];
 
 const LAYOUT: Partial<Layout> = {
     autosize: true,
-    height: 450,
-    width: 740,
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
     showlegend: false,
@@ -147,6 +145,7 @@ function PerformanceOperationKernelUtilizationChart({ data }: PerformanceOperati
             </div>
 
             <Plot
+                className='chart'
                 data={[chartDataDuration, chartDataUtilization]}
                 layout={LAYOUT}
                 config={CONFIG}

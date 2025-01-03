@@ -4,7 +4,7 @@
 
 import { Helmet } from 'react-helmet-async';
 import { useState } from 'react';
-import { Button, Intent } from '@blueprintjs/core';
+import { Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { usePerformance } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
@@ -12,14 +12,12 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceOperationKernelUtilizationChart from '../components/PerformanceOperationKernelUtilizationChart';
 import PerformanceOperationTypesChart from '../components/PerformanceOperationTypesChart';
 import PerformanceScatterChart from '../components/PerformanceScatterChart';
-import Overlay from '../components/Overlay';
 import { PerformanceReport } from '../components/performance/PerfTable';
 import 'styles/components/Performance.scss';
 
 export default function Performance() {
-    const [isOpen, setIsOpen] = useState(false);
     const { data: perfData, isLoading } = usePerformance();
-    // const ops = useGetDeviceOperationsList();
+    const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-2');
     useClearSelectedBuffer();
 
     if (isLoading) {
@@ -36,36 +34,39 @@ export default function Performance() {
 
             <h1 className='page-title'>Performance analysis</h1>
 
-            <header className='button-container'>
-                <Button
-                    text='View graphs'
-                    icon={IconNames.GROUPED_BAR_CHART}
-                    onClick={() => setIsOpen(true)}
-                    disabled={!perfData?.data}
-                    intent={Intent.PRIMARY}
-                />
-            </header>
-
-            <Overlay
-                isOpen={isOpen}
-                onClose={() => setIsOpen(false)}
+            <Tabs
+                id='performance-tabs'
+                selectedTabId={selectedTabId}
+                onChange={setSelectedTabId}
+                renderActiveTabPanelOnly
+                large
             >
-                <h2>Matmul Operations</h2>
+                <Tab
+                    id='tab-1'
+                    title='Table'
+                    icon={IconNames.TH}
+                    // @ts-expect-error this should be just fine
+                    panel={<PerformanceReport data={perfData?.data} />}
+                />
 
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    {/* @ts-expect-error this should be just fine */}
-                    <PerformanceOperationKernelUtilizationChart data={perfData?.data} />
+                <Tab
+                    id='tab-2'
+                    title='Graphs'
+                    icon={IconNames.TIMELINE_AREA_CHART}
+                    panel={
+                        <div className='graph-container'>
+                            {/* @ts-expect-error this should be just fine */}
+                            <PerformanceOperationKernelUtilizationChart data={perfData?.data} />
 
-                    {/* @ts-expect-error this should be just fine */}
-                    <PerformanceScatterChart data={perfData?.data} />
+                            {/* @ts-expect-error this should be just fine */}
+                            <PerformanceScatterChart data={perfData?.data} />
 
-                    {/* @ts-expect-error this should be just fine */}
-                    <PerformanceOperationTypesChart data={perfData?.data} />
-                </div>
-            </Overlay>
-
-            {/* @ts-expect-error this should be just fine */}
-            <PerformanceReport data={perfData?.data} />
+                            {/* @ts-expect-error this should be just fine */}
+                            <PerformanceOperationTypesChart data={perfData?.data} />
+                        </div>
+                    }
+                />
+            </Tabs>
         </div>
     );
 }

@@ -1,6 +1,11 @@
 .scatter-chart {
     margin-bottom: 20px;
 
+    .chart {
+        width: 100%;
+        height: 100%;
+    }
+
     .chart-controls {
         display: flex;
         justify-content: flex-start;
