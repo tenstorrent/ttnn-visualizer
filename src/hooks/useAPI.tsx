@@ -178,12 +178,32 @@ const fetchPerformanceDataRaw = async (): Promise<ParseResult<string>> => {
     });
 };
 
-const fetchDeviceLogRaw = async (): Promise<ParseResult<string>> => {
+interface MetaData {
+    architecture: string | null;
+    frequency: number | null;
+}
+
+interface FetchDeviceLogRawResult {
+    deviceMeta: MetaData;
+    deviceLog: ParseResult<string>;
+}
+
+const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
     const { data } = await axiosInstance.get<string>('/api/profiler/device-log/raw');
 
-    return new Promise<ParseResult<string>>((resolve, reject) => {
+    function parseArchAndFreq(input: string): MetaData {
+        const archMatch = input.match(/ARCH:\s*([\w\d_]+)/);
+        const freqMatch = input.match(/CHIP_FREQ\[MHz\]:\s*(\d+)/);
+        const architecture = archMatch ? archMatch[1] : null;
+        const frequency = freqMatch ? parseInt(freqMatch[1], 10) : null;
+
+        return { architecture, frequency };
+    }
+
+    return new Promise<FetchDeviceLogRawResult>((resolve, reject) => {
         const rows = data.split('\n');
         const csv = rows.slice(1); // Remove the first row
+        const deviceMeta = parseArchAndFreq(rows[0]);
         const headers = csv!
             .shift()!
             .split(/,\s{1,2}/)
@@ -191,7 +211,7 @@ const fetchDeviceLogRaw = async (): Promise<ParseResult<string>> => {
         const processedCsv = [headers, ...csv].join('\n');
         Papa.parse<string>(processedCsv, {
             header: true,
-            complete: (results) => resolve(results),
+            complete: (deviceLog) => resolve({ deviceMeta, deviceLog }),
             error: (error: Error) => reject(error),
         });
     });
