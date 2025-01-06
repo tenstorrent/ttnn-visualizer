@@ -1,10 +1,10 @@
 import { Config, Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import Plot from 'react-plotly.js';
-import isValidNumber from '../functions/isValidNumber';
-import 'styles/components/PerformanceScatterChart.scss';
 import { RowData } from '../definitions/PerfTable';
 import { DeviceArchitecture } from '../model/APIData';
+import getCoreUtilization from '../functions/getCoreUtilization';
+import 'styles/components/PerformanceScatterChart.scss';
 
 interface PerformanceOperationKernelUtilizationChartProps {
     data?: RowData[];
@@ -100,7 +100,7 @@ function PerformanceOperationKernelUtilizationChart({
         () =>
             ({
                 x: filteredOps?.map((_row, index) => index + 1),
-                y: filteredOps?.map((row) => getUtilization(row, architecture)).filter((value) => value !== -1),
+                y: filteredOps?.map((row) => getCoreUtilization(row, architecture)).filter((value) => value !== -1),
                 yaxis: 'y2',
                 hovertemplate: `Duration: %{x} ns<br />Utilization: %{y}`,
                 name: '',
@@ -127,24 +127,6 @@ const isDesiredOperation = (operation?: string): boolean => {
     const opCode = operation?.toLowerCase();
 
     return DESIRED_OP_CODES.some((code) => opCode?.includes(code));
-};
-
-const getUtilization = (row: RowData, architecture: DeviceArchitecture): number => {
-    const CORE_COUNT = {
-        grayskull: 108,
-        wormhole_b0: 64,
-    };
-
-    const ideal = typeof row['PM IDEAL [ns]'] === 'string' ? parseInt(row['PM IDEAL [ns]'], 10) : NaN;
-    const kernelDuration =
-        typeof row['DEVICE KERNEL DURATION [ns]'] === 'string' ? parseInt(row['DEVICE KERNEL DURATION [ns]'], 10) : NaN;
-    const coreCount = typeof row['CORE COUNT'] === 'string' ? parseInt(row['CORE COUNT'], 10) : NaN;
-
-    if (!isValidNumber(ideal) || !isValidNumber(kernelDuration) || !isValidNumber(coreCount)) {
-        return -1;
-    }
-
-    return (ideal / kernelDuration) * (CORE_COUNT[architecture] / coreCount);
 };
 
 export default PerformanceOperationKernelUtilizationChart;

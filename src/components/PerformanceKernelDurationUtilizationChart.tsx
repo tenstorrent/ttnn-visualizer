@@ -1,10 +1,10 @@
 import { Config, Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import Plot from 'react-plotly.js';
-import isValidNumber from '../functions/isValidNumber';
-import 'styles/components/PerformanceScatterChart.scss';
 import { RowData } from '../definitions/PerfTable';
 import { DeviceArchitecture } from '../model/APIData';
+import 'styles/components/PerformanceScatterChart.scss';
+import getCoreUtilization from '../functions/getCoreUtilization';
 
 interface PerformanceKernelDurationUtilizationChartProps {
     data?: RowData[];
@@ -70,7 +70,7 @@ function PerformanceKernelDurationUtilizationChart({
         () =>
             ({
                 x: filteredOps?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
-                y: filteredOps?.map((row) => getUtilization(row, architecture)).filter((value) => value !== -1),
+                y: filteredOps?.map((row) => getCoreUtilization(row, architecture)).filter((value) => value !== -1),
                 mode: 'markers',
                 type: 'scatter',
                 name: '',
@@ -102,23 +102,6 @@ const isMatMulConv = (operation?: string): boolean => {
     const keywords = ['matmul', 'conv'];
 
     return keywords.some((keyword) => opCode?.includes(keyword));
-};
-
-const getUtilization = (row: RowData, architecture: DeviceArchitecture): number => {
-    const CORE_COUNT = {
-        grayskull: 108,
-        wormhole_b0: 64,
-    };
-
-    const ideal = row['PM IDEAL [ns]'] ? parseInt(row['PM IDEAL [ns]'], 10) : null;
-    const kernelDuration = row['DEVICE KERNEL DURATION [ns]'] ? parseInt(row['DEVICE KERNEL DURATION [ns]'], 10) : null;
-    const coreCount = row['CORE COUNT'] ? parseInt(row['CORE COUNT'], 10) : null;
-
-    if (!isValidNumber(ideal) || !isValidNumber(kernelDuration) || !isValidNumber(coreCount)) {
-        return -1;
-    }
-
-    return (ideal / kernelDuration) * (CORE_COUNT[architecture] / coreCount);
 };
 
 export default PerformanceKernelDurationUtilizationChart;
