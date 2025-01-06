@@ -15,8 +15,9 @@ import { PerformanceReport } from '../components/performance/PerfTable';
 import 'styles/components/Performance.scss';
 import { DeviceArchitecture } from '../model/APIData';
 import PerformanceCoreCountUtilizationChart from '../components/PerformanceCoreCountUtilizationChart';
-import PerformanceDeviceRuntimeChart from '../components/PerformanceDeviceRuntimeChart';
+import PerformanceDeviceKernelRuntimeChart from '../components/PerformanceDeviceKernelRuntimeChart';
 import PerformanceKernelDurationUtilizationChart from '../components/PerformanceKernelDurationUtilizationChart';
+import PerformanceDeviceKernelDurationChart from '../components/PerformanceDeviceKernelDurationChart';
 
 export default function Performance() {
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformance();
@@ -61,7 +62,12 @@ export default function Performance() {
                     icon={IconNames.TIMELINE_AREA_CHART}
                     panel={
                         <div className='graph-container'>
-                            <PerformanceDeviceRuntimeChart
+                            <PerformanceDeviceKernelDurationChart
+                                // @ts-expect-error this should be just fine
+                                data={perfData?.data}
+                            />
+
+                            <PerformanceDeviceKernelRuntimeChart
                                 // @ts-expect-error this should be just fine
                                 data={perfData?.data}
                             />

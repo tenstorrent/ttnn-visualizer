@@ -74,6 +74,7 @@ function PerformanceOperationTypesChart({ data }: PerformanceOperationTypesChart
                 labels: Object.keys(operationTypes ?? []),
                 type: 'pie',
                 textinfo: 'percent',
+                hovertemplate: `Type: %{label}<br />Count: %{value}<extra></extra>`,
             }) as Partial<PlotData>,
         [operationTypes],
     );

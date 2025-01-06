@@ -102,7 +102,7 @@ function PerformanceOperationKernelUtilizationChart({
                 x: filteredOps?.map((_row, index) => index + 1),
                 y: filteredOps?.map((row) => getCoreUtilization(row, architecture)).filter((value) => value !== -1),
                 yaxis: 'y2',
-                hovertemplate: `Duration: %{x} ns<br />Utilization: %{y}`,
+                hovertemplate: `Operation: %{x}<br />Utilization: %{y}`,
                 name: '',
             }) as Partial<PlotData>,
         [filteredOps, architecture],

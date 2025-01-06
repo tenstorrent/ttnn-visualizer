@@ -4,7 +4,7 @@ import Plot from 'react-plotly.js';
 import 'styles/components/PerformanceScatterChart.scss';
 import { RowData } from '../definitions/PerfTable';
 
-interface PerformanceDeviceRuntimeChartProps {
+interface PerformanceDeviceKernelRuntimeChartProps {
     data?: RowData[];
 }
 
@@ -16,7 +16,7 @@ const LAYOUT: Partial<Layout> = {
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
     margin: {
-        l: 80,
+        l: 50,
         r: 0,
         b: 50,
         t: 0,
@@ -41,11 +41,12 @@ const LAYOUT: Partial<Layout> = {
             font: {
                 color: LEGEND_COLOUR,
             },
-            standoff: 40,
+            standoff: 20,
         },
         tickformat: 'd',
         hoverformat: ',.2r',
         color: LEGEND_COLOUR,
+        automargin: true,
     },
 };
 
@@ -55,9 +56,8 @@ const CONFIG: Partial<Config> = {
     responsive: true,
 };
 
-function PerformanceDeviceRuntimeChart({ data }: PerformanceDeviceRuntimeChartProps) {
+function PerformanceDeviceKernelRuntimeChart({ data }: PerformanceDeviceKernelRuntimeChartProps) {
     const filteredOps = data?.filter((row) => row?.['CORE COUNT'] && row?.['DEVICE KERNEL DURATION [ns]']);
-    // const filteredOps = data;
 
     const chartData = useMemo(
         () =>
@@ -70,12 +70,10 @@ function PerformanceDeviceRuntimeChart({ data }: PerformanceDeviceRuntimeChartPr
                 marker: {
                     size: 10,
                 },
-                hovertemplate: `Duration: %{y} ns<br />Cores: %{x}`,
+                hovertemplate: `Cores: %{x}<br />Duration: %{y} ns`,
             }) as Partial<PlotData>,
         [filteredOps],
     );
-
-    // console.log(chartData);
 
     return (
         <div className='scatter-chart'>
@@ -92,4 +90,4 @@ function PerformanceDeviceRuntimeChart({ data }: PerformanceDeviceRuntimeChartPr
     );
 }
 
-export default PerformanceDeviceRuntimeChart;
+export default PerformanceDeviceKernelRuntimeChart;
