@@ -80,7 +80,7 @@ function PerformanceOperationTypesChart({ data }: PerformanceOperationTypesChart
 
     return (
         <div className='operation-types-chart'>
-            <h2>Operation Types Pie Chart</h2>
+            <h2>Operation Types</h2>
 
             <Plot
                 className='chart'

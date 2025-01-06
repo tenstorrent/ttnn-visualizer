@@ -6,7 +6,7 @@ import 'styles/components/PerformanceScatterChart.scss';
 import { RowData } from '../definitions/PerfTable';
 import { DeviceArchitecture } from '../model/APIData';
 
-interface PerformanceScatterChartProps {
+interface PerformanceKernelDurationUtilizationChartProps {
     data?: RowData[];
     architecture: DeviceArchitecture;
 }
@@ -19,7 +19,7 @@ const LAYOUT: Partial<Layout> = {
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
     margin: {
-        l: 60,
+        l: 80,
         r: 0,
         b: 50,
         t: 0,
@@ -46,8 +46,9 @@ const LAYOUT: Partial<Layout> = {
             font: {
                 color: LEGEND_COLOUR,
             },
+            standoff: 40,
         },
-        tickformat: '.0%',
+        tickformat: '.2%',
         hoverformat: '.2%',
         color: LEGEND_COLOUR,
     },
@@ -59,7 +60,10 @@ const CONFIG: Partial<Config> = {
     responsive: true,
 };
 
-function PerformanceScatterChart({ data, architecture }: PerformanceScatterChartProps) {
+function PerformanceKernelDurationUtilizationChart({
+    data,
+    architecture,
+}: PerformanceKernelDurationUtilizationChartProps) {
     const filteredOps = data?.filter((row) => isMatMulConv(row?.['OP CODE'] as string | undefined));
 
     const chartData = useMemo(
@@ -117,4 +121,4 @@ const getUtilization = (row: RowData, architecture: DeviceArchitecture): number 
     return (ideal / kernelDuration) * (CORE_COUNT[architecture] / coreCount);
 };
 
-export default PerformanceScatterChart;
+export default PerformanceKernelDurationUtilizationChart;

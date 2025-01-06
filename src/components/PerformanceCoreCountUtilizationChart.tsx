@@ -23,7 +23,7 @@ const LAYOUT: Partial<Layout> = {
     plot_bgcolor: 'transparent',
     showlegend: false,
     margin: {
-        l: 70,
+        l: 60,
         r: 70,
         b: 50,
         t: 0,
@@ -62,6 +62,7 @@ const LAYOUT: Partial<Layout> = {
             font: {
                 color: LEGEND_COLOUR,
             },
+            standoff: 40,
         },
         tickformat: '.2%',
         hoverformat: '.2%',

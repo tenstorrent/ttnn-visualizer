@@ -11,11 +11,12 @@ import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceOperationKernelUtilizationChart from '../components/PerformanceOperationKernelUtilizationChart';
 import PerformanceOperationTypesChart from '../components/PerformanceOperationTypesChart';
-import PerformanceScatterChart from '../components/PerformanceScatterChart';
 import { PerformanceReport } from '../components/performance/PerfTable';
 import 'styles/components/Performance.scss';
 import { DeviceArchitecture } from '../model/APIData';
 import PerformanceCoreCountUtilizationChart from '../components/PerformanceCoreCountUtilizationChart';
+import PerformanceDeviceRuntimeChart from '../components/PerformanceDeviceRuntimeChart';
+import PerformanceKernelDurationUtilizationChart from '../components/PerformanceKernelDurationUtilizationChart';
 
 export default function Performance() {
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformance();
@@ -60,11 +61,12 @@ export default function Performance() {
                     icon={IconNames.TIMELINE_AREA_CHART}
                     panel={
                         <div className='graph-container'>
-                            {/* <PerformanceDeviceRuntimeChart
+                            <PerformanceDeviceRuntimeChart
                                 // @ts-expect-error this should be just fine
                                 data={perfData?.data}
-                            /> */}
+                            />
 
+                            {/* Please note we want to change this so we selectively render the below charts with different sets of data */}
                             <h2>MatMul Operations</h2>
 
                             <PerformanceCoreCountUtilizationChart
@@ -79,7 +81,7 @@ export default function Performance() {
                                 architecture={architecture}
                             />
 
-                            <PerformanceScatterChart
+                            <PerformanceKernelDurationUtilizationChart
                                 // @ts-expect-error this should be just fine
                                 data={perfData?.data}
                                 architecture={architecture}

@@ -48,6 +48,7 @@ const LAYOUT: Partial<Layout> = {
             font: {
                 color: LEGEND_COLOUR,
             },
+            standoff: 40,
         },
         tickformat: 'd',
         hoverformat: ',.2r',
