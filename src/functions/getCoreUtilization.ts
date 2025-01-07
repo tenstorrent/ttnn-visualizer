@@ -1,12 +1,10 @@
 import { RowData } from '../definitions/PerfTable';
 import { DeviceArchitecture } from '../model/APIData';
+import getCoreCount from './getCoreCount';
 import isValidNumber from './isValidNumber';
 
 function getCoreUtilization(row: RowData, architecture: DeviceArchitecture): number {
-    const CORE_COUNT = {
-        grayskull: 108,
-        wormhole_b0: 64,
-    };
+    const maxCores = getCoreCount(architecture);
 
     const ideal = row['PM IDEAL [ns]'] ? parseInt(row['PM IDEAL [ns]'], 10) : null;
     const kernelDuration = row['DEVICE KERNEL DURATION [ns]'] ? parseInt(row['DEVICE KERNEL DURATION [ns]'], 10) : null;
@@ -16,7 +14,7 @@ function getCoreUtilization(row: RowData, architecture: DeviceArchitecture): num
         return 0;
     }
 
-    return (ideal / kernelDuration) * (CORE_COUNT[architecture] / coreCount);
+    return (ideal / kernelDuration) * (maxCores / coreCount);
 }
 
 export default getCoreUtilization;

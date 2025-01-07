@@ -5,6 +5,7 @@ import 'styles/components/PerformanceScatterChart.scss';
 import { RowData } from '../definitions/PerfTable';
 import { DeviceArchitecture } from '../model/APIData';
 import getCoreUtilization from '../functions/getCoreUtilization';
+import getCoreCount from '../functions/getCoreCount';
 
 interface PerformanceCoreCountlUtilizationChartProps {
     data?: RowData[];
@@ -17,61 +18,6 @@ const LEGEND_COLOUR = '#FFF';
 
 const DESIRED_OP_CODES = ['matmul', 'conv'];
 
-const LAYOUT: Partial<Layout> = {
-    autosize: true,
-    paper_bgcolor: 'transparent',
-    plot_bgcolor: 'transparent',
-    showlegend: false,
-    margin: {
-        l: 60,
-        r: 70,
-        b: 50,
-        t: 0,
-    },
-    xaxis: {
-        gridcolor: GRID_COLOUR,
-        linecolor: LINE_COLOUR,
-        title: {
-            text: 'Operation Number',
-            font: {
-                color: LEGEND_COLOUR,
-            },
-        },
-        color: LEGEND_COLOUR,
-        zerolinecolor: 'transparent',
-    },
-    yaxis: {
-        gridcolor: GRID_COLOUR,
-        linecolor: LINE_COLOUR,
-        title: {
-            text: 'Core Count',
-            font: {
-                color: LEGEND_COLOUR,
-            },
-        },
-        tickformat: 'd',
-        hoverformat: ',.2r',
-        color: LEGEND_COLOUR,
-        zerolinecolor: 'transparent',
-    },
-    yaxis2: {
-        gridcolor: GRID_COLOUR,
-        linecolor: LINE_COLOUR,
-        title: {
-            text: 'Utilization (%)',
-            font: {
-                color: LEGEND_COLOUR,
-            },
-            standoff: 40,
-        },
-        tickformat: '.2%',
-        hoverformat: '.2%',
-        color: LEGEND_COLOUR,
-        overlaying: 'y',
-        side: 'right',
-    },
-};
-
 const CONFIG: Partial<Config> = {
     displayModeBar: false,
     displaylogo: false,
@@ -79,7 +25,10 @@ const CONFIG: Partial<Config> = {
 };
 
 function PerformanceCoreCountUtilizationChart({ data, architecture }: PerformanceCoreCountlUtilizationChartProps) {
-    const filteredOps = data?.filter((row) => isDesiredOperation(row?.['OP CODE'] as string | undefined));
+    const filteredOps = useMemo(
+        () => data?.filter((row) => isDesiredOperation(row?.['OP CODE'] as string | undefined)) ?? [],
+        [data],
+    );
 
     const chartDataDuration = useMemo(
         () =>
@@ -105,6 +54,71 @@ function PerformanceCoreCountUtilizationChart({ data, architecture }: Performanc
         [filteredOps, architecture],
     );
 
+    const layout: Partial<Layout> = {
+        autosize: true,
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        showlegend: false,
+        margin: {
+            l: 60,
+            r: 70,
+            b: 50,
+            t: 0,
+        },
+        xaxis: {
+            gridcolor: GRID_COLOUR,
+            linecolor: LINE_COLOUR,
+            range: [0, filteredOps.length],
+            title: {
+                text: 'Operation Number',
+                font: {
+                    color: LEGEND_COLOUR,
+                },
+            },
+            color: LEGEND_COLOUR,
+            fixedrange: true,
+            zeroline: false,
+        },
+        yaxis: {
+            gridcolor: GRID_COLOUR,
+            linecolor: LINE_COLOUR,
+            title: {
+                text: 'Core Count',
+                font: {
+                    color: LEGEND_COLOUR,
+                },
+                standoff: 20,
+            },
+            range: [0, getCoreCount(architecture)],
+            automargin: true,
+            tickformat: 'd',
+            hoverformat: ',.2r',
+            color: LEGEND_COLOUR,
+            fixedrange: true,
+            zeroline: false,
+        },
+        yaxis2: {
+            gridcolor: GRID_COLOUR,
+            linecolor: LINE_COLOUR,
+            range: [0, 1],
+            title: {
+                text: 'Utilization (%)',
+                font: {
+                    color: LEGEND_COLOUR,
+                },
+                standoff: 20,
+            },
+            automargin: true,
+            tickformat: '.0%',
+            hoverformat: '.2%',
+            color: LEGEND_COLOUR,
+            overlaying: 'y',
+            side: 'right',
+            fixedrange: true,
+            zeroline: false,
+        },
+    };
+
     return (
         <div className='scatter-chart'>
             <h3>Operation Core Count + Utilization (MatMul)</h3>
@@ -112,7 +126,7 @@ function PerformanceCoreCountUtilizationChart({ data, architecture }: Performanc
             <Plot
                 className='chart'
                 data={[chartDataDuration, chartDataUtilization]}
-                layout={LAYOUT}
+                layout={layout}
                 config={CONFIG}
                 useResizeHandler
             />
