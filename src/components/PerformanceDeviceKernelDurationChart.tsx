@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { Config, Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import Plot from 'react-plotly.js';
