@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Config, PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
+import { Config, Layout, PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
 import { HistoricalTensor } from '../model/Graph';
 import { TensorData } from '../model/APIData';
 
@@ -117,4 +117,61 @@ export const PerfChartConfig: Partial<Config> = {
     responsive: true,
 };
 
-export const perfChartLayout = {};
+const GRID_COLOUR = '#575757';
+const LINE_COLOUR = '#575757';
+const LEGEND_COLOUR = '#FFF';
+
+export const PerfChartLayout: Partial<Layout> = {
+    autosize: true,
+    paper_bgcolor: 'transparent',
+    plot_bgcolor: 'transparent',
+    showlegend: false,
+    margin: {
+        l: 50,
+        r: 0,
+        b: 50,
+        t: 0,
+    },
+    xaxis: {
+        gridcolor: GRID_COLOUR,
+        linecolor: LINE_COLOUR,
+        color: LEGEND_COLOUR,
+        title: {
+            font: {
+                color: LEGEND_COLOUR,
+            },
+        },
+        fixedrange: true,
+        zeroline: false,
+    },
+    yaxis: {
+        gridcolor: GRID_COLOUR,
+        linecolor: LINE_COLOUR,
+        color: LEGEND_COLOUR,
+        title: {
+            standoff: 20,
+            font: {
+                color: LEGEND_COLOUR,
+            },
+        },
+        automargin: true,
+        fixedrange: true,
+        zeroline: false,
+    },
+    yaxis2: {
+        gridcolor: GRID_COLOUR,
+        linecolor: LINE_COLOUR,
+        color: LEGEND_COLOUR,
+        title: {
+            standoff: 20,
+            font: {
+                color: LEGEND_COLOUR,
+            },
+        },
+        overlaying: 'y',
+        side: 'right',
+        automargin: true,
+        fixedrange: true,
+        zeroline: false,
+    },
+};

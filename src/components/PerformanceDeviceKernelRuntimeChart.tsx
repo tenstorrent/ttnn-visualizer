@@ -7,14 +7,11 @@ import { useMemo } from 'react';
 import Plot from 'react-plotly.js';
 import 'styles/components/PerformanceScatterChart.scss';
 import { RowData } from '../definitions/PerfTable';
-import { PerfChartConfig } from '../definitions/PlotConfigurations';
+import { PerfChartConfig, PerfChartLayout } from '../definitions/PlotConfigurations';
 
 interface PerformanceDeviceKernelRuntimeChartProps {
     data?: RowData[];
 }
-
-const GRID_COLOUR = '#575757';
-const LEGEND_COLOUR = '#FFF';
 
 function PerformanceDeviceKernelRuntimeChart({ data }: PerformanceDeviceKernelRuntimeChartProps) {
     const filteredOps = data?.filter((row) => row?.['CORE COUNT'] && row?.['DEVICE KERNEL DURATION [ns]']);
@@ -36,46 +33,23 @@ function PerformanceDeviceKernelRuntimeChart({ data }: PerformanceDeviceKernelRu
     );
 
     const layout: Partial<Layout> = {
-        autosize: true,
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        showlegend: false,
-        margin: {
-            l: 50,
-            r: 0,
-            b: 50,
-            t: 0,
-        },
+        ...PerfChartLayout,
         xaxis: {
-            gridcolor: GRID_COLOUR,
-            linecolor: GRID_COLOUR,
-            color: LEGEND_COLOUR,
-            title: {
-                text: 'Core Count',
-                font: {
-                    color: LEGEND_COLOUR,
-                },
-            },
-            automargin: true,
-            fixedrange: true,
+            ...PerfChartLayout.xaxis,
         },
         yaxis: {
-            gridcolor: GRID_COLOUR,
-            linecolor: GRID_COLOUR,
-            color: LEGEND_COLOUR,
-            title: {
-                text: 'Device Kernel Duration (ns)',
-                font: {
-                    color: LEGEND_COLOUR,
-                },
-                standoff: 20,
-            },
+            ...PerfChartLayout.yaxis,
             tickformat: 'd',
             hoverformat: ',.2r',
-            automargin: true,
-            fixedrange: true,
         },
     };
+
+    if (layout?.xaxis?.title && typeof layout.xaxis.title !== 'string') {
+        layout.xaxis.title.text = 'Core Count';
+    }
+    if (layout?.yaxis?.title && typeof layout.yaxis.title !== 'string') {
+        layout.yaxis.title.text = 'Device Kernel Duration (ns)';
+    }
 
     return (
         <div className='scatter-chart'>

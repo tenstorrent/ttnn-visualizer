@@ -2,23 +2,19 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Layout, PlotData } from 'plotly.js';
+import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import Plot from 'react-plotly.js';
 import { RowData } from '../definitions/PerfTable';
 import { DeviceArchitecture } from '../model/APIData';
 import getCoreUtilization from '../functions/getCoreUtilization';
 import 'styles/components/PerformanceScatterChart.scss';
-import { PerfChartConfig } from '../definitions/PlotConfigurations';
+import { PerfChartConfig, PerfChartLayout } from '../definitions/PlotConfigurations';
 
 interface PerformanceOperationKernelUtilizationChartProps {
     data?: RowData[];
     architecture: DeviceArchitecture;
 }
-
-const GRID_COLOUR = '#575757';
-const LINE_COLOUR = '#575757';
-const LEGEND_COLOUR = '#FFF';
 
 const DESIRED_OP_CODES = ['matmul', 'conv'];
 
@@ -57,68 +53,41 @@ function PerformanceOperationKernelUtilizationChart({
         [filteredOps, architecture],
     );
 
-    const layout: Partial<Layout> = {
-        autosize: true,
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        showlegend: false,
-        margin: {
-            l: 60,
-            r: 70,
-            b: 50,
-            t: 0,
-        },
+    const layout = {
+        ...PerfChartLayout,
         xaxis: {
-            gridcolor: GRID_COLOUR,
-            linecolor: LINE_COLOUR,
-            color: LEGEND_COLOUR,
-            title: {
-                text: 'Operation',
-                font: {
-                    color: LEGEND_COLOUR,
-                },
-            },
+            ...PerfChartLayout.xaxis,
             range: [0, filteredOps.length],
-            fixedrange: true,
-            zeroline: false,
         },
         yaxis: {
-            gridcolor: GRID_COLOUR,
-            linecolor: LINE_COLOUR,
-            color: LEGEND_COLOUR,
-            title: {
-                text: 'Device Kernel Duration (ns)',
-                font: {
-                    color: LEGEND_COLOUR,
-                },
-                standoff: 20,
-            },
+            ...PerfChartLayout.yaxis,
             tickformat: 'd',
             hoverformat: ',.2r',
             range: [0, Math.max(...(chartDataDuration.y as number[]))],
-            automargin: true,
-            fixedrange: true,
-            zeroline: false,
         },
         yaxis2: {
-            gridcolor: GRID_COLOUR,
-            linecolor: LINE_COLOUR,
-            color: LEGEND_COLOUR,
-            title: {
-                text: 'Utilization (%)',
-                font: {
-                    color: LEGEND_COLOUR,
-                },
-            },
+            ...PerfChartLayout.yaxis2,
             tickformat: '.0%',
             hoverformat: '.2%',
-            overlaying: 'y',
-            side: 'right',
             range: [0, 1],
-            automargin: true,
-            fixedrange: true,
-            zeroline: false,
         },
+    };
+
+    if (layout?.xaxis?.title && typeof layout.xaxis.title !== 'string') {
+        layout.xaxis.title.text = 'Operation';
+    }
+    if (layout?.yaxis?.title && typeof layout.yaxis.title !== 'string') {
+        layout.yaxis.title.text = 'Device Kernel Duration (ns)';
+    }
+    if (layout?.yaxis2?.title && typeof layout.yaxis2.title !== 'string') {
+        layout.yaxis2.title.text = 'Utilization (%)';
+    }
+
+    layout.margin = {
+        l: 100,
+        r: 0,
+        b: 50,
+        t: 0,
     };
 
     return (

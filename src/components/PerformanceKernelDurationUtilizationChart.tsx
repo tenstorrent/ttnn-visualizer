@@ -9,15 +9,12 @@ import { RowData } from '../definitions/PerfTable';
 import { DeviceArchitecture } from '../model/APIData';
 import 'styles/components/PerformanceScatterChart.scss';
 import getCoreUtilization from '../functions/getCoreUtilization';
-import { PerfChartConfig } from '../definitions/PlotConfigurations';
+import { PerfChartConfig, PerfChartLayout } from '../definitions/PlotConfigurations';
 
 interface PerformanceKernelDurationUtilizationChartProps {
     data?: RowData[];
     architecture: DeviceArchitecture;
 }
-
-const GRID_COLOUR = '#575757';
-const LEGEND_COLOUR = '#FFF';
 
 function PerformanceKernelDurationUtilizationChart({
     data,
@@ -42,48 +39,25 @@ function PerformanceKernelDurationUtilizationChart({
     );
 
     const layout: Partial<Layout> = {
-        autosize: true,
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        showlegend: false,
-        margin: {
-            l: 60,
-            r: 70,
-            b: 50,
-            t: 0,
-        },
+        ...PerfChartLayout,
         xaxis: {
-            gridcolor: GRID_COLOUR,
-            linecolor: GRID_COLOUR,
-            color: LEGEND_COLOUR,
-            title: {
-                text: 'Device Kernel Duration (ns)',
-                font: {
-                    color: LEGEND_COLOUR,
-                },
-            },
-            automargin: true,
+            ...PerfChartLayout.xaxis,
             tickformat: 'd',
             hoverformat: ',.2r',
-            fixedrange: true,
         },
         yaxis: {
-            gridcolor: GRID_COLOUR,
-            linecolor: GRID_COLOUR,
-            color: LEGEND_COLOUR,
-            title: {
-                text: 'Utilization (%)',
-                font: {
-                    color: LEGEND_COLOUR,
-                },
-                standoff: 40,
-            },
+            ...PerfChartLayout.yaxis,
             tickformat: '.0%',
             hoverformat: '.2%',
-            automargin: true,
-            fixedrange: true,
         },
     };
+
+    if (layout?.xaxis?.title && typeof layout.xaxis.title !== 'string') {
+        layout.xaxis.title.text = 'Device Kernel Duration (ns)';
+    }
+    if (layout?.yaxis?.title && typeof layout.yaxis.title !== 'string') {
+        layout.yaxis.title.text = 'Utilization (%)';
+    }
 
     return (
         <div className='scatter-chart'>

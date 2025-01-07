@@ -7,14 +7,11 @@ import { useMemo } from 'react';
 import Plot from 'react-plotly.js';
 import 'styles/components/PerformanceScatterChart.scss';
 import { RowData } from '../definitions/PerfTable';
-import { PerfChartConfig } from '../definitions/PlotConfigurations';
+import { PerfChartConfig, PerfChartLayout } from '../definitions/PlotConfigurations';
 
 interface PerformanceDeviceKernelDurationChartProps {
     data?: RowData[];
 }
-
-const GRID_COLOUR = '#575757';
-const LEGEND_COLOUR = '#FFF';
 
 function PerformanceDeviceKernelDurationChart({ data }: PerformanceDeviceKernelDurationChartProps) {
     const filteredOps = data?.filter((row) => row?.['DEVICE KERNEL DURATION [ns]']);
@@ -33,48 +30,25 @@ function PerformanceDeviceKernelDurationChart({ data }: PerformanceDeviceKernelD
     );
 
     const layout: Partial<Layout> = {
-        autosize: true,
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        margin: {
-            l: 50,
-            r: 0,
-            b: 50,
-            t: 0,
-        },
+        ...PerfChartLayout,
         xaxis: {
-            gridcolor: GRID_COLOUR,
-            linecolor: GRID_COLOUR,
-            color: LEGEND_COLOUR,
-            title: {
-                text: 'Operation',
-                font: {
-                    color: LEGEND_COLOUR,
-                },
-            },
+            ...PerfChartLayout.xaxis,
             range: [0, chartData.x?.length ?? 0],
-            fixedrange: true,
-            zeroline: false,
         },
         yaxis: {
-            gridcolor: GRID_COLOUR,
-            linecolor: GRID_COLOUR,
-            color: LEGEND_COLOUR,
-            title: {
-                text: 'Device Kernel Duration (ns)',
-                font: {
-                    color: LEGEND_COLOUR,
-                },
-                standoff: 20,
-            },
+            ...PerfChartLayout.yaxis,
             tickformat: 'd',
             hoverformat: ',.2r',
             range: [0, Math.max(...(chartData.y as number[]))],
-            automargin: true,
-            fixedrange: true,
-            zeroline: false,
         },
     };
+
+    if (layout?.xaxis?.title && typeof layout.xaxis.title !== 'string') {
+        layout.xaxis.title.text = 'Operation';
+    }
+    if (layout?.yaxis?.title && typeof layout.yaxis.title !== 'string') {
+        layout.yaxis.title.text = 'Device Kernel Duration (ns)';
+    }
 
     return (
         <div className='scatter-chart'>
