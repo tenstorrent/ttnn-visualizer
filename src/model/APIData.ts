@@ -200,6 +200,7 @@ interface DeviceOperationParams {
     size: string;
     type: DeviceOperationTypes;
     core_range_set: string;
+    device_id?: number | string;
 }
 
 export interface Node {
