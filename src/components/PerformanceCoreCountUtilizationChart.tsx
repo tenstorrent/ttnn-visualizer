@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Config, Layout, PlotData } from 'plotly.js';
+import { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import Plot from 'react-plotly.js';
 import 'styles/components/PerformanceScatterChart.scss';
@@ -10,6 +10,7 @@ import { RowData } from '../definitions/PerfTable';
 import { DeviceArchitecture } from '../model/APIData';
 import getCoreUtilization from '../functions/getCoreUtilization';
 import getCoreCount from '../functions/getCoreCount';
+import { PerfChartConfig } from '../definitions/PlotConfigurations';
 
 interface PerformanceCoreCountlUtilizationChartProps {
     data?: RowData[];
@@ -21,12 +22,6 @@ const LINE_COLOUR = '#575757';
 const LEGEND_COLOUR = '#FFF';
 
 const DESIRED_OP_CODES = ['matmul', 'conv'];
-
-const CONFIG: Partial<Config> = {
-    displayModeBar: false,
-    displaylogo: false,
-    responsive: true,
-};
 
 function PerformanceCoreCountUtilizationChart({ data, architecture }: PerformanceCoreCountlUtilizationChartProps) {
     const filteredOps = useMemo(
@@ -131,7 +126,7 @@ function PerformanceCoreCountUtilizationChart({ data, architecture }: Performanc
                 className='chart'
                 data={[chartDataDuration, chartDataUtilization]}
                 layout={layout}
-                config={CONFIG}
+                config={PerfChartConfig}
                 useResizeHandler
             />
         </div>

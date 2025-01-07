@@ -2,13 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Config, Layout, PlotData } from 'plotly.js';
+import { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import Plot from 'react-plotly.js';
 import { RowData } from '../definitions/PerfTable';
 import { DeviceArchitecture } from '../model/APIData';
 import 'styles/components/PerformanceScatterChart.scss';
 import getCoreUtilization from '../functions/getCoreUtilization';
+import { PerfChartConfig } from '../definitions/PlotConfigurations';
 
 interface PerformanceKernelDurationUtilizationChartProps {
     data?: RowData[];
@@ -17,12 +18,6 @@ interface PerformanceKernelDurationUtilizationChartProps {
 
 const GRID_COLOUR = '#575757';
 const LEGEND_COLOUR = '#FFF';
-
-const CONFIG: Partial<Config> = {
-    displayModeBar: false,
-    displaylogo: false,
-    responsive: true,
-};
 
 function PerformanceKernelDurationUtilizationChart({
     data,
@@ -98,7 +93,7 @@ function PerformanceKernelDurationUtilizationChart({
                 className='chart'
                 data={[chartData]}
                 layout={layout}
-                config={CONFIG}
+                config={PerfChartConfig}
                 useResizeHandler
             />
         </div>

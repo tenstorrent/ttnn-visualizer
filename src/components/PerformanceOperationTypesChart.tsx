@@ -3,10 +3,11 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import Plot from 'react-plotly.js';
-import { Config, Layout, PlotData } from 'plotly.js';
+import { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { RowData } from '../definitions/PerfTable';
 import 'styles/components/PerformanceOperationTypesChart.scss';
+import { PerfChartConfig } from '../definitions/PlotConfigurations';
 
 interface PerformanceOperationTypesChartProps {
     data?: RowData[];
@@ -26,12 +27,6 @@ const LAYOUT: Partial<Layout> = {
         b: 0,
         t: 0,
     },
-};
-
-const CONFIG: Partial<Config> = {
-    displayModeBar: false,
-    displaylogo: false,
-    responsive: true,
 };
 
 const HOST_OP_MARKER = '(torch)';
@@ -87,7 +82,7 @@ function PerformanceOperationTypesChart({ data }: PerformanceOperationTypesChart
                 className='chart'
                 data={[chartData]}
                 layout={LAYOUT}
-                config={CONFIG}
+                config={PerfChartConfig}
                 useResizeHandler
             />
         </div>

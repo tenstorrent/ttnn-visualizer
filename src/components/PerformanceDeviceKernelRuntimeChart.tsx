@@ -2,11 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Config, Layout, PlotData } from 'plotly.js';
+import { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import Plot from 'react-plotly.js';
 import 'styles/components/PerformanceScatterChart.scss';
 import { RowData } from '../definitions/PerfTable';
+import { PerfChartConfig } from '../definitions/PlotConfigurations';
 
 interface PerformanceDeviceKernelRuntimeChartProps {
     data?: RowData[];
@@ -14,12 +15,6 @@ interface PerformanceDeviceKernelRuntimeChartProps {
 
 const GRID_COLOUR = '#575757';
 const LEGEND_COLOUR = '#FFF';
-
-const CONFIG: Partial<Config> = {
-    displayModeBar: false,
-    displaylogo: false,
-    responsive: true,
-};
 
 function PerformanceDeviceKernelRuntimeChart({ data }: PerformanceDeviceKernelRuntimeChartProps) {
     const filteredOps = data?.filter((row) => row?.['CORE COUNT'] && row?.['DEVICE KERNEL DURATION [ns]']);
@@ -90,7 +85,7 @@ function PerformanceDeviceKernelRuntimeChart({ data }: PerformanceDeviceKernelRu
                 className='chart'
                 data={[chartData]}
                 layout={layout}
-                config={CONFIG}
+                config={PerfChartConfig}
                 useResizeHandler
             />
         </div>

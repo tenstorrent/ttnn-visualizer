@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
+import { Config, PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
 import { HistoricalTensor } from '../model/Graph';
 import { TensorData } from '../model/APIData';
 
@@ -110,3 +110,11 @@ export interface PlotDataOverrides {
     hovertemplate?: string;
     colorVariance?: number;
 }
+
+export const PerfChartConfig: Partial<Config> = {
+    displayModeBar: false,
+    displaylogo: false,
+    responsive: true,
+};
+
+export const perfChartLayout = {};
