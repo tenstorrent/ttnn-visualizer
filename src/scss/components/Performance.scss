@@ -2,4 +2,14 @@
     .button-container {
         margin-bottom: 20px;
     }
+
+    .graph-container {
+        margin: auto;
+        max-width: 750px;
+        max-height: 450px;
+
+        > div {
+            margin-bottom: 60px;
+        }
+    }
 }

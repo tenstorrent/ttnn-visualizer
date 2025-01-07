@@ -246,3 +246,8 @@ export interface BufferPage {
     tensor_id?: number;
     color?: string;
 }
+
+export enum DeviceArchitecture {
+    GRAYSKULL = 'grayskull',
+    WORMHOLE = 'wormhole_b0',
+}

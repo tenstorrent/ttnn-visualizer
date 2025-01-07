@@ -4,26 +4,28 @@
 
 import { Helmet } from 'react-helmet-async';
 import { useState } from 'react';
-import { Button, Intent } from '@blueprintjs/core';
+import { Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { usePerformance } from '../hooks/useAPI';
+import { useDeviceLog, usePerformance } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceOperationKernelUtilizationChart from '../components/PerformanceOperationKernelUtilizationChart';
 import PerformanceOperationTypesChart from '../components/PerformanceOperationTypesChart';
-import PerformanceScatterChart from '../components/PerformanceScatterChart';
-import Overlay from '../components/Overlay';
 import { PerformanceReport } from '../components/performance/PerfTable';
 import 'styles/components/Performance.scss';
+import { DeviceArchitecture } from '../model/APIData';
+import PerformanceCoreCountUtilizationChart from '../components/PerformanceCoreCountUtilizationChart';
+import PerformanceDeviceKernelRuntimeChart from '../components/PerformanceDeviceKernelRuntimeChart';
+import PerformanceKernelDurationUtilizationChart from '../components/PerformanceKernelDurationUtilizationChart';
+import PerformanceDeviceKernelDurationChart from '../components/PerformanceDeviceKernelDurationChart';
 
 export default function Performance() {
-    const [isOpen, setIsOpen] = useState(false);
-    const { data: perfData, isLoading } = usePerformance();
-    // const { data: deviceData } = useDeviceLog();
-    // const ops = useGetDeviceOperationsList();
+    const { data: perfData, isLoading: isLoadingPerformance } = usePerformance();
+    const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
+    const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-2');
     useClearSelectedBuffer();
 
-    if (isLoading) {
+    if (isLoadingPerformance || isLoadingDeviceLog) {
         return (
             <div className='centered-loader'>
                 <LoadingSpinner />
@@ -31,42 +33,72 @@ export default function Performance() {
         );
     }
 
+    const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
+
     return (
         <div className='performance'>
             <Helmet title='Performance' />
 
             <h1 className='page-title'>Performance analysis</h1>
 
-            <header className='button-container'>
-                <Button
-                    text='View graphs'
-                    icon={IconNames.GROUPED_BAR_CHART}
-                    onClick={() => setIsOpen(true)}
-                    disabled={!perfData?.data}
-                    intent={Intent.PRIMARY}
-                />
-            </header>
-
-            <Overlay
-                isOpen={isOpen}
-                onClose={() => setIsOpen(false)}
+            <Tabs
+                id='performance-tabs'
+                selectedTabId={selectedTabId}
+                onChange={setSelectedTabId}
+                renderActiveTabPanelOnly
+                large
             >
-                <h2>Matmul Operations</h2>
+                <Tab
+                    id='tab-1'
+                    title='Table'
+                    icon={IconNames.TH}
+                    // @ts-expect-error this should be just fine
+                    panel={<PerformanceReport data={perfData?.data} />}
+                />
 
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    {/* @ts-expect-error this should be just fine */}
-                    <PerformanceOperationKernelUtilizationChart data={perfData?.data} />
+                <Tab
+                    id='tab-2'
+                    title='Graphs'
+                    icon={IconNames.TIMELINE_AREA_CHART}
+                    panel={
+                        <div className='graph-container'>
+                            <PerformanceDeviceKernelDurationChart
+                                // @ts-expect-error this should be just fine
+                                data={perfData?.data}
+                            />
 
-                    {/* @ts-expect-error this should be just fine */}
-                    <PerformanceScatterChart data={perfData?.data} />
+                            <PerformanceDeviceKernelRuntimeChart
+                                // @ts-expect-error this should be just fine
+                                data={perfData?.data}
+                            />
 
-                    {/* @ts-expect-error this should be just fine */}
-                    <PerformanceOperationTypesChart data={perfData?.data} />
-                </div>
-            </Overlay>
+                            {/* Please note we want to change this so we selectively render the below charts with different sets of data */}
+                            <h2>MatMul Operations</h2>
 
-            {/* @ts-expect-error this should be just fine */}
-            <PerformanceReport data={perfData?.data} />
+                            <PerformanceCoreCountUtilizationChart
+                                // @ts-expect-error this should be just fine
+                                data={perfData?.data}
+                                architecture={architecture}
+                            />
+
+                            <PerformanceOperationKernelUtilizationChart
+                                // @ts-expect-error this should be just fine
+                                data={perfData?.data}
+                                architecture={architecture}
+                            />
+
+                            <PerformanceKernelDurationUtilizationChart
+                                // @ts-expect-error this should be just fine
+                                data={perfData?.data}
+                                architecture={architecture}
+                            />
+
+                            {/* @ts-expect-error this should be just fine */}
+                            <PerformanceOperationTypesChart data={perfData?.data} />
+                        </div>
+                    }
+                />
+            </Tabs>
         </div>
     );
 }

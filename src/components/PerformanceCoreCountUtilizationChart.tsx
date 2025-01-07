@@ -5,12 +5,13 @@
 import { Config, Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import Plot from 'react-plotly.js';
+import 'styles/components/PerformanceScatterChart.scss';
 import { RowData } from '../definitions/PerfTable';
 import { DeviceArchitecture } from '../model/APIData';
 import getCoreUtilization from '../functions/getCoreUtilization';
-import 'styles/components/PerformanceScatterChart.scss';
+import getCoreCount from '../functions/getCoreCount';
 
-interface PerformanceOperationKernelUtilizationChartProps {
+interface PerformanceCoreCountlUtilizationChartProps {
     data?: RowData[];
     architecture: DeviceArchitecture;
 }
@@ -27,10 +28,7 @@ const CONFIG: Partial<Config> = {
     responsive: true,
 };
 
-function PerformanceOperationKernelUtilizationChart({
-    data,
-    architecture,
-}: PerformanceOperationKernelUtilizationChartProps) {
+function PerformanceCoreCountUtilizationChart({ data, architecture }: PerformanceCoreCountlUtilizationChartProps) {
     const filteredOps = useMemo(
         () => data?.filter((row) => isDesiredOperation(row?.['OP CODE'] as string | undefined)) ?? [],
         [data],
@@ -40,9 +38,9 @@ function PerformanceOperationKernelUtilizationChart({
         () =>
             ({
                 x: filteredOps?.map((_row, index) => index + 1),
-                y: filteredOps?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
+                y: filteredOps?.map((row) => row['CORE COUNT']),
                 type: 'bar',
-                hovertemplate: `Operation: %{x}<br />Duration: %{y} ns`,
+                hovertemplate: `Operation: %{x}<br />Core Count: %{y}`,
                 name: '',
             }) as Partial<PlotData>,
         [filteredOps],
@@ -52,9 +50,7 @@ function PerformanceOperationKernelUtilizationChart({
         () =>
             ({
                 x: filteredOps?.map((_row, index) => index + 1),
-                y:
-                    filteredOps?.map((row) => getCoreUtilization(row, architecture)).filter((value) => value !== -1) ??
-                    [],
+                y: filteredOps?.map((row) => getCoreUtilization(row, architecture)).filter((value) => value !== -1),
                 yaxis: 'y2',
                 hovertemplate: `Operation: %{x}<br />Utilization: %{y}`,
                 name: '',
@@ -92,7 +88,7 @@ function PerformanceOperationKernelUtilizationChart({
             linecolor: LINE_COLOUR,
             color: LEGEND_COLOUR,
             title: {
-                text: 'Device Kernel Duration (ns)',
+                text: 'Core Count',
                 font: {
                     color: LEGEND_COLOUR,
                 },
@@ -100,7 +96,7 @@ function PerformanceOperationKernelUtilizationChart({
             },
             tickformat: 'd',
             hoverformat: ',.2r',
-            range: [0, Math.max(...(chartDataDuration.y as number[]))],
+            range: [0, getCoreCount(architecture)],
             automargin: true,
             fixedrange: true,
             zeroline: false,
@@ -114,6 +110,7 @@ function PerformanceOperationKernelUtilizationChart({
                 font: {
                     color: LEGEND_COLOUR,
                 },
+                standoff: 20,
             },
             tickformat: '.0%',
             hoverformat: '.2%',
@@ -128,7 +125,7 @@ function PerformanceOperationKernelUtilizationChart({
 
     return (
         <div className='scatter-chart'>
-            <h3>Operation Device Kernel Duration + Utilization (MatMul)</h3>
+            <h3>Operation Core Count + Utilization (MatMul)</h3>
 
             <Plot
                 className='chart'
@@ -147,4 +144,4 @@ const isDesiredOperation = (operation?: string): boolean => {
     return DESIRED_OP_CODES.some((code) => opCode?.includes(code));
 };
 
-export default PerformanceOperationKernelUtilizationChart;
+export default PerformanceCoreCountUtilizationChart;
