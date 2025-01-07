@@ -14,46 +14,6 @@ interface PerformanceKernelDurationUtilizationChartProps {
 const GRID_COLOUR = '#575757';
 const LEGEND_COLOUR = '#FFF';
 
-const LAYOUT: Partial<Layout> = {
-    autosize: true,
-    paper_bgcolor: 'transparent',
-    plot_bgcolor: 'transparent',
-    margin: {
-        l: 80,
-        r: 0,
-        b: 50,
-        t: 0,
-    },
-    xaxis: {
-        gridcolor: GRID_COLOUR,
-        linecolor: GRID_COLOUR,
-        title: {
-            text: 'Device Kernel Duration (ns)',
-            font: {
-                color: LEGEND_COLOUR,
-            },
-        },
-        tickformat: 'd',
-        hoverformat: ',.2r',
-        color: LEGEND_COLOUR,
-        zerolinecolor: 'transparent',
-    },
-    yaxis: {
-        gridcolor: GRID_COLOUR,
-        linecolor: GRID_COLOUR,
-        title: {
-            text: 'Utilization (%)',
-            font: {
-                color: LEGEND_COLOUR,
-            },
-            standoff: 40,
-        },
-        tickformat: '.2%',
-        hoverformat: '.2%',
-        color: LEGEND_COLOUR,
-    },
-};
-
 const CONFIG: Partial<Config> = {
     displayModeBar: false,
     displaylogo: false,
@@ -82,6 +42,50 @@ function PerformanceKernelDurationUtilizationChart({
         [filteredOps, architecture],
     );
 
+    const layout: Partial<Layout> = {
+        autosize: true,
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        showlegend: false,
+        margin: {
+            l: 60,
+            r: 70,
+            b: 50,
+            t: 0,
+        },
+        xaxis: {
+            gridcolor: GRID_COLOUR,
+            linecolor: GRID_COLOUR,
+            color: LEGEND_COLOUR,
+            title: {
+                text: 'Device Kernel Duration (ns)',
+                font: {
+                    color: LEGEND_COLOUR,
+                },
+            },
+            automargin: true,
+            tickformat: 'd',
+            hoverformat: ',.2r',
+            fixedrange: true,
+        },
+        yaxis: {
+            gridcolor: GRID_COLOUR,
+            linecolor: GRID_COLOUR,
+            color: LEGEND_COLOUR,
+            title: {
+                text: 'Utilization (%)',
+                font: {
+                    color: LEGEND_COLOUR,
+                },
+                standoff: 40,
+            },
+            tickformat: '.0%',
+            hoverformat: '.2%',
+            automargin: true,
+            fixedrange: true,
+        },
+    };
+
     return (
         <div className='scatter-chart'>
             <h3>Device Kernel Duration vs Utilization (Matmul)</h3>
@@ -89,7 +93,7 @@ function PerformanceKernelDurationUtilizationChart({
             <Plot
                 className='chart'
                 data={[chartData]}
-                layout={LAYOUT}
+                layout={layout}
                 config={CONFIG}
                 useResizeHandler
             />

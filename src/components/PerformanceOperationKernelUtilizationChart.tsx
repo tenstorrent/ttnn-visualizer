@@ -11,7 +11,7 @@ interface PerformanceOperationKernelUtilizationChartProps {
     architecture: DeviceArchitecture;
 }
 
-const GRID_COLOUR = 'transparent';
+const GRID_COLOUR = '#575757';
 const LINE_COLOUR = '#575757';
 const LEGEND_COLOUR = '#FFF';
 
@@ -38,7 +38,7 @@ function PerformanceOperationKernelUtilizationChart({
                 x: filteredOps?.map((_row, index) => index + 1),
                 y: filteredOps?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
                 type: 'bar',
-                hovertemplate: `Operation number: %{x}<br />Device Kernel Duration: %{y} ns`,
+                hovertemplate: `Operation: %{x}<br />Duration: %{y} ns`,
                 name: '',
             }) as Partial<PlotData>,
         [filteredOps],
@@ -72,20 +72,21 @@ function PerformanceOperationKernelUtilizationChart({
         xaxis: {
             gridcolor: GRID_COLOUR,
             linecolor: LINE_COLOUR,
+            color: LEGEND_COLOUR,
             title: {
-                text: 'Operation Number',
+                text: 'Operation',
                 font: {
                     color: LEGEND_COLOUR,
                 },
             },
             range: [0, filteredOps.length],
-            color: LEGEND_COLOUR,
             fixedrange: true,
             zeroline: false,
         },
         yaxis: {
             gridcolor: GRID_COLOUR,
             linecolor: LINE_COLOUR,
+            color: LEGEND_COLOUR,
             title: {
                 text: 'Device Kernel Duration (ns)',
                 font: {
@@ -93,30 +94,29 @@ function PerformanceOperationKernelUtilizationChart({
                 },
                 standoff: 20,
             },
-            range: [0, Math.max(...(chartDataDuration.y as number[]))],
-            automargin: true,
             tickformat: 'd',
             hoverformat: ',.2r',
-            color: LEGEND_COLOUR,
+            range: [0, Math.max(...(chartDataDuration.y as number[]))],
+            automargin: true,
             fixedrange: true,
             zeroline: false,
         },
         yaxis2: {
             gridcolor: GRID_COLOUR,
             linecolor: LINE_COLOUR,
+            color: LEGEND_COLOUR,
             title: {
                 text: 'Utilization (%)',
                 font: {
                     color: LEGEND_COLOUR,
                 },
             },
-            range: [0, 1],
-            automargin: true,
             tickformat: '.0%',
             hoverformat: '.2%',
-            color: LEGEND_COLOUR,
             overlaying: 'y',
             side: 'right',
+            range: [0, 1],
+            automargin: true,
             fixedrange: true,
             zeroline: false,
         },

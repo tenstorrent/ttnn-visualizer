@@ -33,7 +33,7 @@ export default function Performance() {
         );
     }
 
-    const architecture = deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
+    const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
 
     return (
         <div className='performance'>

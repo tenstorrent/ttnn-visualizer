@@ -11,45 +11,6 @@ interface PerformanceDeviceKernelRuntimeChartProps {
 const GRID_COLOUR = '#575757';
 const LEGEND_COLOUR = '#FFF';
 
-const LAYOUT: Partial<Layout> = {
-    autosize: true,
-    paper_bgcolor: 'transparent',
-    plot_bgcolor: 'transparent',
-    margin: {
-        l: 50,
-        r: 0,
-        b: 50,
-        t: 0,
-    },
-    xaxis: {
-        gridcolor: GRID_COLOUR,
-        linecolor: GRID_COLOUR,
-        title: {
-            text: 'Core Count',
-            font: {
-                color: LEGEND_COLOUR,
-            },
-        },
-        color: LEGEND_COLOUR,
-        zerolinecolor: 'transparent',
-    },
-    yaxis: {
-        gridcolor: GRID_COLOUR,
-        linecolor: GRID_COLOUR,
-        title: {
-            text: 'Device Kernel Duration (ns)',
-            font: {
-                color: LEGEND_COLOUR,
-            },
-            standoff: 20,
-        },
-        tickformat: 'd',
-        hoverformat: ',.2r',
-        color: LEGEND_COLOUR,
-        automargin: true,
-    },
-};
-
 const CONFIG: Partial<Config> = {
     displayModeBar: false,
     displaylogo: false,
@@ -75,6 +36,48 @@ function PerformanceDeviceKernelRuntimeChart({ data }: PerformanceDeviceKernelRu
         [filteredOps],
     );
 
+    const layout: Partial<Layout> = {
+        autosize: true,
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        showlegend: false,
+        margin: {
+            l: 50,
+            r: 0,
+            b: 50,
+            t: 0,
+        },
+        xaxis: {
+            gridcolor: GRID_COLOUR,
+            linecolor: GRID_COLOUR,
+            color: LEGEND_COLOUR,
+            title: {
+                text: 'Core Count',
+                font: {
+                    color: LEGEND_COLOUR,
+                },
+            },
+            automargin: true,
+            fixedrange: true,
+        },
+        yaxis: {
+            gridcolor: GRID_COLOUR,
+            linecolor: GRID_COLOUR,
+            color: LEGEND_COLOUR,
+            title: {
+                text: 'Device Kernel Duration (ns)',
+                font: {
+                    color: LEGEND_COLOUR,
+                },
+                standoff: 20,
+            },
+            tickformat: 'd',
+            hoverformat: ',.2r',
+            automargin: true,
+            fixedrange: true,
+        },
+    };
+
     return (
         <div className='scatter-chart'>
             <h3>Device Kernel Runtime vs Core Count</h3>
@@ -82,7 +85,7 @@ function PerformanceDeviceKernelRuntimeChart({ data }: PerformanceDeviceKernelRu
             <Plot
                 className='chart'
                 data={[chartData]}
-                layout={LAYOUT}
+                layout={layout}
                 config={CONFIG}
                 useResizeHandler
             />
