@@ -9,11 +9,11 @@ import 'styles/components/PerformanceScatterChart.scss';
 import { RowData } from '../definitions/PerfTable';
 import { PerfChartConfig, PerfChartLayout } from '../definitions/PlotConfigurations';
 
-interface PerformanceDeviceKernelDurationChartProps {
+interface PerfDeviceKernelDurationChartProps {
     data?: RowData[];
 }
 
-function PerformanceDeviceKernelDurationChart({ data }: PerformanceDeviceKernelDurationChartProps) {
+function PerfDeviceKernelDurationChart({ data }: PerfDeviceKernelDurationChartProps) {
     const filteredOps = data?.filter((row) => row?.['DEVICE KERNEL DURATION [ns]']);
 
     const chartData = useMemo(
@@ -65,4 +65,4 @@ function PerformanceDeviceKernelDurationChart({ data }: PerformanceDeviceKernelD
     );
 }
 
-export default PerformanceDeviceKernelDurationChart;
+export default PerfDeviceKernelDurationChart;

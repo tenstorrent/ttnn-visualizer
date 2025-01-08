@@ -14,10 +14,10 @@ import PerformanceOperationTypesChart from '../components/PerformanceOperationTy
 import { PerformanceReport } from '../components/performance/PerfTable';
 import 'styles/components/Performance.scss';
 import { DeviceArchitecture } from '../model/APIData';
-import PerformanceCoreCountUtilizationChart from '../components/PerformanceCoreCountUtilizationChart';
+import PerfCoreCountUtilizationChart from '../components/PerfCoreCountUtilizationChart';
 import PerformanceDeviceKernelRuntimeChart from '../components/PerformanceDeviceKernelRuntimeChart';
 import PerformanceKernelDurationUtilizationChart from '../components/PerformanceKernelDurationUtilizationChart';
-import PerformanceDeviceKernelDurationChart from '../components/PerformanceDeviceKernelDurationChart';
+import PerfDeviceKernelDurationChart from '../components/PerfDeviceKernelDurationChart';
 
 export default function Performance() {
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformance();
@@ -62,7 +62,7 @@ export default function Performance() {
                     icon={IconNames.TIMELINE_AREA_CHART}
                     panel={
                         <div className='graph-container'>
-                            <PerformanceDeviceKernelDurationChart
+                            <PerfDeviceKernelDurationChart
                                 // @ts-expect-error this should be just fine
                                 data={perfData?.data}
                             />
@@ -75,7 +75,7 @@ export default function Performance() {
                             {/* Please note we want to change this so we selectively render the below charts with different sets of data */}
                             <h2>MatMul Operations</h2>
 
-                            <PerformanceCoreCountUtilizationChart
+                            <PerfCoreCountUtilizationChart
                                 // @ts-expect-error this should be just fine
                                 data={perfData?.data}
                                 architecture={architecture}

@@ -12,14 +12,14 @@ import getCoreUtilization from '../functions/getCoreUtilization';
 import getCoreCount from '../functions/getCoreCount';
 import { PerfChartConfig, PerfChartLayout } from '../definitions/PlotConfigurations';
 
-interface PerformanceCoreCountlUtilizationChartProps {
+interface PerfCoreCountUtilizationChartProps {
     data?: RowData[];
     architecture: DeviceArchitecture;
 }
 
 const DESIRED_OP_CODES = ['matmul', 'conv'];
 
-function PerformanceCoreCountUtilizationChart({ data, architecture }: PerformanceCoreCountlUtilizationChartProps) {
+function PerfCoreCountUtilizationChart({ data, architecture }: PerfCoreCountUtilizationChartProps) {
     const filteredOps = useMemo(
         () => data?.filter((row) => isDesiredOperation(row?.['OP CODE'] as string | undefined)) ?? [],
         [data],
@@ -106,4 +106,4 @@ const isDesiredOperation = (operation?: string): boolean => {
     return DESIRED_OP_CODES.some((code) => opCode?.includes(code));
 };
 
-export default PerformanceCoreCountUtilizationChart;
+export default PerfCoreCountUtilizationChart;
