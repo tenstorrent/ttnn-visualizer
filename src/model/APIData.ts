@@ -7,8 +7,6 @@ import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection'
 import { MemoryConfig } from '../functions/parseMemoryConfig';
 
 export interface TensorData extends Tensor {
-    shape: string;
-    dtype: string;
     layout: string;
     memory_config: MemoryConfig | null;
     device_id: number | null;
