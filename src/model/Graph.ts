@@ -21,6 +21,8 @@ export interface Tensor {
     producerNames: string[];
     consumerNames: string[];
     memory_config: MemoryConfig | null;
+    shape: string;
+    dtype: string;
 }
 
 export interface HistoricalTensor extends Tensor {
