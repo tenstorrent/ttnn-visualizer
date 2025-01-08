@@ -31,7 +31,7 @@ const formatRemoteFolderName = (folder: RemoteFolder, type: FolderTypes, selecte
 
     const pathToReplace = paths[type]!;
 
-    return folder.remotePath.replace(pathToReplace, '');
+    return folder.remotePath.toLowerCase().replace(pathToReplace.toLowerCase(), '');
 };
 
 const getTestName = (folder: RemoteFolder) => {
@@ -62,12 +62,10 @@ const remoteFolderRenderer =
         }
 
         const { lastSynced, lastModified } = folder;
+        const lastSyncedDate = lastSynced ? formatter.format(new Date(lastSynced)) : 'Never';
+
         let statusIcon = (
-            <Tooltip
-                content={`Fetching folder status, last sync: ${
-                    lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
-                }`}
-            >
+            <Tooltip content={`Fetching folder status, last sync: ${lastSyncedDate}`}>
                 <Spinner size={16} />
             </Tooltip>
         );
@@ -75,11 +73,7 @@ const remoteFolderRenderer =
         if (!syncingFolderList) {
             if (isRemoteFolderOutdated(folder)) {
                 statusIcon = (
-                    <Tooltip
-                        content={`Folder is stale, last sync: ${
-                            lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
-                        }`}
-                    >
+                    <Tooltip content={`Folder is stale, last sync: ${lastSyncedDate}`}>
                         <Icon
                             icon={IconNames.HISTORY}
                             color='goldenrod'
@@ -88,11 +82,7 @@ const remoteFolderRenderer =
                 );
             } else {
                 statusIcon = (
-                    <Tooltip
-                        content={`Folder is up to date, last sync: ${
-                            lastSynced ? formatter.format(new Date(lastSynced)) : 'Never'
-                        }`}
-                    >
+                    <Tooltip content={`Folder is up to date, last sync: ${lastSyncedDate}`}>
                         <Icon
                             icon={IconNames.UPDATED}
                             color='green'

@@ -75,22 +75,19 @@ def commit_and_log_session(session_data, tab_id):
 def update_paths(
     session_data, active_report, remote_connection, report_name, profile_name
 ):
-    session_data.report_path = get_report_path(
-        active_report,
-        current_app=current_app,
-        remote_connection=remote_connection,
-    )
-
-    if active_report.get("report_name") and active_report.get("profile_name"):
+    if active_report.get("profile_name"):
         session_data.profiler_path = get_profiler_path(
             profile_name=active_report["profile_name"],
             current_app=current_app,
-            report_name=active_report["report_name"],
             remote_connection=remote_connection,
         )
-    elif report_name and not profile_name:
-        session_data.profiler_path = None
-        active_report.update({"profile_name": None})
+
+    if active_report.get("report_name"):
+        session_data.report_path = get_report_path(
+            active_report=active_report,
+            current_app=current_app,
+            remote_connection=remote_connection,
+        )
 
 
 def create_new_tab_session(

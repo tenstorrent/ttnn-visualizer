@@ -4,15 +4,25 @@
 
 import dataclasses
 import json
+import logging
 import time
+from http import HTTPStatus
+from pathlib import Path
 from typing import List
 
+import yaml
 from flask import Blueprint, Response, jsonify
+from flask import request, current_app
 
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries
 from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import RemoteConnectionException
+from ttnn_visualizer.file_uploads import (
+    extract_report_name,
+    save_uploaded_files,
+    validate_files,
+)
 from ttnn_visualizer.models import (
     RemoteReportFolder,
     RemoteConnection,
@@ -21,10 +31,6 @@ from ttnn_visualizer.models import (
 )
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path, check_sqlite_path
-from flask import request, current_app
-from pathlib import Path
-from http import HTTPStatus
-import logging
 from ttnn_visualizer.serializers import (
     serialize_operations,
     serialize_tensors,
@@ -45,17 +51,12 @@ from ttnn_visualizer.sftp_operations import (
     check_remote_path_exists,
     get_remote_profiler_folders,
     sync_remote_profiler_folders,
+    get_cluster_desc,
 )
 from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.utils import (
     read_last_synced_file,
     timer,
-)
-
-from ttnn_visualizer.file_uploads import (
-    extract_report_name,
-    save_uploaded_files,
-    validate_files,
 )
 
 logger = logging.getLogger(__name__)
@@ -548,6 +549,33 @@ def get_remote_profile_folders():
         return Response(status=e.http_status, response=e.message)
 
 
+from flask import Response, jsonify
+import yaml
+
+
+@api.route("/cluster_desc", methods=["GET"])
+@with_session
+def get_cluster_description_file(session: TabSession):
+    if not session.remote_connection:
+        return jsonify({"error": "Remote connection not found"}), 404
+
+    try:
+        cluster_desc_file = get_cluster_desc(session.remote_connection)
+        if not cluster_desc_file:
+            return jsonify({"error": "cluster_descriptor.yaml not found"}), 404
+        yaml_data = yaml.safe_load(cluster_desc_file.decode("utf-8"))
+        return jsonify(yaml_data), 200
+
+    except yaml.YAMLError as e:
+        return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
+
+    except RemoteConnectionException as e:
+        return jsonify({"error": e.message}), e.http_status
+
+    except Exception as e:
+        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+
+
 @api.route("/remote/test", methods=["POST"])
 def test_remote_folder():
     connection_data = request.json
@@ -631,7 +659,7 @@ def sync_remote_folder():
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
     )
-    remote_folder = RemoteReportFolder.model_validate(folder, strict=False)
+
     if profile:
         profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
         try:
@@ -643,10 +671,16 @@ def sync_remote_folder():
                 sid=tab_id,
             )
 
+            profile_folder.lastSynced = int(time.time())
+
+            return profile_folder.model_dump()
+
         except RemoteConnectionException as e:
             return Response(status=e.http_status, response=e.message)
 
     try:
+        remote_folder = RemoteReportFolder.model_validate(folder, strict=False)
+
         sync_remote_folders(
             connection,
             remote_folder.remotePath,
@@ -654,11 +688,13 @@ def sync_remote_folder():
             exclude_patterns=[r"/tensors(/|$)"],
             sid=tab_id,
         )
+
+        remote_folder.lastSynced = int(time.time())
+
+        return remote_folder.model_dump()
+
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
-
-    remote_folder.lastSynced = int(time.time())
-    return remote_folder.model_dump()
 
 
 @api.route("/remote/sqlite/detect-path", methods=["POST"])

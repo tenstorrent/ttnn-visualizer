@@ -71,7 +71,7 @@ const useRemoteConnection = () => {
             throw new Error('No connection provided');
         }
 
-        if (!remoteFolder) {
+        if (!remoteFolder && !remoteProfile) {
             throw new Error('No remote folder provided');
         }
         return axiosInstance.post<RemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
@@ -83,7 +83,7 @@ const useRemoteConnection = () => {
 
     const mountRemoteFolder = async (
         connection: RemoteConnection,
-        remoteFolder: RemoteFolder,
+        remoteFolder?: RemoteFolder,
         remoteProfile?: RemoteFolder,
     ) => {
         return axiosInstance.post<MountRemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/use`, {
@@ -113,19 +113,25 @@ const useRemoteConnection = () => {
         setSavedReportFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
             setAppConfig(`${connection?.name} - reportFolders`, JSON.stringify(folders));
         },
+        deleteSavedReportFolders: (connection?: RemoteConnection) => {
+            deleteAppConfig(`${connection?.name} - reportFolders`);
+        },
         getSavedPerformanceFolders: (connection?: RemoteConnection) =>
             JSON.parse(getAppConfig(`${connection?.name} - performanceFolders`) ?? '[]') as RemoteFolder[],
         setSavedPerformanceFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
             setAppConfig(`${connection?.name} - performanceFolders`, JSON.stringify(folders));
         },
-        updateSavedRemoteFoldersConnection(oldConnection?: RemoteConnection, newConnection?: RemoteConnection) {
-            const folders = this.getSavedReportFolders(oldConnection);
-
-            this.deleteSavedRemoteFolders(oldConnection);
-            this.setSavedReportFolders(newConnection, folders);
+        deleteSavedPerformanceFolders: (connection?: RemoteConnection) => {
+            deleteAppConfig(`${connection?.name} - performanceFolders`);
         },
-        deleteSavedRemoteFolders: (connection?: RemoteConnection) => {
-            deleteAppConfig(`${connection?.name} - remoteFolders`);
+        updateSavedRemoteFoldersConnection(oldConnection?: RemoteConnection, newConnection?: RemoteConnection) {
+            const reportFolders = this.getSavedReportFolders(oldConnection);
+            const performanceFolders = this.getSavedPerformanceFolders(oldConnection);
+
+            this.deleteSavedReportFolders(oldConnection);
+            this.deleteSavedPerformanceFolders(oldConnection);
+            this.setSavedReportFolders(newConnection, reportFolders);
+            this.setSavedPerformanceFolders(newConnection, performanceFolders);
         },
     };
 

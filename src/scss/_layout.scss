@@ -28,12 +28,6 @@
             }
         }
 
-        .current-data {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
         .title {
             font-size: 12px;
 
@@ -44,5 +38,17 @@
                 max-width: 250px;
             }
         }
+    }
+
+    .current-data {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        display: flex;
+        z-index: 1;
+        width: 100%;
+        background-color: $tt-grey-4;
+        gap: 20px;
+        padding: 5px 15px;
     }
 }

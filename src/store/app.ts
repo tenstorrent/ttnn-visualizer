@@ -4,15 +4,12 @@
 
 import { atomWithStorage } from 'jotai/utils';
 import { atom } from 'jotai';
-import { FileProgress, FileStatus, ReportMetaData } from '../model/APIData';
+import { FileProgress, FileStatus } from '../model/APIData';
 
-const reportMetaKey = 'reportMeta';
-const reportLocationKey = 'reportLocation';
-const showHexKey = 'showHex';
-
-export const reportMetaAtom = atomWithStorage<ReportMetaData | null>(reportMetaKey, null);
-export const reportLocationAtom = atomWithStorage<'local' | 'remote' | null>(reportLocationKey, null);
-export const showHexAtom = atomWithStorage<boolean>(showHexKey, false);
+export const reportLocationAtom = atom<'local' | 'remote' | null>(null);
+export const activeReportAtom = atomWithStorage<string | null>('activeReport', null);
+export const activePerformanceTraceAtom = atomWithStorage<string | null>('activePerformanceTrace', null);
+export const showHexAtom = atomWithStorage<boolean>('showHex', false);
 
 export const isFullStackTraceAtom = atom(false);
 export const shouldCollapseAllOperationsAtom = atom(false);
@@ -31,5 +28,5 @@ export const fileTransferProgressAtom = atom<FileProgress>({
     status: FileStatus.INACTIVE,
 });
 
-export const selectedDeviceAtom = atom<number | null>(0); // Assumes device_id always uses a zero based index
+export const selectedDeviceAtom = atom<number | null>(0); // Assumes device_id always uses a zero based index (NOT REALLY USED AT THE MOMENT)
 export const renderMemoryLayoutAtom = atom<boolean>(false);

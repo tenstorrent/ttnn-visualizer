@@ -5,10 +5,8 @@
 import { Helmet } from 'react-helmet-async';
 import { AnchorButton, ButtonGroup, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BuffersByOperationData, useBuffers, useOperationsList, useReportMeta } from '../hooks/useAPI';
-import { reportMetaAtom, selectedDeviceAtom } from '../store/app';
+import { BuffersByOperationData, useBuffers, useOperationsList } from '../hooks/useAPI';
 import 'styles/components/BufferSummary.scss';
 import BufferSummaryPlotRenderer from '../components/buffer-summary/BufferSummaryPlotRenderer';
 import BufferSummaryTable from '../components/buffer-summary/BufferSummaryTable';
@@ -17,7 +15,6 @@ import { BufferType } from '../model/BufferType';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { HistoricalTensor, Operation, Tensor } from '../model/Graph';
 import { HistoricalTensorsByOperation } from '../model/BufferSummary';
-import DeviceSelector from '../components/DeviceSelector';
 import useBufferFocus from '../hooks/useBufferFocus';
 
 const SECTION_IDS = {
@@ -26,23 +23,13 @@ const SECTION_IDS = {
 };
 
 function BufferSummary() {
-    const report = useReportMeta();
-    const setMeta = useSetAtom(reportMetaAtom);
     const plotRef = useRef<HTMLHeadingElement>(null);
     const tableRef = useRef<HTMLHeadingElement>(null);
-    const selectedDevice = useAtomValue(selectedDeviceAtom);
     const [activeSection, setActiveSection] = useState(SECTION_IDS.PLOT);
-    const { data: buffersByOperation } = useBuffers(BufferType.L1, selectedDevice);
+    const { data: buffersByOperation } = useBuffers(BufferType.L1);
     const { data: operationsList } = useOperationsList();
 
     const { activeToast, resetToasts } = useBufferFocus();
-
-    // Needs to be in a useEffect to avoid a bad setState call
-    useEffect(() => {
-        if (report.status === 'success' && report.data) {
-            setMeta(report.data);
-        }
-    }, [report, setMeta]);
 
     useEffect(() => {
         const scrollRefs = [plotRef, tableRef];
@@ -96,8 +83,6 @@ function BufferSummary() {
                 >
                     Table view
                 </AnchorButton>
-
-                <DeviceSelector />
             </ButtonGroup>
 
             {activeToast && (

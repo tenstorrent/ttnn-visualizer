@@ -2,30 +2,30 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { FC, useEffect, useState } from 'react';
+import { FC, useState } from 'react';
 
-import { AnchorButton, Button, FormGroup, Tooltip } from '@blueprintjs/core';
+import { AnchorButton, FormGroup, Tooltip } from '@blueprintjs/core';
 
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useSetAtom } from 'jotai';
 import { useQueryClient } from 'react-query';
-import { useNavigate } from 'react-router';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
-import ROUTES from '../../definitions/routes';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemote from '../../hooks/useRemote';
-import { reportLocationAtom, selectedDeviceAtom } from '../../store/app';
+import { activePerformanceTraceAtom, activeReportAtom, reportLocationAtom, selectedDeviceAtom } from '../../store/app';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
+import createToastNotification from '../../functions/createToastNotification';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
-    const navigate = useNavigate();
     const queryClient = useQueryClient();
 
-    const [_, setReportLocation] = useAtom(reportLocationAtom);
+    const setReportLocation = useSetAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
+    const [activeReport, setActiveReport] = useAtom(activeReportAtom);
+    const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceTraceAtom);
     const [isRemoteOffline, setIsRemoteOffline] = useState(false);
 
     const [isFetching, setIsFetching] = useState(false);
@@ -34,14 +34,18 @@ const RemoteSyncConfigurator: FC = () => {
         remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection),
     );
     const [isSyncingReportFolder, setIsSyncingReportFolder] = useState(false);
-    const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(reportFolderList[0]);
+    const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(
+        activeReport ? reportFolderList.find((folder) => folder.testName.includes(activeReport)) : reportFolderList[0],
+    );
 
     const [remotePerformanceFolderList, setRemotePerformanceFolders] = useState<RemoteFolder[]>(
         remote.persistentState.getSavedPerformanceFolders(remote.persistentState.selectedConnection),
     );
     const [isSyncingPerformanceFolder, setIsSyncingPerformanceFolder] = useState(false);
     const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(
-        remotePerformanceFolderList[0],
+        activePerformanceTrace
+            ? remotePerformanceFolderList.find((folder) => folder.testName.includes(activePerformanceTrace))
+            : remotePerformanceFolderList[0],
     );
 
     const updateSelectedConnection = (connection: RemoteConnection) => {
@@ -79,7 +83,7 @@ const RemoteSyncConfigurator: FC = () => {
             return [];
         }
 
-        const savedFolders = remote.persistentState.getSavedReportFolders(connection);
+        const savedFolders = remote.persistentState.getSavedPerformanceFolders(connection);
         const mergedFolders = (updatedFolders ?? []).map((updatedFolder) => {
             const existingFolder = savedFolders?.find((f) => f.remotePath === updatedFolder.remotePath);
 
@@ -105,74 +109,9 @@ const RemoteSyncConfigurator: FC = () => {
         });
     };
 
-    const viewReport = async () => {
-        if (remote.persistentState.selectedConnection && selectedReportFolder) {
-            const response = await remote.mountRemoteFolder(
-                remote.persistentState.selectedConnection,
-                selectedReportFolder,
-                selectedPerformanceFolder,
-            );
-
-            if (response.status === 200) {
-                queryClient.clear();
-                setReportLocation('remote');
-                setSelectedDevice(0);
-
-                navigate(ROUTES.OPERATIONS);
-            }
-        }
-    };
-
     const isUsingRemoteQuerying = remote.persistentState.selectedConnection?.useRemoteQuerying;
     const isLoading = isSyncingReportFolder || isSyncingPerformanceFolder;
     const isDisabled = isFetching || isLoading;
-
-    const isRemoteReportMounted =
-        !isDisabled &&
-        reportFolderList?.length > 0 &&
-        selectedReportFolder &&
-        (isUsingRemoteQuerying || !isRemoteFolderOutdated(selectedReportFolder));
-
-    useEffect(() => {
-        (async () => {
-            try {
-                setIsFetching(true);
-
-                const updatedRemoteFolders = await remote.listReportFolders(remote.persistentState.selectedConnection);
-                const updatedPerformanceFolders = await remote.listPerformanceFolders(
-                    remote.persistentState.selectedConnection,
-                );
-
-                setIsRemoteOffline(false);
-                updateSavedReportFolders(remote.persistentState.selectedConnection!, updatedRemoteFolders);
-                updateSavedPerformanceFolders(remote.persistentState.selectedConnection!, updatedPerformanceFolders);
-
-                // Update existing folder
-                if (selectedReportFolder) {
-                    const updatedSelectedFolder = updatedRemoteFolders.find(
-                        (f) => f.remotePath === selectedReportFolder?.remotePath,
-                    );
-                    if (updatedSelectedFolder) {
-                        setSelectedReportFolder(updatedSelectedFolder);
-                    }
-                }
-                // Update existing performance folder
-                if (selectedPerformanceFolder) {
-                    const updatedSelectedPerformanceFolder = updatedPerformanceFolders.find(
-                        (f) => f.remotePath === selectedReportFolder?.remotePath,
-                    );
-                    if (updatedSelectedPerformanceFolder) {
-                        setSelectedPerformanceFolder(updatedSelectedPerformanceFolder);
-                    }
-                }
-            } catch {
-                setIsRemoteOffline(true);
-            } finally {
-                setIsFetching(false);
-            }
-        })();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
 
     return (
         <>
@@ -216,7 +155,8 @@ const RemoteSyncConfigurator: FC = () => {
 
                         updatedConnections.splice(findConnectionIndex(connection), 1);
                         remote.persistentState.savedConnectionList = updatedConnections;
-                        remote.persistentState.deleteSavedRemoteFolders(connection);
+                        remote.persistentState.deleteSavedReportFolders(connection);
+                        remote.persistentState.deleteSavedPerformanceFolders(connection);
 
                         updateSelectedConnection(updatedConnections[0]);
                         setSelectedReportFolder(undefined);
@@ -292,7 +232,29 @@ const RemoteSyncConfigurator: FC = () => {
                     remoteFolderList={reportFolderList}
                     loading={isLoading || isFetching}
                     updatingFolderList={isFetching}
-                    onSelectFolder={setSelectedReportFolder}
+                    onSelectFolder={async (folder) => {
+                        setSelectedReportFolder(folder);
+
+                        if (
+                            remote.persistentState.selectedConnection &&
+                            (isUsingRemoteQuerying || (!isUsingRemoteQuerying && !isRemoteFolderOutdated(folder)))
+                        ) {
+                            const response = await remote.mountRemoteFolder(
+                                remote.persistentState.selectedConnection,
+                                folder,
+                                selectedPerformanceFolder,
+                            );
+
+                            if (response.status === 200) {
+                                const fileName = folder.testName;
+                                queryClient.clear();
+                                setReportLocation('remote');
+                                setSelectedDevice(0);
+                                setActiveReport(fileName);
+                                createToastNotification('Active report data', fileName);
+                            }
+                        }
+                    }}
                     type='report'
                 >
                     {!isUsingRemoteQuerying && (
@@ -309,7 +271,6 @@ const RemoteSyncConfigurator: FC = () => {
                                             const { data: updatedFolder } = await remote.syncRemoteFolder(
                                                 remote.persistentState.selectedConnection,
                                                 selectedReportFolder,
-                                                selectedPerformanceFolder,
                                             );
 
                                             const savedRemoteFolders = remote.persistentState.getSavedReportFolders(
@@ -335,6 +296,28 @@ const RemoteSyncConfigurator: FC = () => {
                                     } finally {
                                         setIsSyncingReportFolder(false);
                                         setReportLocation('remote');
+
+                                        if (
+                                            remote.persistentState.selectedConnection &&
+                                            selectedReportFolder &&
+                                            (!isUsingRemoteQuerying ||
+                                                (isUsingRemoteQuerying && isRemoteFolderOutdated(selectedReportFolder)))
+                                        ) {
+                                            const response = await remote.mountRemoteFolder(
+                                                remote.persistentState.selectedConnection,
+                                                selectedReportFolder,
+                                                selectedPerformanceFolder,
+                                            );
+
+                                            if (response.status === 200) {
+                                                const fileName = selectedReportFolder.testName;
+                                                queryClient.clear();
+                                                setReportLocation('remote');
+                                                setSelectedDevice(0);
+                                                setActiveReport(fileName);
+                                                createToastNotification('Active performance data', fileName);
+                                            }
+                                        }
                                     }
                                 }}
                             />
@@ -342,6 +325,7 @@ const RemoteSyncConfigurator: FC = () => {
                     )}
                 </RemoteFolderSelector>
             </FormGroup>
+
             {remote.persistentState.selectedConnection?.performancePath && (
                 <FormGroup
                     label={<h3>Performance data folder</h3>}
@@ -352,7 +336,29 @@ const RemoteSyncConfigurator: FC = () => {
                         remoteFolderList={remotePerformanceFolderList}
                         loading={isLoading || isFetching}
                         updatingFolderList={isFetching}
-                        onSelectFolder={setSelectedPerformanceFolder}
+                        onSelectFolder={async (folder) => {
+                            setSelectedPerformanceFolder(folder);
+
+                            if (
+                                remote.persistentState.selectedConnection &&
+                                (isUsingRemoteQuerying || (!isUsingRemoteQuerying && !isRemoteFolderOutdated(folder)))
+                            ) {
+                                const response = await remote.mountRemoteFolder(
+                                    remote.persistentState.selectedConnection,
+                                    selectedReportFolder,
+                                    folder,
+                                );
+
+                                if (response.status === 200) {
+                                    const fileName = folder?.testName;
+                                    queryClient.clear();
+                                    setReportLocation('remote');
+                                    setSelectedDevice(0);
+                                    setActivePerformanceTrace(fileName);
+                                    createToastNotification('Active performance data', fileName);
+                                }
+                            }
+                        }}
                         type='performance'
                     >
                         {!isUsingRemoteQuerying && (
@@ -372,13 +378,14 @@ const RemoteSyncConfigurator: FC = () => {
                                             if (remote.persistentState.selectedConnection) {
                                                 const { data: updatedFolder } = await remote.syncRemoteFolder(
                                                     remote.persistentState.selectedConnection,
-                                                    selectedReportFolder,
+                                                    undefined,
                                                     selectedPerformanceFolder,
                                                 );
 
-                                                const savedRemoteFolders = remote.persistentState.getSavedReportFolders(
-                                                    remote.persistentState.selectedConnection,
-                                                );
+                                                const savedRemoteFolders =
+                                                    remote.persistentState.getSavedPerformanceFolders(
+                                                        remote.persistentState.selectedConnection,
+                                                    );
 
                                                 const updatedFolderIndex = savedRemoteFolders.findIndex(
                                                     (f) => f.remotePath === selectedPerformanceFolder?.remotePath,
@@ -386,19 +393,41 @@ const RemoteSyncConfigurator: FC = () => {
 
                                                 savedRemoteFolders[updatedFolderIndex] = updatedFolder;
 
-                                                updateSavedReportFolders(
+                                                updateSavedPerformanceFolders(
                                                     remote.persistentState.selectedConnection,
                                                     savedRemoteFolders,
                                                 );
 
                                                 setSelectedPerformanceFolder(savedRemoteFolders[updatedFolderIndex]);
+
+                                                if (
+                                                    remote.persistentState.selectedConnection &&
+                                                    selectedPerformanceFolder &&
+                                                    (isUsingRemoteQuerying ||
+                                                        (!isUsingRemoteQuerying &&
+                                                            isRemoteFolderOutdated(selectedPerformanceFolder)))
+                                                ) {
+                                                    const response = await remote.mountRemoteFolder(
+                                                        remote.persistentState.selectedConnection,
+                                                        selectedReportFolder,
+                                                        selectedPerformanceFolder,
+                                                    );
+
+                                                    if (response.status === 200) {
+                                                        const fileName = selectedPerformanceFolder?.testName;
+                                                        queryClient.clear();
+                                                        setReportLocation('remote');
+                                                        setSelectedDevice(0);
+                                                        setActivePerformanceTrace(fileName);
+                                                        createToastNotification('Active performance data', fileName);
+                                                    }
+                                                }
                                             }
                                         } catch {
                                             // eslint-disable-next-line no-alert
                                             alert('Unable to sync remote folder');
                                         } finally {
                                             setIsSyncingPerformanceFolder(false);
-                                            setReportLocation('remote');
                                         }
                                     }}
                                 />
@@ -407,15 +436,6 @@ const RemoteSyncConfigurator: FC = () => {
                     </RemoteFolderSelector>
                 </FormGroup>
             )}
-            <FormGroup>
-                <Button
-                    disabled={!isRemoteReportMounted}
-                    onClick={viewReport}
-                    icon={IconNames.EYE_OPEN}
-                >
-                    View report
-                </Button>
-            </FormGroup>
         </>
     );
 };

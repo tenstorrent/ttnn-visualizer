@@ -36,12 +36,20 @@
 
     .legend-details {
         display: inline-grid;
-        grid-template-columns: 0.7fr 1.2fr 0.75fr 1fr;
+        grid-template-columns: 0.2fr 1.2fr 0.5fr 1fr 2fr;
         gap: 15px;
         text-align: left;
 
         &.extra-info {
-            grid-template-columns: 0.7fr 1.2fr 0.75fr 1fr 2fr;
+            grid-template-columns: 0.2fr 1.2fr 0.5fr 1fr 2fr;
+        }
+
+        &.shape-info {
+            grid-template-columns: 0.2fr 1.2fr 0.5fr 1fr 2fr;
+        }
+
+        &.extra-info.shape-info {
+            grid-template-columns: 0.2fr 1.2fr 0.5fr 1fr 2fr 3fr;
         }
     }
 
