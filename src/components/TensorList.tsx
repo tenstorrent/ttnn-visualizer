@@ -6,7 +6,7 @@ import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Button, ButtonGroup, Checkbox, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, Checkbox, Icon, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import { MultiSelect } from '@blueprintjs/select';
@@ -25,6 +25,7 @@ import 'styles/components/ListView.scss';
 import 'styles/components/TensorList.scss';
 import BufferDetails from './BufferDetails';
 import isValidNumber from '../functions/isValidNumber';
+import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -41,6 +42,7 @@ const TensorList = () => {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [bufferTypeFilters, setBufferTypeFilters] = useState<BufferType[]>([]);
+    const [showHighConsumerTensors, setShowHighConsumerTensors] = useState(false);
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
 
     const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
@@ -109,9 +111,13 @@ const TensorList = () => {
                 );
             }
 
+            if (showHighConsumerTensors) {
+                tensors = tensors.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS);
+            }
+
             setFilteredTensorList(tensors);
         }
-    }, [operations, fetchedTensors, filterQuery, bufferTypeFilters]);
+    }, [operations, fetchedTensors, filterQuery, bufferTypeFilters, showHighConsumerTensors]);
 
     useEffect(() => {
         const initialTensorId = location.state?.previousOperationId;
@@ -151,6 +157,21 @@ const TensorList = () => {
                 />
 
                 <ButtonGroup minimal>
+                    <Tooltip
+                        content='Toggle high consumer tensors'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => setShowHighConsumerTensors(!showHighConsumerTensors)}
+                            rightIcon={IconNames.ISSUE}
+                            disabled={!fetchedTensors?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
+                            intent={Intent.DANGER}
+                            outlined={showHighConsumerTensors}
+                        >
+                            {fetchedTensors?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS).length}
+                        </Button>
+                    </Tooltip>
+
                     <Tooltip
                         content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
                         placement={PopoverPosition.TOP}
@@ -262,7 +283,20 @@ const TensorList = () => {
                                                     filterQuery={filterQuery}
                                                     icon={IconNames.FLOW_LINEAR}
                                                     iconColour='tensor'
-                                                />
+                                                >
+                                                    {tensor.consumers.length > MAX_NUM_CONSUMERS ? (
+                                                        <Tooltip
+                                                            content='Unusually high number of consumers'
+                                                            position={PopoverPosition.TOP}
+                                                            className='high-number-consumers'
+                                                        >
+                                                            <Icon
+                                                                icon={IconNames.ISSUE}
+                                                                intent={Intent.DANGER}
+                                                            />
+                                                        </Tooltip>
+                                                    ) : null}
+                                                </ListItem>
                                             }
                                         >
                                             <div className='arguments-wrapper'>
