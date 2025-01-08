@@ -22,7 +22,7 @@ import PerformanceDeviceKernelDurationChart from '../components/PerformanceDevic
 export default function Performance() {
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformance();
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
-    const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-2');
+    const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-1');
     useClearSelectedBuffer();
 
     if (isLoadingPerformance || isLoadingDeviceLog) {
