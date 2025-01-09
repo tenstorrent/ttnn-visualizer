@@ -81,6 +81,7 @@ export const MemoryLegendElement: React.FC<{
             <div
                 className={classNames('legend-details', {
                     'extra-info': bufferType || layout,
+                    'shape-info': derivedTensor,
                 })}
             >
                 <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize)}</div>
@@ -94,6 +95,11 @@ export const MemoryLegendElement: React.FC<{
                     <div className='extra-info-slot'>
                         {bufferType && <span className='monospace'>{DeviceOperationTypes[bufferType]} </span>}
                         {layout && <span className='monospace'>{DeviceOperationLayoutTypes[layout]}</span>}
+                    </div>
+                )}
+                {derivedTensor && (
+                    <div className='shape-info-slot'>
+                        {derivedTensor.shape} &nbsp; {derivedTensor.dtype}
                     </div>
                 )}
             </div>

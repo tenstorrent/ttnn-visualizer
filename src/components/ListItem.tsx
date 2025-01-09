@@ -14,6 +14,7 @@ interface ListItemProps {
     icon: IconName;
     iconColour?: keyof typeof ICON_COLOURS;
     intent?: Intent;
+    children?: React.ReactNode;
 }
 
 const ICON_COLOURS = {
@@ -28,6 +29,7 @@ const ListItem: React.FC<ListItemProps> = ({
     icon,
     iconColour = 'none',
     intent = Intent.NONE,
+    children,
 }) => {
     return (
         <div className={classNames(ICON_COLOURS[iconColour], 'list-item')}>
@@ -47,6 +49,8 @@ const ListItem: React.FC<ListItemProps> = ({
             {/* <Button title='Stack trace' minimal small icon={IconNames.CODE} /> */}
             {/* <GoldenTensorComparisonIndicator value={op.goldenGlobal} /> */}
             {/* <GoldenTensorComparisonIndicator value={op.goldenLocal} /> */}
+
+            {children}
         </div>
     );
 };

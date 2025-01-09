@@ -78,10 +78,17 @@
     }
 
     .list-item-container {
+        display: flex;
         padding-bottom: 15px;
 
         // Style added to avoid possible infinite scroll loops
         // https://github.com/TanStack/virtual/issues/540#issuecomment-1720745734
         overflow-anchor: none;
+    }
+
+    .high-number-consumers {
+        margin-left: 5px;
+        margin-right: 5px;
+        margin-bottom: 5px;
     }
 }
