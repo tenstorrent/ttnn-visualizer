@@ -4,24 +4,21 @@
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import Plot from 'react-plotly.js';
-import { RowData } from '../definitions/PerfTable';
-import { DeviceArchitecture } from '../model/APIData';
-import getCoreUtilization from '../functions/getCoreUtilization';
+import { RowData } from '../../definitions/PerfTable';
+import { DeviceArchitecture } from '../../model/APIData';
+import getCoreUtilization from '../../functions/getCoreUtilization';
 import 'styles/components/PerformanceScatterChart.scss';
-import { PerfChartConfig, PerfChartLayout } from '../definitions/PlotConfigurations';
+import PerfChart from './PerfChart';
+import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 
-interface PerformanceOperationKernelUtilizationChartProps {
+interface PerfOperationKernelUtilizationChartProps {
     data?: RowData[];
     architecture: DeviceArchitecture;
 }
 
 const DESIRED_OP_CODES = ['matmul', 'conv'];
 
-function PerformanceOperationKernelUtilizationChart({
-    data,
-    architecture,
-}: PerformanceOperationKernelUtilizationChartProps) {
+function PerfOperationKernelUtilizationChart({ data, architecture }: PerfOperationKernelUtilizationChartProps) {
     const filteredOps = useMemo(
         () => data?.filter((row) => isDesiredOperation(row?.['OP CODE'] as string | undefined)) ?? [],
         [data],
@@ -53,55 +50,43 @@ function PerformanceOperationKernelUtilizationChart({
         [filteredOps, architecture],
     );
 
-    const layout = {
-        ...PerfChartLayout,
-        xaxis: {
-            ...PerfChartLayout.xaxis,
-            range: [0, filteredOps.length],
+    const configuration: Partial<PlotConfiguration> = {
+        margin: {
+            l: 100,
+            r: 0,
+            b: 50,
+            t: 0,
         },
-        yaxis: {
-            ...PerfChartLayout.yaxis,
+        xAxis: {
+            range: [0, filteredOps.length],
+            title: {
+                text: 'Operation',
+            },
+        },
+        yAxis: {
+            title: {
+                text: 'Device Kernel Duration (ns)',
+            },
             tickformat: 'd',
             hoverformat: ',.2r',
             range: [0, Math.max(...(chartDataDuration.y as number[]))],
         },
-        yaxis2: {
-            ...PerfChartLayout.yaxis2,
+        yAxis2: {
+            title: {
+                text: 'Utilization (%)',
+            },
             tickformat: '.0%',
             hoverformat: '.2%',
             range: [0, 1],
         },
     };
 
-    if (layout?.xaxis?.title && typeof layout.xaxis.title !== 'string') {
-        layout.xaxis.title.text = 'Operation';
-    }
-    if (layout?.yaxis?.title && typeof layout.yaxis.title !== 'string') {
-        layout.yaxis.title.text = 'Device Kernel Duration (ns)';
-    }
-    if (layout?.yaxis2?.title && typeof layout.yaxis2.title !== 'string') {
-        layout.yaxis2.title.text = 'Utilization (%)';
-    }
-
-    layout.margin = {
-        l: 100,
-        r: 0,
-        b: 50,
-        t: 0,
-    };
-
     return (
-        <div className='scatter-chart'>
-            <h3>Operation Device Kernel Duration + Utilization (MatMul)</h3>
-
-            <Plot
-                className='chart'
-                data={[chartDataDuration, chartDataUtilization]}
-                layout={layout}
-                config={PerfChartConfig}
-                useResizeHandler
-            />
-        </div>
+        <PerfChart
+            title='Operation Device Kernel Duration + Utilization (MatMul)'
+            chartData={[chartDataDuration, chartDataUtilization]}
+            configuration={configuration}
+        />
     );
 }
 
@@ -111,4 +96,4 @@ const isDesiredOperation = (operation?: string): boolean => {
     return DESIRED_OP_CODES.some((code) => opCode?.includes(code));
 };
 
-export default PerformanceOperationKernelUtilizationChart;
+export default PerfOperationKernelUtilizationChart;

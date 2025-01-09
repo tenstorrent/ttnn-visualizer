@@ -2,15 +2,15 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Layout, PlotData } from 'plotly.js';
+import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import Plot from 'react-plotly.js';
 import 'styles/components/PerformanceScatterChart.scss';
-import { RowData } from '../definitions/PerfTable';
-import { DeviceArchitecture } from '../model/APIData';
-import getCoreUtilization from '../functions/getCoreUtilization';
-import getCoreCount from '../functions/getCoreCount';
-import { PerfChartConfig, PerfChartLayout } from '../definitions/PlotConfigurations';
+import { RowData } from '../../definitions/PerfTable';
+import { DeviceArchitecture } from '../../model/APIData';
+import getCoreUtilization from '../../functions/getCoreUtilization';
+import getCoreCount from '../../functions/getCoreCount';
+import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import PerfChart from './PerfChart';
 
 interface PerfCoreCountUtilizationChartProps {
     data?: RowData[];
@@ -49,54 +49,37 @@ function PerfCoreCountUtilizationChart({ data, architecture }: PerfCoreCountUtil
         [filteredOps, architecture],
     );
 
-    const layout: Partial<Layout> = {
-        ...PerfChartLayout,
-        xaxis: {
-            ...PerfChartLayout.xaxis,
+    const configuration: Partial<PlotConfiguration> = {
+        margin: {
+            l: 100,
+            r: 0,
+            b: 50,
+            t: 0,
+        },
+        xAxis: {
+            title: { text: 'Operation' },
             range: [0, filteredOps.length],
         },
-        yaxis: {
-            ...PerfChartLayout.yaxis,
+        yAxis: {
+            title: { text: 'Core Count' },
             tickformat: 'd',
             hoverformat: ',.2r',
             range: [0, getCoreCount(architecture)],
         },
-        yaxis2: {
-            ...PerfChartLayout.yaxis2,
+        yAxis2: {
+            title: { text: 'Utilization (%)' },
             tickformat: '.0%',
             hoverformat: '.2%',
             range: [0, 1],
         },
     };
 
-    if (layout?.xaxis?.title && typeof layout.xaxis.title !== 'string') {
-        layout.xaxis.title.text = 'Operation';
-    }
-    if (layout?.yaxis?.title && typeof layout.yaxis.title !== 'string') {
-        layout.yaxis.title.text = 'Core Count';
-    }
-    if (layout?.yaxis2?.title && typeof layout.yaxis2.title !== 'string') {
-        layout.yaxis2.title.text = 'Utilization (%)';
-    }
-    layout.margin = {
-        l: 100,
-        r: 0,
-        b: 50,
-        t: 0,
-    };
-
     return (
-        <div className='scatter-chart'>
-            <h3>Operation Core Count + Utilization (MatMul)</h3>
-
-            <Plot
-                className='chart'
-                data={[chartDataDuration, chartDataUtilization]}
-                layout={layout}
-                config={PerfChartConfig}
-                useResizeHandler
-            />
-        </div>
+        <PerfChart
+            title='Operation Core Count + Utilization (MatMul)'
+            chartData={[chartDataDuration, chartDataUtilization]}
+            configuration={configuration}
+        />
     );
 }
 

@@ -68,8 +68,8 @@ export const BufferSummaryAxisConfiguration = {
 } as PlotConfiguration;
 
 export interface PlotConfiguration {
-    height: number;
-    margin: {
+    height?: number;
+    margin?: {
         l: number;
         r: number;
         b: number;
@@ -79,11 +79,33 @@ export interface PlotConfiguration {
     gridColour?: string;
     bgColour?: string;
     xAxis?: {
+        title?: {
+            text?: string;
+        };
         side?: 'top' | 'bottom';
         tickmode?: 'array' | 'auto' | 'linear';
         tick0?: number;
         dtick?: number;
         tickvals?: number[];
+        range?: [number, number];
+        tickformat?: string;
+        hoverformat?: string;
+    };
+    yAxis?: {
+        title?: {
+            text?: string;
+        };
+        range?: [number, number];
+        tickformat?: string;
+        hoverformat?: string;
+    };
+    yAxis2?: {
+        title?: {
+            text?: string;
+        };
+        range?: [number, number];
+        tickformat?: string;
+        hoverformat?: string;
     };
 }
 

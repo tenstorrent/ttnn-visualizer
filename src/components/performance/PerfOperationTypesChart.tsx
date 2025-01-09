@@ -5,11 +5,11 @@
 import Plot from 'react-plotly.js';
 import { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { RowData } from '../definitions/PerfTable';
+import { RowData } from '../../definitions/PerfTable';
 import 'styles/components/PerformanceOperationTypesChart.scss';
-import { PerfChartConfig } from '../definitions/PlotConfigurations';
+import { PerfChartConfig } from '../../definitions/PlotConfigurations';
 
-interface PerformanceOperationTypesChartProps {
+interface PerfOperationTypesChartProps {
     data?: RowData[];
 }
 
@@ -44,7 +44,7 @@ const OP_TYPES = {
     Halo: 'Halo',
 };
 
-function PerformanceOperationTypesChart({ data }: PerformanceOperationTypesChartProps) {
+function PerfOperationTypesChart({ data }: PerfOperationTypesChartProps) {
     const operationTypes = data
         ?.filter((row) => isDesiredOperationType(row?.['OP CODE']))
         .reduce(
@@ -94,4 +94,4 @@ const isDesiredOperationType = (operation?: string): boolean =>
     Object.keys(OP_TYPES).some((type) => operation?.toLowerCase().includes(type?.toLowerCase() ?? '')) &&
     operation !== '';
 
-export default PerformanceOperationTypesChart;
+export default PerfOperationTypesChart;
