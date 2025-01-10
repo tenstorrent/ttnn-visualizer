@@ -31,7 +31,7 @@ function PerfDeviceKernelRuntimeChart({ data }: PerfDeviceKernelRuntimeChartProp
         [filteredOps],
     );
 
-    const configuration: Partial<PlotConfiguration> = {
+    const configuration: PlotConfiguration = {
         xAxis: {
             title: {
                 text: 'Core Count',

@@ -6,7 +6,7 @@ import { Config, Layout, PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
 import { HistoricalTensor } from '../model/Graph';
 import { TensorData } from '../model/APIData';
 
-export const L1RenderConfiguration = {
+export const L1RenderConfiguration: PlotConfiguration = {
     height: 110,
     margin: {
         l: 5,
@@ -15,9 +15,9 @@ export const L1RenderConfiguration = {
         t: 25,
     },
     title: 'L1 Address Space',
-} as PlotConfiguration;
+};
 
-export const L1SmallRenderConfiguration = {
+export const L1SmallRenderConfiguration: PlotConfiguration = {
     height: 90,
     margin: {
         l: 5,
@@ -28,7 +28,7 @@ export const L1SmallRenderConfiguration = {
     title: 'L1 Address Space',
 };
 
-export const DRAMRenderConfiguration = {
+export const DRAMRenderConfiguration: PlotConfiguration = {
     height: 90,
     margin: {
         l: 5,
@@ -37,9 +37,9 @@ export const DRAMRenderConfiguration = {
         t: 25,
     },
     title: 'DRAM Address Space',
-} as PlotConfiguration;
+};
 
-export const CBRenderConfiguration = {
+export const CBRenderConfiguration: PlotConfiguration = {
     height: 80,
     margin: {
         l: 5,
@@ -48,11 +48,11 @@ export const CBRenderConfiguration = {
         t: 25,
     },
     title: '',
-} as PlotConfiguration;
+};
 
 export const MAX_LEGEND_LENGTH = 20;
 
-export const BufferSummaryAxisConfiguration = {
+export const BufferSummaryAxisConfiguration: PlotConfiguration = {
     height: 615,
     margin: {
         l: 0,

@@ -49,7 +49,7 @@ function PerfOperationKernelUtilizationChart({ data, architecture }: PerfOperati
         [filteredOps, architecture],
     );
 
-    const configuration: Partial<PlotConfiguration> = {
+    const configuration: PlotConfiguration = {
         margin: {
             l: 100,
             r: 0,

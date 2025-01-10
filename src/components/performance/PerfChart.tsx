@@ -9,7 +9,7 @@ import 'styles/components/PerfChart.scss';
 
 interface PerfChartProps {
     chartData: Partial<PlotData>[];
-    configuration: Partial<PlotConfiguration>;
+    configuration: PlotConfiguration;
     title: string;
 }
 

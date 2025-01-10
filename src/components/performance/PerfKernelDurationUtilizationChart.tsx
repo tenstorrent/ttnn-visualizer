@@ -34,7 +34,7 @@ function PerfKernelDurationUtilizationChart({ data, architecture }: PerfKernelDu
         [filteredOps, architecture],
     );
 
-    const configuration: Partial<PlotConfiguration> = {
+    const configuration: PlotConfiguration = {
         xAxis: {
             title: {
                 text: 'Device Kernel Duration (ns)',

@@ -28,7 +28,7 @@ function PerfDeviceKernelDurationChart({ data }: PerfDeviceKernelDurationChartPr
         [filteredOps],
     );
 
-    const configuration: Partial<PlotConfiguration> = {
+    const configuration: PlotConfiguration = {
         xAxis: {
             title: {
                 text: 'Operation',
