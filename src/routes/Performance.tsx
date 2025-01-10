@@ -9,15 +9,15 @@ import { IconNames } from '@blueprintjs/icons';
 import { useDeviceLog, usePerformance } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
-import PerformanceOperationKernelUtilizationChart from '../components/PerformanceOperationKernelUtilizationChart';
-import PerformanceOperationTypesChart from '../components/PerformanceOperationTypesChart';
 import { PerformanceReport } from '../components/performance/PerfTable';
 import 'styles/components/Performance.scss';
 import { DeviceArchitecture } from '../model/APIData';
-import PerformanceCoreCountUtilizationChart from '../components/PerformanceCoreCountUtilizationChart';
-import PerformanceDeviceKernelRuntimeChart from '../components/PerformanceDeviceKernelRuntimeChart';
-import PerformanceKernelDurationUtilizationChart from '../components/PerformanceKernelDurationUtilizationChart';
-import PerformanceDeviceKernelDurationChart from '../components/PerformanceDeviceKernelDurationChart';
+import PerfDeviceKernelDurationChart from '../components/performance/PerfDeviceKernelDurationChart';
+import PerfDeviceKernelRuntimeChart from '../components/performance/PerfDeviceKernelRuntimeChart';
+import PerfCoreCountUtilizationChart from '../components/performance/PerfCoreCountUtilizationChart';
+import PerfOperationKernelUtilizationChart from '../components/performance/PerfOperationKernelUtilizationChart';
+import PerfKernelDurationUtilizationChart from '../components/performance/PerfKernelDurationUtilizationChart';
+import PerfOperationTypesChart from '../components/performance/PerfOperationTypesChart';
 
 export default function Performance() {
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformance();
@@ -61,13 +61,13 @@ export default function Performance() {
                     title='Graphs'
                     icon={IconNames.TIMELINE_AREA_CHART}
                     panel={
-                        <div className='graph-container'>
-                            <PerformanceDeviceKernelDurationChart
+                        <div className='graph-tab'>
+                            <PerfDeviceKernelDurationChart
                                 // @ts-expect-error this should be just fine
                                 data={perfData?.data}
                             />
 
-                            <PerformanceDeviceKernelRuntimeChart
+                            <PerfDeviceKernelRuntimeChart
                                 // @ts-expect-error this should be just fine
                                 data={perfData?.data}
                             />
@@ -75,26 +75,26 @@ export default function Performance() {
                             {/* Please note we want to change this so we selectively render the below charts with different sets of data */}
                             <h2>MatMul Operations</h2>
 
-                            <PerformanceCoreCountUtilizationChart
+                            <PerfCoreCountUtilizationChart
                                 // @ts-expect-error this should be just fine
                                 data={perfData?.data}
                                 architecture={architecture}
                             />
 
-                            <PerformanceOperationKernelUtilizationChart
+                            <PerfOperationKernelUtilizationChart
                                 // @ts-expect-error this should be just fine
                                 data={perfData?.data}
                                 architecture={architecture}
                             />
 
-                            <PerformanceKernelDurationUtilizationChart
+                            <PerfKernelDurationUtilizationChart
                                 // @ts-expect-error this should be just fine
                                 data={perfData?.data}
                                 architecture={architecture}
                             />
 
                             {/* @ts-expect-error this should be just fine */}
-                            <PerformanceOperationTypesChart data={perfData?.data} />
+                            <PerfOperationTypesChart data={perfData?.data} />
                         </div>
                     }
                 />
