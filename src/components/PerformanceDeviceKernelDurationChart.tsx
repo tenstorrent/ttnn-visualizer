@@ -57,7 +57,7 @@ function PerformanceDeviceKernelDurationChart({ data }: PerformanceDeviceKernelD
                     color: LEGEND_COLOUR,
                 },
             },
-            range: [0, chartData.x.length],
+            range: [0, chartData.x?.length],
             fixedrange: true,
             zeroline: false,
         },

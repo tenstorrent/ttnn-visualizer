@@ -4,7 +4,7 @@
 
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
-import { Operation, OperationDescription, Tensor, TensorData } from '../model/APIData';
+import { Operation, OperationDescription, Tensor } from '../model/APIData';
 import { toHex } from '../functions/math';
 import ROUTES from '../definitions/routes';
 import 'styles/components/BufferDetails.scss';
@@ -16,7 +16,7 @@ import MemoryConfigRow from './MemoryConfigRow';
 import GoldenTensorComparisonIndicator from './GoldenTensorComparisonIndicator';
 
 interface BufferDetailsProps {
-    tensor: TensorData;
+    tensor: Tensor;
     operations: OperationDescription[];
     className?: string;
 }

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
-import { HistoricalTensor, TensorData } from '../model/APIData';
+import { Tensor } from '../model/APIData';
 
 export const L1RenderConfiguration = {
     height: 110,
@@ -100,7 +100,7 @@ export interface PlotDataCustom extends PlotData {
     memoryData: {
         address: number;
         size: number;
-        tensor: HistoricalTensor | TensorData | null;
+        tensor: Tensor | null;
     };
 }
 

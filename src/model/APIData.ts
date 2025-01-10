@@ -30,14 +30,7 @@ export interface Tensor {
     memory_config: MemoryConfig | null;
     device_id: number | null;
     producerOperation?: Operation;
-}
-
-export interface HistoricalTensor extends Tensor {
-    parentOperationId: number;
-}
-
-export interface TensorData extends Tensor {
-    io: 'input' | 'output' | null; // TODO: validate usefulness in the future
+    operationIdentifier?: string;
     comparison: {
         global: {
             actual_pcc: number;
@@ -54,6 +47,11 @@ export interface TensorData extends Tensor {
             tensor_id: number;
         };
     } | null;
+    io: 'input' | 'output' | null;
+}
+
+export interface HistoricalTensor extends Tensor {
+    parentOperationId: number;
 }
 
 export interface BufferData {
@@ -74,8 +72,6 @@ export interface Buffer {
 
 export interface OperationDetailsData extends Operation {
     id: number;
-    inputs: TensorData[];
-    outputs: TensorData[];
     buffers: BufferData[];
     l1_sizes: number[];
 }
@@ -119,7 +115,7 @@ export const defaultOperationDetailsData: OperationDetailsData = {
     stackTraceIdentifier: '',
 };
 
-export const defaultTensorData: TensorData = {
+export const defaultTensorData: Tensor = {
     buffer_type: 0,
     id: 0,
     shape: '',

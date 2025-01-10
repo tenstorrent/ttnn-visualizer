@@ -15,7 +15,7 @@ import { BufferType } from '../model/BufferType';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { HistoricalTensorsByOperation } from '../model/BufferSummary';
 import useBufferFocus from '../hooks/useBufferFocus';
-import { HistoricalTensor, Operation, Tensor } from '../model/APIData';
+import { Operation, Tensor } from '../model/APIData';
 
 const SECTION_IDS = {
     PLOT: 'plot',
@@ -124,7 +124,7 @@ function BufferSummary() {
     );
 }
 
-// Modified from 'createHitoricalTensorList' function in OperationDetails.ts
+// Modified from 'createHistoricalTensorList' function in OperationDetails.ts
 // TODO: Refactor to optimise historical tensor lookup
 function createHistoricalTensorList(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
     const historicalTensorsByOperation: HistoricalTensorsByOperation = new Map();
@@ -134,19 +134,16 @@ function createHistoricalTensorList(operations?: Operation[], buffersByOperation
     }
 
     buffersByOperation.forEach((operation) => {
-        const tensorsByBufferAddress: Map<number, HistoricalTensor> = new Map();
+        const tensorsByBufferAddress: Map<number, Tensor> = new Map();
         const currentOperation = operations.find((op) => op.id === operation.id);
 
         for (const buffer of operation.buffers) {
             const bufferAddress = buffer.address;
             const bufferType = buffer.buffer_type;
-            let opId: number | undefined;
             let tensor: Tensor | undefined;
 
             for (let i = operations.indexOf(currentOperation!); i >= 0; i--) {
                 const op = operations[i];
-                opId = op.id;
-
                 tensor = op.inputs.find((input) => input.address === bufferAddress);
 
                 if (tensor !== undefined) {
@@ -161,10 +158,8 @@ function createHistoricalTensorList(operations?: Operation[], buffersByOperation
             }
 
             if (tensor !== undefined) {
-                const historicalTensor: HistoricalTensor = {
+                const historicalTensor: Tensor = {
                     ...tensor,
-                    parentOperationId: opId!,
-                    historical: opId! !== operation.id,
                     buffer_type: bufferType,
                 };
                 tensorsByBufferAddress.set(bufferAddress, historicalTensor);

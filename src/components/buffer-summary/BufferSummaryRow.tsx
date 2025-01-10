@@ -4,7 +4,7 @@
 
 import 'styles/components/BufferSummaryRow.scss';
 import BufferSummaryBuffer from './BufferSummaryBuffer';
-import { Buffer, HistoricalTensor } from '../../model/APIData';
+import { Buffer, Tensor } from '../../model/APIData';
 
 interface BufferSummaryRowProps {
     buffers: Buffer[];
@@ -12,7 +12,7 @@ interface BufferSummaryRowProps {
     memoryStart: number;
     memoryEnd: number;
     memoryPadding: number;
-    tensorList: Map<number, HistoricalTensor>;
+    tensorList: Map<number, Tensor>;
 }
 
 const SCALE = 100;

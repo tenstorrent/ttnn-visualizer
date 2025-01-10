@@ -11,7 +11,7 @@ import { BufferType } from '../../model/BufferType';
 import { useBufferPages, useDevices } from '../../hooks/useAPI';
 import '../../scss/components/TensorVisualizationComponent.scss';
 import LoadingSpinner from '../LoadingSpinner';
-import { BufferPage, HistoricalTensor } from '../../model/APIData';
+import { BufferPage, Tensor } from '../../model/APIData';
 import SVGBufferRenderer from './SVGBufferRenderer';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import getChartData, { pageDataToChunkArray } from '../../functions/getChartData';
@@ -25,7 +25,7 @@ export interface TensorVisualisationComponentProps {
     bufferType?: BufferType;
     isOpen: boolean;
     onClose: () => void;
-    tensorByAddress?: Map<number, HistoricalTensor>;
+    tensorByAddress?: Map<number, Tensor>;
     tensorId?: number;
     zoomRange: [number, number];
 }

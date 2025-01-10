@@ -4,13 +4,13 @@
 
 import { getBufferColor, getTensorColor } from './colorGenerator';
 import { formatSize, toHex } from './math';
-import { BufferPage, Chunk, ColoredChunk, HistoricalTensor, TensorData } from '../model/APIData';
+import { BufferPage, Chunk, ColoredChunk, Tensor } from '../model/APIData';
 import { PlotDataCustom } from '../definitions/PlotConfigurations';
 import { TensorMemoryLayout } from './parseMemoryConfig';
 
 export default function getChartData(
     memory: Chunk[],
-    getTensorForAddress: (id: number) => TensorData | HistoricalTensor | null,
+    getTensorForAddress: (id: number) => Tensor | null,
     overrides?: { color?: string; colorVariance?: number; hovertemplate?: string },
     options?: { renderPattern?: boolean },
 ): Partial<PlotDataCustom>[] {
