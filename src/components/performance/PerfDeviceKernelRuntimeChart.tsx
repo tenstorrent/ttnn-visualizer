@@ -4,7 +4,6 @@
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import 'styles/components/PerformanceScatterChart.scss';
 import { RowData } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';

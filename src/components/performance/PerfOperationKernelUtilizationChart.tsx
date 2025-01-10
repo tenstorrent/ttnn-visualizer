@@ -7,7 +7,6 @@ import { useMemo } from 'react';
 import { RowData } from '../../definitions/PerfTable';
 import { DeviceArchitecture } from '../../model/APIData';
 import getCoreUtilization from '../../functions/getCoreUtilization';
-import 'styles/components/PerformanceScatterChart.scss';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 

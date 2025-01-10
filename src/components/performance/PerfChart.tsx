@@ -5,7 +5,7 @@
 import { Config, Layout, PlotData } from 'plotly.js';
 import Plot from 'react-plotly.js';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
-import 'styles/components/PerformanceScatterChart.scss';
+import 'styles/components/PerfChart.scss';
 
 interface PerfChartProps {
     chartData: Partial<PlotData>[];
@@ -92,7 +92,7 @@ function PerfChart({ chartData, configuration, title }: PerfChartProps) {
     };
 
     return (
-        <div className='scatter-chart'>
+        <div className='chart-container'>
             <h3>{title}</h3>
 
             <Plot
