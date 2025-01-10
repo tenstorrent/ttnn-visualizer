@@ -2,14 +2,41 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Operation, Tensor } from './Graph';
 import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
 import { MemoryConfig } from '../functions/parseMemoryConfig';
+import { BufferType } from './BufferType';
 
-export interface TensorData extends Tensor {
+export interface Operation {
+    id: number;
+    name: string;
+    inputs: Tensor[];
+    outputs: Tensor[];
+    stack_trace: string;
+    device_operations: Node[];
+    stackTraceIdentifier: string;
+}
+
+export interface Tensor {
+    address: number | null;
+    id: number;
+    buffer_type: BufferType | null;
+    producers: number[];
+    consumers: number[];
+    producerNames: string[];
+    consumerNames: string[];
+    shape: string;
+    dtype: string;
     layout: string;
     memory_config: MemoryConfig | null;
     device_id: number | null;
+    producerOperation?: Operation;
+}
+
+export interface HistoricalTensor extends Tensor {
+    parentOperationId: number;
+}
+
+export interface TensorData extends Tensor {
     io: 'input' | 'output' | null; // TODO: validate usefulness in the future
     comparison: {
         global: {
@@ -51,8 +78,6 @@ export interface OperationDetailsData extends Operation {
     outputs: TensorData[];
     buffers: BufferData[];
     l1_sizes: number[];
-    stack_trace: string;
-    device_operations: Node[];
 }
 
 export interface TabSession {
@@ -159,7 +184,6 @@ export interface OperationDescription extends Operation {
         value: string;
         parsedValue: MemoryConfig | null;
     }[];
-    device_operations: Node[];
 }
 
 export enum NodeType {

@@ -9,15 +9,16 @@ import {
     Chunk,
     DeviceOperation,
     FragmentationEntry,
+    HistoricalTensor,
     Node,
     NodeType,
     OperationDescription,
     OperationDetailsData,
+    Tensor,
     TensorData,
 } from './APIData';
 import { BufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
-import { HistoricalTensor, Tensor } from './Graph';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import getChartData from '../functions/getChartData';
 
@@ -91,7 +92,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 ],
             ].flat() || [];
 
-        this.historicalTensorListByAddress = this.createHitoricalTensorList();
+        this.historicalTensorListByAddress = this.createHistoricalTensorList();
         this.historicalTensorListByAddress.forEach((tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
                 return this.operations.find((operation) => operation.id === op)?.name || '';
@@ -431,7 +432,7 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
         };
     }
 
-    private createHitoricalTensorList() {
+    private createHistoricalTensorList() {
         const tensorsByBufferAddress: Map<number, HistoricalTensor> = new Map();
 
         const currentOperation = this.operations.find((op) => op.id === this.id);
@@ -463,7 +464,6 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
                 const historicalTensor: HistoricalTensor = {
                     ...tensor,
                     parentOperationId: opId!,
-                    historical: opId! !== this.id,
                     buffer_type: bufferType,
                 };
                 tensorsByBufferAddress.set(bufferAddress, historicalTensor);

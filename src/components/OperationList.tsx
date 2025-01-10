@@ -102,7 +102,7 @@ const OperationList = () => {
     useMemo(() => {
         if (fetchedOperations) {
             let operations = [...fetchedOperations];
-
+            // console.log(operations);
             if (filterQuery) {
                 operations = fetchedOperations?.filter((operation) =>
                     getOperationFilterName(operation).toLowerCase().includes(filterQuery.toLowerCase()),
@@ -338,9 +338,8 @@ const OperationList = () => {
         </fieldset>
     );
 };
-
 function getOperationFilterName(operation: OperationDescription) {
-    return `${operation.id.toString()} ${operation.name}`;
+    return `${operation.id.toString()} ${operation.name} (${operation.stackTraceIdentifier}) `;
 }
 
 function isSortingModeActive(sorting: SortingOptions) {

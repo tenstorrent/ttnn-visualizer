@@ -2,8 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { OperationDescription } from '../model/APIData';
-import { Tensor } from '../model/Graph';
+import { OperationDescription, Tensor } from '../model/APIData';
 
 function getDeallocationOperation(
     tensor: Tensor,

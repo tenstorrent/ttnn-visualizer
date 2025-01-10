@@ -13,9 +13,9 @@ import BufferSummaryTable from '../components/buffer-summary/BufferSummaryTable'
 import ROUTES from '../definitions/routes';
 import { BufferType } from '../model/BufferType';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { HistoricalTensor, Operation, Tensor } from '../model/Graph';
 import { HistoricalTensorsByOperation } from '../model/BufferSummary';
 import useBufferFocus from '../hooks/useBufferFocus';
+import { HistoricalTensor, Operation, Tensor } from '../model/APIData';
 
 const SECTION_IDS = {
     PLOT: 'plot',

@@ -3,9 +3,8 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import 'styles/components/BufferSummaryRow.scss';
-import { HistoricalTensor } from '../../model/Graph';
 import BufferSummaryBuffer from './BufferSummaryBuffer';
-import { Buffer } from '../../model/APIData';
+import { Buffer, HistoricalTensor } from '../../model/APIData';
 
 interface BufferSummaryRowProps {
     buffers: Buffer[];

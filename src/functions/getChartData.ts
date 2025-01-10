@@ -4,8 +4,7 @@
 
 import { getBufferColor, getTensorColor } from './colorGenerator';
 import { formatSize, toHex } from './math';
-import { BufferPage, Chunk, ColoredChunk, TensorData } from '../model/APIData';
-import { HistoricalTensor } from '../model/Graph';
+import { BufferPage, Chunk, ColoredChunk, HistoricalTensor, TensorData } from '../model/APIData';
 import { PlotDataCustom } from '../definitions/PlotConfigurations';
 import { TensorMemoryLayout } from './parseMemoryConfig';
 

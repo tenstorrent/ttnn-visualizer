@@ -12,8 +12,7 @@ import { OperationDetails } from '../../model/OperationDetails';
 import 'styles/components/ProducerConsumersData.scss';
 import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
 import { getTensorColor } from '../../functions/colorGenerator';
-import { TensorData } from '../../model/APIData';
-import { HistoricalTensor } from '../../model/Graph';
+import { HistoricalTensor, TensorData } from '../../model/APIData';
 
 const ITEM_HEIGHT = 16; // Height in px
 

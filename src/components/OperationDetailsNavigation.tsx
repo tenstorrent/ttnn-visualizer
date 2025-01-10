@@ -111,7 +111,12 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                 {isLoading ? (
                     <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
                 ) : (
-                    <h2 className='title'>{operation && `${operation?.id} ${operation.name}`}</h2>
+                    <h2 className='title'>
+                        {operation && `${operation?.id} ${operation.name}`}{' '}
+                        {operation?.stackTraceIdentifier && (
+                            <span className='small'>{`(${operation.stackTraceIdentifier})`}</span>
+                        )}
+                    </h2>
                 )}
             </ButtonGroup>
         </nav>

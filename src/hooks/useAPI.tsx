@@ -27,6 +27,17 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import isValidNumber from '../functions/isValidNumber';
 
+const parseStackTrace = (stackTrace: string): string => {
+    const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
+    const match = stackTrace.match(regex);
+
+    if (match) {
+        return `${match[1]}:${match[2]}`;
+    }
+
+    return '';
+};
+
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
     const response = await axiosInstance.get<TabSession>('/api/session').catch();
@@ -58,7 +69,10 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
         const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(`/api/operations/${id}`, {
             maxRedirects: 1,
         });
-        return operationDetails;
+        return {
+            ...operationDetails,
+            stackTraceIdentifier: parseStackTrace(operationDetails.stack_trace),
+        };
     } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
             if (error.response && error.response.status >= 400 && error.response.status < 500) {
@@ -82,6 +96,7 @@ const fetchOperations = async (deviceId?: number): Promise<OperationDescription[
 
     return operationList.map((operation) => ({
         ...operation,
+        stackTraceIdentifier: parseStackTrace(operation.stack_trace),
         arguments: operation.arguments.map((argument) =>
             argument.name === 'memory_config' || memoryConfigPattern.test(argument.value)
                 ? {
