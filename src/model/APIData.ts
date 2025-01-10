@@ -116,6 +116,7 @@ export const defaultOperationDetailsData: OperationDetailsData = {
     l1_sizes: [],
     stack_trace: '',
     device_operations: [],
+    stackTraceIdentifier: '',
 };
 
 export const defaultTensorData: TensorData = {
