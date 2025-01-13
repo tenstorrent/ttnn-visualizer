@@ -18,7 +18,7 @@ import {
     OperationDetailsData,
     ReportMetaData,
     TabSession,
-    TensorData,
+    Tensor,
     defaultBuffer,
     defaultOperationDetailsData,
     defaultTensorData,
@@ -26,6 +26,17 @@ import {
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import isValidNumber from '../functions/isValidNumber';
+
+const parseFileOperationIdentifier = (stackTrace: string): string => {
+    const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
+    const match = stackTrace.match(regex);
+
+    if (match) {
+        return `${match[1]}:${match[2]}`;
+    }
+
+    return '';
+};
 
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
@@ -58,7 +69,10 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
         const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(`/api/operations/${id}`, {
             maxRedirects: 1,
         });
-        return operationDetails;
+        return {
+            ...operationDetails,
+            operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
+        };
     } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
             if (error.response && error.response.status >= 400 && error.response.status < 500) {
@@ -74,23 +88,48 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
 };
 
 const fetchOperations = async (deviceId?: number): Promise<OperationDescription[]> => {
+    const tensorList: Map<number, Tensor> = new Map<number, Tensor>();
     const { data: operationList } = await axiosInstance.get<OperationDescription[]>('/api/operations', {
         params: {
             device_id: deviceId,
         },
     });
 
-    return operationList.map((operation) => ({
-        ...operation,
-        arguments: operation.arguments.map((argument) =>
+    return operationList.map((operation: OperationDescription) => {
+        const outputs = operation.outputs.map((tensor) => {
+            const tensorWithMetadata = {
+                ...tensor,
+                producerOperation: operation,
+                operationIdentifier: `${operation.id} ${operation.name} (${parseFileOperationIdentifier(operation.stack_trace)})`,
+            };
+            tensorList.set(tensor.id, tensorWithMetadata);
+            return { ...tensorWithMetadata, io: 'output' };
+        });
+
+        const inputs = operation.inputs.map((tensor) => {
+            const cachedTensor = tensorList.get(tensor.id);
+            if (cachedTensor) {
+                return { ...cachedTensor, io: 'input' };
+            }
+            return { ...tensor, io: 'input' };
+        });
+
+        const argumentsWithParsedValues = operation.arguments.map((argument) =>
             argument.name === 'memory_config' || memoryConfigPattern.test(argument.value)
                 ? {
                       ...argument,
                       parsedValue: argument.value ? (parseMemoryConfig(argument.value) as MemoryConfig) : null,
                   }
                 : argument,
-        ),
-    }));
+        );
+        return {
+            ...operation,
+            operationFileIdentifier: parseFileOperationIdentifier(operation.stack_trace),
+            outputs,
+            inputs,
+            arguments: argumentsWithParsedValues,
+        } as OperationDescription;
+    });
 };
 
 export interface BuffersByOperationData {
@@ -352,9 +391,9 @@ export const useBufferPages = (
         fetchBufferPages(operationId, address, bufferType, deviceId),
     );
 };
-export const fetchTensors = async (deviceId?: number | null): Promise<TensorData[]> => {
+export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> => {
     try {
-        const { data: tensorList } = await axiosInstance.get<TensorData[]>('/api/tensors', {
+        const { data: tensorList } = await axiosInstance.get<Tensor[]>('/api/tensors', {
             maxRedirects: 1,
             params: {
                 // device_id: deviceId,
@@ -378,7 +417,7 @@ export const fetchTensors = async (deviceId?: number | null): Promise<TensorData
 };
 
 export const useTensors = (deviceId?: number | null) => {
-    return useQuery<TensorData[], AxiosError>({
+    return useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(deviceId),
         queryKey: ['get-tensors', deviceId],
         retry: false,

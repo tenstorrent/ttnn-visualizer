@@ -14,8 +14,7 @@ import SearchField from './SearchField';
 import LoadingSpinner from './LoadingSpinner';
 import { useOperationsList, useTensors } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
-import { Tensor } from '../model/Graph';
-import { TensorData } from '../model/APIData';
+import { Tensor } from '../model/APIData';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
 import { expandedTensorsAtom } from '../store/app';
@@ -38,7 +37,7 @@ const TensorList = () => {
 
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [filterQuery, setFilterQuery] = useState('');
-    const [filteredTensorList, setFilteredTensorList] = useState<TensorData[]>([]);
+    const [filteredTensorList, setFilteredTensorList] = useState<Tensor[]>([]);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [bufferTypeFilters, setBufferTypeFilters] = useState<BufferType[]>([]);

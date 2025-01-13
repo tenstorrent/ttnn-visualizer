@@ -9,7 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 
 import { useAtomValue } from 'jotai';
 import { getTensorColor } from '../../functions/colorGenerator';
-import { TensorData } from '../../model/APIData';
+import { Tensor } from '../../model/APIData';
 import { prettyPrintAddress, toHex } from '../../functions/math';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { useOperationsList } from '../../hooks/useAPI';
@@ -22,7 +22,7 @@ import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator'
 import { selectedTensorAtom } from '../../store/app';
 
 export interface TensorDetailsComponentProps {
-    tensor: TensorData;
+    tensor: Tensor;
     memorySize: number;
     onTensorClick: (address?: number, tensorId?: number) => void;
     operationId: number;
@@ -67,10 +67,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         }}
                     />
                     <h4>Tensor ID: {tensor.id}</h4>
-
-                    <span className={classNames('format-numbers monospace', { em: tensor.address === null })}>
-                        {prettyPrintAddress(tensor.address, memorySize)}
-                    </span>
+                    <h5>{tensor.operationIdentifier}</h5>
                 </button>
 
                 {(tensor.consumers.length > MAX_NUM_CONSUMERS || tensor.producers.length > MAX_NUM_CONSUMERS) && (
@@ -127,6 +124,9 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
             </div>
 
             <div className='tensor-meta'>
+                <p>
+                    <strong>Address:</strong> {prettyPrintAddress(tensor.address, memorySize)}
+                </p>
                 {tensor.buffer_type !== null && (
                     <p>
                         <strong>Buffer type:</strong> {BufferTypeLabel[tensor.buffer_type]}
