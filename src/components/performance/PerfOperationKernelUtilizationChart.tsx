@@ -5,19 +5,18 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { RowData } from '../../definitions/PerfTable';
-import { DeviceArchitecture } from '../../model/APIData';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 
 interface PerfOperationKernelUtilizationChartProps {
     data?: RowData[];
-    architecture: DeviceArchitecture;
+    maxCores: number;
 }
 
 const DESIRED_OP_CODES = ['matmul', 'conv'];
 
-function PerfOperationKernelUtilizationChart({ data, architecture }: PerfOperationKernelUtilizationChartProps) {
+function PerfOperationKernelUtilizationChart({ data, maxCores }: PerfOperationKernelUtilizationChartProps) {
     const filteredOps = useMemo(
         () => data?.filter((row) => isDesiredOperation(row?.['OP CODE'] as string | undefined)) ?? [],
         [data],
@@ -39,14 +38,12 @@ function PerfOperationKernelUtilizationChart({ data, architecture }: PerfOperati
         () =>
             ({
                 x: filteredOps?.map((_row, index) => index + 1),
-                y:
-                    filteredOps?.map((row) => getCoreUtilization(row, architecture)).filter((value) => value !== -1) ??
-                    [],
+                y: filteredOps?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1) ?? [],
                 yaxis: 'y2',
                 hovertemplate: `Operation: %{x}<br />Utilization: %{y}`,
                 name: '',
             }) as Partial<PlotData>,
-        [filteredOps, architecture],
+        [filteredOps, maxCores],
     );
 
     const configuration: PlotConfiguration = {

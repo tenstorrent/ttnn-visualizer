@@ -5,24 +5,23 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { RowData } from '../../definitions/PerfTable';
-import { DeviceArchitecture } from '../../model/APIData';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 
 interface PerfKernelDurationUtilizationChartProps {
     data?: RowData[];
-    architecture: DeviceArchitecture;
+    maxCores: number;
 }
 
-function PerfKernelDurationUtilizationChart({ data, architecture }: PerfKernelDurationUtilizationChartProps) {
+function PerfKernelDurationUtilizationChart({ data, maxCores }: PerfKernelDurationUtilizationChartProps) {
     const filteredOps = data?.filter((row) => isMatMulConv(row?.['OP CODE'] as string | undefined));
 
     const chartData = useMemo(
         () =>
             ({
                 x: filteredOps?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
-                y: filteredOps?.map((row) => getCoreUtilization(row, architecture)).filter((value) => value !== -1),
+                y: filteredOps?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
                 mode: 'markers',
                 type: 'scatter',
                 name: '',
@@ -31,7 +30,7 @@ function PerfKernelDurationUtilizationChart({ data, architecture }: PerfKernelDu
                 },
                 hovertemplate: `Duration: %{x} ns<br />Utilization: %{y}`,
             }) as Partial<PlotData>,
-        [filteredOps, architecture],
+        [filteredOps, maxCores],
     );
 
     const configuration: PlotConfiguration = {
