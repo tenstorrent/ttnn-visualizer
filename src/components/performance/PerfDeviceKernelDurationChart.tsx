@@ -13,27 +13,27 @@ interface PerfDeviceKernelDurationChartProps {
 }
 
 function PerfDeviceKernelDurationChart({ data }: PerfDeviceKernelDurationChartProps) {
-    const filteredOps = data?.filter((row) => row?.['DEVICE KERNEL DURATION [ns]']);
-
     const chartData = useMemo(
         () =>
             ({
-                x: filteredOps?.map((_row, index) => index + 1) ?? [],
-                y: filteredOps?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
+                x: data?.map((row) => row['CORE COUNT']),
+                y: data?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
+                mode: 'markers',
                 type: 'scatter',
-                mode: 'lines',
                 name: '',
-                hovertemplate: `Operation: %{x}<br />Duration: %{y} ns`,
+                marker: {
+                    size: 10,
+                },
+                hovertemplate: `Cores: %{x} ns<br />Device Kernel Duration: %{y}`,
             }) as Partial<PlotData>,
-        [filteredOps],
+        [data],
     );
 
     const configuration: PlotConfiguration = {
         xAxis: {
             title: {
-                text: 'Operation',
+                text: 'Core Count',
             },
-            range: [0, chartData.x?.length ?? 0] as [number, number],
         },
         yAxis: {
             title: {
@@ -41,13 +41,12 @@ function PerfDeviceKernelDurationChart({ data }: PerfDeviceKernelDurationChartPr
             },
             tickformat: 'd',
             hoverformat: ',.2r',
-            range: [0, Math.max(...(chartData.y as number[]))] as [number, number],
         },
     };
 
     return (
         <PerfChart
-            title='Device Kernel Duration'
+            title='Device Kernel Duration vs Core Count'
             chartData={[chartData]}
             configuration={configuration}
         />

@@ -93,7 +93,11 @@ function PerfChart({ chartData, configuration, title }: PerfChartProps) {
 
     return (
         <div className='chart-container'>
-            <h3>{title}</h3>
+            <h3
+            // id={title.toLowerCase().replace(/\s+/g, '-')}
+            >
+                {title}
+            </h3>
 
             <Plot
                 className='chart'

@@ -50,7 +50,7 @@ function PerfKernelDurationUtilizationChart({ data, maxCores }: PerfKernelDurati
 
     return (
         <PerfChart
-            title='Device Kernel Duration vs Utilization (Matmul)'
+            title='Utilization vs Device Kernel Duration'
             chartData={[chartData]}
             configuration={configuration}
         />

@@ -66,7 +66,7 @@ function PerfCoreCountUtilizationChart({ data, maxCores }: PerfCoreCountUtilizat
 
     return (
         <PerfChart
-            title='Operation Core Count + Utilization'
+            title='Core Count + Utilization'
             chartData={[chartDataDuration, chartDataUtilization]}
             configuration={configuration}
         />

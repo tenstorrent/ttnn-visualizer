@@ -58,7 +58,7 @@ export default function Performance() {
 
     if (isLoadingPerformance || isLoadingDeviceLog) {
         return (
-            <div className='centered-loader'>
+            <div className='centred-loader'>
                 <LoadingSpinner />
             </div>
         );
@@ -100,72 +100,84 @@ export default function Performance() {
                                 <strong>Cores:</strong> {maxCores}
                             </p>
 
-                            <div>
-                                <p>
-                                    <strong>Operation codes</strong>
-                                </p>
+                            <div className='charts-container'>
+                                <aside className='op-code-menu'>
+                                    <p className='header'>
+                                        <strong>Operation codes</strong>
+                                    </p>
 
-                                <ButtonGroup outlined>
-                                    <Button
-                                        onClick={() => setSelectedOpCodes(opCodeOptions)}
-                                        intent={Intent.PRIMARY}
+                                    {opCodeOptions.map((option) => (
+                                        <label
+                                            className='option'
+                                            key={option}
+                                            htmlFor={option}
+                                        >
+                                            <input
+                                                type='checkbox'
+                                                checked={selectedOpCodes.includes(option)}
+                                                id={option}
+                                                onChange={() =>
+                                                    setSelectedOpCodes((currentCodes) =>
+                                                        currentCodes.includes(option)
+                                                            ? currentCodes.filter((code) => code !== option)
+                                                            : [...currentCodes, option],
+                                                    )
+                                                }
+                                            />
+                                            <span>{option}</span>
+                                        </label>
+                                    ))}
+
+                                    <ButtonGroup
+                                        className='footer'
+                                        outlined
                                     >
-                                        Select all
-                                    </Button>
-                                    <Button
-                                        onClick={() => setSelectedOpCodes([])}
-                                        intent={Intent.DANGER}
-                                    >
-                                        Clear all
-                                    </Button>
-                                </ButtonGroup>
-                            </div>
+                                        <Button
+                                            onClick={() => setSelectedOpCodes(opCodeOptions)}
+                                            intent={Intent.PRIMARY}
+                                        >
+                                            Select all
+                                        </Button>
+                                        <Button
+                                            onClick={() => setSelectedOpCodes([])}
+                                            intent={Intent.DANGER}
+                                        >
+                                            Clear all
+                                        </Button>
+                                    </ButtonGroup>
+                                </aside>
 
-                            <div className='op-code-options'>
-                                {opCodeOptions.map((option) => (
-                                    <label
-                                        className='option'
-                                        key={option}
-                                        htmlFor={option}
-                                    >
-                                        <input
-                                            type='checkbox'
-                                            checked={selectedOpCodes.includes(option)}
-                                            id={option}
-                                            onChange={() =>
-                                                setSelectedOpCodes((currentCodes) =>
-                                                    currentCodes.includes(option)
-                                                        ? currentCodes.filter((code) => code !== option)
-                                                        : [...currentCodes, option],
-                                                )
-                                            }
-                                        />
-                                        <span>{option}</span>
-                                    </label>
-                                ))}
-                            </div>
+                                <div className='charts'>
+                                    {/* <ul>
+                                        <li>
+                                            <a href='#device-kernel-duration'>Device kernel duration</a>
+                                        </li>
+                                    </ul> */}
 
-                            <div className='charts'>
-                                <PerfDeviceKernelDurationChart data={filteredData} />
+                                    <PerfDeviceKernelRuntimeChart
+                                        data={filteredData}
+                                        maxCores={maxCores}
+                                    />
 
-                                <PerfDeviceKernelRuntimeChart data={filteredData} />
+                                    <PerfDeviceKernelDurationChart data={filteredData} />
 
-                                <PerfCoreCountUtilizationChart
-                                    data={filteredData}
-                                    maxCores={maxCores}
-                                />
+                                    <PerfCoreCountUtilizationChart
+                                        data={filteredData}
+                                        maxCores={maxCores}
+                                    />
 
-                                <PerfOperationKernelUtilizationChart
-                                    data={filteredData}
-                                    maxCores={maxCores}
-                                />
+                                    <PerfOperationKernelUtilizationChart
+                                        data={filteredData}
+                                        maxCores={maxCores}
+                                    />
 
-                                <PerfKernelDurationUtilizationChart
-                                    data={filteredData}
-                                    maxCores={maxCores}
-                                />
+                                    <PerfKernelDurationUtilizationChart
+                                        data={filteredData}
+                                        maxCores={maxCores}
+                                    />
 
-                                <PerfOperationTypesChart data={filteredData} />
+                                    <PerfOperationTypesChart data={data} />
+                                </div>
                             </div>
                         </div>
                     }

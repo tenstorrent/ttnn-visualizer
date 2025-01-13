@@ -72,7 +72,7 @@ function PerfOperationKernelUtilizationChart({ data, maxCores }: PerfOperationKe
 
     return (
         <PerfChart
-            title='Operation Device Kernel Duration + Utilization (MatMul)'
+            title='Device Kernel Duration + Utilization'
             chartData={[chartDataDuration, chartDataUtilization]}
             configuration={configuration}
         />
