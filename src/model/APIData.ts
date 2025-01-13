@@ -13,7 +13,7 @@ export interface Operation {
     outputs: Tensor[];
     stack_trace: string;
     device_operations: Node[];
-    stackTraceIdentifier: string;
+    operationFileIdentifier: string;
 }
 
 export interface Tensor {
@@ -48,10 +48,6 @@ export interface Tensor {
         };
     } | null;
     io: 'input' | 'output' | null;
-}
-
-export interface HistoricalTensor extends Tensor {
-    parentOperationId: number;
 }
 
 export interface BufferData {
@@ -112,7 +108,7 @@ export const defaultOperationDetailsData: OperationDetailsData = {
     l1_sizes: [],
     stack_trace: '',
     device_operations: [],
-    stackTraceIdentifier: '',
+    operationFileIdentifier: '',
 };
 
 export const defaultTensorData: Tensor = {

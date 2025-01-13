@@ -13,7 +13,7 @@ import BufferSummaryTable from '../components/buffer-summary/BufferSummaryTable'
 import ROUTES from '../definitions/routes';
 import { BufferType } from '../model/BufferType';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { HistoricalTensorsByOperation } from '../model/BufferSummary';
+import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import useBufferFocus from '../hooks/useBufferFocus';
 import { Operation, Tensor } from '../model/APIData';
 
@@ -55,7 +55,7 @@ function BufferSummary() {
     }, []);
 
     const tensorListByOperation = useMemo(
-        () => createHistoricalTensorList(operationsList, buffersByOperation),
+        () => createTensorListByOperationById(operationsList, buffersByOperation),
         [operationsList, buffersByOperation],
     );
 
@@ -124,13 +124,13 @@ function BufferSummary() {
     );
 }
 
-// Modified from 'createHistoricalTensorList' function in OperationDetails.ts
+// Modified from 'createTensorListByOperationById' function in OperationDetails.ts
 // TODO: Refactor to optimise historical tensor lookup
-function createHistoricalTensorList(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
-    const historicalTensorsByOperation: HistoricalTensorsByOperation = new Map();
+function createTensorListByOperationById(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
+    const tensorsByOperationById: TensorsByOperationByAddress = new Map();
 
     if (!operations || !buffersByOperation) {
-        return historicalTensorsByOperation;
+        return tensorsByOperationById;
     }
 
     buffersByOperation.forEach((operation) => {
@@ -158,18 +158,17 @@ function createHistoricalTensorList(operations?: Operation[], buffersByOperation
             }
 
             if (tensor !== undefined) {
-                const historicalTensor: Tensor = {
+                tensorsByBufferAddress.set(bufferAddress, {
                     ...tensor,
                     buffer_type: bufferType,
-                };
-                tensorsByBufferAddress.set(bufferAddress, historicalTensor);
+                });
             }
         }
 
-        historicalTensorsByOperation.set(operation.id, tensorsByBufferAddress);
+        tensorsByOperationById.set(operation.id, tensorsByBufferAddress);
     });
 
-    return historicalTensorsByOperation;
+    return tensorsByOperationById;
 }
 
 export default BufferSummary;

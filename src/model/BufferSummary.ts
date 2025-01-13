@@ -4,4 +4,4 @@
 
 import { Tensor } from './APIData';
 
-export type HistoricalTensorsByOperation = Map<number, Map<number, Tensor>>;
+export type TensorsByOperationByAddress = Map<number, Map<number, Tensor>>;

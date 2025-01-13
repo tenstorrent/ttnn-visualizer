@@ -27,7 +27,7 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import isValidNumber from '../functions/isValidNumber';
 
-const parseStackTrace = (stackTrace: string): string => {
+const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
     const match = stackTrace.match(regex);
 
@@ -71,7 +71,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
         });
         return {
             ...operationDetails,
-            stackTraceIdentifier: parseStackTrace(operationDetails.stack_trace),
+            operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
         };
     } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
@@ -100,7 +100,7 @@ const fetchOperations = async (deviceId?: number): Promise<OperationDescription[
             const tensorWithMetadata = {
                 ...tensor,
                 producerOperation: operation,
-                operationIdentifier: `${operation.id} ${operation.name} (${parseStackTrace(operation.stack_trace)})`,
+                operationIdentifier: `${operation.id} ${operation.name} (${parseFileOperationIdentifier(operation.stack_trace)})`,
             };
             tensorList.set(tensor.id, tensorWithMetadata);
             return { ...tensorWithMetadata, io: 'output' };
@@ -124,7 +124,7 @@ const fetchOperations = async (deviceId?: number): Promise<OperationDescription[
         );
         return {
             ...operation,
-            stackTraceIdentifier: parseStackTrace(operation.stack_trace),
+            operationFileIdentifier: parseFileOperationIdentifier(operation.stack_trace),
             outputs,
             inputs,
             arguments: argumentsWithParsedValues,
