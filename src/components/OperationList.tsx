@@ -339,7 +339,7 @@ const OperationList = () => {
     );
 };
 function getOperationFilterName(operation: OperationDescription) {
-    return `${operation.id.toString()} ${operation.name} (${operation.operationFileIdentifier}) `;
+    return `${operation.id} ${operation.name} (${operation.operationFileIdentifier}) `;
 }
 
 function isSortingModeActive(sorting: SortingOptions) {
