@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Helmet } from 'react-helmet-async';
-import { useEffect, useState } from 'react';
-import { Tab, TabId, Tabs } from '@blueprintjs/core';
+import { useEffect, useMemo, useState } from 'react';
+import { Button, ButtonGroup, Intent, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useDeviceLog, usePerformance } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
@@ -24,23 +24,35 @@ import { RowData } from '../definitions/PerfTable';
 export default function Performance() {
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformance();
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
+
+    const data = useMemo(
+        () => (perfData?.data ? (perfData.data as RowData[]) : []).filter((row) => row['OP TYPE'] === 'tt_dnn_device'),
+        [perfData?.data],
+    );
+
+    const opCodeOptions = useMemo(
+        () =>
+            [
+                ...new Set(
+                    data.map((row) => row['OP CODE']).filter((opCode): opCode is string => opCode !== undefined),
+                ).values(),
+            ].sort(),
+        [data],
+    );
+
     const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-1');
-    const [selectedOpCodes, setSelectedOpCodes] = useState<string[]>([]);
-    const [_filteredData, setFilteredData] = useState<RowData[]>([]);
+    const [selectedOpCodes, setSelectedOpCodes] = useState<string[]>(opCodeOptions);
+    const [filteredData, setFilteredData] = useState<RowData[]>([]);
 
     useClearSelectedBuffer();
 
-    const data = (perfData?.data ? (perfData.data as RowData[]) : []).filter(
-        (row) => row['OP TYPE'] === 'tt_dnn_device',
-    );
-
-    const opCodeOptions = new Set(
-        data.map((row) => row['OP CODE']).filter((opCode): opCode is string => opCode !== undefined),
-    );
+    useEffect(() => {
+        setSelectedOpCodes(opCodeOptions);
+    }, [opCodeOptions]);
 
     useEffect(() => {
         setFilteredData(
-            data.filter((row) => (selectedOpCodes.length ? selectedOpCodes.includes(row['OP CODE'] ?? '') : row)),
+            data.filter((row) => (selectedOpCodes.length ? selectedOpCodes.includes(row['OP CODE'] ?? '') : false)),
         );
     }, [selectedOpCodes, data]);
 
@@ -61,37 +73,6 @@ export default function Performance() {
 
             <h1 className='page-title'>Performance analysis</h1>
 
-            <p>
-                {architecture} ({maxCores} cores)
-            </p>
-
-            <p>{opCodeOptions.entries()}</p>
-
-            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', flexDirection: 'column' }}>
-                Selected: {selectedOpCodes}
-                {[...opCodeOptions.values()].map((option) => (
-                    <label
-                        style={{ display: 'flex', gap: '5px' }}
-                        key={option}
-                        htmlFor={option}
-                    >
-                        <input
-                            type='checkbox'
-                            checked={selectedOpCodes.includes(option)}
-                            id={option}
-                            onChange={() =>
-                                setSelectedOpCodes((currentCodes) =>
-                                    currentCodes.includes(option)
-                                        ? currentCodes.filter((code) => code !== option)
-                                        : [...currentCodes, option],
-                                )
-                            }
-                        />
-                        <span>{option}</span>
-                    </label>
-                ))}
-            </div>
-
             <Tabs
                 id='performance-tabs'
                 selectedTabId={selectedTabId}
@@ -108,33 +89,84 @@ export default function Performance() {
 
                 <Tab
                     id='tab-2'
-                    title='Graphs'
+                    title='Charts'
                     icon={IconNames.TIMELINE_AREA_CHART}
                     panel={
-                        <div className='graph-tab'>
-                            <PerfDeviceKernelDurationChart data={data} />
+                        <div className='chart-tab'>
+                            <p>
+                                <strong>Arch:</strong> {architecture}
+                            </p>
+                            <p>
+                                <strong>Cores:</strong> {maxCores}
+                            </p>
 
-                            <PerfDeviceKernelRuntimeChart data={data} />
+                            <div>
+                                <p>
+                                    <strong>Operation codes</strong>
+                                </p>
 
-                            {/* Please note we want to change this so we selectively render the below charts with different sets of data */}
-                            <h2>MatMul Operations</h2>
+                                <ButtonGroup outlined>
+                                    <Button
+                                        onClick={() => setSelectedOpCodes(opCodeOptions)}
+                                        intent={Intent.PRIMARY}
+                                    >
+                                        Select all
+                                    </Button>
+                                    <Button
+                                        onClick={() => setSelectedOpCodes([])}
+                                        intent={Intent.DANGER}
+                                    >
+                                        Clear all
+                                    </Button>
+                                </ButtonGroup>
+                            </div>
 
-                            <PerfCoreCountUtilizationChart
-                                data={data}
-                                maxCores={maxCores}
-                            />
+                            <div className='op-code-options'>
+                                {opCodeOptions.map((option) => (
+                                    <label
+                                        className='option'
+                                        key={option}
+                                        htmlFor={option}
+                                    >
+                                        <input
+                                            type='checkbox'
+                                            checked={selectedOpCodes.includes(option)}
+                                            id={option}
+                                            onChange={() =>
+                                                setSelectedOpCodes((currentCodes) =>
+                                                    currentCodes.includes(option)
+                                                        ? currentCodes.filter((code) => code !== option)
+                                                        : [...currentCodes, option],
+                                                )
+                                            }
+                                        />
+                                        <span>{option}</span>
+                                    </label>
+                                ))}
+                            </div>
 
-                            <PerfOperationKernelUtilizationChart
-                                data={data}
-                                maxCores={maxCores}
-                            />
+                            <div className='charts'>
+                                <PerfDeviceKernelDurationChart data={filteredData} />
 
-                            <PerfKernelDurationUtilizationChart
-                                data={data}
-                                maxCores={maxCores}
-                            />
+                                <PerfDeviceKernelRuntimeChart data={filteredData} />
 
-                            <PerfOperationTypesChart data={data} />
+                                <PerfCoreCountUtilizationChart
+                                    data={filteredData}
+                                    maxCores={maxCores}
+                                />
+
+                                <PerfOperationKernelUtilizationChart
+                                    data={filteredData}
+                                    maxCores={maxCores}
+                                />
+
+                                <PerfKernelDurationUtilizationChart
+                                    data={filteredData}
+                                    maxCores={maxCores}
+                                />
+
+                                <PerfOperationTypesChart data={filteredData} />
+                            </div>
                         </div>
                     }
                 />

@@ -3,7 +3,21 @@
         margin-bottom: 20px;
     }
 
-    .graph-tab {
+    .op-code-options {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 5px;
+
+        // margin: auto;
+        // max-width: 750px;
+    }
+
+    .option {
+        display: flex;
+        gap: 5px;
+    }
+
+    .charts {
         margin: auto;
         max-width: 750px;
 

@@ -29,38 +29,21 @@ const LAYOUT: Partial<Layout> = {
     },
 };
 
-const HOST_OP_MARKER = '(torch)';
-
-const OP_TYPES = {
-    MatMul: 'MatMul',
-    Conv: 'Conv',
-    InterleavedToSharded: 'I2S',
-    MaxPool: 'MaxPool',
-    Move: 'Move',
-    Reduce: 'Reduce',
-    Reshard: 'Reshard',
-    'Tile/Untile': 'Tile/Untile',
-    Binary: 'Binary',
-    Halo: 'Halo',
-};
-
 function PerfOperationTypesChart({ data }: PerfOperationTypesChartProps) {
-    const operationTypes = data
-        ?.filter((row) => isDesiredOperationType(row?.['OP CODE']))
-        .reduce(
-            (types, operation) => {
-                const operationCode = operation['OP CODE'] as string;
+    const operationTypes = data?.reduce(
+        (types, operation) => {
+            const operationCode = operation['OP CODE'] as string;
 
-                if (types[operationCode] !== undefined && typeof types[operationCode] === 'number') {
-                    types[operationCode] += 1;
-                } else {
-                    types[operationCode] = 1;
-                }
+            if (types[operationCode] !== undefined && typeof types[operationCode] === 'number') {
+                types[operationCode] += 1;
+            } else {
+                types[operationCode] = 1;
+            }
 
-                return types;
-            },
-            {} as Record<string, number>,
-        );
+            return types;
+        },
+        {} as Record<string, number>,
+    );
 
     const chartData = useMemo(
         () =>
@@ -88,10 +71,5 @@ function PerfOperationTypesChart({ data }: PerfOperationTypesChartProps) {
         </div>
     );
 }
-
-const isDesiredOperationType = (operation?: string): boolean =>
-    !operation?.includes(HOST_OP_MARKER) &&
-    Object.keys(OP_TYPES).some((type) => operation?.toLowerCase().includes(type?.toLowerCase() ?? '')) &&
-    operation !== '';
 
 export default PerfOperationTypesChart;

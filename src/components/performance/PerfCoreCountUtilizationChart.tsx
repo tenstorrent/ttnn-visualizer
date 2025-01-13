@@ -14,36 +14,29 @@ interface PerfCoreCountUtilizationChartProps {
     maxCores: number;
 }
 
-const DESIRED_OP_CODES = ['matmul', 'conv'];
-
 function PerfCoreCountUtilizationChart({ data, maxCores }: PerfCoreCountUtilizationChartProps) {
-    const filteredOps = useMemo(
-        () => data?.filter((row) => isDesiredOperation(row?.['OP CODE'] as string | undefined)) ?? [],
-        [data],
-    );
-
     const chartDataDuration = useMemo(
         () =>
             ({
-                x: filteredOps?.map((_row, index) => index + 1),
-                y: filteredOps?.map((row) => row['CORE COUNT']),
+                x: data?.map((_row, index) => index + 1),
+                y: data?.map((row) => row['CORE COUNT']),
                 type: 'bar',
                 hovertemplate: `Operation: %{x}<br />Core Count: %{y}`,
                 name: '',
             }) as Partial<PlotData>,
-        [filteredOps],
+        [data],
     );
 
     const chartDataUtilization = useMemo(
         () =>
             ({
-                x: filteredOps?.map((_row, index) => index + 1),
-                y: filteredOps?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
+                x: data?.map((_row, index) => index + 1),
+                y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
                 yaxis: 'y2',
                 hovertemplate: `Operation: %{x}<br />Utilization: %{y}`,
                 name: '',
             }) as Partial<PlotData>,
-        [filteredOps, maxCores],
+        [data, maxCores],
     );
 
     const configuration: PlotConfiguration = {
@@ -55,7 +48,7 @@ function PerfCoreCountUtilizationChart({ data, maxCores }: PerfCoreCountUtilizat
         },
         xAxis: {
             title: { text: 'Operation' },
-            range: [0, filteredOps.length],
+            range: [0, data?.length ?? 0],
         },
         yAxis: {
             title: { text: 'Core Count' },
@@ -73,17 +66,11 @@ function PerfCoreCountUtilizationChart({ data, maxCores }: PerfCoreCountUtilizat
 
     return (
         <PerfChart
-            title='Operation Core Count + Utilization (MatMul)'
+            title='Operation Core Count + Utilization'
             chartData={[chartDataDuration, chartDataUtilization]}
             configuration={configuration}
         />
     );
 }
-
-const isDesiredOperation = (operation?: string): boolean => {
-    const opCode = operation?.toLowerCase();
-
-    return DESIRED_OP_CODES.some((code) => opCode?.includes(code));
-};
 
 export default PerfCoreCountUtilizationChart;
