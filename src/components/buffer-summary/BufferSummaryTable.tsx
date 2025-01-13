@@ -15,7 +15,7 @@ import '@blueprintjs/table/lib/css/table.css';
 import 'styles/components/BufferSummaryTable.scss';
 import HighlightedText from '../HighlightedText';
 import useBuffersTable, { SortingDirection } from '../../hooks/useBuffersTable';
-import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
+import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { BufferData } from '../../model/APIData';
@@ -82,7 +82,7 @@ const COLUMNS: ColumnDefinition[] = [
 
 interface BufferSummaryTableProps {
     buffersByOperation: BuffersByOperationData[];
-    tensorListByOperation: HistoricalTensorsByOperation;
+    tensorListByOperation: TensorsByOperationByAddress;
 }
 
 interface SummaryTableBuffer extends BufferData {

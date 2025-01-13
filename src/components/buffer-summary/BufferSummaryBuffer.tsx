@@ -5,9 +5,8 @@
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
-import { Buffer } from '../../model/APIData';
+import { Buffer, Tensor } from '../../model/APIData';
 import { formatSize, toHex } from '../../functions/math';
-import { HistoricalTensor } from '../../model/Graph';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { renderMemoryLayoutAtom, selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import { getDimmedColour } from '../../functions/colour';
@@ -18,7 +17,7 @@ interface BufferSummaryBufferProps {
     buffer: Buffer;
     size: number;
     position: number;
-    tensor?: HistoricalTensor;
+    tensor?: Tensor;
 }
 
 function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBufferProps) {

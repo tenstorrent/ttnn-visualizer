@@ -35,7 +35,7 @@ export const MemoryLegendElement: React.FC<{
     const Component = chunk.empty ? 'div' : 'button';
     const emptyChunkLabel = (
         <>
-            Empty space{' '}
+            <span>Empty space </span>
             {chunk.largestEmpty && (
                 <Tooltip content='Largest empty memory space'>
                     <Icon
@@ -88,7 +88,11 @@ export const MemoryLegendElement: React.FC<{
                 <div className='format-numbers monospace keep-left'>({toHex(chunk.address)})</div>
                 <div className='format-numbers monospace'>{formatSize(chunk.size)} </div>
                 <div>
-                    {!chunk.empty && derivedTensor && <>Tensor {derivedTensor.id}</>}
+                    {!chunk.empty && derivedTensor && (
+                        <>
+                            {derivedTensor.operationIdentifier} : Tensor {derivedTensor.id}
+                        </>
+                    )}
                     {chunk.empty && emptyChunkLabel}
                 </div>
                 {(bufferType || layout) && (

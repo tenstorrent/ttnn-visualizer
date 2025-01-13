@@ -4,20 +4,19 @@
 
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
-import { OperationDescription, TensorData } from '../model/APIData';
+import { Operation, OperationDescription, Tensor } from '../model/APIData';
 import { toHex } from '../functions/math';
 import ROUTES from '../definitions/routes';
 import 'styles/components/BufferDetails.scss';
 import getDeallocationOperation from '../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../functions/getNextAllocationOperation';
-import { Operation, Tensor } from '../model/Graph';
 import isValidNumber from '../functions/isValidNumber';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';
 import GoldenTensorComparisonIndicator from './GoldenTensorComparisonIndicator';
 
 interface BufferDetailsProps {
-    tensor: TensorData;
+    tensor: Tensor;
     operations: OperationDescription[];
     className?: string;
 }

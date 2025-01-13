@@ -13,20 +13,19 @@ import {
     NodeType,
     OperationDescription,
     OperationDetailsData,
-    TensorData,
+    Tensor,
 } from './APIData';
 import { BufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
-import { HistoricalTensor, Tensor } from './Graph';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import getChartData from '../functions/getChartData';
 
 export class OperationDetails implements Partial<OperationDetailsData> {
     id: number;
 
-    inputs: TensorData[];
+    inputs: Tensor[];
 
-    outputs: TensorData[];
+    outputs: Tensor[];
 
     buffers: BufferData[];
 
@@ -34,13 +33,13 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     stack_trace: string;
 
-    tensorList: TensorData[];
+    tensorList: Tensor[];
 
     device_operations: Node[] = [];
 
-    historicalTensorListByAddress: Map<number, HistoricalTensor> = new Map();
+    tensorListByAddress: Map<number, Tensor> = new Map();
 
-    private historicalTensorListById: Map<number, HistoricalTensor> = new Map();
+    private tensorListById: Map<number, Tensor> = new Map();
 
     private operations: OperationDescription[] = [];
 
@@ -66,33 +65,41 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             tensor.consumerNames = tensor.consumers.map((op) => {
                 return this.operations.find((operation) => operation.id === op)?.name || '';
             });
+            tensor.operationIdentifier = tensor.producers
+                .map((op) => {
+                    return this.operations.find((operation) => operation.id === op)?.operationFileIdentifier || '';
+                })
+                .join('');
         });
 
-        this.outputs.forEach((tensor: TensorData) => {
+        this.outputs.forEach((tensor: Tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
                 return this.operations.find((operation) => operation.id === op)?.name || '';
             });
             tensor.consumerNames = tensor.consumers.map((op) => {
                 return this.operations.find((operation) => operation.id === op)?.name || '';
             });
+            tensor.operationIdentifier = this.operations.find(
+                (operation) => operation.id === this.id,
+            )?.operationFileIdentifier;
         });
 
         this.tensorList =
             [
                 [
                     ...(this.inputs.map((input) => {
-                        return { ...input, io: 'input' } as TensorData;
+                        return { ...input, io: 'input' } as Tensor;
                     }) || []),
                 ],
                 [
                     ...(this.outputs.map((output) => {
-                        return { ...output, io: 'output' } as TensorData;
+                        return { ...output, io: 'output' } as Tensor;
                     }) || []),
                 ],
             ].flat() || [];
 
-        this.historicalTensorListByAddress = this.createHitoricalTensorList();
-        this.historicalTensorListByAddress.forEach((tensor) => {
+        this.tensorListByAddress = this.getTensorListByAddress();
+        this.tensorListByAddress.forEach((tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
                 return this.operations.find((operation) => operation.id === op)?.name || '';
             });
@@ -100,8 +107,8 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 return this.operations.find((operation) => operation.id === op)?.name || '';
             });
         });
-        this.historicalTensorListById = new Map(
-            Array.from(this.historicalTensorListByAddress.values()).map((tensor) => [tensor.id, tensor]),
+        this.tensorListById = new Map(
+            Array.from(this.tensorListByAddress.values()).map((tensor) => [tensor.id, tensor]),
         );
 
         const deviceOpList: Node[] = [];
@@ -219,12 +226,8 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         return this.l1_sizes?.[0] || 0;
     }
 
-    getTensorForAddress(address: number): TensorData | HistoricalTensor | null {
-        const tensorData = this.tensorList.find((tensor) => tensor.address === address) || null;
-        if (!tensorData) {
-            return this.historicalTensorListByAddress.get(address) || null;
-        }
-        return tensorData;
+    getTensorForAddress(address: number): Tensor | null {
+        return this.tensorListByAddress.get(address) || null;
     }
 
     getTensorProducerConsumer(id: number | null) {
@@ -232,10 +235,10 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             return { producers: [], consumers: [] };
         }
 
-        let tensor: TensorData | HistoricalTensor | undefined = this.tensorList.find((t) => t.id === id);
+        let tensor: Tensor | undefined = this.tensorList.find((t) => t.id === id);
 
         if (!tensor) {
-            tensor = this.historicalTensorListById.get(id);
+            tensor = this.tensorListById.get(id);
             if (!tensor) {
                 return { producers: [], consumers: [] };
             }
@@ -431,21 +434,18 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
         };
     }
 
-    private createHitoricalTensorList() {
-        const tensorsByBufferAddress: Map<number, HistoricalTensor> = new Map();
+    private getTensorListByAddress() {
+        const tensorsByBufferAddress: Map<number, Tensor> = new Map();
 
         const currentOperation = this.operations.find((op) => op.id === this.id);
 
         for (const buffer of this.buffers) {
             const bufferAddress = buffer.address;
             const bufferType = buffer.buffer_type;
-            let opId: number | undefined;
             let tensor: Tensor | undefined;
 
             for (let i = this.operations.indexOf(currentOperation!); i >= 0; i--) {
                 const op = this.operations[i];
-                opId = op.id;
-
                 tensor = op.inputs.find((input) => input.address === bufferAddress);
 
                 if (tensor !== undefined) {
@@ -460,13 +460,10 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
             }
 
             if (tensor !== undefined) {
-                const historicalTensor: HistoricalTensor = {
+                tensorsByBufferAddress.set(bufferAddress, {
                     ...tensor,
-                    parentOperationId: opId!,
-                    historical: opId! !== this.id,
                     buffer_type: bufferType,
-                };
-                tensorsByBufferAddress.set(bufferAddress, historicalTensor);
+                });
             }
         }
 
