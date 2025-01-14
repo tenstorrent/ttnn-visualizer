@@ -18,6 +18,7 @@ import PerfCoreCountUtilizationChart from '../components/performance/PerfCoreCou
 import PerfOperationKernelUtilizationChart from '../components/performance/PerfOperationKernelUtilizationChart';
 import PerfKernelDurationUtilizationChart from '../components/performance/PerfKernelDurationUtilizationChart';
 import PerfOperationTypesChart from '../components/performance/PerfOperationTypesChart';
+import PerfOpCountVsRuntimeChart from '../components/performance/PerfOpCountVsRuntimeChart';
 import getCoreCount from '../functions/getCoreCount';
 import { RowData } from '../definitions/PerfTable';
 
@@ -153,6 +154,8 @@ export default function Performance() {
                                             <a href='#device-kernel-duration'>Device kernel duration</a>
                                         </li>
                                     </ul> */}
+
+                                    <PerfOpCountVsRuntimeChart data={filteredData} />
 
                                     <PerfDeviceKernelRuntimeChart
                                         data={filteredData}

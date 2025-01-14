@@ -10,7 +10,7 @@ import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 
 interface PerfKernelDurationUtilizationChartProps {
-    data?: RowData[];
+    data: RowData[];
     maxCores: number;
 }
 

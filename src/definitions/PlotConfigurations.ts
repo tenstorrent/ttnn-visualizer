@@ -106,6 +106,7 @@ export interface PlotConfiguration {
         tickformat?: string;
         hoverformat?: string;
     };
+    barMode?: 'stack' | 'group';
 }
 
 export const CONDENSED_PLOT_CHUNK_COLOR = '#9c9e9f';
