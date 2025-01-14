@@ -54,8 +54,6 @@ function PerfOpCountVsRuntimeChart({ data }: PerfOpCountVsRuntimeChartProps) {
                         type: 'bar',
                         name: '',
                         hovertemplate: `${opCode}<br />%{y:.0%}`,
-                        tickformat: '.0%',
-                        hoverformat: '.0%',
                         marker: {
                             color: MARKER_COLOURS[index],
                         },
@@ -75,8 +73,6 @@ function PerfOpCountVsRuntimeChart({ data }: PerfOpCountVsRuntimeChartProps) {
                         type: 'bar',
                         name: '',
                         hovertemplate: `${opCode}<br />%{y:.0%}`,
-                        tickformat: '.0%',
-                        hoverformat: '.0%',
                         marker: {
                             color: MARKER_COLOURS[index],
                         },
