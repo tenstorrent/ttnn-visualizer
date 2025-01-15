@@ -11,27 +11,23 @@ import { PerfChartConfig } from '../../definitions/PlotConfigurations';
 
 interface PerfOperationTypesChartProps {
     data: RowData[];
-    selectedOpCodes: Marker[];
+    opCodes: Marker[];
 }
 
 const LAYOUT: Partial<Layout> = {
     autosize: true,
     paper_bgcolor: 'transparent',
-    legend: {
-        font: {
-            color: 'white',
-        },
-    },
     margin: {
         l: 0,
         r: 0,
         b: 0,
         t: 0,
     },
+    showlegend: false,
 };
 
-function PerfOperationTypesChart({ data, selectedOpCodes }: PerfOperationTypesChartProps) {
-    const opCodes = useMemo(
+function PerfOperationTypesChart({ data, opCodes }: PerfOperationTypesChartProps) {
+    const filteredOpCodes = useMemo(
         () => [...new Set(data?.filter((row) => row['OP CODE'] !== undefined).map((row) => row['OP CODE']))],
         [data],
     );
@@ -39,18 +35,18 @@ function PerfOperationTypesChart({ data, selectedOpCodes }: PerfOperationTypesCh
     const chartData = useMemo(
         () =>
             ({
-                values: opCodes.map((opCode) => data.filter((row) => row['OP CODE'] === opCode).length),
-                labels: [...opCodes],
+                values: filteredOpCodes.map((opCode) => data.filter((row) => row['OP CODE'] === opCode).length),
+                labels: [...filteredOpCodes],
                 type: 'pie',
                 textinfo: 'percent',
                 hovertemplate: `Type: %{label}<br />Count: %{value}<extra></extra>`,
                 marker: {
-                    colors: opCodes.map(
-                        (opCode) => selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
+                    colors: filteredOpCodes.map(
+                        (opCode) => opCodes.find((selected) => selected.opCode === opCode)?.colour,
                     ),
                 },
             }) as Partial<PlotData>,
-        [data, opCodes, selectedOpCodes],
+        [data, opCodes, filteredOpCodes],
     );
 
     return (

@@ -150,7 +150,7 @@ export default function Performance() {
 
                                     <PerfOperationTypesChart
                                         data={data}
-                                        selectedOpCodes={selectedOpCodes}
+                                        opCodes={opCodeOptions}
                                     />
                                 </div>
                             </div>

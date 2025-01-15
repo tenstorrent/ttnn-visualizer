@@ -31,7 +31,13 @@ $icon-gap: 8px;
     }
 
     .option {
+        display: flex;
+        gap: 8px;
         padding: 8px 16px 0 26px;
+
+        .memory-color-block {
+            margin-top: 2px;
+        }
 
         &:nth-child(odd) {
             background-color: color.adjust($list-color, $lightness: -5%);

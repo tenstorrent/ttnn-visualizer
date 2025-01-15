@@ -57,15 +57,10 @@ function PerfChartFilter({ opCodeOptions, selectedOpCodes, updateOpCodes }: Perf
             </p>
 
             {opCodeOptions.map((option) => (
-                <div className='option'>
-                    <div
-                        className='memory-colour-block'
-                        style={{
-                            backgroundColor: option.colour,
-                            width: '10px',
-                            height: '10px',
-                        }}
-                    />
+                <div
+                    className='option'
+                    key={option.opCode}
+                >
                     <Checkbox
                         checked={selectedOpCodes.map((selected) => selected.opCode).includes(option.opCode)}
                         id={option.opCode}
@@ -77,6 +72,13 @@ function PerfChartFilter({ opCodeOptions, selectedOpCodes, updateOpCodes }: Perf
                                 : [...selectedOpCodes, option];
 
                             updateOpCodes(newSelectedOpCodes);
+                        }}
+                    />
+
+                    <div
+                        className='memory-color-block'
+                        style={{
+                            backgroundColor: option.colour,
                         }}
                     />
                 </div>
