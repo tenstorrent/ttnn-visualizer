@@ -2,6 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { HistoricalTensor } from './Graph';
+import { Tensor } from './APIData';
 
-export type HistoricalTensorsByOperation = Map<number, Map<number, HistoricalTensor>>;
+export type TensorsByOperationByAddress = Map<number, Map<number, Tensor>>;

@@ -5,7 +5,7 @@
 @use '../definitions/colours' as *;
 
 .legend-item {
-    display: inline-grid;
+    display: grid;
     gap: 5px;
     grid-template-columns: 20px 1fr;
     height: 18px;
@@ -36,20 +36,20 @@
 
     .legend-details {
         display: inline-grid;
-        grid-template-columns: 0.2fr 1.2fr 0.5fr 1fr 2fr;
+        grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 2fr;
         gap: 15px;
         text-align: left;
 
         &.extra-info {
-            grid-template-columns: 0.2fr 1.2fr 0.5fr 1fr 2fr;
+            grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 2fr;
         }
 
         &.shape-info {
-            grid-template-columns: 0.2fr 1.2fr 0.5fr 1fr 2fr;
+            grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 2fr;
         }
 
         &.extra-info.shape-info {
-            grid-template-columns: 0.2fr 1.2fr 0.5fr 1fr 2fr 3fr;
+            grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 1.5fr 3fr;
         }
     }
 

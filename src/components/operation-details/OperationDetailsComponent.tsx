@@ -271,7 +271,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
                                             isOpen={tensixIOVisualisationOpen}
                                             onClose={() => setTensixIOVisualisationOpen(false)}
-                                            tensorByAddress={details.historicalTensorListByAddress}
+                                            tensorByAddress={details.tensorListByAddress}
                                         />
                                     )}
                                     {tensixFullVisualisationOpen && (
@@ -282,7 +282,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
                                             isOpen={tensixFullVisualisationOpen}
                                             onClose={() => setTensixFullVisualisationOpen(false)}
-                                            tensorByAddress={details.historicalTensorListByAddress}
+                                            tensorByAddress={details.tensorListByAddress}
                                         />
                                     )}
                                 </h3>

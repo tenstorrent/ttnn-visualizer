@@ -16,7 +16,7 @@ import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/routes';
 import isValidNumber from '../../functions/isValidNumber';
-import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
+import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, selectedDeviceAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 
@@ -27,7 +27,7 @@ const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
 interface BufferSummaryPlotRendererProps {
     buffersByOperation: BuffersByOperationData[];
-    tensorListByOperation: HistoricalTensorsByOperation;
+    tensorListByOperation: TensorsByOperationByAddress;
 }
 
 function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }: BufferSummaryPlotRendererProps) {
