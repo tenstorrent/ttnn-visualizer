@@ -74,8 +74,6 @@ export interface PlotConfiguration {
         b: number;
         t: number;
     };
-    showLegend?: boolean;
-    legend?: object;
     title?: string;
     gridColour?: string;
     bgColour?: string;
