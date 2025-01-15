@@ -22,8 +22,6 @@ function PerfChart({ chartData, configuration, title }: PerfChartProps) {
         autosize: true,
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        showlegend: configuration.showLegend || false,
-        legend: configuration.legend,
         margin: {
             l: 50,
             r: 0,
