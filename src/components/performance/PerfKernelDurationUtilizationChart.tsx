@@ -5,24 +5,21 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { RowData } from '../../definitions/PerfTable';
-import { DeviceArchitecture } from '../../model/APIData';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 
 interface PerfKernelDurationUtilizationChartProps {
-    data?: RowData[];
-    architecture: DeviceArchitecture;
+    data: RowData[];
+    maxCores: number;
 }
 
-function PerfKernelDurationUtilizationChart({ data, architecture }: PerfKernelDurationUtilizationChartProps) {
-    const filteredOps = data?.filter((row) => isMatMulConv(row?.['OP CODE'] as string | undefined));
-
+function PerfKernelDurationUtilizationChart({ data, maxCores }: PerfKernelDurationUtilizationChartProps) {
     const chartData = useMemo(
         () =>
             ({
-                x: filteredOps?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
-                y: filteredOps?.map((row) => getCoreUtilization(row, architecture)).filter((value) => value !== -1),
+                x: data?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
+                y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
                 mode: 'markers',
                 type: 'scatter',
                 name: '',
@@ -31,7 +28,7 @@ function PerfKernelDurationUtilizationChart({ data, architecture }: PerfKernelDu
                 },
                 hovertemplate: `Duration: %{x} ns<br />Utilization: %{y}`,
             }) as Partial<PlotData>,
-        [filteredOps, architecture],
+        [data, maxCores],
     );
 
     const configuration: PlotConfiguration = {
@@ -53,18 +50,11 @@ function PerfKernelDurationUtilizationChart({ data, architecture }: PerfKernelDu
 
     return (
         <PerfChart
-            title='Device Kernel Duration vs Utilization (Matmul)'
+            title='Utilization vs Device Kernel Duration'
             chartData={[chartData]}
             configuration={configuration}
         />
     );
 }
-
-const isMatMulConv = (operation?: string): boolean => {
-    const opCode = operation?.toLowerCase();
-    const keywords = ['matmul', 'conv'];
-
-    return keywords.some((keyword) => opCode?.includes(keyword));
-};
 
 export default PerfKernelDurationUtilizationChart;

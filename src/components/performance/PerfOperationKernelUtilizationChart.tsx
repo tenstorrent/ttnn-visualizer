@@ -5,48 +5,38 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { RowData } from '../../definitions/PerfTable';
-import { DeviceArchitecture } from '../../model/APIData';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 
 interface PerfOperationKernelUtilizationChartProps {
     data?: RowData[];
-    architecture: DeviceArchitecture;
+    maxCores: number;
 }
 
-const DESIRED_OP_CODES = ['matmul', 'conv'];
-
-function PerfOperationKernelUtilizationChart({ data, architecture }: PerfOperationKernelUtilizationChartProps) {
-    const filteredOps = useMemo(
-        () => data?.filter((row) => isDesiredOperation(row?.['OP CODE'] as string | undefined)) ?? [],
-        [data],
-    );
-
+function PerfOperationKernelUtilizationChart({ data, maxCores }: PerfOperationKernelUtilizationChartProps) {
     const chartDataDuration = useMemo(
         () =>
             ({
-                x: filteredOps?.map((_row, index) => index + 1),
-                y: filteredOps?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
+                x: data?.map((_row, index) => index + 1),
+                y: data?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
                 type: 'bar',
                 hovertemplate: `Operation: %{x}<br />Duration: %{y} ns`,
                 name: '',
             }) as Partial<PlotData>,
-        [filteredOps],
+        [data],
     );
 
     const chartDataUtilization = useMemo(
         () =>
             ({
-                x: filteredOps?.map((_row, index) => index + 1),
-                y:
-                    filteredOps?.map((row) => getCoreUtilization(row, architecture)).filter((value) => value !== -1) ??
-                    [],
+                x: data?.map((_row, index) => index + 1),
+                y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1) ?? [],
                 yaxis: 'y2',
                 hovertemplate: `Operation: %{x}<br />Utilization: %{y}`,
                 name: '',
             }) as Partial<PlotData>,
-        [filteredOps, architecture],
+        [data, maxCores],
     );
 
     const configuration: PlotConfiguration = {
@@ -57,7 +47,7 @@ function PerfOperationKernelUtilizationChart({ data, architecture }: PerfOperati
             t: 0,
         },
         xAxis: {
-            range: [0, filteredOps.length],
+            range: [0, data?.length ?? 0],
             title: {
                 text: 'Operation',
             },
@@ -82,17 +72,11 @@ function PerfOperationKernelUtilizationChart({ data, architecture }: PerfOperati
 
     return (
         <PerfChart
-            title='Operation Device Kernel Duration + Utilization (MatMul)'
+            title='Device Kernel Duration + Utilization'
             chartData={[chartDataDuration, chartDataUtilization]}
             configuration={configuration}
         />
     );
 }
-
-const isDesiredOperation = (operation?: string): boolean => {
-    const opCode = operation?.toLowerCase();
-
-    return DESIRED_OP_CODES.some((code) => opCode?.includes(code));
-};
 
 export default PerfOperationKernelUtilizationChart;

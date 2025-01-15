@@ -53,3 +53,34 @@ export interface ProcessedRow {
 }
 
 export type MathFidelity = 'HiFi4' | 'HiFi2' | 'LoFi';
+
+export const MARKER_COLOURS = [
+    'rgb(31, 119, 180)',
+    'rgb(255, 127, 14)',
+    'rgb(44, 160, 44)',
+    'rgb(214, 39, 40)',
+    'rgb(148, 103, 189)',
+    'rgb(140, 86, 75)',
+    'rgb(227, 119, 194)',
+    'rgb(188, 189, 34)',
+    'rgb(23, 190, 207)',
+    'rgb(255, 187, 120)',
+    'rgb(40, 108, 26)',
+    'rgb(255, 152, 150)',
+    'rgb(197, 176, 213)',
+    'rgb(196, 156, 148)',
+    'rgb(247, 182, 210)',
+    'rgb(199, 199, 199)',
+    'rgb(219, 219, 141)',
+    'rgb(158, 218, 229)',
+    'rgb(57, 59, 121)',
+    'rgb(82, 84, 163)',
+    'rgb(107, 110, 207)',
+    'rgb(156, 158, 222)',
+    'rgb(255, 127, 14)',
+];
+
+export interface Marker {
+    opCode: string;
+    colour: (typeof MARKER_COLOURS)[number];
+}

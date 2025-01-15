@@ -5,73 +5,48 @@
 import Plot from 'react-plotly.js';
 import { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { RowData } from '../../definitions/PerfTable';
+import { Marker, RowData } from '../../definitions/PerfTable';
 import 'styles/components/PerformanceOperationTypesChart.scss';
 import { PerfChartConfig } from '../../definitions/PlotConfigurations';
 
 interface PerfOperationTypesChartProps {
-    data?: RowData[];
+    data: RowData[];
+    opCodes: Marker[];
 }
 
 const LAYOUT: Partial<Layout> = {
     autosize: true,
     paper_bgcolor: 'transparent',
-    legend: {
-        font: {
-            color: 'white',
-        },
-    },
     margin: {
         l: 0,
         r: 0,
         b: 0,
         t: 0,
     },
+    showlegend: false,
 };
 
-const HOST_OP_MARKER = '(torch)';
-
-const OP_TYPES = {
-    MatMul: 'MatMul',
-    Conv: 'Conv',
-    InterleavedToSharded: 'I2S',
-    MaxPool: 'MaxPool',
-    Move: 'Move',
-    Reduce: 'Reduce',
-    Reshard: 'Reshard',
-    'Tile/Untile': 'Tile/Untile',
-    Binary: 'Binary',
-    Halo: 'Halo',
-};
-
-function PerfOperationTypesChart({ data }: PerfOperationTypesChartProps) {
-    const operationTypes = data
-        ?.filter((row) => isDesiredOperationType(row?.['OP CODE']))
-        .reduce(
-            (types, operation) => {
-                const operationCode = operation['OP CODE'] as string;
-
-                if (types[operationCode] !== undefined && typeof types[operationCode] === 'number') {
-                    types[operationCode] += 1;
-                } else {
-                    types[operationCode] = 1;
-                }
-
-                return types;
-            },
-            {} as Record<string, number>,
-        );
+function PerfOperationTypesChart({ data, opCodes }: PerfOperationTypesChartProps) {
+    const filteredOpCodes = useMemo(
+        () => [...new Set(data?.filter((row) => row['OP CODE'] !== undefined).map((row) => row['OP CODE']))],
+        [data],
+    );
 
     const chartData = useMemo(
         () =>
             ({
-                values: Object.values(operationTypes ?? []),
-                labels: Object.keys(operationTypes ?? []),
+                values: filteredOpCodes.map((opCode) => data.filter((row) => row['OP CODE'] === opCode).length),
+                labels: [...filteredOpCodes],
                 type: 'pie',
                 textinfo: 'percent',
-                hovertemplate: `Type: %{label}<br />Count: %{value}<extra></extra>`,
+                hovertemplate: `%{label}<br />Count: %{value}<extra></extra>`,
+                marker: {
+                    colors: filteredOpCodes.map(
+                        (opCode) => opCodes.find((selected) => selected.opCode === opCode)?.colour,
+                    ),
+                },
             }) as Partial<PlotData>,
-        [operationTypes],
+        [data, opCodes, filteredOpCodes],
     );
 
     return (
@@ -88,10 +63,5 @@ function PerfOperationTypesChart({ data }: PerfOperationTypesChartProps) {
         </div>
     );
 }
-
-const isDesiredOperationType = (operation?: string): boolean =>
-    !operation?.includes(HOST_OP_MARKER) &&
-    Object.keys(OP_TYPES).some((type) => operation?.toLowerCase().includes(type?.toLowerCase() ?? '')) &&
-    operation !== '';
 
 export default PerfOperationTypesChart;

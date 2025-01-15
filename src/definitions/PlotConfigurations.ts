@@ -106,6 +106,7 @@ export interface PlotConfiguration {
         tickformat?: string;
         hoverformat?: string;
     };
+    barMode?: 'stack' | 'group';
 }
 
 export const CONDENSED_PLOT_CHUNK_COLOR = '#9c9e9f';
@@ -140,7 +141,7 @@ export const PerfChartConfig: Partial<Config> = {
 
 const GRID_COLOUR = '#575757';
 const LINE_COLOUR = '#575757';
-const LEGEND_COLOUR = '#FFF';
+const TITLE_COLOUR = '#FFF';
 
 export const PerfChartLayout: Partial<Layout> = {
     autosize: true,
@@ -156,10 +157,10 @@ export const PerfChartLayout: Partial<Layout> = {
     xaxis: {
         gridcolor: GRID_COLOUR,
         linecolor: LINE_COLOUR,
-        color: LEGEND_COLOUR,
+        color: TITLE_COLOUR,
         title: {
             font: {
-                color: LEGEND_COLOUR,
+                color: TITLE_COLOUR,
             },
         },
         fixedrange: true,
@@ -168,11 +169,11 @@ export const PerfChartLayout: Partial<Layout> = {
     yaxis: {
         gridcolor: GRID_COLOUR,
         linecolor: LINE_COLOUR,
-        color: LEGEND_COLOUR,
+        color: TITLE_COLOUR,
         title: {
             standoff: 20,
             font: {
-                color: LEGEND_COLOUR,
+                color: TITLE_COLOUR,
             },
         },
         automargin: true,
@@ -182,11 +183,11 @@ export const PerfChartLayout: Partial<Layout> = {
     yaxis2: {
         gridcolor: GRID_COLOUR,
         linecolor: LINE_COLOUR,
-        color: LEGEND_COLOUR,
+        color: TITLE_COLOUR,
         title: {
             standoff: 20,
             font: {
-                color: LEGEND_COLOUR,
+                color: TITLE_COLOUR,
             },
         },
         overlaying: 'y',
