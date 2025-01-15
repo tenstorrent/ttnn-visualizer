@@ -84,3 +84,13 @@ export const isEqual = <T>(value: T, other: T): boolean => {
         return isEqual(valueObj[key], otherObj[key]);
     });
 };
+export const toReadableShape = (input: string) => {
+    const match = input.match(/Shape\((\[.*\])\)/);
+    if (!match) {
+        return input;
+    }
+    return match[1];
+};
+export const toReadableType = (input: string) => {
+    return input.replace(/^DataType\./, '');
+};
