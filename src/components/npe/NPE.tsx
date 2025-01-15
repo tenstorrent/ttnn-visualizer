@@ -19,7 +19,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const width = npeData.common_info.num_cols;
     const height = npeData.common_info.num_rows;
 
-    const transfers = npeData.noc_transfers.map((transfer) => transfer.route);
+    const transfers = [npeData.noc_transfers.map((transfer) => transfer.route)[0]];
     // console.log(routes);
     // const transfers = npeData.noc_transfers;
     // const data = [

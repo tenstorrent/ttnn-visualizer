@@ -1,8 +1,8 @@
 import { NoCID } from '../../model/NPE';
 
-export const NODE_SIZE = 80;
+export const NODE_SIZE = 70;
 
-const NOC_CENTER = { x: 50, y: NODE_SIZE - 50 };
+const NOC_CENTER = { x: 40, y: NODE_SIZE - 40 };
 const CENTER_DISPERSION = 10; // dispersion from the starting point
 const NOC_0_X_OFFSET = -CENTER_DISPERSION;
 const NOC_0_Y_OFFSET = -CENTER_DISPERSION;
