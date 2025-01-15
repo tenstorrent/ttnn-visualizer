@@ -20,7 +20,7 @@ function PerfDeviceKernelRuntimeChart({ data, maxCores }: PerfDeviceKernelRuntim
                 x: data?.map((_row, index) => index + 1),
                 y: data?.map((row) => row['CORE COUNT']),
                 type: 'bar',
-                hovertemplate: `Operation: %{x}<br />Core Count: %{y}`,
+                hovertemplate: `Operation: %{x}<br />Cores: %{y}`,
                 name: '',
             }) as Partial<PlotData>,
         [data],

@@ -24,7 +24,7 @@ function PerfDeviceKernelDurationChart({ data }: PerfDeviceKernelDurationChartPr
                 marker: {
                     size: 10,
                 },
-                hovertemplate: `Cores: %{x} ns<br />Device Kernel Duration: %{y}`,
+                hovertemplate: `Cores: %{x}<br />Device Kernel Duration: %{y} ns`,
             }) as Partial<PlotData>,
         [data],
     );

@@ -4,7 +4,7 @@
 
 import { Helmet } from 'react-helmet-async';
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ButtonGroup, Intent, Tab, TabId, Tabs } from '@blueprintjs/core';
+import { Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useDeviceLog, usePerformance } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
@@ -20,7 +20,8 @@ import PerfKernelDurationUtilizationChart from '../components/performance/PerfKe
 import PerfOperationTypesChart from '../components/performance/PerfOperationTypesChart';
 import PerfOpCountVsRuntimeChart from '../components/performance/PerfOpCountVsRuntimeChart';
 import getCoreCount from '../functions/getCoreCount';
-import { RowData } from '../definitions/PerfTable';
+import { MARKER_COLOURS, Marker, RowData } from '../definitions/PerfTable';
+import PerfChartFilter from '../components/performance/PerfChartFilter';
 
 export default function Performance() {
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformance();
@@ -37,12 +38,17 @@ export default function Performance() {
                 ...new Set(
                     data.map((row) => row['OP CODE']).filter((opCode): opCode is string => opCode !== undefined),
                 ).values(),
-            ].sort(),
+            ]
+                .sort()
+                .map((opCode, index) => ({
+                    opCode,
+                    colour: MARKER_COLOURS[index],
+                })),
         [data],
     );
 
     const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-1');
-    const [selectedOpCodes, setSelectedOpCodes] = useState<string[]>(opCodeOptions);
+    const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>(opCodeOptions);
     const [filteredData, setFilteredData] = useState<RowData[]>([]);
 
     useClearSelectedBuffer();
@@ -53,7 +59,13 @@ export default function Performance() {
 
     useEffect(() => {
         setFilteredData(
-            data.filter((row) => (selectedOpCodes.length ? selectedOpCodes.includes(row['OP CODE'] ?? '') : false)),
+            data
+                .filter((row) =>
+                    selectedOpCodes.length
+                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row['OP CODE'] ?? '')
+                        : false,
+                )
+                .sort((a, b) => (a['OP CODE'] ?? '').localeCompare(b['OP CODE'] ?? '')),
         );
     }, [selectedOpCodes, data]);
 
@@ -102,60 +114,17 @@ export default function Performance() {
                             </p>
 
                             <div className='charts-container'>
-                                <aside className='op-code-menu'>
-                                    <p className='header'>
-                                        <strong>Operation codes</strong>
-                                    </p>
-
-                                    {opCodeOptions.map((option) => (
-                                        <label
-                                            className='option'
-                                            key={option}
-                                            htmlFor={option}
-                                        >
-                                            <input
-                                                type='checkbox'
-                                                checked={selectedOpCodes.includes(option)}
-                                                id={option}
-                                                onChange={() =>
-                                                    setSelectedOpCodes((currentCodes) =>
-                                                        currentCodes.includes(option)
-                                                            ? currentCodes.filter((code) => code !== option)
-                                                            : [...currentCodes, option],
-                                                    )
-                                                }
-                                            />
-                                            <span>{option}</span>
-                                        </label>
-                                    ))}
-
-                                    <ButtonGroup
-                                        className='footer'
-                                        outlined
-                                    >
-                                        <Button
-                                            onClick={() => setSelectedOpCodes(opCodeOptions)}
-                                            intent={Intent.PRIMARY}
-                                        >
-                                            Select all
-                                        </Button>
-                                        <Button
-                                            onClick={() => setSelectedOpCodes([])}
-                                            intent={Intent.DANGER}
-                                        >
-                                            Clear all
-                                        </Button>
-                                    </ButtonGroup>
-                                </aside>
+                                <PerfChartFilter
+                                    opCodeOptions={opCodeOptions}
+                                    selectedOpCodes={selectedOpCodes}
+                                    updateOpCodes={setSelectedOpCodes}
+                                />
 
                                 <div className='charts'>
-                                    {/* <ul>
-                                        <li>
-                                            <a href='#device-kernel-duration'>Device kernel duration</a>
-                                        </li>
-                                    </ul> */}
-
-                                    <PerfOpCountVsRuntimeChart data={filteredData} />
+                                    <PerfOpCountVsRuntimeChart
+                                        data={filteredData}
+                                        selectedOpCodes={selectedOpCodes}
+                                    />
 
                                     <PerfDeviceKernelRuntimeChart
                                         data={filteredData}
@@ -179,7 +148,10 @@ export default function Performance() {
                                         maxCores={maxCores}
                                     />
 
-                                    <PerfOperationTypesChart data={data} />
+                                    <PerfOperationTypesChart
+                                        data={data}
+                                        selectedOpCodes={selectedOpCodes}
+                                    />
                                 </div>
                             </div>
                         </div>

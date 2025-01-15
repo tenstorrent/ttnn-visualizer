@@ -5,12 +5,13 @@
 import Plot from 'react-plotly.js';
 import { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { RowData } from '../../definitions/PerfTable';
+import { Marker, RowData } from '../../definitions/PerfTable';
 import 'styles/components/PerformanceOperationTypesChart.scss';
 import { PerfChartConfig } from '../../definitions/PlotConfigurations';
 
 interface PerfOperationTypesChartProps {
-    data?: RowData[];
+    data: RowData[];
+    selectedOpCodes: Marker[];
 }
 
 const LAYOUT: Partial<Layout> = {
@@ -29,32 +30,27 @@ const LAYOUT: Partial<Layout> = {
     },
 };
 
-function PerfOperationTypesChart({ data }: PerfOperationTypesChartProps) {
-    const operationTypes = data?.reduce(
-        (types, operation) => {
-            const operationCode = operation['OP CODE'] as string;
-
-            if (types[operationCode] !== undefined && typeof types[operationCode] === 'number') {
-                types[operationCode] += 1;
-            } else {
-                types[operationCode] = 1;
-            }
-
-            return types;
-        },
-        {} as Record<string, number>,
+function PerfOperationTypesChart({ data, selectedOpCodes }: PerfOperationTypesChartProps) {
+    const opCodes = useMemo(
+        () => [...new Set(data?.filter((row) => row['OP CODE'] !== undefined).map((row) => row['OP CODE']))],
+        [data],
     );
 
     const chartData = useMemo(
         () =>
             ({
-                values: Object.values(operationTypes ?? []),
-                labels: Object.keys(operationTypes ?? []),
+                values: opCodes.map((opCode) => data.filter((row) => row['OP CODE'] === opCode).length),
+                labels: [...opCodes],
                 type: 'pie',
                 textinfo: 'percent',
                 hovertemplate: `Type: %{label}<br />Count: %{value}<extra></extra>`,
+                marker: {
+                    colors: opCodes.map(
+                        (opCode) => selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
+                    ),
+                },
             }) as Partial<PlotData>,
-        [operationTypes],
+        [data, opCodes, selectedOpCodes],
     );
 
     return (

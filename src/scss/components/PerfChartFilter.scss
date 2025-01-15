@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
+@use 'sass:color';
+@use '../definitions/colours' as *;
+
+$list-color: $tt-purple-shade;
+$border-radius: 2px;
+$icon-gap: 8px;
+
+.op-code-menu {
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 20px;
+    left: 0;
+    align-self: start;
+    background-color: color.adjust($list-color, $lightness: 0%);
+    border-radius: $border-radius;
+    box-shadow: 6px 6px 8px 0 rgb(0 0 0 / 25%);
+
+    .header {
+        background-color: color.adjust($list-color, $lightness: 0%);
+        margin-bottom: 0;
+        padding: 8px 16px;
+    }
+
+    .footer {
+        background-color: color.adjust($list-color, $lightness: 0%);
+    }
+
+    .option {
+        padding: 8px 16px 0 26px;
+
+        &:nth-child(odd) {
+            background-color: color.adjust($list-color, $lightness: -5%);
+        }
+
+        &:nth-child(even) {
+            background-color: color.adjust($list-color, $lightness: -10%);
+        }
+
+        &:last-child {
+            background-color: color.adjust($list-color, $lightness: -15%);
+        }
+    }
+}
