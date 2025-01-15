@@ -51,47 +51,49 @@ function PerfChartFilter({ opCodeOptions, selectedOpCodes, updateOpCodes }: Perf
     };
 
     return (
-        <aside className='op-code-menu'>
-            <p className='header'>
-                <strong>Operation codes</strong>
-            </p>
+        <aside className='op-code-menu-container'>
+            <div className='op-code-menu'>
+                <p className='header'>
+                    <strong>Operation codes</strong>
+                </p>
 
-            {opCodeOptions.map((option) => (
-                <div
-                    className='option'
-                    key={option.opCode}
-                >
+                <div className='option select-all'>
                     <Checkbox
-                        checked={selectedOpCodes.map((selected) => selected.opCode).includes(option.opCode)}
-                        id={option.opCode}
-                        key={option.opCode}
-                        label={option.opCode}
-                        onChange={() => {
-                            const newSelectedOpCodes = selectedOpCodes.includes(option)
-                                ? selectedOpCodes.filter((code) => code !== option)
-                                : [...selectedOpCodes, option];
-
-                            updateOpCodes(newSelectedOpCodes);
-                        }}
-                    />
-
-                    <div
-                        className='memory-color-block'
-                        style={{
-                            backgroundColor: option.colour,
-                        }}
+                        checked={isAllSelected}
+                        indeterminate={isIndeterminate}
+                        id='select-all'
+                        onChange={handleAllSelectedChange}
+                        label={getAllSelectedLabel()}
                     />
                 </div>
-            ))}
 
-            <div className='option'>
-                <Checkbox
-                    checked={isAllSelected}
-                    indeterminate={isIndeterminate}
-                    id='select-all'
-                    onChange={handleAllSelectedChange}
-                    label={getAllSelectedLabel()}
-                />
+                {opCodeOptions.map((option) => (
+                    <div
+                        className='option'
+                        key={option.opCode}
+                    >
+                        <Checkbox
+                            checked={selectedOpCodes.map((selected) => selected.opCode).includes(option.opCode)}
+                            id={option.opCode}
+                            key={option.opCode}
+                            label={option.opCode}
+                            onChange={() => {
+                                const newSelectedOpCodes = selectedOpCodes.includes(option)
+                                    ? selectedOpCodes.filter((code) => code !== option)
+                                    : [...selectedOpCodes, option];
+
+                                updateOpCodes(newSelectedOpCodes);
+                            }}
+                        />
+
+                        <div
+                            className='memory-color-block'
+                            style={{
+                                backgroundColor: option.colour,
+                            }}
+                        />
+                    </div>
+                ))}
             </div>
         </aside>
     );

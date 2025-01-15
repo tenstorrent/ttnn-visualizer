@@ -9,46 +9,52 @@ $list-color: $tt-purple-shade;
 $border-radius: 2px;
 $icon-gap: 8px;
 
-.op-code-menu {
-    display: flex;
-    flex-direction: column;
+.op-code-menu-container {
     position: sticky;
     top: 20px;
     left: 0;
+    width: 325px;
     align-self: start;
-    background-color: color.adjust($list-color, $lightness: 0%);
-    border-radius: $border-radius;
-    box-shadow: 6px 6px 8px 0 rgb(0 0 0 / 25%);
 
-    .header {
-        background-color: color.adjust($list-color, $lightness: 0%);
-        margin-bottom: 0;
-        padding: 8px 16px;
-    }
-
-    .footer {
-        background-color: color.adjust($list-color, $lightness: 0%);
-    }
-
-    .option {
+    .op-code-menu {
         display: flex;
-        gap: 8px;
-        padding: 8px 16px 0 26px;
+        flex-direction: column;
+        background-color: color.adjust($list-color, $lightness: 0%);
+        border-radius: $border-radius;
+        box-shadow: 6px 6px 8px 0 rgb(0 0 0 / 25%);
+        max-height: calc(100vh - 70px); // Need to save some space for the footer bar
+        overflow-y: auto;
 
-        .memory-color-block {
-            margin-top: 2px;
+        .header {
+            background-color: color.adjust($list-color, $lightness: 0%);
+            margin-bottom: 0;
+            padding: 8px 16px;
         }
 
-        &:nth-child(odd) {
-            background-color: color.adjust($list-color, $lightness: -5%);
+        .footer {
+            background-color: color.adjust($list-color, $lightness: 0%);
         }
 
-        &:nth-child(even) {
-            background-color: color.adjust($list-color, $lightness: -10%);
-        }
+        .option {
+            display: flex;
+            gap: 8px;
+            padding: 8px 16px 0;
 
-        &:last-child {
-            background-color: color.adjust($list-color, $lightness: -15%);
+            .memory-color-block {
+                margin-top: 2px;
+            }
+
+            &:nth-child(odd) {
+                background-color: color.adjust($list-color, $lightness: -5%);
+            }
+
+            &:nth-child(even) {
+                background-color: color.adjust($list-color, $lightness: -10%);
+            }
+
+            &.select-all {
+                background-color: color.adjust($list-color, $lightness: -20%);
+            }
         }
     }
 }

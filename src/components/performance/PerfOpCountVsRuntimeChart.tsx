@@ -28,8 +28,8 @@ function PerfOpCountVsRuntimeChart({ data, selectedOpCodes }: PerfOpCountVsRunti
                         x: ['Op Count'],
                         y: [data.filter((row) => row['OP CODE'] === opCode).length / data.length],
                         type: 'bar',
-                        name: opCode,
-                        hovertemplate: `%{y:.1%}`,
+                        name: '',
+                        hovertemplate: `${opCode}<br />%{y:.1%}`,
                         marker: {
                             color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
                         },
@@ -46,8 +46,8 @@ function PerfOpCountVsRuntimeChart({ data, selectedOpCodes }: PerfOpCountVsRunti
                         x: ['Runtime %'],
                         y: [data.filter((row) => row['OP CODE'] === opCode).reduce(getRuntimeLength, 0) / totalRuntime],
                         type: 'bar',
-                        name: opCode,
-                        hovertemplate: `%{y:.1%}`,
+                        name: '',
+                        hovertemplate: `${opCode}<br />%{y:.1%}`,
                         marker: {
                             color: MARKER_COLOURS[index],
                         },

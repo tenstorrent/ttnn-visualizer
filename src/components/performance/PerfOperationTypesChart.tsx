@@ -39,7 +39,7 @@ function PerfOperationTypesChart({ data, opCodes }: PerfOperationTypesChartProps
                 labels: [...filteredOpCodes],
                 type: 'pie',
                 textinfo: 'percent',
-                hovertemplate: `Type: %{label}<br />Count: %{value}<extra></extra>`,
+                hovertemplate: `%{label}<br />Count: %{value}<extra></extra>`,
                 marker: {
                     colors: filteredOpCodes.map(
                         (opCode) => opCodes.find((selected) => selected.opCode === opCode)?.colour,
