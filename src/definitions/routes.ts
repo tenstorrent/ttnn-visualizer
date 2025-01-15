@@ -10,6 +10,7 @@ const ROUTES = Object.freeze({
     STYLEGUIDE: '/styleguide',
     GRAPHTREE: '/graphtree',
     PERFORMANCE: '/performance',
+    NPE: '/npe',
 });
 
 export default ROUTES;

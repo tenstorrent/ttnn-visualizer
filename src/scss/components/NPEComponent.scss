@@ -1,0 +1,28 @@
+@use '../definitions/colours' as *;
+
+.npe {
+    .tensix-grid {
+        &.empty {
+            position: absolute;
+            z-index: -1;
+        }
+
+        display: grid;
+        gap: 10px;
+
+        .tensix {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid $tt-black;
+
+            &:hover {
+                transition: border-color 100ms linear;
+                border-color: $tt-yellow-tint-2;
+            }
+
+            &.active {
+                border-color: $tt-tensix-active;
+            }
+        }
+    }
+}

@@ -61,5 +61,9 @@
         &.performance-button {
             @include button-styles($tt-performance, $tt-performance-active, 'lightning');
         }
+
+        &.npe-button {
+            @include button-styles($tt-npe, $tt-npe-active, 'add-location');
+        }
     }
 }

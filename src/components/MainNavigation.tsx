@@ -89,6 +89,16 @@ function MainNavigation() {
                     large
                     className='performance-button'
                 />
+                <Button
+                    text='NPE'
+                    onClick={() => handleNavigate(ROUTES.NPE)}
+                    active={window.location.pathname === ROUTES.NPE}
+                    icon={IconNames.ADD_LOCATION}
+                    // disabled={!hasActiveProfile}
+                    minimal
+                    large
+                    className='npe-button'
+                />
             </Navbar.Group>
         </Navbar>
     );

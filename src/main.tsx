@@ -21,6 +21,7 @@ import BufferSummary from './routes/BufferSummary';
 import { SocketProvider } from './libs/SocketProvider';
 import GraphView from './routes/GraphView';
 import Performance from './routes/Performance';
+import NPE from './routes/NPE';
 
 const router = createBrowserRouter([
     {
@@ -59,6 +60,10 @@ const router = createBrowserRouter([
             {
                 path: 'performance',
                 element: <Performance />,
+            },
+            {
+                path: ROUTES.NPE,
+                element: <NPE />,
             },
         ],
     },
