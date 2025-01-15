@@ -5,6 +5,11 @@
 @use '../definitions/colours' as *;
 
 .operation-graph-component {
+    .operation-graph-container {
+        width: 100%;
+        height: calc(100vh - 125px);
+    }
+
     .operation-graph-header {
         display: flex;
         flex-direction: column;
@@ -49,6 +54,12 @@
 
         .operation-name {
             font-size: 17px;
+        }
+
+        > h3 {
+            background-color: $tt-grey-4;
+            padding: 5px;
+            font-size: 16px;
         }
 
         .tensors {

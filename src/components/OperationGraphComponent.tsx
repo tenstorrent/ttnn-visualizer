@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Edge, Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
-import { Button, Label, PopoverPosition, Slider, Tooltip } from '@blueprintjs/core';
+import { Button, Intent, Label, PopoverPosition, Slider, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { OperationDescription, Tensor } from '../model/APIData';
@@ -223,10 +223,7 @@ const OperationGraph: React.FC<{
     }, []);
 
     const getNextOperationId = (currentId: number | null) => {
-        if (nodes === null) {
-            return null;
-        }
-        if (currentId === null) {
+        if (nodes === null || currentId === null) {
             return null;
         }
         const nodeIds = nodes.getIds();
@@ -235,10 +232,7 @@ const OperationGraph: React.FC<{
     };
 
     const getPreviousOperationId = (currentId: number | null) => {
-        if (nodes === null) {
-            return null;
-        }
-        if (currentId === null) {
+        if (nodes === null || currentId === null) {
             return null;
         }
         const nodeIds = nodes.getIds();
@@ -320,7 +314,7 @@ const OperationGraph: React.FC<{
                     />
                 </div>
             </div>
-            {currentOperationId !== null && (
+            {currentOperationId !== null && !isLoading && (
                 <div className='operation-graph-props'>
                     <h2 className='operation-name'>
                         {currentOperationId} {operationList.find((op) => op.id === currentOperationId)?.name} (
@@ -329,6 +323,7 @@ const OperationGraph: React.FC<{
                     <Button
                         className='navigate-button'
                         rightIcon={IconNames.ArrowRight}
+                        intent={Intent.PRIMARY}
                         onClick={() => navigate(`/operations/${currentOperationId}`)}
                     >
                         Memory Details
@@ -341,7 +336,7 @@ const OperationGraph: React.FC<{
                             ?.inputs.map((tensor, index) => (
                                 <TensorDetailsComponent
                                     tensor={tensor}
-                                    key={`${currentOperationId} ${tensor.id} ${index}`}
+                                    key={`input-${currentOperationId} ${tensor.id} ${index}`}
                                 />
                             ))}
                     </div>
@@ -352,7 +347,7 @@ const OperationGraph: React.FC<{
                             ?.outputs.map((tensor, index) => (
                                 <TensorDetailsComponent
                                     tensor={tensor}
-                                    key={`${currentOperationId} ${tensor.id} ${index}`}
+                                    key={`output-${currentOperationId} ${tensor.id} ${index}`}
                                 />
                             ))}
                     </div>
@@ -364,8 +359,8 @@ const OperationGraph: React.FC<{
                 </div>
             )}
             <div
+                className='operation-graph-container'
                 ref={containerRef}
-                style={{ width: '100%', height: 'calc(100vh - 125px )' }}
             />
 
             <div className='aside'>
@@ -385,12 +380,14 @@ const TensorDetailsComponent: React.FC<{ tensor: Tensor }> = ({ tensor }) => {
             <div>{tensor.operationIdentifier && [tensor.operationIdentifier]}</div>
             {tensor?.memory_config
                 ? Object.entries(tensor.memory_config).map(([key, value]) => (
-                      <table>
-                          <MemoryConfigRow
-                              key={key}
-                              header={key}
-                              value={value as string | ShardSpec}
-                          />
+                      <table key={key}>
+                          <tbody>
+                              <MemoryConfigRow
+                                  key={key}
+                                  header={key}
+                                  value={value as string | ShardSpec}
+                              />
+                          </tbody>
                       </table>
                   ))
                 : null}
