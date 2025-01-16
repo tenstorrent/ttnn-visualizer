@@ -26,7 +26,6 @@ import {
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import isValidNumber from '../functions/isValidNumber';
-import getOperationIdentifier from '../functions/getOperationIdentifier';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -103,9 +102,11 @@ const fetchOperations = async (deviceId?: number): Promise<OperationDescription[
             const tensorWithMetadata = {
                 ...tensor,
                 producerOperation: operation,
-                operationIdentifier: getOperationIdentifier(operation),
+                operationIdentifier: `${operation.id} ${operation.name} ${operation.operationFileIdentifier}`,
             };
+
             tensorList.set(tensor.id, tensorWithMetadata);
+
             return { ...tensorWithMetadata, io: 'output' };
         });
 
