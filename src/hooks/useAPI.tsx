@@ -26,6 +26,7 @@ import {
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import isValidNumber from '../functions/isValidNumber';
+import getOperationIdentifier from '../functions/getOperationIdentifier';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -96,11 +97,13 @@ const fetchOperations = async (deviceId?: number): Promise<OperationDescription[
     });
 
     return operationList.map((operation: OperationDescription) => {
+        operation.operationFileIdentifier = parseFileOperationIdentifier(operation.stack_trace);
+
         const outputs = operation.outputs.map((tensor) => {
             const tensorWithMetadata = {
                 ...tensor,
                 producerOperation: operation,
-                operationIdentifier: `${operation.id} ${operation.name} (${parseFileOperationIdentifier(operation.stack_trace)})`,
+                operationIdentifier: getOperationIdentifier(operation),
             };
             tensorList.set(tensor.id, tensorWithMetadata);
             return { ...tensorWithMetadata, io: 'output' };
@@ -399,6 +402,20 @@ export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> 
                 // device_id: deviceId,
             },
         });
+
+        const operationsList = await fetchOperations();
+
+        for (const tensor of tensorList) {
+            if (tensor.producers.length > 0) {
+                const producerId = tensor.producers[0];
+                const operationDetails = operationsList.find((operation) => operation.id === producerId);
+                const outputTensor = operationDetails?.outputs.find((output) => output.id === tensor.id);
+
+                if (outputTensor) {
+                    tensor.operationIdentifier = outputTensor.operationIdentifier;
+                }
+            }
+        }
 
         return tensorList;
     } catch (error: unknown) {

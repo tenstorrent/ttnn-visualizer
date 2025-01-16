@@ -14,6 +14,7 @@ import isValidNumber from '../functions/isValidNumber';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';
 import GoldenTensorComparisonIndicator from './GoldenTensorComparisonIndicator';
+import getOperationIdentifier from '../functions/getOperationIdentifier';
 
 interface BufferDetailsProps {
     tensor: Tensor;
@@ -141,9 +142,7 @@ function getLastOperation(lastOperationId: number, operations: Operation[], tens
     }
 
     return lastOperation ? (
-        <Link to={`${ROUTES.OPERATIONS}/${lastOperation.id}`}>
-            {lastOperation?.id} {lastOperation.name}
-        </Link>
+        <Link to={`${ROUTES.OPERATIONS}/${lastOperation.id}`}>{getOperationIdentifier(lastOperation)}</Link>
     ) : null;
 }
 

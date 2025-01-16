@@ -282,16 +282,17 @@ const TensorList = () => {
                                                     filterQuery={filterQuery}
                                                     icon={IconNames.FLOW_LINEAR}
                                                     iconColour='tensor'
-                                                    tags={[
-                                                        {
-                                                            htmlTitle: isValidNumber(tensor.buffer_type)
-                                                                ? BufferTypeLabel[tensor.buffer_type]
-                                                                : 'n/a',
-                                                            intent: isValidNumber(tensor.buffer_type)
-                                                                ? Intent.PRIMARY
-                                                                : Intent.NONE,
-                                                        },
-                                                    ]}
+                                                    tags={
+                                                        isValidNumber(tensor.buffer_type) &&
+                                                        BufferTypeLabel[tensor.buffer_type]
+                                                            ? [
+                                                                  {
+                                                                      htmlTitle: BufferTypeLabel[tensor.buffer_type],
+                                                                      intent: Intent.PRIMARY,
+                                                                  },
+                                                              ]
+                                                            : undefined
+                                                    }
                                                 >
                                                     {tensor.consumers.length > MAX_NUM_CONSUMERS ? (
                                                         <Tooltip
