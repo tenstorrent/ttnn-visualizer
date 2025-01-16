@@ -4,7 +4,7 @@
 
 import React from 'react';
 import classNames from 'classnames';
-import { Icon, IconName, Intent } from '@blueprintjs/core';
+import { Icon, IconName, Intent, Tag, TagProps } from '@blueprintjs/core';
 import HighlightedText from './HighlightedText';
 import '../scss/components/ListItem.scss';
 
@@ -14,6 +14,7 @@ interface ListItemProps {
     icon: IconName;
     iconColour?: keyof typeof ICON_COLOURS;
     intent?: Intent;
+    tags?: TagProps[];
     children?: React.ReactNode;
 }
 
@@ -29,6 +30,7 @@ const ListItem: React.FC<ListItemProps> = ({
     icon,
     iconColour = 'none',
     intent = Intent.NONE,
+    tags,
     children,
 }) => {
     return (
@@ -51,6 +53,15 @@ const ListItem: React.FC<ListItemProps> = ({
             {/* <GoldenTensorComparisonIndicator value={op.goldenLocal} /> */}
 
             {children}
+
+            {tags?.map((tag) => (
+                <Tag
+                    key={tag.htmlTitle}
+                    intent={tag.intent ?? Intent.NONE}
+                >
+                    {tag.htmlTitle}
+                </Tag>
+            ))}
         </div>
     );
 };

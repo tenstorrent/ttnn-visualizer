@@ -282,6 +282,16 @@ const TensorList = () => {
                                                     filterQuery={filterQuery}
                                                     icon={IconNames.FLOW_LINEAR}
                                                     iconColour='tensor'
+                                                    tags={[
+                                                        {
+                                                            htmlTitle: isValidNumber(tensor.buffer_type)
+                                                                ? BufferTypeLabel[tensor.buffer_type]
+                                                                : 'n/a',
+                                                            intent: isValidNumber(tensor.buffer_type)
+                                                                ? Intent.PRIMARY
+                                                                : Intent.NONE,
+                                                        },
+                                                    ]}
                                                 >
                                                     {tensor.consumers.length > MAX_NUM_CONSUMERS ? (
                                                         <Tooltip
@@ -321,11 +331,7 @@ const TensorList = () => {
     );
 };
 
-function getTensorFilterName(tensor: Tensor) {
-    const bufferTypeLabel = isValidNumber(tensor.buffer_type) ? BufferTypeLabel[tensor.buffer_type] : 'n/a';
-
-    return `Tensor ${tensor.id} ${bufferTypeLabel}`;
-}
+const getTensorFilterName = (tensor: Tensor) => `${tensor.id} ${tensor.shape} ${tensor.dtype}`;
 
 function getBufferTypeFilterOptions(tensors: Tensor[]) {
     return [
