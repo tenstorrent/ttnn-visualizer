@@ -12,6 +12,7 @@ import {
     color_row,
     evaluate_fidelity,
     formatCell,
+    getUniqueDeviceIDs,
     get_datatype_size,
     mergeMultideviceRows,
     tflops_per_core,
@@ -171,7 +172,7 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
             Bound: bound,
             'OP Code': { raw_value: op_code },
             'Device Time': { raw_value: device_time_val, unit: 'µs', decimals: 0 },
-            'Dispatch Time': { raw_value: dispatch_time_val, unit: 'µs', decimals: 0 },
+            'Op-to-Op Gap': { raw_value: dispatch_time_val, unit: 'µs', decimals: 0 },
             Cores: { raw_value: Number(row['CORE COUNT']) },
             DRAM: dram_speed,
             'DRAM %': dram_percentage,
@@ -194,7 +195,7 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
         Bound: bound,
         'OP Code': { raw_value: op_code_val },
         'Device Time': { raw_value: device_time_val || null, unit: 'µs', decimals: 0 },
-        'Dispatch Time': { raw_value: dispatch_time_val, unit: 'µs', decimals: 0 },
+        'Op-to-Op Gap': { raw_value: dispatch_time_val, unit: 'µs', decimals: 0 },
         Cores: { raw_value: Number(row['CORE COUNT']) || null },
         DRAM: dram_speed,
         'DRAM %': dram_percentage,
@@ -215,13 +216,13 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
 const add_derived_columns = (rows: ProcessedRow[]) => {
     const total_duration = rows.reduce(
         (acc, r) =>
-            acc + ((r['Device Time'].raw_value as number) || 0) + ((r['Dispatch Time'].raw_value as number) || 0),
+            acc + ((r['Device Time'].raw_value as number) || 0) + ((r['Op-to-Op Gap'].raw_value as number) || 0),
         0,
     );
 
     rows.forEach((r) => {
         const device_time = (r['Device Time'].raw_value as number) || 0;
-        const dispatch_time = (r['Dispatch Time'].raw_value as number) || 0;
+        const dispatch_time = (r['Op-to-Op Gap'].raw_value as number) || 0;
         if (total_duration > 0) {
             r['Total %'] = {
                 raw_value: ((device_time + dispatch_time) / total_duration) * 100,
@@ -252,16 +253,6 @@ const add_derived_columns = (rows: ProcessedRow[]) => {
     });
 };
 
-const getUniqueDeviceIDs = (rows: RowData[]): number[] => {
-    const ids = new Set<number>();
-    for (const row of rows) {
-        if (row['DEVICE ID'] !== undefined) {
-            ids.add(Number(row['DEVICE ID']));
-        }
-    }
-    return [...ids];
-};
-
 // The main React component
 interface PerformanceReportProps {
     data?: RowData[];
@@ -274,6 +265,15 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, setIsMultiDevice] = useState<boolean>(false);
+
+    // const byOp = useGetDeviceOperationsListByOp();
+    // console.log(byOp);
+    //
+    // const list = useGetDeviceOperationsList();
+    // console.log(list);
+
+    // console.log(processed);
+    // console.log(operations);
 
     const processedRows = useMemo(() => {
         if (data === undefined) {
@@ -316,7 +316,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
 
         if (hiliteHighDispatch) {
             rows.forEach((op_data: ProcessedRow) => {
-                const val = op_data['Dispatch Time'].raw_value;
+                const val = op_data['Op-to-Op Gap'].raw_value;
                 const highDispatch = val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
                 op_data.Slow = {
                     raw_value: null,
@@ -336,7 +336,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         'Bound',
         'OP Code',
         'Device Time',
-        'Dispatch Time',
+        'Op-to-Op Gap',
         'Cores',
         'DRAM',
         'DRAM %',
@@ -352,7 +352,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         const highDispatchOps = rows
             .map((op_data: ProcessedRow, idx: number) => [idx + 1, op_data] as [number, ProcessedRow])
             .filter(([_, op_data]) => {
-                const val = op_data['Dispatch Time'].raw_value;
+                const val = op_data['Op-to-Op Gap'].raw_value;
                 return val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
             });
 
@@ -362,17 +362,17 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
 
         // Compute the max dispatch overhead
         const max_dispatch_overhead = highDispatchOps.reduce((acc, [_, op_data]) => {
-            const val = op_data['Dispatch Time'].raw_value as number;
+            const val = op_data['Op-to-Op Gap'].raw_value as number;
             return acc + (val - 6);
         }, 0);
 
-        // Compute total_duration as sum of device times + dispatch times
+        // Compute total_duration as sum of device times + Op-to-Op Gaps
         const total_device_time = rows.reduce((acc, r) => {
             const val = r['Device Time'].raw_value;
             return acc + (typeof val === 'number' ? val : 0);
         }, 0);
         const total_dispatch_time = rows.reduce((acc, r) => {
-            const val = r['Dispatch Time'].raw_value;
+            const val = r['Op-to-Op Gap'].raw_value;
             return acc + (typeof val === 'number' ? val : 0);
         }, 0);
 
