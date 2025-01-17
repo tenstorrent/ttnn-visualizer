@@ -1,19 +1,30 @@
 @use '../definitions/colours' as *;
 
 .npe {
+    .timestep {
+        font-size: 10px;
+        padding: 2px;
+    }
+
+    .chip {
+        margin: 20px;
+        position: relative;
+    }
+
     .tensix-grid {
         &.empty {
             position: absolute;
             z-index: -1;
+            top: 0;
+            left: 0;
         }
 
         display: grid;
-        gap: 10px;
+        gap: 5px;
 
         .tensix {
             display: flex;
             flex-direction: column;
-            border: 1px solid $tt-black;
 
             &:hover {
                 transition: border-color 100ms linear;
@@ -22,6 +33,10 @@
 
             &.active {
                 border-color: $tt-tensix-active;
+            }
+
+            &.empty-tensix {
+                border-color: $tt-slate;
             }
         }
     }

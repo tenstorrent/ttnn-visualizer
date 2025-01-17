@@ -1,3 +1,5 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
 import { NPEData } from '../model/NPE';
 
 export const npeTempData: NPEData = {
@@ -7928,11 +7930,11 @@ export const npeTempData: NPEData = {
                 [3, 0, 'NOC1_NORTH', 23.2],
                 [3, 0, 'NOC1_WEST', 23.2],
                 [4, 0, 'NOC1_NORTH', 46.4],
+                [9, 0, 'NOC1_NORTH', 46.4],
                 [5, 0, 'NOC1_NORTH', 46.4],
                 [6, 0, 'NOC1_NORTH', 46.4],
                 [7, 0, 'NOC1_NORTH', 46.4],
                 [8, 0, 'NOC1_NORTH', 46.4],
-                [9, 0, 'NOC1_NORTH', 46.4],
                 [9, 0, 'NOC1_WEST', 46.4],
                 [9, 2, 'NOC1_WEST', 46.4],
                 [9, 3, 'NOC1_WEST', 46.4],
@@ -8856,16 +8858,16 @@ export const npeTempData: NPEData = {
             end_cycle: 39680,
             active_transfers: [29],
             link_utilization: [
-                [0, 0, 'NOC1_NORTH', 23.2],
+                [0, 0, 'NOC0_SOUTH', 23.2],
                 [1, 0, 'NOC1_NORTH', 23.2],
                 [10, 0, 'NOC1_WEST', 23.2],
-                [10, 3, 'NOC1_WEST', 23.2],
-                [10, 4, 'NOC1_WEST', 23.2],
-                [10, 5, 'NOC1_WEST', 23.2],
-                [10, 6, 'NOC1_WEST', 23.2],
-                [10, 7, 'NOC1_WEST', 23.2],
-                [10, 8, 'NOC1_WEST', 23.2],
-                [10, 9, 'NOC1_WEST', 23.2],
+                [10, 3, 'NOC0_EAST', 23.2],
+                [10, 4, 'NOC0_EAST', 23.2],
+                [10, 5, 'NOC0_EAST', 23.2],
+                [10, 6, 'NOC0_EAST', 23.2],
+                [10, 7, 'NOC0_EAST', 23.2],
+                [10, 8, 'NOC0_EAST', 23.2],
+                [10, 9, 'NOC0_EAST', 23.2],
                 [11, 0, 'NOC1_NORTH', 23.2],
             ],
         },

@@ -12,7 +12,7 @@ const SVGTensixRenderer: React.FC<SVGTensixRendererProps> = ({ width, height, da
         <svg
             width={width}
             height={height}
-            style={{ border: '1px solid black' }}
+            // style={{ border: '1px solid black' }}
         >
             <g>
                 {data.map((line, index) => {
