@@ -25,6 +25,7 @@ import 'styles/components/TensorList.scss';
 import BufferDetails from './BufferDetails';
 import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
+import { toReadableShape, toReadableType } from '../functions/math';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -332,7 +333,8 @@ const TensorList = () => {
     );
 };
 
-const getTensorFilterName = (tensor: Tensor) => `${tensor.id} ${tensor.shape} ${tensor.dtype}`;
+const getTensorFilterName = (tensor: Tensor) =>
+    `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensor.operationIdentifier ? tensor.operationIdentifier : ''}`;
 
 function getBufferTypeFilterOptions(tensors: Tensor[]) {
     return [

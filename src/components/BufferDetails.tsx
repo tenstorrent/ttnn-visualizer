@@ -32,6 +32,11 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
             <table className='ttnn-table analysis-table'>
                 <tbody>
                     <tr>
+                        <th>Tensor Id</th>
+                        <td>{tensor.id}</td>
+                    </tr>
+
+                    <tr>
                         <th>Last used</th>
                         <td>
                             {isValidNumber(lastOperationId)
@@ -140,10 +145,10 @@ function getLastOperation(lastOperationId: number, operations: Operation[], tens
         lastOperation = operations.find((operation) => operation.id === tensor.consumers[tensor.consumers.length - 2]);
     }
 
-    const matchingTensor = lastOperation?.inputs.find((input) => input.id === tensor.id);
-
-    return matchingTensor && lastOperation ? (
-        <Link to={`${ROUTES.OPERATIONS}/${lastOperation.id}`}>{matchingTensor.operationIdentifier}</Link>
+    return lastOperation ? (
+        <Link to={`${ROUTES.OPERATIONS}/${lastOperation.id}`}>
+            {lastOperation?.id} {lastOperation.name} ({lastOperation.operationFileIdentifier})
+        </Link>
     ) : null;
 }
 
