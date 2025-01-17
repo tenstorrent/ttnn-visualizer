@@ -19,6 +19,7 @@ import ROUTES from '../definitions/routes';
 import { expandedOperationsAtom, shouldCollapseAllOperationsAtom } from '../store/app';
 import { OperationDescription } from '../model/APIData';
 import ListItem from './ListItem';
+import { formatSize } from '../functions/math';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -307,7 +308,7 @@ const OperationList = () => {
                                         >
                                             <div className='arguments-wrapper'>
                                                 <p className='monospace'>
-                                                    Python execution time: {operation.duration}s
+                                                    Python execution time: {formatSize(operation.duration)} s
                                                 </p>
 
                                                 {operation.arguments && (
