@@ -2,15 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Link, Outlet } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { Classes, Tooltip } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
 import classNames from 'classnames';
-import TenstorrentLogo from './TenstorrentLogo';
-import ROUTES from '../definitions/routes';
 import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
 
@@ -40,13 +38,7 @@ function Layout() {
 
             <header className='app-header'>
                 <nav className='nav-container'>
-                    <Link
-                        className='tt-logo'
-                        to={ROUTES.HOME}
-                    >
-                        <TenstorrentLogo />
-                        <p className='version'>v{appVersion}</p>
-                    </Link>
+                    <p className='version'>v{appVersion}</p>
                     <MainNavigation />
                 </nav>
 
