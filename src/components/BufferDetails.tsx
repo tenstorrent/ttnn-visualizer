@@ -5,7 +5,7 @@
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { Operation, OperationDescription, Tensor } from '../model/APIData';
-import { toHex } from '../functions/math';
+import { toHex, toReadableShape, toReadableType } from '../functions/math';
 import ROUTES from '../definitions/routes';
 import 'styles/components/BufferDetails.scss';
 import getDeallocationOperation from '../functions/getDeallocationOperation';
@@ -78,7 +78,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
 
                     <tr>
                         <th>DataType</th>
-                        <td>{dtype}</td>
+                        <td>{toReadableType(dtype)}</td>
                     </tr>
 
                     <tr>
@@ -98,7 +98,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
 
                     <tr>
                         <th>Shape</th>
-                        <td>{shape}</td>
+                        <td>{toReadableShape(shape)}</td>
                     </tr>
 
                     {tensor.comparison ? (
