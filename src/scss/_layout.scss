@@ -11,6 +11,18 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
+
+        .title {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+
+            h1 {
+                margin: 0;
+            }
+        }
     }
 
     .current-data {
