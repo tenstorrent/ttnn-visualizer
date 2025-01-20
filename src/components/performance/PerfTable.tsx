@@ -12,6 +12,7 @@ import {
     color_row,
     evaluate_fidelity,
     formatCell,
+    getUniqueDeviceIDs,
     get_datatype_size,
     mergeMultideviceRows,
     tflops_per_core,
@@ -250,16 +251,6 @@ const add_derived_columns = (rows: ProcessedRow[]) => {
             r.Bound = { raw_value: 'HOST' };
         }
     });
-};
-
-const getUniqueDeviceIDs = (rows: RowData[]): number[] => {
-    const ids = new Set<number>();
-    for (const row of rows) {
-        if (row['DEVICE ID'] !== undefined) {
-            ids.add(Number(row['DEVICE ID']));
-        }
-    }
-    return [...ids];
 };
 
 // The main React component

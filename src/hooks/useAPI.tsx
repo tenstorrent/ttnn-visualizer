@@ -411,7 +411,7 @@ export const useGetDeviceOperationListPerf = () => {
             df = mergeMultideviceRows(df);
         }
 
-        df = df.filter((r) => !r['OP CODE']?.toString().includes('(torch)') && !(r['OP CODE']?.toString() === ''));
+        df = df.filter((r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE']?.toString() === ''));
 
         deviceOperations.forEach((deviceOperation, index) => {
             const perfData = df[index];
