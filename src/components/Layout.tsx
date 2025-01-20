@@ -38,7 +38,10 @@ function Layout() {
 
             <header className='app-header'>
                 <nav className='nav-container'>
-                    <p className='version'>v{appVersion}</p>
+                    <div className='title'>
+                        <h1>TT-NN Visualizer</h1>
+                        <sup className='version'>v{appVersion}</sup>
+                    </div>
                     <MainNavigation />
                 </nav>
 
