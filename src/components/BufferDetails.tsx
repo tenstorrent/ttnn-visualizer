@@ -77,6 +77,11 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                     </tr>
 
                     <tr>
+                        <th>Shape</th>
+                        <td>{toReadableShape(shape)}</td>
+                    </tr>
+
+                    <tr>
                         <th>DataType</th>
                         <td>{toReadableType(dtype)}</td>
                     </tr>
@@ -95,11 +100,6 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                               />
                           ))
                         : null}
-
-                    <tr>
-                        <th>Shape</th>
-                        <td>{toReadableShape(shape)}</td>
-                    </tr>
 
                     {tensor.comparison ? (
                         <>

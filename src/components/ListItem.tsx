@@ -47,17 +47,12 @@ const ListItem: React.FC<ListItemProps> = ({
                 filter={filterQuery}
             />
 
-            {/* <Button title='Operation tensor report' minimal small icon={IconNames.GRAPH} /> */}
-            {/* <Button title='Stack trace' minimal small icon={IconNames.CODE} /> */}
-            {/* <GoldenTensorComparisonIndicator value={op.goldenGlobal} /> */}
-            {/* <GoldenTensorComparisonIndicator value={op.goldenLocal} /> */}
-
             {children}
 
             {tags?.map((tag) => (
                 <Tag
                     key={tag.htmlTitle}
-                    intent={tag.intent ?? Intent.NONE}
+                    className={tag.className}
                 >
                     {tag.htmlTitle}
                 </Tag>
