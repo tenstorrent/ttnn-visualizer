@@ -15,6 +15,7 @@ export interface Cell {
 }
 
 export interface RowData {
+    ID: number;
     'DEVICE ID'?: number;
     'HOST START TS'?: number;
     'DEVICE FW DURATION [ns]'?: number;

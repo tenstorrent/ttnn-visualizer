@@ -26,6 +26,8 @@ import {
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import isValidNumber from '../functions/isValidNumber';
+import { getUniqueDeviceIDs, mergeMultideviceRows } from '../functions/perfFunctions';
+import { RowData } from '../definitions/PerfTable';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -350,7 +352,7 @@ export const useGetDeviceOperationsListByOp = () => {
     }, [operations]);
 };
 
-export const useGetDeviceOperationsList = () => {
+export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     const { data: operations } = useOperationsList();
 
     return useMemo(() => {
@@ -374,6 +376,52 @@ export const useGetDeviceOperationsList = () => {
                 .flat() || []
         );
     }, [operations]);
+};
+
+export interface DeviceOperationMapping {
+    name: string;
+    id: number;
+    operationName: string;
+    perfData?: RowData;
+}
+
+export const useGetDeviceOperationListPerf = () => {
+    const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
+    const { data } = usePerformance();
+
+    return useMemo(() => {
+        if (!data?.data || data.data.length === 0) {
+            return [];
+        }
+
+        // @ts-expect-error this should be just fine
+        let df: RowData[] = data.data.slice() as RowData[];
+
+        df.forEach((r, index) => {
+            r.ORIGINAL_ID = index + 2;
+        });
+
+        if (df.length > 0 && 'HOST START TS' in df[0]) {
+            df = df.sort((a, b) => Number(a['HOST START TS'] || 0) - Number(b['HOST START TS'] || 0));
+        }
+
+        const uniqueDeviceIDs = getUniqueDeviceIDs(df);
+
+        if (uniqueDeviceIDs.length > 1) {
+            df = mergeMultideviceRows(df);
+        }
+
+        df = df.filter((r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE']?.toString() === ''));
+
+        deviceOperations.forEach((deviceOperation, index) => {
+            const perfData = df[index];
+            if (perfData && perfData['OP CODE'] === deviceOperation.name) {
+                deviceOperation.perfData = df[index];
+            }
+        });
+
+        return deviceOperations;
+    }, [data, deviceOperations]);
 };
 
 // Not currently used anymore

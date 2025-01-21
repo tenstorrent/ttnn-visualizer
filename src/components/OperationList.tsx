@@ -14,7 +14,7 @@ import Collapsible from './Collapsible';
 import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ListView.scss';
-import { useOperationsList } from '../hooks/useAPI';
+import { DeviceOperationMapping, useGetDeviceOperationListPerf, useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
 import { expandedOperationsAtom, shouldCollapseAllOperationsAtom } from '../store/app';
 import { OperationDescription } from '../model/APIData';
@@ -35,6 +35,7 @@ const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
+    const perfData = useGetDeviceOperationListPerf();
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const [filterQuery, setFilterQuery] = useState('');
@@ -126,7 +127,9 @@ const OperationList = () => {
 
             setFilteredOperationsList(operations);
         }
-    }, [fetchedOperations, filterQuery, shouldSortByID, shouldSortDuration]);
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fetchedOperations, filterQuery, shouldSortByID, shouldSortDuration, perfData]);
 
     useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;
@@ -310,6 +313,26 @@ const OperationList = () => {
                                                 <p className='monospace'>
                                                     Python execution time: {formatSize(operation.duration)} s
                                                 </p>
+                                                <p className='monospace'>
+                                                    {perfData
+                                                        ?.filter(
+                                                            (perf: DeviceOperationMapping) => perf.id === operation.id,
+                                                        )
+                                                        .map((perf) => (
+                                                            <p key={perf.id + perf.operationName}>
+                                                                <strong>{perf.perfData?.['OP CODE']}</strong> device
+                                                                time:{' '}
+                                                                {formatSize(
+                                                                    Number(
+                                                                        perf.perfData?.['DEVICE KERNEL DURATION [ns]'],
+                                                                    ) / 1000,
+
+                                                                    0,
+                                                                )}{' '}
+                                                                µs
+                                                            </p>
+                                                        ))}
+                                                </p>
 
                                                 {operation.arguments && (
                                                     <OperationArguments
@@ -339,6 +362,7 @@ const OperationList = () => {
         </fieldset>
     );
 };
+
 function getOperationFilterName(operation: OperationDescription) {
     return `${operation.id} ${operation.name} (${operation.operationFileIdentifier}) `;
 }

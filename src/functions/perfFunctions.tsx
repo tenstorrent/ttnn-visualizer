@@ -258,3 +258,12 @@ export const mergeMultideviceRows = (rows: RowData[]): RowData[] => {
         );
     });
 };
+export const getUniqueDeviceIDs = (rows: RowData[]): number[] => {
+    const ids = new Set<number>();
+    for (const row of rows) {
+        if (row['DEVICE ID'] !== undefined) {
+            ids.add(Number(row['DEVICE ID']));
+        }
+    }
+    return [...ids];
+};
