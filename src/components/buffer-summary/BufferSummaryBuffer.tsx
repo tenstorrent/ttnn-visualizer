@@ -6,7 +6,7 @@ import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { Buffer, Tensor } from '../../model/APIData';
-import { formatSize, toHex } from '../../functions/math';
+import { formatSize, toHex, toReadableShape, toReadableType } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { renderMemoryLayoutAtom, selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import { getDimmedColour } from '../../functions/colour';
@@ -80,6 +80,8 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
                                 {buffer.address} ({toHex(buffer.address)})<br />
                                 Size: {formatSize(buffer.size)}
                                 <br />
+                                {tensor?.shape ? toReadableShape(tensor.shape) : ''}{' '}
+                                {tensor?.dtype ? toReadableType(tensor.dtype) : ''}{' '}
                                 {tensor?.id ? `Tensor ${tensor.id}` : ''}
                                 {tensor?.memory_config?.memory_layout ? (
                                     <>
