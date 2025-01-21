@@ -381,6 +381,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
             </div>
         );
     };
+
     return (
         <>
             <Switch

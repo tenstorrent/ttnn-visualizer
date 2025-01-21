@@ -318,20 +318,25 @@ const OperationList = () => {
                                                         ?.filter(
                                                             (perf: DeviceOperationMapping) => perf.id === operation.id,
                                                         )
-                                                        .map((perf) => (
-                                                            <p key={perf.id + perf.operationName}>
-                                                                <strong>{perf.perfData?.['OP CODE']}</strong> device
-                                                                time:{' '}
-                                                                {formatSize(
-                                                                    Number(
-                                                                        perf.perfData?.['DEVICE KERNEL DURATION [ns]'],
-                                                                    ) / 1000,
+                                                        .map(
+                                                            (perf) =>
+                                                                perf.perfData && (
+                                                                    <p key={perf.id + perf.operationName}>
+                                                                        <strong>{perf.perfData?.['OP CODE']}</strong>{' '}
+                                                                        Device time:{' '}
+                                                                        {formatSize(
+                                                                            Number(
+                                                                                perf.perfData?.[
+                                                                                    'DEVICE KERNEL DURATION [ns]'
+                                                                                ],
+                                                                            ) / 1000,
 
-                                                                    0,
-                                                                )}{' '}
-                                                                µs
-                                                            </p>
-                                                        ))}
+                                                                            0,
+                                                                        )}{' '}
+                                                                        µs
+                                                                    </p>
+                                                                ),
+                                                        )}
                                                 </p>
 
                                                 {operation.arguments && (

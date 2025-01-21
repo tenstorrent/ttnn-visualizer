@@ -354,28 +354,42 @@ export const useGetDeviceOperationsListByOp = () => {
 
 export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     const { data: operations } = useOperationsList();
+    const { data: devices } = useDevices();
+
+    const collapseMultideviceOPs = (data: DeviceOperationMapping[], numDevices: number): DeviceOperationMapping[] => {
+        const lookup = new Map<string, DeviceOperationMapping>();
+        data.forEach((item) => {
+            const key = `${item.name}-${item.id}`;
+            if (!lookup.has(key)) {
+                lookup.set(key, item);
+            }
+        });
+        return Array.from(lookup.values());
+    };
 
     return useMemo(() => {
-        return (
-            operations
-                ?.map((operation) => {
-                    return operation.device_operations
-                        .filter((op) => op.node_type === NodeType.function_start)
-                        .map((deviceOperation) => deviceOperation.params.name)
-                        .filter(
-                            (opName) =>
-                                !opName.includes('(torch)') &&
-                                !opName.includes('::') &&
-                                !opName.includes('ttnn.') &&
-                                opName !== '',
-                        )
-                        .map((op) => {
-                            return { name: op, id: operation.id, operationName: operation.name };
-                        });
-                })
-                .flat() || []
+        if (!operations || !devices) {
+            return [];
+        }
+        const result = operations.flatMap((operation) =>
+            operation.device_operations
+                .filter(
+                    (op) =>
+                        op.node_type === NodeType.function_start &&
+                        op.params.name &&
+                        !op.params.name.includes('(torch)') &&
+                        !op.params.name.includes('::') &&
+                        !op.params.name.includes('ttnn.'),
+                )
+                .map((deviceOperation) => ({
+                    name: deviceOperation.params.name,
+                    id: operation.id,
+                    operationName: operation.name,
+                })),
         );
-    }, [operations]);
+        // return result;
+        return collapseMultideviceOPs(result, devices.length);
+    }, [operations, devices]);
 };
 
 export interface DeviceOperationMapping {
@@ -412,15 +426,17 @@ export const useGetDeviceOperationListPerf = () => {
         }
 
         df = df.filter((r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE']?.toString() === ''));
-
+        let isInvalid = false;
         deviceOperations.forEach((deviceOperation, index) => {
             const perfData = df[index];
             if (perfData && perfData['OP CODE'] === deviceOperation.name) {
                 deviceOperation.perfData = df[index];
+            } else {
+                isInvalid = true;
             }
         });
-
-        return deviceOperations;
+        // console.log('isInvalid', isInvalid);
+        return isInvalid ? [] : deviceOperations;
     }, [data, deviceOperations]);
 };
 

@@ -3,14 +3,16 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Outlet } from 'react-router-dom';
-import { Classes, Tooltip } from '@blueprintjs/core';
+import { Classes, Icon, Tooltip } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
 import classNames from 'classnames';
+import { IconNames } from '@blueprintjs/icons';
 import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
+import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -26,7 +28,8 @@ function Layout() {
     const appVersion = import.meta.env.APP_VERSION;
     const activeReport = useAtomValue(activeReportAtom);
     const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
-
+    const useGetDeviceOperationListPerfResult = useGetDeviceOperationListPerf();
+    const isInSync = useGetDeviceOperationListPerfResult.length > 0;
     return (
         <div className={Classes.DARK}>
             <Helmet
@@ -70,6 +73,28 @@ function Layout() {
                                 <strong>Performance:</strong> {activePerformanceTrace}
                             </span>
                         </Tooltip>
+                    )}
+
+                    {activeReport && activePerformanceTrace && (
+                        <span>
+                            {isInSync ? (
+                                <strong>
+                                    <Icon
+                                        icon={IconNames.TickCircle}
+                                        color='#32a467'
+                                    />{' '}
+                                    Profiler and perf reports syncronized
+                                </strong>
+                            ) : (
+                                <strong>
+                                    <Icon
+                                        icon={IconNames.ISSUE}
+                                        color='#fa512e'
+                                    />{' '}
+                                    Profiler and perf reports cant be synchronized
+                                </strong>
+                            )}
+                        </span>
                     )}
                 </div>
             </header>
