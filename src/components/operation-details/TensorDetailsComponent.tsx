@@ -10,7 +10,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { Tensor } from '../../model/APIData';
-import { prettyPrintAddress, toHex } from '../../functions/math';
+import { prettyPrintAddress, toHex, toReadableShape, toReadableType } from '../../functions/math';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { useOperationsList } from '../../hooks/useAPI';
 import getNextAllocationOperation from '../../functions/getNextAllocationOperation';
@@ -111,7 +111,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 )}
                 {overlayOpen && address !== null && tensor.buffer_type !== null && (
                     <TensorVisualisationComponent
-                        title={`Tensor ${tensor.id}`}
+                        title={`${BufferTypeLabel[tensor.buffer_type]} ${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensor.operationIdentifier} Tensor ${tensor.id}`}
                         operationId={operationId}
                         address={address}
                         bufferType={tensor.buffer_type}
@@ -133,10 +133,10 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     </p>
                 )}
                 <p>
-                    <strong>Shape:</strong> {tensor.shape}
+                    <strong>Shape:</strong> {toReadableShape(tensor.shape)}
                 </p>
                 <p>
-                    <strong>Dtype:</strong> {tensor.dtype}
+                    <strong>Dtype:</strong> {toReadableType(tensor.dtype)}
                 </p>
                 <p>
                     <strong>Layout:</strong> {tensor.layout}
