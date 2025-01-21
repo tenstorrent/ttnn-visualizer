@@ -264,7 +264,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     </Tooltip>
                                     {tensixIOVisualisationOpen && (
                                         <TensorVisualisationComponent
-                                            title={`${operation.id} ${operation.name}  (${operation.operationFileIdentifier}) inputs/outputs`}
+                                            title={`${operationId} ${operation.name}  (${operation.operationFileIdentifier}) inputs/outputs`}
                                             operationId={operationId}
                                             address={inputOutputAddressList}
                                             bufferType={BufferType.L1}
@@ -276,7 +276,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     )}
                                     {tensixFullVisualisationOpen && (
                                         <TensorVisualisationComponent
-                                            title={`${operation.id} ${operation.name}  (${operation.operationFileIdentifier})  detailed memory report`}
+                                            title={`${operationId} ${operation.name}  (${operation.operationFileIdentifier})  detailed memory report`}
                                             operationId={operationId}
                                             bufferType={BufferType.L1}
                                             zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
