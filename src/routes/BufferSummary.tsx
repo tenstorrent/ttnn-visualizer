@@ -2,30 +2,20 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import { useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { AnchorButton, ButtonGroup, Intent, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useEffect, useMemo, useRef, useState } from 'react';
 import { BuffersByOperationData, useBuffers, useOperationsList } from '../hooks/useAPI';
-import 'styles/components/BufferSummary.scss';
-import BufferSummaryPlotRenderer from '../components/buffer-summary/BufferSummaryPlotRenderer';
-import BufferSummaryTable from '../components/buffer-summary/BufferSummaryTable';
-import ROUTES from '../definitions/routes';
-import { BufferType } from '../model/BufferType';
-import LoadingSpinner from '../components/LoadingSpinner';
-import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import useBufferFocus from '../hooks/useBufferFocus';
+import { BufferType } from '../model/BufferType';
+import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import { Operation, Tensor } from '../model/APIData';
-
-const TAB_IDS = {
-    L1: 'L1',
-    DRAM: 'DRAM',
-};
-
-const SECTION_IDS = {
-    PLOT: 'plot',
-    TABLE: 'table',
-};
+import ROUTES from '../definitions/routes';
+import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
+import LoadingSpinner from '../components/LoadingSpinner';
+import 'styles/components/BufferSummary.scss';
+import { SECTION_IDS, TAB_IDS } from '../definitions/BufferSummary';
 
 function BufferSummary() {
     const plotRef = useRef<HTMLHeadingElement>(null);
@@ -38,7 +28,7 @@ function BufferSummary() {
 
     const { activeToast, resetToasts } = useBufferFocus();
 
-    const isDram = selectedTabId === TAB_IDS.DRAM;
+    const isDramActive = selectedTabId === TAB_IDS.DRAM;
 
     useEffect(() => {
         const scrollRefs = [plotRef, tableRef];
@@ -63,22 +53,49 @@ function BufferSummary() {
         return () => window.removeEventListener('scroll', navHighlighter);
     }, []);
 
-    const tensorListByOperation = useMemo(
-        () => createTensorListByOperationById(operationsList, isDram ? dramBuffersByOperation : buffersByOperation),
-        [operationsList, buffersByOperation, isDram, dramBuffersByOperation],
+    const tensorListByOperation = createTensorListByOperationById(
+        operationsList,
+        isDramActive ? dramBuffersByOperation : buffersByOperation,
     );
 
     return (
         <div className='buffer-summary'>
             <Helmet title='Buffer summary' />
 
-            <h1 className='page-title'>{isDram ? 'DRAM' : 'L1'} buffers by operation</h1>
+            <h1 className='page-title'>Buffers by operation</h1>
+
+            <ButtonGroup className='sticky-nav'>
+                <AnchorButton
+                    intent={Intent.PRIMARY}
+                    href={`${ROUTES.BUFFERS}#${SECTION_IDS.PLOT}`}
+                    icon={IconNames.HORIZONTAL_BAR_CHART}
+                    outlined={activeSection !== SECTION_IDS.PLOT}
+                >
+                    Plot view
+                </AnchorButton>
+
+                <AnchorButton
+                    intent={Intent.PRIMARY}
+                    href={`${ROUTES.BUFFERS}#${SECTION_IDS.TABLE}`}
+                    icon={IconNames.TH}
+                    outlined={activeSection !== SECTION_IDS.TABLE}
+                >
+                    Table view
+                </AnchorButton>
+            </ButtonGroup>
+
+            {activeToast && (
+                // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
+                <div
+                    className='outside-click'
+                    onClick={resetToasts}
+                />
+            )}
 
             <Tabs
                 id='performance-tabs'
                 selectedTabId={selectedTabId}
                 onChange={setSelectedTabId}
-                renderActiveTabPanelOnly
                 large
             >
                 <Tab
@@ -86,65 +103,17 @@ function BufferSummary() {
                     title='L1'
                     icon={IconNames.PAGE_LAYOUT}
                     panel={
-                        <>
-                            {' '}
-                            <ButtonGroup className='sticky-nav'>
-                                <AnchorButton
-                                    intent={Intent.PRIMARY}
-                                    href={`${ROUTES.BUFFERS}#${SECTION_IDS.PLOT}`}
-                                    icon={IconNames.HORIZONTAL_BAR_CHART}
-                                    outlined={activeSection !== SECTION_IDS.PLOT}
-                                >
-                                    Plot view
-                                </AnchorButton>
-
-                                <AnchorButton
-                                    intent={Intent.PRIMARY}
-                                    href={`${ROUTES.BUFFERS}#${SECTION_IDS.TABLE}`}
-                                    icon={IconNames.TH}
-                                    outlined={activeSection !== SECTION_IDS.TABLE}
-                                >
-                                    Table view
-                                </AnchorButton>
-                            </ButtonGroup>
-                            {activeToast && (
-                                // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
-                                <div
-                                    className='outside-click'
-                                    onClick={resetToasts}
-                                />
-                            )}
-                            {buffersByOperation && operationsList && tensorListByOperation ? (
-                                <>
-                                    <h2>Plot view</h2>
-                                    <div
-                                        ref={plotRef}
-                                        id={SECTION_IDS.PLOT}
-                                    >
-                                        <BufferSummaryPlotRenderer
-                                            buffersByOperation={buffersByOperation}
-                                            tensorListByOperation={tensorListByOperation}
-                                            isDram={isDram}
-                                        />
-                                    </div>
-
-                                    <h2>Table view</h2>
-                                    <div
-                                        ref={tableRef}
-                                        id={SECTION_IDS.TABLE}
-                                    >
-                                        <BufferSummaryTable
-                                            buffersByOperation={buffersByOperation.filter(
-                                                (op) => op.buffers.length > 0,
-                                            )}
-                                            tensorListByOperation={tensorListByOperation}
-                                        />
-                                    </div>
-                                </>
-                            ) : (
-                                <LoadingSpinner />
-                            )}
-                        </>
+                        buffersByOperation && operationsList && tensorListByOperation ? (
+                            <BufferSummaryTab
+                                plotRef={plotRef}
+                                tableRef={tableRef}
+                                buffersByOperation={buffersByOperation}
+                                tensorListByOperation={tensorListByOperation}
+                                isDramActive={isDramActive}
+                            />
+                        ) : (
+                            <LoadingSpinner />
+                        )
                     }
                 />
 
@@ -153,64 +122,17 @@ function BufferSummary() {
                     title='DRAM (can be slow)'
                     icon={IconNames.PAGE_LAYOUT}
                     panel={
-                        <>
-                            <ButtonGroup className='sticky-nav'>
-                                <AnchorButton
-                                    intent={Intent.PRIMARY}
-                                    href={`${ROUTES.BUFFERS}#${SECTION_IDS.PLOT}`}
-                                    icon={IconNames.HORIZONTAL_BAR_CHART}
-                                    outlined={activeSection !== SECTION_IDS.PLOT}
-                                >
-                                    Plot view
-                                </AnchorButton>
-
-                                <AnchorButton
-                                    intent={Intent.PRIMARY}
-                                    href={`${ROUTES.BUFFERS}#${SECTION_IDS.TABLE}`}
-                                    icon={IconNames.TH}
-                                    outlined={activeSection !== SECTION_IDS.TABLE}
-                                >
-                                    Table view
-                                </AnchorButton>
-                            </ButtonGroup>
-                            {activeToast && (
-                                // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
-                                <div
-                                    className='outside-click'
-                                    onClick={resetToasts}
-                                />
-                            )}
-                            {buffersByOperation && operationsList && tensorListByOperation ? (
-                                <>
-                                    <h2>Plot view</h2>
-                                    <div
-                                        ref={plotRef}
-                                        id={SECTION_IDS.PLOT}
-                                    >
-                                        <BufferSummaryPlotRenderer
-                                            buffersByOperation={buffersByOperation}
-                                            tensorListByOperation={tensorListByOperation}
-                                            isDram={isDram}
-                                        />
-                                    </div>
-
-                                    <h2>Table view</h2>
-                                    <div
-                                        ref={tableRef}
-                                        id={SECTION_IDS.TABLE}
-                                    >
-                                        <BufferSummaryTable
-                                            buffersByOperation={buffersByOperation.filter(
-                                                (op) => op.buffers.length > 0,
-                                            )}
-                                            tensorListByOperation={tensorListByOperation}
-                                        />
-                                    </div>
-                                </>
-                            ) : (
-                                <LoadingSpinner />
-                            )}
-                        </>
+                        dramBuffersByOperation && operationsList && tensorListByOperation ? (
+                            <BufferSummaryTab
+                                plotRef={plotRef}
+                                tableRef={tableRef}
+                                buffersByOperation={dramBuffersByOperation}
+                                tensorListByOperation={tensorListByOperation}
+                                isDramActive={isDramActive}
+                            />
+                        ) : (
+                            <LoadingSpinner />
+                        )
                     }
                 />
             </Tabs>

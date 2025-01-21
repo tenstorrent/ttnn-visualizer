@@ -30,7 +30,7 @@ interface ColumnDefinition {
 
 enum COLUMN_HEADERS {
     operation_id = 'Operation',
-    tensor_id = 'Tensor Id',
+    tensor_id = 'Tensor',
     address = 'Address',
     hexAddress = 'Address (hex)',
     size = 'Size',

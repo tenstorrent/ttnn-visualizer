@@ -29,13 +29,13 @@ const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 interface BufferSummaryPlotRendererProps {
     buffersByOperation: BuffersByOperationData[];
     tensorListByOperation: TensorsByOperationByAddress;
-    isDram?: boolean;
+    isDramActive?: boolean;
 }
 
 function BufferSummaryPlotRenderer({
     buffersByOperation,
     tensorListByOperation,
-    isDram = false,
+    isDramActive = false,
 }: BufferSummaryPlotRendererProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
@@ -53,7 +53,7 @@ function BufferSummaryPlotRenderer({
     );
 
     const getMemorySize = () => {
-        if (isDram) {
+        if (isDramActive) {
             return DRAM_MEMORY_SIZE;
         }
 
@@ -61,7 +61,7 @@ function BufferSummaryPlotRenderer({
     };
 
     // TODO: Multi device support
-    const memorySize = useMemo(getMemorySize, [isDram, deviceId, devices, isLoadingDevices]);
+    const memorySize = useMemo(getMemorySize, [isDramActive, deviceId, devices, isLoadingDevices]);
 
     const zoomedMemorySize = useMemo(() => {
         let minValue: undefined | number;
@@ -103,6 +103,7 @@ function BufferSummaryPlotRenderer({
             <div className='controls'>
                 <Switch
                     label='Buffer zoom'
+                    // disabled={isDramActive}
                     checked={isZoomedIn}
                     onChange={() => {
                         setIsZoomedIn(!isZoomedIn);
