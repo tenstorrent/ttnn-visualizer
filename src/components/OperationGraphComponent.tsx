@@ -167,7 +167,7 @@ const OperationGraph: React.FC<{
                         }
                     });
 
-                    // keeping this for now in case we resurect this soon
+                    // keeping this for now in case we resurrect this soon
                     // networkRef.current.on('dragEnd', () => {
                     //     if (networkRef.current) {
                     //         const centerPosition = networkRef.current.getViewPosition();
@@ -322,7 +322,7 @@ const OperationGraph: React.FC<{
                     </h2>
                     <Button
                         className='navigate-button'
-                        rightIcon={IconNames.ArrowRight}
+                        rightIcon={IconNames.SEGMENTED_CONTROL}
                         intent={Intent.PRIMARY}
                         onClick={() => navigate(`/operations/${currentOperationId}`)}
                     >

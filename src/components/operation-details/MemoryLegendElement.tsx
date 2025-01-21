@@ -9,7 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { DeviceOperationLayoutTypes, DeviceOperationTypes, FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { formatSize, prettyPrintAddress, toHex } from '../../functions/math';
+import { formatSize, prettyPrintAddress, toHex, toReadableShape, toReadableType } from '../../functions/math';
 import 'styles/components/MemoryLegendElement.scss';
 
 export const MemoryLegendElement: React.FC<{
@@ -103,7 +103,7 @@ export const MemoryLegendElement: React.FC<{
                 )}
                 {derivedTensor && (
                     <div className='shape-info-slot'>
-                        {derivedTensor.shape} &nbsp; {derivedTensor.dtype}
+                        {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)}
                     </div>
                 )}
             </div>
