@@ -7,8 +7,8 @@ export const toHex = (num: number): string => {
     return `0x${(num >>> 0).toString(16).toUpperCase()}`;
 };
 
-export const formatSize = (number: number): string => {
-    return new Intl.NumberFormat('en-US').format(number);
+export const formatSize = (number: number, decimals?: number): string => {
+    return new Intl.NumberFormat('en-US', { maximumFractionDigits: decimals }).format(number);
 };
 
 /**
