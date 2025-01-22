@@ -206,10 +206,10 @@ export const color_row = (op_data: ProcessedRow, min_percentage: number) => {
             op_data.Bound.color = 'red';
         }
 
-        // Dispatch time >6.5us?
-        const dispatch_time = op_data['Dispatch Time'].raw_value as number | null;
+        // Op-to-Op Gap >6.5us?
+        const dispatch_time = op_data['Op-to-Op Gap'].raw_value as number | null;
         if (dispatch_time != null && dispatch_time > 6.5) {
-            op_data['Dispatch Time'].color = 'red';
+            op_data['Op-to-Op Gap'].color = 'red';
         }
 
         // Math Fidelity evaluation
