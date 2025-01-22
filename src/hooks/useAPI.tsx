@@ -98,13 +98,17 @@ const fetchOperations = async (deviceId?: number): Promise<OperationDescription[
     });
 
     return operationList.map((operation: OperationDescription) => {
+        operation.operationFileIdentifier = parseFileOperationIdentifier(operation.stack_trace);
+
         const outputs = operation.outputs.map((tensor) => {
             const tensorWithMetadata = {
                 ...tensor,
                 producerOperation: operation,
-                operationIdentifier: `${operation.id} ${operation.name} (${parseFileOperationIdentifier(operation.stack_trace)})`,
+                operationIdentifier: `${operation.id} ${operation.name} ${operation.operationFileIdentifier}`,
             };
+
             tensorList.set(tensor.id, tensorWithMetadata);
+
             return { ...tensorWithMetadata, io: 'output' };
         });
 
@@ -447,6 +451,20 @@ export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> 
                 // device_id: deviceId,
             },
         });
+
+        const operationsList = await fetchOperations();
+
+        for (const tensor of tensorList) {
+            if (tensor.producers.length > 0) {
+                const producerId = tensor.producers[0];
+                const operationDetails = operationsList.find((operation) => operation.id === producerId);
+                const outputTensor = operationDetails?.outputs.find((output) => output.id === tensor.id);
+
+                if (outputTensor) {
+                    tensor.operationIdentifier = outputTensor.operationIdentifier;
+                }
+            }
+        }
 
         return tensorList;
     } catch (error: unknown) {

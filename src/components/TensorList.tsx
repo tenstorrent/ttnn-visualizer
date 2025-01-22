@@ -25,6 +25,7 @@ import 'styles/components/TensorList.scss';
 import BufferDetails from './BufferDetails';
 import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
+import { toReadableShape, toReadableType } from '../functions/math';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -282,6 +283,20 @@ const TensorList = () => {
                                                     filterQuery={filterQuery}
                                                     icon={IconNames.FLOW_LINEAR}
                                                     iconColour='tensor'
+                                                    tags={
+                                                        isValidNumber(tensor.buffer_type) &&
+                                                        BufferTypeLabel[tensor.buffer_type]
+                                                            ? [
+                                                                  {
+                                                                      htmlTitle: BufferTypeLabel[tensor.buffer_type],
+                                                                      className:
+                                                                          tensor.buffer_type === BufferType.L1
+                                                                              ? 'tag-l1'
+                                                                              : 'tag-dram',
+                                                                  },
+                                                              ]
+                                                            : undefined
+                                                    }
                                                 >
                                                     {tensor.consumers.length > MAX_NUM_CONSUMERS ? (
                                                         <Tooltip
@@ -321,11 +336,8 @@ const TensorList = () => {
     );
 };
 
-function getTensorFilterName(tensor: Tensor) {
-    const bufferTypeLabel = isValidNumber(tensor.buffer_type) ? BufferTypeLabel[tensor.buffer_type] : 'n/a';
-
-    return `Tensor ${tensor.id} ${bufferTypeLabel}`;
-}
+const getTensorFilterName = (tensor: Tensor) =>
+    `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensor.operationIdentifier ? tensor.operationIdentifier : ''}`;
 
 function getBufferTypeFilterOptions(tensors: Tensor[]) {
     return [
