@@ -61,7 +61,36 @@ $dark-danger-background-base: $tt-red-accent;
         'warning': $dark-warning-background-base,
         'danger': $tt-red,
     ),
-    $dark-navbar-background-color: transparent
+    $pt-text-color: $tt-grey-2,
+    $dark-navbar-background-color: transparent,
+    // Background/Hover/Active/Text colours
+    $tag-intent-colors:
+        (
+            'primary': (
+                $dark-primary-background-base,
+                color.adjust($dark-primary-background-base, $lightness: -10%),
+                color.adjust($dark-primary-background-base, $lightness: -5%),
+                $white,
+            ),
+            'success': (
+                $green3,
+                $green2,
+                $green1,
+                $white,
+            ),
+            'warning': (
+                $dark-warning-background-base,
+                color.adjust($dark-warning-background-base, $lightness: -10%),
+                color.adjust($dark-warning-background-base, $lightness: -5%),
+                $tt-grey-2,
+            ),
+            'danger': (
+                $dark-danger-background-base,
+                $red2,
+                $red1,
+                $white,
+            ),
+        )
 );
 
 // Overrides for BlueprintJS which cannot be done via SASS variables
