@@ -7,8 +7,8 @@ import { atom } from 'jotai';
 import { FileProgress, FileStatus } from '../model/APIData';
 
 export const reportLocationAtom = atom<'local' | 'remote' | null>(null);
-export const activeReportAtom = atomWithStorage<string | null>('activeReport', null);
-export const activePerformanceTraceAtom = atomWithStorage<string | null>('activePerformanceTrace', null);
+export const activeReportAtom = atom<string | null>(null);
+export const activePerformanceTraceAtom = atom<string | null>(null);
 export const showHexAtom = atomWithStorage<boolean>('showHex', false);
 
 export const isFullStackTraceAtom = atom(false);

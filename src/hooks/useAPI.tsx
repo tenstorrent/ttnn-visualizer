@@ -26,6 +26,9 @@ import {
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import isValidNumber from '../functions/isValidNumber';
+import { getUniqueDeviceIDs, mergeMultideviceRows } from '../functions/perfFunctions';
+import { RowData } from '../definitions/PerfTable';
+import { isDeviceOperation } from '../functions/filterOperations';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -96,13 +99,17 @@ const fetchOperations = async (deviceId?: number): Promise<OperationDescription[
     });
 
     return operationList.map((operation: OperationDescription) => {
+        operation.operationFileIdentifier = parseFileOperationIdentifier(operation.stack_trace);
+
         const outputs = operation.outputs.map((tensor) => {
             const tensorWithMetadata = {
                 ...tensor,
                 producerOperation: operation,
-                operationIdentifier: `${operation.id} ${operation.name} (${parseFileOperationIdentifier(operation.stack_trace)})`,
+                operationIdentifier: `${operation.id} ${operation.name} ${operation.operationFileIdentifier}`,
             };
+
             tensorList.set(tensor.id, tensorWithMetadata);
+
             return { ...tensorWithMetadata, io: 'output' };
         });
 
@@ -334,13 +341,7 @@ export const useGetDeviceOperationsListByOp = () => {
                     const ops = operation.device_operations
                         .filter((op) => op.node_type === NodeType.function_start)
                         .map((deviceOperation) => deviceOperation.params.name)
-                        .filter(
-                            (opName) =>
-                                !opName.includes('(torch)') &&
-                                !opName.includes('::') &&
-                                !opName.includes('ttnn.') &&
-                                opName !== '',
-                        );
+                        .filter((opName) => isDeviceOperation(opName));
                     return { id: operation.id, name: operation.name, ops };
                 })
                 .filter((data) => {
@@ -350,30 +351,87 @@ export const useGetDeviceOperationsListByOp = () => {
     }, [operations]);
 };
 
-export const useGetDeviceOperationsList = () => {
+export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     const { data: operations } = useOperationsList();
+    const { data: devices } = useDevices();
+
+    const collapseMultideviceOPs = (data: DeviceOperationMapping[], numDevices: number): DeviceOperationMapping[] => {
+        const lookup = new Map<string, DeviceOperationMapping>();
+        data.forEach((item) => {
+            const key = `${item.name}-${item.id}`;
+            if (!lookup.has(key)) {
+                lookup.set(key, item);
+            }
+        });
+        return Array.from(lookup.values());
+    };
 
     return useMemo(() => {
-        return (
-            operations
-                ?.map((operation) => {
-                    return operation.device_operations
-                        .filter((op) => op.node_type === NodeType.function_start)
-                        .map((deviceOperation) => deviceOperation.params.name)
-                        .filter(
-                            (opName) =>
-                                !opName.includes('(torch)') &&
-                                !opName.includes('::') &&
-                                !opName.includes('ttnn.') &&
-                                opName !== '',
-                        )
-                        .map((op) => {
-                            return { name: op, id: operation.id, operationName: operation.name };
-                        });
-                })
-                .flat() || []
+        if (!operations || !devices) {
+            return [];
+        }
+        const result = operations.flatMap((operation) =>
+            operation.device_operations
+                .filter(
+                    (op) =>
+                        op.node_type === NodeType.function_start && op.params.name && isDeviceOperation(op.params.name),
+                )
+                .map((deviceOperation) => ({
+                    name: deviceOperation.params.name,
+                    id: operation.id,
+                    operationName: operation.name,
+                })),
         );
-    }, [operations]);
+        return collapseMultideviceOPs(result, devices.length);
+    }, [operations, devices]);
+};
+
+export interface DeviceOperationMapping {
+    name: string;
+    id: number;
+    operationName: string;
+    perfData?: RowData;
+}
+
+export const useGetDeviceOperationListPerf = () => {
+    const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
+    const { data } = usePerformance();
+
+    return useMemo(() => {
+        if (!data?.data || data.data.length === 0) {
+            return [];
+        }
+
+        // @ts-expect-error this should be just fine
+        let df: RowData[] = data.data.slice() as RowData[];
+
+        df.forEach((r, index) => {
+            r.ORIGINAL_ID = index + 2;
+        });
+
+        if (df.length > 0 && 'HOST START TS' in df[0]) {
+            df = df.sort((a, b) => Number(a['HOST START TS'] || 0) - Number(b['HOST START TS'] || 0));
+        }
+
+        const uniqueDeviceIDs = getUniqueDeviceIDs(df);
+
+        if (uniqueDeviceIDs.length > 1) {
+            df = mergeMultideviceRows(df);
+        }
+
+        df = df.filter((r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE'] === ''));
+
+        const isValid = deviceOperations.every((deviceOperation, index) => {
+            const perfData = df[index];
+            if (perfData && perfData['OP CODE'] === deviceOperation.name) {
+                deviceOperation.perfData = perfData;
+                return true;
+            }
+            return false;
+        });
+
+        return isValid ? deviceOperations : [];
+    }, [data, deviceOperations]);
 };
 
 // Not currently used anymore
@@ -399,6 +457,20 @@ export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> 
                 // device_id: deviceId,
             },
         });
+
+        const operationsList = await fetchOperations();
+
+        for (const tensor of tensorList) {
+            if (tensor.producers.length > 0) {
+                const producerId = tensor.producers[0];
+                const operationDetails = operationsList.find((operation) => operation.id === producerId);
+                const outputTensor = operationDetails?.outputs.find((output) => output.id === tensor.id);
+
+                if (outputTensor) {
+                    tensor.operationIdentifier = outputTensor.operationIdentifier;
+                }
+            }
+        }
 
         return tensorList;
     } catch (error: unknown) {
