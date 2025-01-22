@@ -355,15 +355,37 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     const { data: operations } = useOperationsList();
     const { data: devices } = useDevices();
 
+    /**
+     * TODO: update when device op data is device bound
+     * @description Collapse multi-device operations into single entry temporary logic, this can under certain circumstances lead to false positives
+     * @param data
+     * @param numDevices
+     */
     const collapseMultideviceOPs = (data: DeviceOperationMapping[], numDevices: number): DeviceOperationMapping[] => {
-        const lookup = new Map<string, DeviceOperationMapping>();
+        if (numDevices === 1) {
+            return data;
+        }
+        const result: DeviceOperationMapping[] = [];
+        let count = 0;
+        let previousKey = '';
+
         data.forEach((item) => {
             const key = `${item.name}-${item.id}`;
-            if (!lookup.has(key)) {
-                lookup.set(key, item);
+
+            if (key === previousKey) {
+                count++;
+            } else {
+                count = 1;
             }
+
+            if (count !== numDevices) {
+                result.push(item);
+            }
+
+            previousKey = key;
         });
-        return Array.from(lookup.values());
+
+        return result;
     };
 
     return useMemo(() => {
@@ -429,7 +451,6 @@ export const useGetDeviceOperationListPerf = () => {
             }
             return false;
         });
-
         return isValid ? deviceOperations : [];
     }, [data, deviceOperations]);
 };
