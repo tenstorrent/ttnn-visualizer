@@ -266,15 +266,6 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, setIsMultiDevice] = useState<boolean>(false);
 
-    // const byOp = useGetDeviceOperationsListByOp();
-    // console.log(byOp);
-    //
-    // const list = useGetDeviceOperationsList();
-    // console.log(list);
-
-    // console.log(processed);
-    // console.log(operations);
-
     const processedRows = useMemo(() => {
         if (data === undefined) {
             return [];
