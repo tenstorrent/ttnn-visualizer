@@ -28,6 +28,7 @@ import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functio
 import isValidNumber from '../functions/isValidNumber';
 import { getUniqueDeviceIDs, mergeMultideviceRows } from '../functions/perfFunctions';
 import { RowData } from '../definitions/PerfTable';
+import { isDeviceOperation } from '../functions/filterOperations';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -340,13 +341,7 @@ export const useGetDeviceOperationsListByOp = () => {
                     const ops = operation.device_operations
                         .filter((op) => op.node_type === NodeType.function_start)
                         .map((deviceOperation) => deviceOperation.params.name)
-                        .filter(
-                            (opName) =>
-                                !opName.includes('(torch)') &&
-                                !opName.includes('::') &&
-                                !opName.includes('ttnn.') &&
-                                opName !== '',
-                        );
+                        .filter((opName) => isDeviceOperation(opName));
                     return { id: operation.id, name: operation.name, ops };
                 })
                 .filter((data) => {
@@ -358,28 +353,37 @@ export const useGetDeviceOperationsListByOp = () => {
 
 export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     const { data: operations } = useOperationsList();
+    const { data: devices } = useDevices();
+
+    const collapseMultideviceOPs = (data: DeviceOperationMapping[], numDevices: number): DeviceOperationMapping[] => {
+        const lookup = new Map<string, DeviceOperationMapping>();
+        data.forEach((item) => {
+            const key = `${item.name}-${item.id}`;
+            if (!lookup.has(key)) {
+                lookup.set(key, item);
+            }
+        });
+        return Array.from(lookup.values());
+    };
 
     return useMemo(() => {
-        return (
-            operations
-                ?.map((operation) => {
-                    return operation.device_operations
-                        .filter((op) => op.node_type === NodeType.function_start)
-                        .map((deviceOperation) => deviceOperation.params.name)
-                        .filter(
-                            (opName) =>
-                                !opName.includes('(torch)') &&
-                                !opName.includes('::') &&
-                                !opName.includes('ttnn.') &&
-                                opName !== '',
-                        )
-                        .map((op) => {
-                            return { name: op, id: operation.id, operationName: operation.name };
-                        });
-                })
-                .flat() || []
+        if (!operations || !devices) {
+            return [];
+        }
+        const result = operations.flatMap((operation) =>
+            operation.device_operations
+                .filter(
+                    (op) =>
+                        op.node_type === NodeType.function_start && op.params.name && isDeviceOperation(op.params.name),
+                )
+                .map((deviceOperation) => ({
+                    name: deviceOperation.params.name,
+                    id: operation.id,
+                    operationName: operation.name,
+                })),
         );
-    }, [operations]);
+        return collapseMultideviceOPs(result, devices.length);
+    }, [operations, devices]);
 };
 
 export interface DeviceOperationMapping {
@@ -415,16 +419,18 @@ export const useGetDeviceOperationListPerf = () => {
             df = mergeMultideviceRows(df);
         }
 
-        df = df.filter((r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE']?.toString() === ''));
+        df = df.filter((r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE'] === ''));
 
-        deviceOperations.forEach((deviceOperation, index) => {
+        const isValid = deviceOperations.every((deviceOperation, index) => {
             const perfData = df[index];
             if (perfData && perfData['OP CODE'] === deviceOperation.name) {
-                deviceOperation.perfData = df[index];
+                deviceOperation.perfData = perfData;
+                return true;
             }
+            return false;
         });
 
-        return deviceOperations;
+        return isValid ? deviceOperations : [];
     }, [data, deviceOperations]);
 };
 
