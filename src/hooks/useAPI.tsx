@@ -426,17 +426,16 @@ export const useGetDeviceOperationListPerf = () => {
         }
 
         df = df.filter((r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE']?.toString() === ''));
-        let isInvalid = false;
-        deviceOperations.forEach((deviceOperation, index) => {
+        const isValid = deviceOperations.every((deviceOperation, index) => {
             const perfData = df[index];
             if (perfData && perfData['OP CODE'] === deviceOperation.name) {
-                deviceOperation.perfData = df[index];
-            } else {
-                isInvalid = true;
+                deviceOperation.perfData = perfData;
+                return true;
             }
+            return false;
         });
-        // console.log('isInvalid', isInvalid);
-        return isInvalid ? [] : deviceOperations;
+
+        return isValid ? deviceOperations : [];
     }, [data, deviceOperations]);
 };
 
