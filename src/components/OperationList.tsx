@@ -311,7 +311,7 @@ const OperationList = () => {
                                         >
                                             <div className='arguments-wrapper'>
                                                 <p className='monospace'>
-                                                    Python execution time: {operation.duration}s
+                                                    Python execution time: {formatSize(operation.duration)} s
                                                 </p>
                                                 <p className='monospace'>
                                                     {perfData

@@ -11,6 +11,7 @@ import {
     Intent,
     PopoverPosition,
     Switch,
+    Tag,
     Tooltip,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -406,6 +407,41 @@ export default function Styleguide() {
             </FormGroup>
 
             <h3>Components</h3>
+
+            <p>Tags</p>
+
+            <div className='container flex'>
+                <Tag
+                    intent={Intent.NONE}
+                    large
+                >
+                    None
+                </Tag>
+                <Tag
+                    intent={Intent.PRIMARY}
+                    large
+                >
+                    Primary
+                </Tag>
+                <Tag
+                    intent={Intent.WARNING}
+                    large
+                >
+                    Warning
+                </Tag>
+                <Tag
+                    intent={Intent.SUCCESS}
+                    large
+                >
+                    Success
+                </Tag>
+                <Tag
+                    intent={Intent.DANGER}
+                    large
+                >
+                    Danger
+                </Tag>
+            </div>
 
             <p>Progress bar</p>
 
