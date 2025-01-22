@@ -81,7 +81,7 @@ function Layout() {
                                 <strong>
                                     <Icon
                                         icon={IconNames.TickCircle}
-                                        color='#32a467'
+                                        className='intent-ok'
                                     />{' '}
                                     Profiler and perf reports syncronized
                                 </strong>
@@ -89,9 +89,9 @@ function Layout() {
                                 <strong>
                                     <Icon
                                         icon={IconNames.ISSUE}
-                                        color='#fa512e'
+                                        className='intent-not-ok'
                                     />{' '}
-                                    Profiler and perf reports cant be synchronized
+                                    Profiler and perf reports can&apos;t be synchronized
                                 </strong>
                             )}
                         </span>
