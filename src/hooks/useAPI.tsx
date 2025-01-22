@@ -28,6 +28,7 @@ import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functio
 import isValidNumber from '../functions/isValidNumber';
 import { getUniqueDeviceIDs, mergeMultideviceRows } from '../functions/perfFunctions';
 import { RowData } from '../definitions/PerfTable';
+import { isDeviceOperation } from '../functions/filterOperations';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -336,13 +337,7 @@ export const useGetDeviceOperationsListByOp = () => {
                     const ops = operation.device_operations
                         .filter((op) => op.node_type === NodeType.function_start)
                         .map((deviceOperation) => deviceOperation.params.name)
-                        .filter(
-                            (opName) =>
-                                !opName.includes('(torch)') &&
-                                !opName.includes('::') &&
-                                !opName.includes('ttnn.') &&
-                                opName !== '',
-                        );
+                        .filter((opName) => isDeviceOperation(opName));
                     return { id: operation.id, name: operation.name, ops };
                 })
                 .filter((data) => {
@@ -375,11 +370,7 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
             operation.device_operations
                 .filter(
                     (op) =>
-                        op.node_type === NodeType.function_start &&
-                        op.params.name &&
-                        !op.params.name.includes('(torch)') &&
-                        !op.params.name.includes('::') &&
-                        !op.params.name.includes('ttnn.'),
+                        op.node_type === NodeType.function_start && op.params.name && isDeviceOperation(op.params.name),
                 )
                 .map((deviceOperation) => ({
                     name: deviceOperation.params.name,
@@ -387,7 +378,6 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
                     operationName: operation.name,
                 })),
         );
-        // return result;
         return collapseMultideviceOPs(result, devices.length);
     }, [operations, devices]);
 };
@@ -425,7 +415,8 @@ export const useGetDeviceOperationListPerf = () => {
             df = mergeMultideviceRows(df);
         }
 
-        df = df.filter((r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE']?.toString() === ''));
+        df = df.filter((r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE'] === ''));
+
         const isValid = deviceOperations.every((deviceOperation, index) => {
             const perfData = df[index];
             if (perfData && perfData['OP CODE'] === deviceOperation.name) {
