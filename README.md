@@ -58,15 +58,15 @@ https://github.com/user-attachments/assets/80e6cfe5-24c4-4d5f-8c1e-2a6a2f9651ff
 
 | Per core allocation details | Per core allocation details for individual tensors |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Per core allocation details" src="https://github.com/user-attachments/assets/e1647b4d-9bf9-4e30-98a5-8cfd48ef495f" /> | <img width="400" alt="Per core allocation details for individual tensor" src="https://github.com/user-attachments/assets/b8f7f22d-88ee-4384-a5b8-89a792823e59" /> |
+| <img width="400" alt="Per core allocation details" src="https://github.com/user-attachments/assets/e1647b4d-9bf9-4e30-98a5-8cfd48ef495f" /> | <img width="400" alt="Per core allocation details for individual tensor" src="https://github.com/user-attachments/assets/75b8d12d-2452-4dc4-9c00-26612d74d5e8" /> |
 
 | Tensor details list | Performance report |
 |-----------------------------------------------|------------------------------------------|
 | <img width="400" alt="Tensor details list" src="https://github.com/user-attachments/assets/d19d770b-a6cd-4c5d-96d5-181c2a5e9692" /> | <img width="400" alt="Performance report" src="https://github.com/user-attachments/assets/fe7156d8-2bc5-40c5-b42b-13ccd26e1392" /> |
 
-| Performance analysis |
+| Performance analysis | |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Performance analysis" src="https://github.com/user-attachments/assets/03f64a7a-262a-4b2a-a0b6-c70f3f14705c" /> |
+| <img width="400" alt="Performance analysis" src="https://github.com/user-attachments/assets/03f64a7a-262a-4b2a-a0b6-c70f3f14705c" /> | |
 
 ## Getting started
 
