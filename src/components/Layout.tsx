@@ -3,16 +3,17 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Outlet } from 'react-router-dom';
-import { Classes, Tooltip } from '@blueprintjs/core';
+import { Classes, Icon, Tooltip } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { useAtom } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
 import classNames from 'classnames';
+import { IconNames } from '@blueprintjs/icons';
 import { useEffect } from 'react';
 import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
-import { useSession } from '../hooks/useAPI';
+import { useGetDeviceOperationListPerf, useSession } from '../hooks/useAPI';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -36,6 +37,9 @@ function Layout() {
             setActivePerformanceTrace(session.active_report?.profile_name ?? null);
         }
     }, [session, setActiveReport, setActivePerformanceTrace]);
+
+    const useGetDeviceOperationListPerfResult = useGetDeviceOperationListPerf();
+    const isInSync = useGetDeviceOperationListPerfResult.length > 0;
 
     return (
         <div className={Classes.DARK}>
@@ -91,6 +95,27 @@ function Layout() {
                                 <strong>Performance:</strong> {activePerformanceTrace}
                             </>
                         ))}
+                    {activeReport && activePerformanceTrace && (
+                        <span>
+                            {isInSync ? (
+                                <strong>
+                                    <Icon
+                                        icon={IconNames.TickCircle}
+                                        className='intent-ok'
+                                    />{' '}
+                                    Profiler and perf reports syncronized
+                                </strong>
+                            ) : (
+                                <strong>
+                                    <Icon
+                                        icon={IconNames.ISSUE}
+                                        className='intent-not-ok'
+                                    />{' '}
+                                    Profiler and perf reports can&apos;t be synchronized
+                                </strong>
+                            )}
+                        </span>
+                    )}
                 </div>
             </header>
 
