@@ -415,15 +415,13 @@ export interface DeviceOperationMapping {
     perfData?: RowData;
 }
 
-export const useGetDeviceOperationListPerf = () => {
-    const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
+const useNormalizedPerformance = (): RowData[] => {
     const { data } = usePerformance();
 
     return useMemo(() => {
         if (!data?.data || data.data.length === 0) {
             return [];
         }
-
         // @ts-expect-error this should be just fine
         let df: RowData[] = data.data.slice() as RowData[];
 
@@ -441,10 +439,16 @@ export const useGetDeviceOperationListPerf = () => {
             df = mergeMultideviceRows(df);
         }
 
-        df = df.filter((r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE'] === ''));
+        return df.filter((r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE'] === ''));
+    }, [data]);
+};
+export const useGetDeviceOperationListPerf = () => {
+    const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
+    const data = useNormalizedPerformance();
 
+    return useMemo(() => {
         const isValid = deviceOperations.every((deviceOperation, index) => {
-            const perfData = df[index];
+            const perfData = data[index];
             if (perfData && perfData['OP CODE'] === deviceOperation.name) {
                 deviceOperation.perfData = perfData;
                 return true;
@@ -455,7 +459,39 @@ export const useGetDeviceOperationListPerf = () => {
     }, [data, deviceOperations]);
 };
 
+/**
+ * @description op id to perf id mapping with all Op ids including missing perf ids and host ids
+ */
 export const useGetOptoPerfId = () => {
+    const { data: operations } = useOperationsList();
+    const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
+    const data = useNormalizedPerformance();
+
+    return useMemo(() => {
+        const ids = deviceOperations.map((deviceOperation, index) => {
+            const perfData = data[index];
+            if (perfData && perfData['OP CODE'] === deviceOperation.name) {
+                return { opId: deviceOperation.id, perfId: perfData.ORIGINAL_ID };
+            }
+            return { opId: deviceOperation.id, perfId: -1 };
+        });
+
+        return (
+            operations?.map((operation) => {
+                const op = ids.find((id) => id.opId === operation.id);
+                if (op) {
+                    return op;
+                }
+                return { opId: operation.id, perfId: -1 };
+            }) || []
+        );
+    }, [data, deviceOperations, operations]);
+};
+
+/**
+ * @description op id to perf id mapping only for existing perf ids
+ */
+export const useGetOptoPerfIdFiltered = () => {
     const opMapping = useGetDeviceOperationListPerf();
     return opMapping.map((op) => {
         return { opId: op.id, perfId: op.perfData?.ORIGINAL_ID };
