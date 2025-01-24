@@ -455,6 +455,13 @@ export const useGetDeviceOperationListPerf = () => {
     }, [data, deviceOperations]);
 };
 
+export const useGetOptoPerfId = () => {
+    const opMapping = useGetDeviceOperationListPerf();
+    return opMapping.map((op) => {
+        return { opId: op.id, perfId: op.perfData?.ORIGINAL_ID };
+    });
+};
+
 // Not currently used anymore
 export const useReportMeta = () => {
     return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
