@@ -97,6 +97,7 @@ function BufferSummary() {
                 selectedTabId={selectedTabId}
                 onChange={setSelectedTabId}
                 large
+                renderActiveTabPanelOnly
             >
                 <Tab
                     id={TAB_IDS.L1}
@@ -109,7 +110,6 @@ function BufferSummary() {
                                 tableRef={tableRef}
                                 buffersByOperation={buffersByOperation}
                                 tensorListByOperation={tensorListByOperation}
-                                isDramActive={isDramActive}
                             />
                         ) : (
                             <LoadingSpinner />
@@ -128,7 +128,7 @@ function BufferSummary() {
                                 tableRef={tableRef}
                                 buffersByOperation={dramBuffersByOperation}
                                 tensorListByOperation={tensorListByOperation}
-                                isDramActive={isDramActive}
+                                isDram
                             />
                         ) : (
                             <LoadingSpinner />

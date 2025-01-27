@@ -7,9 +7,9 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch } from '@blueprintjs/core';
 import { Link } from 'react-router-dom';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom } from 'jotai';
 import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
-import { BuffersByOperationData, useDevices } from '../../hooks/useAPI';
+import { BuffersByOperationData } from '../../hooks/useAPI';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
@@ -17,27 +17,29 @@ import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/routes';
 import isValidNumber from '../../functions/isValidNumber';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
-import { renderMemoryLayoutAtom, selectedDeviceAtom, showHexAtom } from '../../store/app';
+import { renderMemoryLayoutAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
+import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
-interface BufferSummaryPlotRendererProps {
+interface BufferSummaryPlotRendererDRAMProps {
     buffersByOperation: BuffersByOperationData[];
     tensorListByOperation: TensorsByOperationByAddress;
 }
 
-function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }: BufferSummaryPlotRendererProps) {
+function BufferSummaryPlotRendererDRAM({
+    buffersByOperation,
+    tensorListByOperation,
+}: BufferSummaryPlotRendererDRAMProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
-    const deviceId = useAtomValue(selectedDeviceAtom) || 0;
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [isZoomedIn, setIsZoomedIn] = useState(false);
-    const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const scrollElementRef = useRef(null);
 
     const numberOfOperations = useMemo(
@@ -46,29 +48,36 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
         [buffersByOperation],
     );
 
-    const getMemorySize = () => (!isLoadingDevices && devices ? devices[deviceId].worker_l1_size : 0);
+    const segmentedChartData: BuffersByOperationData[][] = useMemo(() => {
+        if (isZoomedIn) {
+            return getSplitBuffers(buffersByOperation);
+        }
+
+        return [buffersByOperation];
+    }, [buffersByOperation, isZoomedIn]);
 
     // TODO: Multi device support
-    const memorySize = useMemo(getMemorySize, [deviceId, devices, isLoadingDevices]);
+    const memorySize = DRAM_MEMORY_SIZE;
 
     const zoomedMemorySize = useMemo(() => {
         let minValue: undefined | number;
         let maxValue: undefined | number;
 
-        buffersByOperation?.forEach((operation) =>
-            operation.buffers.forEach((buffer) => {
-                minValue = isValidNumber(minValue) ? Math.min(minValue, buffer.address) : buffer.address;
-                maxValue = isValidNumber(maxValue)
-                    ? Math.max(maxValue, buffer.address + buffer.size)
-                    : buffer.address + buffer.size;
-            }),
-        );
+        segmentedChartData?.forEach((segment) => {
+            for (const operation of segment) {
+                for (const buffer of operation.buffers) {
+                    const bufferEnd = buffer.address + buffer.size;
+                    minValue = isValidNumber(minValue) ? Math.min(minValue, buffer.address) : buffer.address;
+                    maxValue = isValidNumber(maxValue) ? Math.max(maxValue, bufferEnd) : bufferEnd;
+                }
+            }
+        });
 
-        return minValue && maxValue ? [minValue, maxValue] : [0, memorySize];
-    }, [buffersByOperation, memorySize]);
+        return minValue && maxValue ? [minValue, maxValue] : [0, DRAM_MEMORY_SIZE];
+    }, [segmentedChartData]);
 
     const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
-    const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
+    const zoomedMemorySizeEnd = zoomedMemorySize[1] || DRAM_MEMORY_SIZE;
     const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
 
     const virtualizer = useVirtualizer({
@@ -86,7 +95,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
         setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
     };
 
-    return buffersByOperation && !isLoadingDevices && tensorListByOperation ? (
+    return buffersByOperation && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
             <div className='controls'>
                 <Switch
@@ -200,4 +209,32 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     );
 }
 
-export default BufferSummaryPlotRenderer;
+const SEGMENT_COUNT = 16;
+const DRAM_SEGMENT_SIZE = DRAM_MEMORY_SIZE / SEGMENT_COUNT;
+
+function getSplitBuffers(data: BuffersByOperationData[]): BuffersByOperationData[][] {
+    const splitBuffers: BuffersByOperationData[][] = new Array(16);
+
+    for (let b = 0; b < data.length; b++) {
+        const operation = data[b];
+
+        for (let x = 0; x < operation.buffers.length; x++) {
+            const buffer = operation.buffers[x];
+            const partIndex = Math.floor(buffer.address / DRAM_SEGMENT_SIZE);
+
+            if (!splitBuffers?.[partIndex]) {
+                splitBuffers[partIndex] = [{ ...operation, buffers: [] }];
+            }
+
+            if (!splitBuffers?.[partIndex][b]) {
+                splitBuffers[partIndex][b] = { ...operation, buffers: [] };
+            }
+
+            splitBuffers[partIndex][b].buffers.push(buffer);
+        }
+    }
+
+    return splitBuffers;
+}
+
+export default BufferSummaryPlotRendererDRAM;
