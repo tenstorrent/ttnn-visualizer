@@ -6,9 +6,7 @@
 
 ### Environment
 
-Copy the provided `.env.sample` file to `.env`. The values from the sample should work as is but `VITE_API_ROOT` is required to be able to communicate with the backend.
-
-
+The application should run out of the box, but should you need to you can adjust certain values in the front end or back end code using a `.env` file. See `.env.sample` for existing variables
 
 ### Frontend
 
