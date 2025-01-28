@@ -15,7 +15,6 @@ import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/routes';
-import isValidNumber from '../../functions/isValidNumber';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
@@ -59,26 +58,16 @@ function BufferSummaryPlotRendererDRAM({
     // TODO: Multi device support
     const memorySize = DRAM_MEMORY_SIZE;
 
-    const zoomedMemorySize = useMemo(() => {
-        let minValue: undefined | number;
-        let maxValue: undefined | number;
+    const zoomedMemoryOptions = segmentedChartData.map((_segment, index) => {
+        const zoomStart = DRAM_SEGMENT_SIZE * index;
+        const zoomEnd = DRAM_SEGMENT_SIZE * (index + 1);
 
-        segmentedChartData?.forEach((segment) => {
-            for (const operation of segment) {
-                for (const buffer of operation.buffers) {
-                    const bufferEnd = buffer.address + buffer.size;
-                    minValue = isValidNumber(minValue) ? Math.min(minValue, buffer.address) : buffer.address;
-                    maxValue = isValidNumber(maxValue) ? Math.max(maxValue, bufferEnd) : bufferEnd;
-                }
-            }
-        });
-
-        return minValue && maxValue ? [minValue, maxValue] : [0, DRAM_MEMORY_SIZE];
-    }, [segmentedChartData]);
-
-    const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
-    const zoomedMemorySizeEnd = zoomedMemorySize[1] || DRAM_MEMORY_SIZE;
-    const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
+        return {
+            start: zoomStart,
+            end: zoomEnd,
+            padding: (zoomEnd - zoomStart) * MEMORY_ZOOM_PADDING_RATIO,
+        };
+    });
 
     const virtualizer = useVirtualizer({
         count: buffersByOperation?.length || PLACEHOLDER_ARRAY_SIZE,
@@ -125,83 +114,95 @@ function BufferSummaryPlotRendererDRAM({
 
             <p className='x-axis-label'>Memory Address</p>
 
-            <div className='chart-position'>
-                <MemoryPlotRenderer
-                    className='buffer-summary-plot'
-                    chartDataList={[
-                        [
-                            {
-                                x: [0],
-                                y: [1],
-                                type: 'bar',
-                                width: [0],
-                                marker: {
-                                    color: 'transparent',
-                                },
-                            },
-                        ],
-                    ]}
-                    isZoomedIn={isZoomedIn}
-                    memorySize={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
-                    plotZoomRange={
-                        isZoomedIn
-                            ? [zoomedMemorySizeStart - memoryPadding, zoomedMemorySizeEnd + memoryPadding]
-                            : [0, memorySize]
-                    }
-                    configuration={BufferSummaryAxisConfiguration}
-                />
-            </div>
-
-            <div
-                className={classNames('scrollable-element', {
-                    'scroll-shade-top': hasScrolledFromTop,
-                    'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
-                })}
-                onScroll={(event) => handleUserScrolling(event)}
-                ref={scrollElementRef}
-            >
-                <div
-                    style={{
-                        // Div is sized to the maximum required to render all list items minus our shade element heights
-                        height: virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT,
-                    }}
-                >
+            <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '4rem' }}>
+                {segmentedChartData.map((segment, index) => (
                     <div
-                        className='list-container'
-                        style={{
-                            // Tracks scroll position
-                            transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
-                        }}
+                        key={`${segment[index].name}-${index}`}
+                        style={{ flexBasis: '50%' }}
                     >
-                        {virtualItems.map((virtualRow) => {
-                            const operation = buffersByOperation[virtualRow.index];
+                        <div className='chart-position'>
+                            <MemoryPlotRenderer
+                                className='buffer-summary-plot'
+                                chartDataList={[
+                                    [
+                                        {
+                                            x: [0],
+                                            y: [1],
+                                            type: 'bar',
+                                            width: [0],
+                                            marker: {
+                                                color: 'transparent',
+                                            },
+                                        },
+                                    ],
+                                ]}
+                                isZoomedIn={isZoomedIn}
+                                memorySize={isZoomedIn ? zoomedMemoryOptions[index].end : memorySize}
+                                plotZoomRange={
+                                    isZoomedIn
+                                        ? [
+                                              zoomedMemoryOptions[index].start - zoomedMemoryOptions[index].padding,
+                                              zoomedMemoryOptions[index].end + zoomedMemoryOptions[index].padding,
+                                          ]
+                                        : [0, memorySize]
+                                }
+                                configuration={BufferSummaryAxisConfiguration}
+                            />
+                        </div>
 
-                            return (
+                        <div
+                            className={classNames('scrollable-element', {
+                                'scroll-shade-top': hasScrolledFromTop,
+                                'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
+                            })}
+                            onScroll={(event) => handleUserScrolling(event)}
+                            ref={scrollElementRef}
+                        >
+                            <div
+                                style={{
+                                    // Div is sized to the maximum required to render all list items minus our shade element heights
+                                    height: virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT,
+                                }}
+                            >
                                 <div
-                                    className='buffer-summary-plot-container'
-                                    key={virtualRow.key}
-                                    data-index={virtualRow.index}
-                                    ref={virtualizer.measureElement}
+                                    className='list-container'
+                                    style={{
+                                        // Tracks scroll position
+                                        transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
+                                    }}
                                 >
-                                    <BufferSummaryRow
-                                        buffers={operation.buffers}
-                                        operationId={operation.id}
-                                        memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
-                                        memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
-                                        memoryPadding={memoryPadding}
-                                        tensorList={tensorListByOperation.get(operation.id)!}
-                                    />
-                                    <Link
-                                        to={`${ROUTES.OPERATIONS}/${operation.id}`}
-                                        className='y-axis-tick'
-                                    >
-                                        {operation.id}
-                                    </Link>
+                                    {virtualItems.map((virtualRow) => {
+                                        const operation = segment[virtualRow.index];
+
+                                        return (
+                                            <div
+                                                className='buffer-summary-plot-container'
+                                                key={virtualRow.key}
+                                                data-index={virtualRow.index}
+                                                ref={virtualizer.measureElement}
+                                            >
+                                                <BufferSummaryRow
+                                                    buffers={operation.buffers}
+                                                    operationId={operation.id}
+                                                    memoryStart={isZoomedIn ? zoomedMemoryOptions[index].start : 0}
+                                                    memoryEnd={isZoomedIn ? zoomedMemoryOptions[index].end : memorySize}
+                                                    memoryPadding={zoomedMemoryOptions[index].padding}
+                                                    tensorList={tensorListByOperation.get(operation.id)!}
+                                                />
+                                                <Link
+                                                    to={`${ROUTES.OPERATIONS}/${operation.id}`}
+                                                    className='y-axis-tick'
+                                                >
+                                                    {operation.id}
+                                                </Link>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                            );
-                        })}
+                            </div>
+                        </div>
                     </div>
-                </div>
+                ))}
             </div>
         </div>
     ) : (
@@ -209,10 +210,15 @@ function BufferSummaryPlotRendererDRAM({
     );
 }
 
-const SEGMENT_COUNT = 16;
+const SEGMENT_COUNT = 1024;
 const DRAM_SEGMENT_SIZE = DRAM_MEMORY_SIZE / SEGMENT_COUNT;
 
 function getSplitBuffers(data: BuffersByOperationData[]): BuffersByOperationData[][] {
+    // const buffers = data
+    //     .map((op) => op.buffers.map((buffer) => ({ ...buffer, opName: op.name, opId: op.id })).flat())
+    //     .flat()
+    //     .sort((a, b) => a.address - b.address);
+
     const splitBuffers: BuffersByOperationData[][] = new Array(16);
 
     for (let b = 0; b < data.length; b++) {
