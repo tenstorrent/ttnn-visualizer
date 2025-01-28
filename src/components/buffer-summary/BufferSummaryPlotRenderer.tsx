@@ -19,7 +19,6 @@ import isValidNumber from '../../functions/isValidNumber';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, selectedDeviceAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
-import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -29,14 +28,9 @@ const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 interface BufferSummaryPlotRendererProps {
     buffersByOperation: BuffersByOperationData[];
     tensorListByOperation: TensorsByOperationByAddress;
-    isDramActive?: boolean;
 }
 
-function BufferSummaryPlotRenderer({
-    buffersByOperation,
-    tensorListByOperation,
-    isDramActive = false,
-}: BufferSummaryPlotRendererProps) {
+function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }: BufferSummaryPlotRendererProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
@@ -52,16 +46,10 @@ function BufferSummaryPlotRenderer({
         [buffersByOperation],
     );
 
-    const getMemorySize = () => {
-        if (isDramActive) {
-            return DRAM_MEMORY_SIZE;
-        }
-
-        return !isLoadingDevices && devices ? devices[deviceId].worker_l1_size : 0;
-    };
+    const getMemorySize = () => (!isLoadingDevices && devices ? devices[deviceId].worker_l1_size : 0);
 
     // TODO: Multi device support
-    const memorySize = useMemo(getMemorySize, [isDramActive, deviceId, devices, isLoadingDevices]);
+    const memorySize = useMemo(getMemorySize, [deviceId, devices, isLoadingDevices]);
 
     const zoomedMemorySize = useMemo(() => {
         let minValue: undefined | number;
@@ -103,7 +91,6 @@ function BufferSummaryPlotRenderer({
             <div className='controls'>
                 <Switch
                     label='Buffer zoom'
-                    // disabled={isDramActive}
                     checked={isZoomedIn}
                     onChange={() => {
                         setIsZoomedIn(!isZoomedIn);
@@ -189,7 +176,7 @@ function BufferSummaryPlotRenderer({
                                 >
                                     <BufferSummaryRow
                                         buffers={operation.buffers}
-                                        operationId={operation.id}
+                                        // operationId={operation.id}
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}

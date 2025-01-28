@@ -8,13 +8,14 @@ import BufferSummaryTable from './BufferSummaryTable';
 import { BuffersByOperationData } from '../../hooks/useAPI';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { SECTION_IDS } from '../../definitions/BufferSummary';
+import BufferSummaryPlotRendererDRAM from './BufferSummaryPlotRendererDRAM';
 
 interface BufferSummaryTabProps {
     plotRef: RefObject<HTMLHeadingElement>;
     tableRef: RefObject<HTMLHeadingElement>;
     buffersByOperation: BuffersByOperationData[];
     tensorListByOperation: TensorsByOperationByAddress;
-    isDramActive: boolean;
+    isDram?: boolean;
 }
 
 function BufferSummaryTab({
@@ -22,7 +23,7 @@ function BufferSummaryTab({
     tableRef,
     buffersByOperation,
     tensorListByOperation,
-    isDramActive,
+    isDram = false,
 }: BufferSummaryTabProps) {
     return (
         <>
@@ -31,11 +32,17 @@ function BufferSummaryTab({
                 ref={plotRef}
                 id={SECTION_IDS.PLOT}
             >
-                <BufferSummaryPlotRenderer
-                    buffersByOperation={buffersByOperation}
-                    tensorListByOperation={tensorListByOperation}
-                    isDramActive={isDramActive}
-                />
+                {isDram ? (
+                    <BufferSummaryPlotRendererDRAM
+                        buffersByOperation={buffersByOperation}
+                        tensorListByOperation={tensorListByOperation}
+                    />
+                ) : (
+                    <BufferSummaryPlotRenderer
+                        buffersByOperation={buffersByOperation}
+                        tensorListByOperation={tensorListByOperation}
+                    />
+                )}
             </div>
 
             <h2>Table view</h2>
