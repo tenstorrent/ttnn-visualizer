@@ -25,6 +25,8 @@ const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
+// TODO: Multi device support
+const MEMORY_SIZE = DRAM_MEMORY_SIZE;
 
 const CHART_DATA: Partial<PlotData>[][] = [
     [
@@ -69,9 +71,6 @@ function BufferSummaryPlotRendererDRAM({
 
         return [buffersByOperation];
     }, [buffersByOperation, isZoomedIn]);
-
-    // TODO: Multi device support
-    const memorySize = DRAM_MEMORY_SIZE;
 
     const zoomedMemoryOptions = useMemo(
         () =>
@@ -141,14 +140,14 @@ function BufferSummaryPlotRendererDRAM({
                             className='buffer-summary-plot'
                             chartDataList={CHART_DATA}
                             isZoomedIn={isZoomedIn}
-                            memorySize={isZoomedIn ? zoomedMemoryOptions[index].end : memorySize}
+                            memorySize={isZoomedIn ? zoomedMemoryOptions[index].end : MEMORY_SIZE}
                             plotZoomRange={
                                 isZoomedIn
                                     ? [
                                           zoomedMemoryOptions[index].start - zoomedMemoryOptions[index].padding,
                                           zoomedMemoryOptions[index].end + zoomedMemoryOptions[index].padding,
                                       ]
-                                    : [0, memorySize]
+                                    : [0, MEMORY_SIZE]
                             }
                             configuration={BufferSummaryAxisConfiguration}
                         />
@@ -189,7 +188,7 @@ function BufferSummaryPlotRendererDRAM({
                                                 buffers={operation.buffers}
                                                 // operationId={operation.id}
                                                 memoryStart={isZoomedIn ? zoomedMemoryOptions[index].start : 0}
-                                                memoryEnd={isZoomedIn ? zoomedMemoryOptions[index].end : memorySize}
+                                                memoryEnd={isZoomedIn ? zoomedMemoryOptions[index].end : MEMORY_SIZE}
                                                 memoryPadding={zoomedMemoryOptions[index].padding}
                                                 tensorList={tensorListByOperation.get(operation.id)!}
                                             />
