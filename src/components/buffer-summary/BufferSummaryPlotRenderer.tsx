@@ -189,7 +189,7 @@ function BufferSummaryPlotRenderer({
                                 >
                                     <BufferSummaryRow
                                         buffers={operation.buffers}
-                                        operationId={operation.id}
+                                        // operationId={operation.id}
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
