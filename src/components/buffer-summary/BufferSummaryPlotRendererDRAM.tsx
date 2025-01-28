@@ -58,9 +58,12 @@ function BufferSummaryPlotRendererDRAM({
     // TODO: Multi device support
     const memorySize = DRAM_MEMORY_SIZE;
 
-    const zoomedMemoryOptions = segmentedChartData.map((_segment, index) => {
-        const zoomStart = DRAM_SEGMENT_SIZE * index;
-        const zoomEnd = DRAM_SEGMENT_SIZE * (index + 1);
+    const zoomedMemoryOptions = segmentedChartData.map((segment) => {
+        const buffers = segment.flatMap((op) => op.buffers);
+        const zoomStart = buffers[0].address;
+        const zoomEnd = buffers[buffers.length - 1].address;
+
+        // console.log('zoomedMemoryOptions', zoomedMemoryOptions);
 
         return {
             start: zoomStart,
@@ -210,37 +213,48 @@ function BufferSummaryPlotRendererDRAM({
     );
 }
 
-const SEGMENT_COUNT = 1024;
-const DRAM_SEGMENT_SIZE = DRAM_MEMORY_SIZE / SEGMENT_COUNT;
+const SPLIT_THRESHOLD_RATIO = 2;
 
 function getSplitBuffers(data: BuffersByOperationData[]): BuffersByOperationData[][] {
-    // const buffers = data
-    //     .map((op) => op.buffers.map((buffer) => ({ ...buffer, opName: op.name, opId: op.id })).flat())
-    //     .flat()
-    //     .sort((a, b) => a.address - b.address);
+    const buffers = data
+        .flatMap((op) => op.buffers.map((buffer) => ({ ...buffer, opName: op.name, opId: op.id })))
+        .sort((a, b) => a.address - b.address);
 
-    const splitBuffers: BuffersByOperationData[][] = new Array(16);
+    const lastDataPoint = buffers.at(-1);
+    const splitThreshold = lastDataPoint ? (lastDataPoint.address + lastDataPoint.size) / SPLIT_THRESHOLD_RATIO : 0;
 
-    for (let b = 0; b < data.length; b++) {
-        const operation = data[b];
+    const result = [];
+    let currentArray = [];
 
-        for (let x = 0; x < operation.buffers.length; x++) {
-            const buffer = operation.buffers[x];
-            const partIndex = Math.floor(buffer.address / DRAM_SEGMENT_SIZE);
+    for (let i = 0; i < buffers.length; i++) {
+        const thisPosition = buffers[i].address;
+        const lastPosition = buffers[i - 1]?.address ?? 0;
 
-            if (!splitBuffers?.[partIndex]) {
-                splitBuffers[partIndex] = [{ ...operation, buffers: [] }];
-            }
-
-            if (!splitBuffers?.[partIndex][b]) {
-                splitBuffers[partIndex][b] = { ...operation, buffers: [] };
-            }
-
-            splitBuffers[partIndex][b].buffers.push(buffer);
+        if (thisPosition - lastPosition > splitThreshold) {
+            result.push(currentArray);
+            currentArray = [];
         }
+
+        currentArray.push(buffers[i]);
     }
 
-    return splitBuffers;
+    if (currentArray.length > 0) {
+        result.push(currentArray);
+    }
+
+    return result.map((buffersGroup) => {
+        const operationsMap = new Map<number, BuffersByOperationData>();
+
+        buffersGroup.forEach((buffer) => {
+            const { opId, opName, ...originalBuffer } = buffer;
+            if (!operationsMap.has(opId)) {
+                operationsMap.set(opId, { id: opId, name: opName, buffers: [] });
+            }
+            operationsMap.get(opId)!.buffers.push(originalBuffer);
+        });
+
+        return Array.from(operationsMap.values());
+    });
 }
 
 export default BufferSummaryPlotRendererDRAM;
