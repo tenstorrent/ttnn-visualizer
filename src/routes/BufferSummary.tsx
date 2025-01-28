@@ -119,7 +119,7 @@ function BufferSummary() {
 
                 <Tab
                     id={TAB_IDS.DRAM}
-                    title='DRAM (can be slow)'
+                    title='DRAM'
                     icon={IconNames.PAGE_LAYOUT}
                     panel={
                         dramBuffersByOperation && operationsList && tensorListByOperation ? (
