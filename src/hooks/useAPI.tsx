@@ -462,7 +462,7 @@ export const useGetDeviceOperationListPerf = () => {
 /**
  * @description op id to perf id mapping with all Op ids including missing perf ids and host ids
  */
-export const useGetOptoPerfId = () => {
+export const useOptoPerfIdAll = () => {
     const { data: operations } = useOperationsList();
     const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
     const data = useNormalizedPerformance();
@@ -470,19 +470,15 @@ export const useGetOptoPerfId = () => {
     return useMemo(() => {
         const ids = deviceOperations.map((deviceOperation, index) => {
             const perfData = data[index];
-            if (perfData && perfData['OP CODE'] === deviceOperation.name) {
-                return { opId: deviceOperation.id, perfId: perfData.ORIGINAL_ID };
-            }
-            return { opId: deviceOperation.id, perfId: -1 };
+            return perfData && perfData['OP CODE'] === deviceOperation.name
+                ? { opId: deviceOperation.id, perfId: perfData.ORIGINAL_ID }
+                : { opId: deviceOperation.id, perfId: -1 };
         });
 
         return (
             operations?.map((operation) => {
                 const op = ids.find((id) => id.opId === operation.id);
-                if (op) {
-                    return op;
-                }
-                return { opId: operation.id, perfId: -1 };
+                return op || { opId: operation.id, perfId: -1 };
             }) || []
         );
     }, [data, deviceOperations, operations]);
@@ -491,11 +487,12 @@ export const useGetOptoPerfId = () => {
 /**
  * @description op id to perf id mapping only for existing perf ids
  */
-export const useGetOptoPerfIdFiltered = () => {
+export const useOptoPerfIdFiltered = () => {
     const opMapping = useGetDeviceOperationListPerf();
-    return opMapping.map((op) => {
-        return { opId: op.id, perfId: op.perfData?.ORIGINAL_ID };
-    });
+    return opMapping.map(({ id, perfData }) => ({
+        opId: id,
+        perfId: perfData?.ORIGINAL_ID,
+    }));
 };
 
 // Not currently used anymore
