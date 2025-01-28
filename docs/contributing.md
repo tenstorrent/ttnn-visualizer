@@ -4,10 +4,6 @@
 
 ## Running the app from source
 
-### Environment
-
-The application should run out of the box, but should you need to you can adjust certain values in the front end or back end code using a `.env` file. See `.env.sample` for existing variables
-
 ### Frontend
 
 ```shell
@@ -49,6 +45,10 @@ npm run flask:start-debug
 ```
 
 When both the frontend and backend are running you can access the app on [http://localhost:5173](http://localhost:5173) or whatever **Local** uri is printed in your terminal where you ran `npm run dev`.
+
+### Environment
+
+The application should run out of the box, but should you need to you can adjust certain values in the front end or back end code using a `.env` file. See `.env.sample` for some of the key variables available.
 
 ## Troubleshooting
 
