@@ -11,6 +11,7 @@ import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatSize, toHex, toReadableShape, toReadableType } from '../../functions/math';
 import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import useBufferFocus from '../../hooks/useBufferFocus';
+import { getDimmedColour } from '../../functions/colour';
 
 interface BufferSummaryRowProps {
     buffers: Buffer[];
@@ -32,7 +33,7 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
     const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
-    const [, setSelectedAddress] = useAtom(selectedAddressAtom);
+    const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
     const { createToast, resetToasts } = useBufferFocus();
 
     const interactivityList = useMemo(() => {
@@ -41,7 +42,8 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
             const position = ((buffer.address - memoryStart) / computedMemorySize) * TARGET_SCALE;
             const tensor = tensorList.get(buffer.address);
             const color = (tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address)) || 'black';
-            return { position, size, tensor, color, buffer };
+            const dimmedColor = getDimmedColour(color);
+            return { position, size, tensor, color, dimmedColor, buffer };
         });
     }, [buffers, computedMemorySize, memoryStart, tensorList]);
 
@@ -52,13 +54,23 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
             if (ctx) {
                 ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-                interactivityList.forEach(({ color, position, size }) => {
-                    ctx.fillStyle = color;
+                interactivityList.forEach(({ color, position, size, buffer, dimmedColor, tensor }) => {
+                    let activeColor = color;
+
+                    if (selectedTensor && selectedTensor === tensor?.id) {
+                        activeColor = color;
+                    } else if (selectedAddress && selectedAddress !== buffer.address) {
+                        activeColor = dimmedColor;
+                    } else if (selectedAddress === buffer.address && selectedTensor && selectedTensor !== tensor?.id) {
+                        activeColor = dimmedColor;
+                    }
+
+                    ctx.fillStyle = activeColor;
                     ctx.fillRect(position, 1, size, CANVAS_HEIGHT);
                 });
             }
         }
-    }, [interactivityList]);
+    }, [interactivityList, selectedAddress, selectedTensor]);
 
     const findBufferForInteraction = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
