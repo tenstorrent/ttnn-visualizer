@@ -422,7 +422,9 @@ export const useNormalizedPerformance = (): RowData[] => {
             return [];
         }
         // @ts-expect-error this should be just fine
-        let df: RowData[] = data.data.slice() as RowData[];
+        let df: RowData[] = (data.data.slice() as RowData[]).filter(
+            (r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE'] === ''),
+        );
 
         df.forEach((r, index) => {
             r.ORIGINAL_ID = index + 2;
@@ -438,7 +440,7 @@ export const useNormalizedPerformance = (): RowData[] => {
             df = mergeMultideviceRows(df);
         }
 
-        return df.filter((r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE'] === ''));
+        return df;
     }, [data]);
 };
 export const useGetDeviceOperationListPerf = () => {
@@ -490,10 +492,12 @@ export const useOptoPerfIdFiltered = () => {
     const opMapping = useGetDeviceOperationListPerf();
     return useMemo(
         () =>
-            opMapping.map(({ id, perfData }) => ({
-                opId: id,
-                perfId: perfData?.ORIGINAL_ID,
-            })),
+            opMapping.map(({ id, perfData }) => {
+                return {
+                    opId: id,
+                    perfId: perfData?.ORIGINAL_ID,
+                };
+            }),
         [opMapping],
     );
 };

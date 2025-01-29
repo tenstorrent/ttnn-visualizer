@@ -264,7 +264,6 @@ interface PerformanceReportProps {
 
 export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercentage = 0.5 }) => {
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
-    const [showHostOps, setShowHostOps] = useState<boolean>(false);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, setIsMultiDevice] = useState<boolean>(false);
@@ -274,7 +273,10 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         if (data === undefined) {
             return [];
         }
+
         let df = data.slice();
+
+        df = df.filter((r) => !r['OP CODE']?.toString().includes('(torch)') && !(r['OP CODE']?.toString() === ''));
 
         df.forEach((r, index) => {
             r.ORIGINAL_ID = index + 2;
@@ -292,9 +294,6 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         }
 
         // Filter out host ops if we should
-        if (!showHostOps) {
-            df = df.filter((r) => !r['OP CODE']?.toString().includes('(torch)') && !(r['OP CODE']?.toString() === ''));
-        }
 
         let rows: ProcessedRow[] = [];
         let prevRow: RowData | null = null;
@@ -325,7 +324,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         }
 
         return rows;
-    }, [data, opIdsMap, mergeDeviceData, showHostOps, hiliteHighDispatch, minPercentage]);
+    }, [data, opIdsMap, mergeDeviceData, hiliteHighDispatch, minPercentage]);
 
     const baseHeaders = [
         'ID',
@@ -398,12 +397,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                 checked={mergeDeviceData && isMultiDevice}
                 disabled={!isMultiDevice}
             />
-            <Switch
-                className='expand-button'
-                label={showHostOps ? 'Hide host ops' : 'Show host ops'}
-                onChange={() => setShowHostOps(!showHostOps)}
-                checked={showHostOps}
-            />
+
             <Switch
                 className='expand-button'
                 label={provideMatmulAdvice ? 'Hide Matmul optimization analysis' : 'Show Matmul optimization analysis'}
