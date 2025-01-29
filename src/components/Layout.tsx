@@ -14,6 +14,7 @@ import { useEffect } from 'react';
 import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
 import { useGetDeviceOperationListPerf, useSession } from '../hooks/useAPI';
+import ROUTES from '../definitions/routes';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -52,10 +53,13 @@ function Layout() {
 
             <header className='app-header'>
                 <nav className='nav-container'>
-                    <div className='title'>
+                    <a
+                        href={ROUTES.HOME}
+                        className='title'
+                    >
                         <h1>TT-NN Visualizer</h1>
                         <sup className='version'>v{appVersion}</sup>
-                    </div>
+                    </a>
                     <MainNavigation />
                 </nav>
 

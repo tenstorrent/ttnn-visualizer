@@ -168,7 +168,7 @@ const TensorList = () => {
                             intent={Intent.DANGER}
                             outlined={showHighConsumerTensors}
                         >
-                            {fetchedTensors?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS).length}
+                            {filteredTensorList?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS).length}
                         </Button>
                     </Tooltip>
 
