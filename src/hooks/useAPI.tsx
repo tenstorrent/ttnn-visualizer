@@ -365,25 +365,24 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
         if (numDevices === 1) {
             return data;
         }
+
         const result: DeviceOperationMapping[] = [];
-        let count = 0;
-        let previousKey = '';
+        const operationCountByKey = new Map<string, number>();
 
-        data.forEach((item) => {
+        for (const { name, id } of data) {
+            const key = `${name}-${id}`;
+            operationCountByKey.set(key, (operationCountByKey.get(key) || 0) + 1);
+        }
+
+        const seen = new Set<string>();
+
+        for (const item of data) {
             const key = `${item.name}-${item.id}`;
-
-            if (key === previousKey) {
-                count++;
-            } else {
-                count = 1;
-            }
-
-            if (count !== numDevices) {
+            if (!seen.has(key) && operationCountByKey.get(key) === numDevices) {
                 result.push(item);
+                seen.add(key);
             }
-
-            previousKey = key;
-        });
+        }
 
         return result;
     };
@@ -489,8 +488,7 @@ export const useOptoPerfIdAll = () => {
  */
 export const useOptoPerfIdFiltered = () => {
     const opMapping = useGetDeviceOperationListPerf();
-    console.log('opMapping', opMapping);
-    const a = useMemo(
+    return useMemo(
         () =>
             opMapping.map(({ id, perfData }) => ({
                 opId: id,
@@ -498,8 +496,6 @@ export const useOptoPerfIdFiltered = () => {
             })),
         [opMapping],
     );
-    console.log('API', a);
-    return a;
 };
 
 // Not currently used anymore

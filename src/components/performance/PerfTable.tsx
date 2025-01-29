@@ -269,17 +269,11 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, setIsMultiDevice] = useState<boolean>(false);
     const opIdsMap = useOptoPerfIdFiltered();
-    console.log('PERF:', opIdsMap);
-    // console.log(
-    //     '2',
-    //     opIdsMap.find((op) => Number(op.perfId) === 2),
-    // );
 
     const processedRows = useMemo(() => {
         if (data === undefined) {
             return [];
         }
-        console.log('PERF memo:', opIdsMap);
         let df = data.slice();
 
         df.forEach((r, index) => {
