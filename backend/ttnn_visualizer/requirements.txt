@@ -16,6 +16,7 @@ pandas
 wheel
 build
 PyYAML==6.0.2
+python-dotenv==1.0.1
 
 # Dev dependencies
 mypy

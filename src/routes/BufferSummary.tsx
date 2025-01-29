@@ -2,34 +2,33 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import { useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { AnchorButton, ButtonGroup, Intent } from '@blueprintjs/core';
+import { AnchorButton, ButtonGroup, Intent, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useEffect, useMemo, useRef, useState } from 'react';
 import { BuffersByOperationData, useBuffers, useOperationsList } from '../hooks/useAPI';
-import 'styles/components/BufferSummary.scss';
-import BufferSummaryPlotRenderer from '../components/buffer-summary/BufferSummaryPlotRenderer';
-import BufferSummaryTable from '../components/buffer-summary/BufferSummaryTable';
-import ROUTES from '../definitions/routes';
-import { BufferType } from '../model/BufferType';
-import LoadingSpinner from '../components/LoadingSpinner';
-import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import useBufferFocus from '../hooks/useBufferFocus';
+import { BufferType } from '../model/BufferType';
+import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import { Operation, Tensor } from '../model/APIData';
-
-const SECTION_IDS = {
-    PLOT: 'plot',
-    TABLE: 'table',
-};
+import ROUTES from '../definitions/routes';
+import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
+import LoadingSpinner from '../components/LoadingSpinner';
+import 'styles/components/BufferSummary.scss';
+import { SECTION_IDS, TAB_IDS } from '../definitions/BufferSummary';
 
 function BufferSummary() {
     const plotRef = useRef<HTMLHeadingElement>(null);
     const tableRef = useRef<HTMLHeadingElement>(null);
     const [activeSection, setActiveSection] = useState(SECTION_IDS.PLOT);
+    const [selectedTabId, setSelectedTabId] = useState<TabId>(TAB_IDS.L1);
     const { data: buffersByOperation } = useBuffers(BufferType.L1);
+    const { data: dramBuffersByOperation } = useBuffers(BufferType.DRAM);
     const { data: operationsList } = useOperationsList();
 
     const { activeToast, resetToasts } = useBufferFocus();
+
+    const isDramActive = selectedTabId === TAB_IDS.DRAM;
 
     useEffect(() => {
         const scrollRefs = [plotRef, tableRef];
@@ -54,16 +53,16 @@ function BufferSummary() {
         return () => window.removeEventListener('scroll', navHighlighter);
     }, []);
 
-    const tensorListByOperation = useMemo(
-        () => createTensorListByOperationById(operationsList, buffersByOperation),
-        [operationsList, buffersByOperation],
+    const tensorListByOperation = createTensorListByOperationById(
+        operationsList,
+        isDramActive ? dramBuffersByOperation : buffersByOperation,
     );
 
     return (
         <div className='buffer-summary'>
             <Helmet title='Buffer summary' />
 
-            <h1 className='page-title'>L1 buffers by operation</h1>
+            <h1 className='page-title'>Buffers by operation</h1>
 
             <ButtonGroup className='sticky-nav'>
                 <AnchorButton
@@ -93,33 +92,50 @@ function BufferSummary() {
                 />
             )}
 
-            {buffersByOperation && operationsList && tensorListByOperation ? (
-                <>
-                    <h2>Plot view</h2>
-                    <div
-                        ref={plotRef}
-                        id={SECTION_IDS.PLOT}
-                    >
-                        <BufferSummaryPlotRenderer
-                            buffersByOperation={buffersByOperation}
-                            tensorListByOperation={tensorListByOperation}
-                        />
-                    </div>
+            <Tabs
+                id='performance-tabs'
+                selectedTabId={selectedTabId}
+                onChange={setSelectedTabId}
+                large
+                renderActiveTabPanelOnly
+            >
+                <Tab
+                    id={TAB_IDS.L1}
+                    title='L1'
+                    icon={IconNames.PAGE_LAYOUT}
+                    panel={
+                        buffersByOperation && operationsList && tensorListByOperation ? (
+                            <BufferSummaryTab
+                                plotRef={plotRef}
+                                tableRef={tableRef}
+                                buffersByOperation={buffersByOperation}
+                                tensorListByOperation={tensorListByOperation}
+                            />
+                        ) : (
+                            <LoadingSpinner />
+                        )
+                    }
+                />
 
-                    <h2>Table view</h2>
-                    <div
-                        ref={tableRef}
-                        id={SECTION_IDS.TABLE}
-                    >
-                        <BufferSummaryTable
-                            buffersByOperation={buffersByOperation.filter((op) => op.buffers.length > 0)}
-                            tensorListByOperation={tensorListByOperation}
-                        />
-                    </div>
-                </>
-            ) : (
-                <LoadingSpinner />
-            )}
+                <Tab
+                    id={TAB_IDS.DRAM}
+                    title='DRAM'
+                    icon={IconNames.PAGE_LAYOUT}
+                    panel={
+                        dramBuffersByOperation && operationsList && tensorListByOperation ? (
+                            <BufferSummaryTab
+                                plotRef={plotRef}
+                                tableRef={tableRef}
+                                buffersByOperation={dramBuffersByOperation}
+                                tensorListByOperation={tensorListByOperation}
+                                isDram
+                            />
+                        ) : (
+                            <LoadingSpinner />
+                        )
+                    }
+                />
+            </Tabs>
         </div>
     );
 }
