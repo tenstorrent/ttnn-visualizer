@@ -18,6 +18,7 @@ import {
     tflops_per_core,
 } from '../../functions/perfFunctions';
 import { Cell, MathFidelity, ProcessedRow, RowData } from '../../definitions/PerfTable';
+import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
 
 const analyze_matmul = (row: RowData) => {
     const input_0_from_dram = String(row.INPUT_0_MEMORY || '').includes('DRAM');
@@ -168,6 +169,7 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
 
         return {
             ID: { raw_value: null },
+            OP: { raw_value: null },
             'Total %': { raw_value: null },
             Bound: bound,
             'OP Code': { raw_value: op_code },
@@ -191,6 +193,7 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
     }
     return {
         ID: { raw_value: null },
+        OP: { raw_value: null },
         'Total %': { raw_value: null },
         Bound: bound,
         'OP Code': { raw_value: op_code_val },
@@ -261,16 +264,19 @@ interface PerformanceReportProps {
 
 export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercentage = 0.5 }) => {
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
-    const [showHostOps, setShowHostOps] = useState<boolean>(false);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, setIsMultiDevice] = useState<boolean>(false);
+    const opIdsMap = useOptoPerfIdFiltered();
 
     const processedRows = useMemo(() => {
         if (data === undefined) {
             return [];
         }
+
         let df = data.slice();
+
+        df = df.filter((r) => !r['OP CODE']?.toString().includes('(torch)') && !(r['OP CODE']?.toString() === ''));
 
         df.forEach((r, index) => {
             r.ORIGINAL_ID = index + 2;
@@ -287,17 +293,14 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
             df = mergeMultideviceRows(df);
         }
 
-        // Filter out host ops if we should
-        if (!showHostOps) {
-            df = df.filter((r) => !r['OP CODE']?.toString().includes('(torch)') && !(r['OP CODE']?.toString() === ''));
-        }
-
         let rows: ProcessedRow[] = [];
         let prevRow: RowData | null = null;
 
         df.forEach((r) => {
             const opData = analyze_op(r, prevRow);
+            const linkedObj = opIdsMap.find((op) => op.perfId === r.ORIGINAL_ID);
             opData.ID.raw_value = String(r.ORIGINAL_ID);
+            opData.OP.raw_value = linkedObj?.opId || null;
             rows.push(opData);
             prevRow = r;
         });
@@ -319,10 +322,11 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         }
 
         return rows;
-    }, [data, mergeDeviceData, minPercentage, showHostOps, hiliteHighDispatch]);
+    }, [data, opIdsMap, mergeDeviceData, hiliteHighDispatch, minPercentage]);
 
     const baseHeaders = [
         'ID',
+        'OP',
         'Total %',
         'Bound',
         'OP Code',
@@ -391,12 +395,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                 checked={mergeDeviceData && isMultiDevice}
                 disabled={!isMultiDevice}
             />
-            <Switch
-                className='expand-button'
-                label={showHostOps ? 'Hide host ops' : 'Show host ops'}
-                onChange={() => setShowHostOps(!showHostOps)}
-                checked={showHostOps}
-            />
+
             <Switch
                 className='expand-button'
                 label={provideMatmulAdvice ? 'Hide Matmul optimization analysis' : 'Show Matmul optimization analysis'}

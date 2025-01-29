@@ -365,25 +365,24 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
         if (numDevices === 1) {
             return data;
         }
+
         const result: DeviceOperationMapping[] = [];
-        let count = 0;
-        let previousKey = '';
+        const operationCountByKey = new Map<string, number>();
 
-        data.forEach((item) => {
+        for (const { name, id } of data) {
+            const key = `${name}-${id}`;
+            operationCountByKey.set(key, (operationCountByKey.get(key) || 0) + 1);
+        }
+
+        const seen = new Set<string>();
+
+        for (const item of data) {
             const key = `${item.name}-${item.id}`;
-
-            if (key === previousKey) {
-                count++;
-            } else {
-                count = 1;
-            }
-
-            if (count !== numDevices) {
+            if (!seen.has(key) && operationCountByKey.get(key) === numDevices) {
                 result.push(item);
+                seen.add(key);
             }
-
-            previousKey = key;
-        });
+        }
 
         return result;
     };
@@ -415,7 +414,7 @@ export interface DeviceOperationMapping {
     perfData?: RowData;
 }
 
-const useNormalizedPerformance = (): RowData[] => {
+export const useNormalizedPerformance = (): RowData[] => {
     const { data } = usePerformance();
 
     return useMemo(() => {
@@ -423,7 +422,9 @@ const useNormalizedPerformance = (): RowData[] => {
             return [];
         }
         // @ts-expect-error this should be just fine
-        let df: RowData[] = data.data.slice() as RowData[];
+        let df: RowData[] = (data.data.slice() as RowData[]).filter(
+            (r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE'] === ''),
+        );
 
         df.forEach((r, index) => {
             r.ORIGINAL_ID = index + 2;
@@ -439,7 +440,7 @@ const useNormalizedPerformance = (): RowData[] => {
             df = mergeMultideviceRows(df);
         }
 
-        return df.filter((r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE'] === ''));
+        return df;
     }, [data]);
 };
 export const useGetDeviceOperationListPerf = () => {
@@ -489,10 +490,16 @@ export const useOptoPerfIdAll = () => {
  */
 export const useOptoPerfIdFiltered = () => {
     const opMapping = useGetDeviceOperationListPerf();
-    return opMapping.map(({ id, perfData }) => ({
-        opId: id,
-        perfId: perfData?.ORIGINAL_ID,
-    }));
+    return useMemo(
+        () =>
+            opMapping.map(({ id, perfData }) => {
+                return {
+                    opId: id,
+                    perfId: perfData?.ORIGINAL_ID,
+                };
+            }),
+        [opMapping],
+    );
 };
 
 // Not currently used anymore
