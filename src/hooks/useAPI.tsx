@@ -415,7 +415,7 @@ export interface DeviceOperationMapping {
     perfData?: RowData;
 }
 
-const useNormalizedPerformance = (): RowData[] => {
+export const useNormalizedPerformance = (): RowData[] => {
     const { data } = usePerformance();
 
     return useMemo(() => {
@@ -489,10 +489,17 @@ export const useOptoPerfIdAll = () => {
  */
 export const useOptoPerfIdFiltered = () => {
     const opMapping = useGetDeviceOperationListPerf();
-    return opMapping.map(({ id, perfData }) => ({
-        opId: id,
-        perfId: perfData?.ORIGINAL_ID,
-    }));
+    console.log('opMapping', opMapping);
+    const a = useMemo(
+        () =>
+            opMapping.map(({ id, perfData }) => ({
+                opId: id,
+                perfId: perfData?.ORIGINAL_ID,
+            })),
+        [opMapping],
+    );
+    console.log('API', a);
+    return a;
 };
 
 // Not currently used anymore

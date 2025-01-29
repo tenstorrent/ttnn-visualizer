@@ -18,6 +18,7 @@ import {
     tflops_per_core,
 } from '../../functions/perfFunctions';
 import { Cell, MathFidelity, ProcessedRow, RowData } from '../../definitions/PerfTable';
+import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
 
 const analyze_matmul = (row: RowData) => {
     const input_0_from_dram = String(row.INPUT_0_MEMORY || '').includes('DRAM');
@@ -168,6 +169,7 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
 
         return {
             ID: { raw_value: null },
+            OP: { raw_value: null },
             'Total %': { raw_value: null },
             Bound: bound,
             'OP Code': { raw_value: op_code },
@@ -191,6 +193,7 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
     }
     return {
         ID: { raw_value: null },
+        OP: { raw_value: null },
         'Total %': { raw_value: null },
         Bound: bound,
         'OP Code': { raw_value: op_code_val },
@@ -265,11 +268,18 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, setIsMultiDevice] = useState<boolean>(false);
+    const opIdsMap = useOptoPerfIdFiltered();
+    console.log('PERF:', opIdsMap);
+    // console.log(
+    //     '2',
+    //     opIdsMap.find((op) => Number(op.perfId) === 2),
+    // );
 
     const processedRows = useMemo(() => {
         if (data === undefined) {
             return [];
         }
+        console.log('PERF memo:', opIdsMap);
         let df = data.slice();
 
         df.forEach((r, index) => {
@@ -297,7 +307,9 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
 
         df.forEach((r) => {
             const opData = analyze_op(r, prevRow);
+            const linkedObj = opIdsMap.find((op) => op.perfId === r.ORIGINAL_ID);
             opData.ID.raw_value = String(r.ORIGINAL_ID);
+            opData.OP.raw_value = linkedObj?.opId || null;
             rows.push(opData);
             prevRow = r;
         });
@@ -319,10 +331,11 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         }
 
         return rows;
-    }, [data, mergeDeviceData, minPercentage, showHostOps, hiliteHighDispatch]);
+    }, [data, opIdsMap, mergeDeviceData, showHostOps, hiliteHighDispatch, minPercentage]);
 
     const baseHeaders = [
         'ID',
+        'OP',
         'Total %',
         'Bound',
         'OP Code',
