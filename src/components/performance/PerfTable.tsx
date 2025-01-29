@@ -293,8 +293,6 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
             df = mergeMultideviceRows(df);
         }
 
-        // Filter out host ops if we should
-
         let rows: ProcessedRow[] = [];
         let prevRow: RowData | null = null;
 
