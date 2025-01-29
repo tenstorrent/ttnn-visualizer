@@ -81,6 +81,7 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
             return {
                 interactiveBuffer: interactivityList.find((b) => mouseX >= b.position && mouseX <= b.position + b.size),
                 scaleX,
+                canvas,
             };
         }
         return {};
@@ -109,8 +110,9 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
     };
 
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-        const { interactiveBuffer, scaleX } = findBufferForInteraction(event);
+        const { interactiveBuffer, scaleX, canvas } = findBufferForInteraction(event);
         if (interactiveBuffer) {
+            canvas.style.cursor = 'pointer';
             const x = interactiveBuffer.position / scaleX;
             const { color } = interactiveBuffer;
 
@@ -140,6 +142,8 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
                 ),
             });
         } else {
+            // eslint-disable-next-line no-unused-expressions
+            canvasRef.current && (canvasRef.current.style.cursor = 'default');
             setTooltip(null);
         }
     };
