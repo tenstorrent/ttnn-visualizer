@@ -65,7 +65,7 @@ ssh-add -L
 If it is not present, run the following on your local machine:
 
 ```shell
-sh-add
+ssh-add
 ```
 
 ### Fix for python random errors not finding modules
