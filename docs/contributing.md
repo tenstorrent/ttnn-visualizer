@@ -62,7 +62,7 @@ Check your local ssh agent has your ssh key by running:
 ssh-add -L
 ```
 
-If it is not present, run the following on your local machine:
+If your key isn't present, run the following on your local machine:
 
 ```shell
 ssh-add
