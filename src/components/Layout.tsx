@@ -14,7 +14,7 @@ import { useEffect } from 'react';
 import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
 import { useGetDeviceOperationListPerf, useSession } from '../hooks/useAPI';
-import ROUTES from '../definitions/routes';
+import ROUTES from '../definitions/Routes';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,

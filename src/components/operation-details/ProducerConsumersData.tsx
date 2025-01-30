@@ -7,7 +7,7 @@ import { Button, Icon } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { IconNames } from '@blueprintjs/icons';
-import ROUTES from '../../definitions/routes';
+import ROUTES from '../../definitions/Routes';
 import { OperationDetails } from '../../model/OperationDetails';
 import 'styles/components/ProducerConsumersData.scss';
 import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';

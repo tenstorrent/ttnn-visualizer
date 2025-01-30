@@ -13,7 +13,7 @@ import { MultiSelect } from '@blueprintjs/select';
 import SearchField from './SearchField';
 import LoadingSpinner from './LoadingSpinner';
 import { useOperationsList, useTensors } from '../hooks/useAPI';
-import ROUTES from '../definitions/routes';
+import ROUTES from '../definitions/Routes';
 import { Tensor } from '../model/APIData';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';

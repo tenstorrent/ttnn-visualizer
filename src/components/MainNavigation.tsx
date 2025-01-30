@@ -6,7 +6,7 @@ import { Alignment, Button, Navbar } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useAtomValue } from 'jotai';
-import ROUTES from '../definitions/routes';
+import ROUTES from '../definitions/Routes';
 import 'styles/components/MainNavigation.scss';
 import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 

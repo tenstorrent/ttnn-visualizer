@@ -15,7 +15,7 @@ import Home from './routes/Home';
 import Operations from './routes/Operations';
 import OperationDetails from './routes/OperationDetails';
 import Styleguide from './routes/Styleguide';
-import ROUTES from './definitions/routes';
+import ROUTES from './definitions/Routes';
 import Tensors from './routes/Tensors';
 import BufferSummary from './routes/BufferSummary';
 import { SocketProvider } from './libs/SocketProvider';
@@ -33,31 +33,31 @@ const router = createBrowserRouter([
                 element: <Home />,
             },
             {
-                path: 'operations',
+                path: ROUTES.OPERATIONS,
                 element: <Operations />,
             },
             {
-                path: 'operations/:operationId',
+                path: `${ROUTES.OPERATIONS}/:operationId`,
                 element: <OperationDetails />,
             },
             {
-                path: 'tensors',
+                path: ROUTES.TENSORS,
                 element: <Tensors />,
             },
             {
-                path: 'buffer-summary',
+                path: ROUTES.BUFFERS,
                 element: <BufferSummary />,
             },
             {
-                path: 'styleguide',
+                path: ROUTES.STYLEGUIDE,
                 element: <Styleguide />,
             },
             {
-                path: 'graphtree/:operationId?',
+                path: `${ROUTES.GRAPHTREE}/:operationId?`,
                 element: <GraphView />,
             },
             {
-                path: 'performance',
+                path: ROUTES.PERFORMANCE,
                 element: <Performance />,
             },
         ],

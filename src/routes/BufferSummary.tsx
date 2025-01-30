@@ -11,11 +11,16 @@ import useBufferFocus from '../hooks/useBufferFocus';
 import { BufferType } from '../model/BufferType';
 import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import { Operation, Tensor } from '../model/APIData';
-import ROUTES from '../definitions/routes';
+import ROUTES from '../definitions/Routes';
 import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
 import LoadingSpinner from '../components/LoadingSpinner';
 import 'styles/components/BufferSummary.scss';
-import { SECTION_IDS, TAB_IDS } from '../definitions/BufferSummary';
+import { SECTION_IDS } from '../definitions/BufferSummary';
+
+enum TAB_IDS {
+    L1 = 'L1',
+    DRAM = 'DRAM',
+}
 
 function BufferSummary() {
     const plotRef = useRef<HTMLHeadingElement>(null);
