@@ -14,7 +14,7 @@ import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
-import ROUTES from '../../definitions/routes';
+import ROUTES from '../../definitions/Routes';
 import isValidNumber from '../../functions/isValidNumber';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, selectedDeviceAtom, showHexAtom } from '../../store/app';
