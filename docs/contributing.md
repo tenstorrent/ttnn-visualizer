@@ -4,7 +4,7 @@
 
 ## Running the app from source
 
-### Frontend
+### Front end
 
 ```shell
 nvm use
@@ -12,7 +12,7 @@ npm install
 npm run dev
 ```
 
-### Backend
+### Back end
 
 create env
 
@@ -53,6 +53,8 @@ The application should run out of the box, but should you need to you can adjust
 ## Troubleshooting
 
 ### Fix for 'no keys found' error
+
+<img width="492" alt="Screenshot 2025-01-30 at 1 55 10 PM" src="https://github.com/user-attachments/assets/3f7f9983-f92d-4900-9321-9d46c6355c36" />
 
 Check your local ssh agent has your ssh key by running:
 
