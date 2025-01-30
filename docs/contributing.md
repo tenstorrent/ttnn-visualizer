@@ -52,6 +52,20 @@ The application should run out of the box, but should you need to you can adjust
 
 ## Troubleshooting
 
+### Fix for 'no keys found' error
+
+Check your local ssh agent has your ssh key by running:
+
+```shell
+ssh-add -L
+```
+
+If it is not present, run the following on your local machine:
+
+```shell
+sh-add
+```
+
 ### Fix for python random errors not finding modules
 
 ```shell
