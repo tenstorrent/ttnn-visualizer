@@ -5,12 +5,13 @@
 
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Button, Slider } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { NPEData, NoCID, NoCTransfer } from '../../model/NPEModel';
-import SVGTensixRenderer from './SVGTensixRenderer';
+import TensixTransferRenderer from './TensixTransferRenderer';
 import { NODE_SIZE, calculateLinkCongestionColor, getLinkPoints, getRouteColor } from './drawingApi';
+import NPECongestionHeatMap from './NPECongestionHeatMap';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -23,15 +24,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const height = npeData.common_info.num_rows;
     const [, setSelectedTransfer] = React.useState<number | null>(null);
     const [selectedTimestep, setSelectedTimestep] = React.useState<number>(0);
-    // const transfer = npeData.noc_transfers.find((tr) => tr.id === selectedTransfer) || null;
     const links = npeData.timestep_data[selectedTimestep];
     const transfers = npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));
     const [animationInterval, setAnimationInterval] = React.useState<number | null>(null);
     const [selectedTransferList, setSelectedTransferList] = React.useState<NoCTransfer[]>([]);
     const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
     const [isPlaying, setIsPlaying] = React.useState<boolean>(false);
-
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
     useEffect(() => {
         stopAnimation();
@@ -40,14 +38,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedTransferList([]);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [npeData]);
-
-    const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
-    useEffect(() => {
-        const handleResize = () => setCanvasWidth(window.innerWidth);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-    const canvasHeight = 30;
 
     const getLines = (nocs: Array<{ transfer: number; nocId: NoCID | undefined }>) => {
         return nocs.map((noc) => {
@@ -71,41 +61,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             [],
         );
     }, [selectedTransferList]);
-
-    const congestionMapPerTimestamp = useMemo(() => {
-        return {
-            worst: npeData.timestep_data.map((timestep) =>
-                calculateLinkCongestionColor(Math.max(-1, ...timestep.link_demand.map((route) => route[3]))),
-            ),
-            utilization: npeData.timestep_data.map((timestep) => calculateLinkCongestionColor(timestep.avg_link_util)),
-            demand: npeData.timestep_data.map((timestep) => calculateLinkCongestionColor(timestep.avg_link_demand)),
-        };
-    }, [npeData.timestep_data]);
-
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) {
-            return;
-        }
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-            return;
-        }
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const chunkWidth = canvas.width / congestionMapPerTimestamp.worst.length;
-        congestionMapPerTimestamp.worst.forEach((color, index) => {
-            ctx.fillStyle = color;
-            ctx.fillRect(index * chunkWidth, 0, chunkWidth, canvas.height / 3);
-        });
-        congestionMapPerTimestamp.utilization.forEach((color, index) => {
-            ctx.fillStyle = color;
-            ctx.fillRect(index * chunkWidth, canvas.height / 3, chunkWidth, (canvas.height / 3) * 2);
-        });
-        congestionMapPerTimestamp.demand.forEach((color, index) => {
-            ctx.fillStyle = color;
-            ctx.fillRect(index * chunkWidth, (canvas.height / 3) * 2, chunkWidth, canvas.height);
-        });
-    }, [congestionMapPerTimestamp, canvasWidth, canvasHeight]);
 
     const startAnimation = () => {
         setIsPlaying(true);
@@ -149,8 +104,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         }
         setSelectedIndex(index || -1);
         onPause();
-        const allTRansfersForTime = npeData.timestep_data[selectedTimestep].active_transfers;
-        const activeTransfers = allTRansfersForTime
+
+        const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
             .map((transferId) => {
                 const transfer = npeData.noc_transfers.find((tr) => tr.id === transferId);
                 if (transfer) {
@@ -167,7 +122,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     return (
         <div className='npe'>
             <div className='header'>
-                {/* <p>{npeData.common_info.device_name}</p> */}
                 {!isPlaying && (
                     <Button
                         icon={IconNames.Play}
@@ -180,7 +134,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         onClick={onPause}
                     />
                 )}
-                {/* {congestionMapPerTimestamp.demand} */}
                 <Slider
                     min={0}
                     max={npeData.timestep_data.length - 1}
@@ -189,12 +142,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     value={selectedTimestep}
                     onChange={(value: number) => handleScrubberChange(value)}
                 />
-                <canvas
-                    style={{ width: '100%', height: `${canvasHeight}px` }}
-                    ref={canvasRef}
-                    width={canvasWidth}
-                    height={canvasHeight}
-                />
+                <NPECongestionHeatMap timestepList={npeData.timestep_data} />
             </div>
             <div
                 className='split-grid'
@@ -239,6 +187,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             <>
                                 {transfer?.src && (
                                     <div
+                                        key={`${transfer.id}-src`}
                                         className='tensix'
                                         style={{
                                             position: 'relative',
@@ -253,6 +202,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 {transfer?.dst && (
                                     <div
                                         className='tensix'
+                                        key={`${transfer.id}-dst`}
                                         style={{
                                             position: 'relative',
                                             gridColumn: transfer.dst[1] + 1,
@@ -281,7 +231,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
 
                                 // onMouseOut={() => showActiveTransfers(null)}
                             >
-                                <SVGTensixRenderer
+                                <TensixTransferRenderer
                                     width={SVG_SIZE}
                                     height={SVG_SIZE}
                                     data={[getLinkPoints(route[2], calculateLinkCongestionColor(route[3]))]}
@@ -355,54 +305,16 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             // background: 'rgba(255, 0, 0, 0.5)',
                                         }}
                                     >
-                                        <SVGTensixRenderer
+                                        <TensixTransferRenderer
                                             width={SVG_SIZE}
                                             height={SVG_SIZE}
                                             data={getLines(transferForNoc)}
                                             isMulticolor
                                         />
                                     </div>
-                                    {/* {transferForNoc?.map((transfer) => ( */}
-                                    {/*    <div */}
-                                    {/*        key={transfer.transfer} */}
-                                    {/*        style={{ */}
-                                    {/*            position: 'absolute', */}
-                                    {/*            top: 0, */}
-                                    {/*            left: 0, */}
-                                    {/*            width: '100%', */}
-                                    {/*            height: '100%', */}
-                                    {/*            background: 'rgba(255, 0, 0, 0.5)', */}
-                                    {/*        }} */}
-                                    {/*    > */}
-                                    {/*         <SVGTensixRenderer */}
-                                    {/*            width={SVG_SIZE} */}
-                                    {/*            height={SVG_SIZE} */}
-                                    {/*            data={[getLinkPoints(row[transferForNoc], calculateLinkCongestionColor(route[3]))]} */}
-                                    {/*         /> */}
-                                    {/*    </div> */}
-                                    {/* ))} */}
                                 </div>
                             )),
                         )}
-                        {/* {selectedTransferList.map((transfer) => */}
-                        {/*    transfer.route.map((route, index) => ( */}
-                        {/*        <div */}
-                        {/*            key={`-${index}`} */}
-                        {/*            className='tensix no-click' */}
-                        {/*            style={{ */}
-                        {/*                position: 'relative', */}
-                        {/*                gridColumn: route[1] + 1, */}
-                        {/*                gridRow: route[0] + 1, */}
-                        {/*            }} */}
-                        {/*        > */}
-                        {/*            <SVGTensixRenderer */}
-                        {/*                width={SVG_SIZE} */}
-                        {/*                height={SVG_SIZE} */}
-                        {/*                data={[getLinkPoints(route[2], '#ffffff99')]} */}
-                        {/*            /> */}
-                        {/*        </div> */}
-                        {/*    )), */}
-                        {/* )} */}
                     </div>
                 </div>
                 <div className='side-data'>

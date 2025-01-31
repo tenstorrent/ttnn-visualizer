@@ -93,7 +93,7 @@ function MainNavigation() {
                     text='NPE'
                     onClick={() => handleNavigate(ROUTES.NPE)}
                     active={window.location.pathname === ROUTES.NPE}
-                    icon={IconNames.ADD_LOCATION}
+                    icon={IconNames.Random}
                     // disabled={!hasActiveProfile}
                     minimal
                     large

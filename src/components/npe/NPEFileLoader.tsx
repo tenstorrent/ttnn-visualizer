@@ -23,7 +23,7 @@ const NPEFileLoader: React.FC<NPEFileLoaderProps> = ({ onFileLoad }) => {
                 const result = e.target?.result as string;
                 const parsedData = JSON.parse(result);
                 setError(null);
-                onFileLoad(parsedData); // Call the callback with parsed JSON
+                onFileLoad(parsedData);
             } catch (err) {
                 setError('Invalid JSON file. Please upload a valid JSON.');
             }
@@ -42,14 +42,12 @@ const NPEFileLoader: React.FC<NPEFileLoaderProps> = ({ onFileLoad }) => {
                 onChange={handleFileChange}
                 style={{
                     display: 'block',
-                    padding: '5px',
-                    // border: '1px solid #ccc',
+                    padding: '0',
                     borderRadius: '4px',
                     width: '100%',
+                    cursor: 'pointer',
                 }}
             />
-
-            {/* Error Message */}
             {error && <p style={{ color: 'red', marginTop: 10 }}>{error}</p>}
         </div>
     );

@@ -63,7 +63,7 @@
         }
 
         &.npe-button {
-            @include button-styles($tt-npe, $tt-npe-active, 'add-location');
+            @include button-styles($tt-npe, $tt-npe-active, 'random');
         }
     }
 }
