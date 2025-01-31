@@ -16,7 +16,6 @@ import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
 import LoadingSpinner from '../components/LoadingSpinner';
 import 'styles/components/BufferSummary.scss';
 import { SECTION_IDS } from '../definitions/BufferSummary';
-import Range from '../components/RangeSlider';
 
 enum TAB_IDS {
     L1 = 'L1',
@@ -69,8 +68,6 @@ function BufferSummary() {
             <Helmet title='Buffer summary' />
 
             <h1 className='page-title'>Buffers by operation</h1>
-
-            <Range />
 
             <ButtonGroup className='sticky-nav'>
                 <AnchorButton
