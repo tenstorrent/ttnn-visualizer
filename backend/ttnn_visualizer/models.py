@@ -114,10 +114,10 @@ class Tensor(SerializeableDataclass):
     device_id: int
     address: int
     buffer_type: BufferType
+    device_addresses: list[int]
 
     def __post_init__(self):
         self.memory_config = parse_memory_config(self.memory_config)
-
 
 @dataclasses.dataclass
 class InputTensor(SerializeableDataclass):
