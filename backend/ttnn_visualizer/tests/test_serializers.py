@@ -62,7 +62,7 @@ class TestSerializers(unittest.TestCase):
                 2,
                 2000,
                 BufferType.L1,
-                [50],
+                [25],
             ),
         ]
         devices = [
@@ -131,7 +131,7 @@ class TestSerializers(unittest.TestCase):
                         "device_id": 1,
                         "address": 1000,
                         "buffer_type": 0,
-                        "device_addresses": [50],
+                        "device_addresses": [25],
                     }
                 ],
             }
@@ -336,6 +336,7 @@ class TestSerializers(unittest.TestCase):
                     "device_id": 1,
                     "address": 1000,
                     "buffer_type": 0,
+                    "device_addresses": [25],
                 }
             ]
         }
