@@ -17,6 +17,10 @@ export enum NoCID {
     NOC0_SOUTH = 'NOC0_SOUTH',
     NOC0_EAST = 'NOC0_EAST',
     NOC1_WEST = 'NOC1_WEST',
+    NOC0_IN = 'NOC0_IN',
+    NOC0_OUT = 'NOC0_OUT',
+    NOC1_IN = 'NOC1_IN',
+    NOC1_OUT = 'NOC1_OUT',
 }
 
 export interface NoCTransfer {
@@ -24,7 +28,7 @@ export interface NoCTransfer {
     src: [row, col];
     dst: [row, col];
     total_bytes: number;
-    transfer_type: 'UNICAST' | 'MULTICAST';
+    noc_event_type: 'UNICAST' | 'MULTICAST';
     noc_type: NoCType;
     injection_rate: number;
     start_cycle: number;
@@ -43,7 +47,9 @@ export interface TimestepData {
     start_cycle: number;
     end_cycle: number;
     active_transfers: NoCTransferId[];
-    link_utilization: [row, col, NoCID, number][]; // LinkUtilization[];
+    link_demand: [row, col, NoCID, number][]; // LinkUtilization[];
+    avg_link_demand: number;
+    avg_link_util: number;
 }
 
 export interface NPEData {

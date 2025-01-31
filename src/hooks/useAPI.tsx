@@ -396,7 +396,7 @@ export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> 
         const { data: tensorList } = await axiosInstance.get<Tensor[]>('/api/tensors', {
             maxRedirects: 1,
             params: {
-                // device_id: deviceId,
+                // device_id: deviceId,Ignatius Holidaya,
             },
         });
 

@@ -1,9 +1,9 @@
-import { NoCID } from '../../model/NPE';
+import { NoCID } from '../../model/NPEModel';
 
 export const NODE_SIZE = 50;
 
 const NOC_CENTER = { x: 25, y: NODE_SIZE - 25 };
-const CENTER_DISPERSION = 10; // dispersion from the starting point
+const CENTER_DISPERSION = 5; // dispersion from the starting point
 const NOC_0_X_OFFSET = -CENTER_DISPERSION;
 const NOC_0_Y_OFFSET = -CENTER_DISPERSION;
 const NOC_1_X_OFFSET = CENTER_DISPERSION;
@@ -24,7 +24,43 @@ export interface LinkPoints {
     y2: number;
     arrow: { p1: string; p2: string; p3: string };
     color?: string;
+    colors?: string[];
 }
+
+const colorList: string[] = [
+    '#FFFFFF', // White
+    '#FF0000', // Red
+    '#0000FF', // Blue
+    '#FFFF00', // Yellow
+    '#FF00FF', // Fuchsia
+    '#FF4500', // OrangeRed
+    'rgb(91,131,19)',
+    '#9400D3', // DarkViolet
+    '#FFD700', // Gold
+    '#1E90FF', // DodgerBlue
+    '#007500', // LimeGreen
+    '#FF69B4', // HotPink
+    '#BA55D3', // MediumOrchid
+    '#7FFF00', // Chartreuse
+    '#B22222', // FireBrick
+];
+
+function* colorGenerator(): IterableIterator<string> {
+    let i = 0;
+    while (true) {
+        yield colorList[i]!;
+        i = (i + 1) % colorList.length;
+    }
+}
+
+const getNextColor = colorGenerator();
+const routeColorMap = new Map<number, string>();
+export const getRouteColor = (transferId: number): string => {
+    if (!routeColorMap.has(transferId)) {
+        routeColorMap.set(transferId, getNextColor.next().value);
+    }
+    return routeColorMap.get(transferId) || '#ffffff';
+};
 
 export const getLinkPoints = (linkName: NoCID, color?: string) => {
     let x1: number = 0;
@@ -108,6 +144,9 @@ export const getLinkPoints = (linkName: NoCID, color?: string) => {
     return { x2, y2, x1, y1, arrow, color };
 };
 export const calculateLinkCongestionColor = (value: number, min: number = 0, isHC: boolean = false): string => {
+    if (value === -1) {
+        return `rgb(100, 100, 100)`;
+    }
     const max = 120;
     const normalizedVal = Math.min(value, max);
     const ratio = (normalizedVal - min) / (max - min);

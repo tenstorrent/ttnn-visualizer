@@ -1,9 +1,11 @@
 @use '../definitions/colours' as *;
 
 .npe {
-    .timestep {
+    button.timestep {
         font-size: 10px;
         padding: 2px;
+        min-width: 10px;
+        min-height: 10px;
     }
 
     .chip {
@@ -20,14 +22,18 @@
         }
 
         display: grid;
-        gap: 5px;
+        gap: 1px;
 
         .tensix {
             display: flex;
             flex-direction: column;
+            border: 1px solid transparent;
+            z-index: 1;
+            cursor: pointer;
+            overflow: hidden;
 
             &:hover {
-                transition: border-color 100ms linear;
+                transition: border-color 50ms linear;
                 border-color: $tt-yellow-tint-2;
             }
 
@@ -37,6 +43,15 @@
 
             &.empty-tensix {
                 border-color: $tt-slate;
+            }
+
+            &.no-click {
+                border: 1px solid transparent;
+                pointer-events: none;
+
+                &:hover {
+                    border-color: transparent;
+                }
             }
         }
     }
