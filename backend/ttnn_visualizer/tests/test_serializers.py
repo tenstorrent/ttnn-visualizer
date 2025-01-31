@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import unittest
 
 from ttnn_visualizer.models import (
@@ -43,7 +47,7 @@ class TestSerializers(unittest.TestCase):
                 "shape1",
                 "dtype1",
                 "layout1",
-                "memory_config1",
+                "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::DRAM,shard_spec=std::nullopt)",
                 1,
                 1000,
                 BufferType.DRAM,
@@ -53,7 +57,7 @@ class TestSerializers(unittest.TestCase):
                 "shape2",
                 "dtype2",
                 "layout2",
-                "memory_config2",
+                "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::DRAM,shard_spec=std::nullopt)",
                 2,
                 2000,
                 BufferType.L1,
@@ -98,7 +102,10 @@ class TestSerializers(unittest.TestCase):
                         "shape": "shape1",
                         "dtype": "dtype1",
                         "layout": "layout1",
-                        "memory_config": "memory_config1",
+                        "memory_config": {
+                            "memory_layout": "TensorMemoryLayout::INTERLEAVED",
+                            "shard_spec": "std::nullopt",
+                        },
                         "device_id": 1,
                         "address": 1000,
                         "buffer_type": 0,
@@ -114,7 +121,10 @@ class TestSerializers(unittest.TestCase):
                         "shape": "shape1",
                         "dtype": "dtype1",
                         "layout": "layout1",
-                        "memory_config": "memory_config1",
+                        "memory_config": {
+                            "memory_layout": "TensorMemoryLayout::INTERLEAVED",
+                            "shard_spec": "std::nullopt",
+                        },
                         "device_id": 1,
                         "address": 1000,
                         "buffer_type": 0,
@@ -269,7 +279,7 @@ class TestSerializers(unittest.TestCase):
                 "shape1",
                 "dtype1",
                 "layout1",
-                "memory_config1",
+                "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::DRAM,shard_spec=std::nullopt)",
                 1,
                 1000,
                 BufferType.DRAM,
@@ -291,7 +301,10 @@ class TestSerializers(unittest.TestCase):
                     "shape": "shape1",
                     "dtype": "dtype1",
                     "layout": "layout1",
-                    "memory_config": "memory_config1",
+                    "memory_config": {
+                        "memory_layout": "TensorMemoryLayout::INTERLEAVED",
+                        "shard_spec": "std::nullopt",
+                    },
                     "device_id": 1,
                     "address": 1000,
                     "buffer_type": 0,
@@ -310,7 +323,10 @@ class TestSerializers(unittest.TestCase):
                     "shape": "shape1",
                     "dtype": "dtype1",
                     "layout": "layout1",
-                    "memory_config": "memory_config1",
+                    "memory_config": {
+                        "memory_layout": "TensorMemoryLayout::INTERLEAVED",
+                        "shard_spec": "std::nullopt",
+                    },
                     "device_id": 1,
                     "address": 1000,
                     "buffer_type": 0,
@@ -334,7 +350,7 @@ class TestSerializers(unittest.TestCase):
                 "shape1",
                 "dtype1",
                 "layout1",
-                "memory_config1",
+                "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::DRAM,shard_spec=std::nullopt)",
                 1,
                 1000,
                 BufferType.DRAM,
@@ -344,7 +360,7 @@ class TestSerializers(unittest.TestCase):
             Device(1, 4, 4, 2, 2, 256, 4, 64, 0, 0, 1, 2, 512, 256, 128, 64, 1, 512)
         ]
         producers_consumers = [ProducersConsumers(1, [2], [3])]
-        device_operations = DeviceOperation(1, '[{"counter": 1, "op_id": 1}]')
+        device_operations = [DeviceOperation(1, '[{"counter": 1, "op_id": 1}]')]
 
         result = serialize_operation(
             buffers,
@@ -384,7 +400,10 @@ class TestSerializers(unittest.TestCase):
                     "id": 1,
                     "input_index": 0,
                     "layout": "layout1",
-                    "memory_config": "memory_config1",
+                    "memory_config": {
+                        "memory_layout": "TensorMemoryLayout::INTERLEAVED",
+                        "shard_spec": "std::nullopt",
+                    },
                     "operation_id": 1,
                     "producers": [2],
                     "shape": "shape1",
@@ -401,7 +420,10 @@ class TestSerializers(unittest.TestCase):
                     "dtype": "dtype1",
                     "id": 1,
                     "layout": "layout1",
-                    "memory_config": "memory_config1",
+                    "memory_config": {
+                        "memory_layout": "TensorMemoryLayout::INTERLEAVED",
+                        "shard_spec": "std::nullopt",
+                    },
                     "operation_id": 1,
                     "output_index": 0,
                     "producers": [2],
@@ -481,7 +503,7 @@ class TestSerializers(unittest.TestCase):
                 "shape1",
                 "dtype1",
                 "layout1",
-                "memory_config1",
+                "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::DRAM,shard_spec=std::nullopt)",
                 1,
                 1000,
                 BufferType.DRAM,
@@ -491,7 +513,7 @@ class TestSerializers(unittest.TestCase):
                 "shape2",
                 "dtype2",
                 "layout2",
-                "memory_config2",
+                "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::DRAM,shard_spec=std::nullopt)",
                 2,
                 2000,
                 BufferType.L1,
@@ -510,7 +532,10 @@ class TestSerializers(unittest.TestCase):
                 "shape": "shape1",
                 "dtype": "dtype1",
                 "layout": "layout1",
-                "memory_config": "memory_config1",
+                "memory_config": {
+                    "memory_layout": "TensorMemoryLayout::INTERLEAVED",
+                    "shard_spec": "std::nullopt",
+                },
                 "device_id": 1,
                 "address": 1000,
                 "buffer_type": 0,
@@ -523,7 +548,10 @@ class TestSerializers(unittest.TestCase):
                 "shape": "shape2",
                 "dtype": "dtype2",
                 "layout": "layout2",
-                "memory_config": "memory_config2",
+                "memory_config": {
+                    "memory_layout": "TensorMemoryLayout::INTERLEAVED",
+                    "shard_spec": "std::nullopt",
+                },
                 "device_id": 2,
                 "address": 2000,
                 "buffer_type": 1,

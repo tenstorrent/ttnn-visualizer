@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
 
@@ -78,10 +78,25 @@
     }
 
     .list-item-container {
+        display: flex;
         padding-bottom: 15px;
 
         // Style added to avoid possible infinite scroll loops
         // https://github.com/TanStack/virtual/issues/540#issuecomment-1720745734
         overflow-anchor: none;
+    }
+
+    .high-number-consumers {
+        margin-left: 5px;
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+
+    .tag-l1 {
+        background-color: $tt-purple;
+    }
+
+    .tag-dram {
+        background-color: $tt-teal;
     }
 }

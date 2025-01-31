@@ -9,6 +9,7 @@ const ROUTES = Object.freeze({
     BUFFERS: '/buffer-summary',
     STYLEGUIDE: '/styleguide',
     GRAPHTREE: '/graphtree',
+    PERFORMANCE: '/performance',
 });
 
 export default ROUTES;

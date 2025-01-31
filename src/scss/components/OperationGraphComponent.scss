@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
 
 .operation-graph-component {
+    .operation-graph-container {
+        width: 100%;
+        height: calc(100vh - 125px);
+    }
+
     .operation-graph-header {
         display: flex;
         flex-direction: column;
@@ -29,6 +34,59 @@
 
         .bp5-label {
             margin-bottom: 5px;
+        }
+    }
+
+    .aside {
+        position: fixed;
+        bottom: 28px;
+    }
+
+    .operation-graph-props {
+        position: fixed;
+        z-index: 1;
+        width: 450px;
+        height: calc(100% - 80px - 15px - 28px);
+        right: 0;
+        background-color: rgba($tt-grey-2, 0.9);
+        overflow: auto;
+        padding-left: 20px;
+
+        .operation-name {
+            font-size: 17px;
+        }
+
+        > h3 {
+            background-color: $tt-grey-4;
+            padding: 5px;
+            font-size: 16px;
+        }
+
+        .tensors {
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+
+            h3 {
+                margin: 0;
+                margin-bottom: 2px;
+            }
+
+            .tensor-details {
+                border-left: 3px solid $tt-grey-5;
+                padding-left: 10px;
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+
+                > table {
+                    margin-left: 7px;
+                }
+
+                > div {
+                    margin-left: 15px;
+                }
+            }
         }
     }
 }

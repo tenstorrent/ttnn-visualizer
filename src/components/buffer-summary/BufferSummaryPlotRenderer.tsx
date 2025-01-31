@@ -16,8 +16,8 @@ import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/routes';
 import isValidNumber from '../../functions/isValidNumber';
-import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
-import { selectedDeviceAtom, showHexAtom } from '../../store/app';
+import { TensorsByOperationByAddress } from '../../model/BufferSummary';
+import { renderMemoryLayoutAtom, selectedDeviceAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
@@ -27,7 +27,7 @@ const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
 interface BufferSummaryPlotRendererProps {
     buffersByOperation: BuffersByOperationData[];
-    tensorListByOperation: HistoricalTensorsByOperation;
+    tensorListByOperation: TensorsByOperationByAddress;
 }
 
 function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }: BufferSummaryPlotRendererProps) {
@@ -35,6 +35,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const deviceId = useAtomValue(selectedDeviceAtom) || 0;
+    const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [isZoomedIn, setIsZoomedIn] = useState(false);
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const scrollElementRef = useRef(null);
@@ -45,11 +46,10 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
         [buffersByOperation],
     );
 
+    const getMemorySize = () => (!isLoadingDevices && devices ? devices[deviceId].worker_l1_size : 0);
+
     // TODO: Multi device support
-    const memorySize = useMemo(
-        () => (!isLoadingDevices && devices ? devices[deviceId].worker_l1_size : 0),
-        [deviceId, devices, isLoadingDevices],
-    );
+    const memorySize = useMemo(getMemorySize, [deviceId, devices, isLoadingDevices]);
 
     const zoomedMemorySize = useMemo(() => {
         let minValue: undefined | number;
@@ -88,21 +88,31 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
 
     return buffersByOperation && !isLoadingDevices && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
-            <Switch
-                label='Buffer zoom'
-                checked={isZoomedIn}
-                onChange={() => {
-                    setIsZoomedIn(!isZoomedIn);
-                }}
-            />
+            <div className='controls'>
+                <Switch
+                    label='Buffer zoom'
+                    checked={isZoomedIn}
+                    onChange={() => {
+                        setIsZoomedIn(!isZoomedIn);
+                    }}
+                />
 
-            <GlobalSwitch
-                label='Hex axis labels'
-                checked={showHex}
-                onChange={() => {
-                    setShowHex(!showHex);
-                }}
-            />
+                <GlobalSwitch
+                    label='Hex axis labels'
+                    checked={showHex}
+                    onChange={() => {
+                        setShowHex(!showHex);
+                    }}
+                />
+
+                <GlobalSwitch
+                    label='Tensor memory layout overlay'
+                    checked={renderMemoryLayout}
+                    onChange={() => {
+                        setRenderMemoryLayout(!renderMemoryLayout);
+                    }}
+                />
+            </div>
 
             <p className='x-axis-label'>Memory Address</p>
 
@@ -166,7 +176,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                                 >
                                     <BufferSummaryRow
                                         buffers={operation.buffers}
-                                        operationId={operation.id}
+                                        // operationId={operation.id}
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}

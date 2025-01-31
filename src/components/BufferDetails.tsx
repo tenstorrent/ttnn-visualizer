@@ -1,25 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Icon, Intent } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
-import { OperationDescription, TensorData } from '../model/APIData';
-import { toHex } from '../functions/math';
+import { Operation, OperationDescription, Tensor } from '../model/APIData';
+import { toHex, toReadableShape, toReadableType } from '../functions/math';
 import ROUTES from '../definitions/routes';
 import 'styles/components/BufferDetails.scss';
 import getDeallocationOperation from '../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../functions/getNextAllocationOperation';
-import { Operation, Tensor } from '../model/Graph';
 import isValidNumber from '../functions/isValidNumber';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';
 import GoldenTensorComparisonIndicator from './GoldenTensorComparisonIndicator';
 
 interface BufferDetailsProps {
-    tensor: TensorData;
+    tensor: Tensor;
     operations: OperationDescription[];
     className?: string;
 }
@@ -35,40 +32,16 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
             <table className='ttnn-table analysis-table'>
                 <tbody>
                     <tr>
+                        <th>Tensor Id</th>
+                        <td>{tensor.id}</td>
+                    </tr>
+
+                    <tr>
                         <th>Last used</th>
                         <td>
                             {isValidNumber(lastOperationId)
                                 ? getLastOperation(lastOperationId, operations, tensor)
                                 : 'No consumers for this tensor'}
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <th>Deallocation</th>
-                        <td>
-                            {isValidNumber(deallocationOperationId) ? (
-                                <div>
-                                    Deallocation found in{' '}
-                                    <Link to={`${ROUTES.OPERATIONS}/${deallocationOperationId}`}>
-                                        {deallocationOperationId}{' '}
-                                        {operations.find((operation) => operation.id === deallocationOperationId)?.name}
-                                    </Link>
-                                    <Icon
-                                        className='deallocation-icon'
-                                        icon={IconNames.TICK}
-                                        intent={Intent.SUCCESS}
-                                    />
-                                </div>
-                            ) : (
-                                <>
-                                    Missing deallocation operation
-                                    <Icon
-                                        className='deallocation-icon'
-                                        icon={IconNames.WARNING_SIGN}
-                                        intent={Intent.WARNING}
-                                    />
-                                </>
-                            )}
                         </td>
                     </tr>
 
@@ -104,8 +77,13 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                     </tr>
 
                     <tr>
+                        <th>Shape</th>
+                        <td>{toReadableShape(shape)}</td>
+                    </tr>
+
+                    <tr>
                         <th>DataType</th>
-                        <td>{dtype}</td>
+                        <td>{toReadableType(dtype)}</td>
                     </tr>
 
                     <tr>
@@ -113,8 +91,8 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         <td>{layout}</td>
                     </tr>
 
-                    {tensor?.parsed_memory_config
-                        ? Object.entries(tensor.parsed_memory_config).map(([key, value]) => (
+                    {tensor?.memory_config
+                        ? Object.entries(tensor.memory_config).map(([key, value]) => (
                               <MemoryConfigRow
                                   key={key}
                                   header={key}
@@ -122,11 +100,6 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                               />
                           ))
                         : null}
-
-                    <tr>
-                        <th>Shape</th>
-                        <td>{shape}</td>
-                    </tr>
 
                     {tensor.comparison ? (
                         <>
@@ -174,7 +147,7 @@ function getLastOperation(lastOperationId: number, operations: Operation[], tens
 
     return lastOperation ? (
         <Link to={`${ROUTES.OPERATIONS}/${lastOperation.id}`}>
-            {lastOperation?.id} {lastOperation.name}
+            {lastOperation?.id} {lastOperation.name} ({lastOperation.operationFileIdentifier})
         </Link>
     ) : null;
 }

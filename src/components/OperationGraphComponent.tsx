@@ -1,18 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Edge, Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
-import { Button, Label, PopoverPosition, Slider, Tooltip } from '@blueprintjs/core';
+import { Button, Intent, Label, PopoverPosition, Slider, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
-import { OperationDescription } from '../model/APIData';
-import ROUTES from '../definitions/routes';
+import { OperationDescription, Tensor } from '../model/APIData';
 import '../scss/components/OperationGraphComponent.scss';
 import LoadingSpinner from './LoadingSpinner';
+import MemoryConfigRow from './MemoryConfigRow';
+import { ShardSpec } from '../functions/parseMemoryConfig';
+import { BufferType } from '../model/BufferType';
+import { toReadableShape, toReadableType } from '../functions/math';
 
 type OperationList = OperationDescription[];
 
@@ -27,7 +30,7 @@ const OperationGraph: React.FC<{
     const [scale, setScale] = useState(1);
 
     const focusNodeId = operationId !== undefined ? operationId : operationList[0].id ?? 0;
-    const [currentOperationId, setCurrentOperationId] = useState<number>(operationId ?? 0);
+    const [currentOperationId, setCurrentOperationId] = useState<number | null>(operationId ?? 0);
     const currentOpIdRef = useRef<number>(currentOperationId);
 
     const edges = useMemo(
@@ -40,7 +43,7 @@ const OperationGraph: React.FC<{
                                 from: op.id,
                                 to: consumerId,
                                 arrows: 'to',
-                                label: `${tensor.id}`,
+                                label: `${toReadableShape(tensor.shape)} \n ${toReadableType(tensor.dtype)}`,
                             }) as Edge,
                     ),
                 ),
@@ -63,7 +66,7 @@ const OperationGraph: React.FC<{
                 .filter((op) => connectedNodeIds.has(op.id))
                 .map((op) => ({
                     id: op.id,
-                    label: `${op.id} ${op.name}`,
+                    label: `${op.id} ${op.name} \n ${op.operationFileIdentifier}`,
                     shape: 'box',
                 })),
         );
@@ -106,6 +109,7 @@ const OperationGraph: React.FC<{
                                 font: { color: '#f5e2ba', size: 20, strokeColor: '#000' },
                                 color: '#f5e2ba',
                                 arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                                smooth: { enabled: true, type: 'cubicBezier', roundness: 0.5 },
                             },
                             autoResize: true,
                             layout: {
@@ -140,6 +144,7 @@ const OperationGraph: React.FC<{
                         });
                         networkRef.current?.selectNodes([focusNodeId], true);
                         setCurrentOperationId(focusNodeId);
+                        // @ts-expect-error this is normal
                         currentOpIdRef.current = focusNodeId;
                     });
 
@@ -154,44 +159,47 @@ const OperationGraph: React.FC<{
                             } else {
                                 focusOnNode((edge?.to as number) || null);
                             }
-                        }
-                        if (params.nodes.length > 0) {
-                            navigate(`${ROUTES.OPERATIONS}/${params.nodes[0]}`);
+                        } else {
+                            networkRef.current?.selectNodes([], true);
+                            setCurrentOperationId(null);
+                            // @ts-expect-error this is normal
+                            currentOpIdRef.current = null;
                         }
                     });
 
-                    networkRef.current.on('dragEnd', () => {
-                        if (networkRef.current) {
-                            const centerPosition = networkRef.current.getViewPosition();
-                            const nodePositions = networkRef.current.getPositions();
-
-                            const closestNodeId = Object.keys(nodePositions).reduce(
-                                (closestId, nodeId) => {
-                                    const pos = nodePositions[nodeId];
-                                    const distance = Math.sqrt(
-                                        (centerPosition.x - pos.x) ** 2 + (centerPosition.y - pos.y) ** 2,
-                                    );
-                                    if (
-                                        closestId === null ||
-                                        distance <
-                                            Math.sqrt(
-                                                (centerPosition.x - nodePositions[closestId].x) ** 2 +
-                                                    (centerPosition.y - nodePositions[closestId].y) ** 2,
-                                            )
-                                    ) {
-                                        return nodeId;
-                                    }
-                                    return closestId;
-                                },
-                                null as string | null,
-                            );
-                            if (closestNodeId) {
-                                networkRef.current.selectNodes([closestNodeId], true);
-                                setCurrentOperationId(parseInt(closestNodeId, 10));
-                                currentOpIdRef.current = parseInt(closestNodeId, 10);
-                            }
-                        }
-                    });
+                    // keeping this for now in case we resurrect this soon
+                    // networkRef.current.on('dragEnd', () => {
+                    //     if (networkRef.current) {
+                    //         const centerPosition = networkRef.current.getViewPosition();
+                    //         const nodePositions = networkRef.current.getPositions();
+                    //
+                    //         const closestNodeId = Object.keys(nodePositions).reduce(
+                    //             (closestId, nodeId) => {
+                    //                 const pos = nodePositions[nodeId];
+                    //                 const distance = Math.sqrt(
+                    //                     (centerPosition.x - pos.x) ** 2 + (centerPosition.y - pos.y) ** 2,
+                    //                 );
+                    //                 if (
+                    //                     closestId === null ||
+                    //                     distance <
+                    //                         Math.sqrt(
+                    //                             (centerPosition.x - nodePositions[closestId].x) ** 2 +
+                    //                                 (centerPosition.y - nodePositions[closestId].y) ** 2,
+                    //                         )
+                    //                 ) {
+                    //                     return nodeId;
+                    //                 }
+                    //                 return closestId;
+                    //             },
+                    //             null as string | null,
+                    //         );
+                    //         if (closestNodeId) {
+                    //             networkRef.current.selectNodes([closestNodeId], true);
+                    //             setCurrentOperationId(parseInt(closestNodeId, 10));
+                    //             currentOpIdRef.current = parseInt(closestNodeId, 10);
+                    //         }
+                    //     }
+                    // });
                     networkRef.current.on('zoom', (params) => {
                         if (params.scale <= 3) {
                             setScale(params.scale);
@@ -214,8 +222,8 @@ const OperationGraph: React.FC<{
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const getNextOperationId = (currentId: number) => {
-        if (nodes === null) {
+    const getNextOperationId = (currentId: number | null) => {
+        if (nodes === null || currentId === null) {
             return null;
         }
         const nodeIds = nodes.getIds();
@@ -223,8 +231,8 @@ const OperationGraph: React.FC<{
         return currentIndex !== -1 && currentIndex < nodeIds.length - 1 ? (nodeIds[currentIndex + 1] as number) : null;
     };
 
-    const getPreviousOperationId = (currentId: number) => {
-        if (nodes === null) {
+    const getPreviousOperationId = (currentId: number | null) => {
+        if (nodes === null || currentId === null) {
             return null;
         }
         const nodeIds = nodes.getIds();
@@ -243,6 +251,7 @@ const OperationGraph: React.FC<{
                 });
                 networkRef.current.selectNodes([nodeId], true);
                 setCurrentOperationId(nodeId);
+                // @ts-expect-error this is normal
                 currentOpIdRef.current = nodeId;
             }
         },
@@ -305,18 +314,83 @@ const OperationGraph: React.FC<{
                     />
                 </div>
             </div>
+            {currentOperationId !== null && !isLoading && (
+                <div className='operation-graph-props'>
+                    <h2 className='operation-name'>
+                        {currentOperationId} {operationList.find((op) => op.id === currentOperationId)?.name} (
+                        {operationList.find((op) => op.id === currentOperationId)?.operationFileIdentifier})
+                    </h2>
+                    <Button
+                        className='navigate-button'
+                        rightIcon={IconNames.SEGMENTED_CONTROL}
+                        intent={Intent.PRIMARY}
+                        onClick={() => navigate(`/operations/${currentOperationId}`)}
+                    >
+                        Memory Details
+                    </Button>
+
+                    <h3>Inputs:</h3>
+                    <div className='tensors'>
+                        {operationList
+                            .find((op) => op.id === currentOperationId)
+                            ?.inputs.map((tensor, index) => (
+                                <TensorDetailsComponent
+                                    tensor={tensor}
+                                    key={`input-${currentOperationId} ${tensor.id} ${index}`}
+                                />
+                            ))}
+                    </div>
+                    <h3>Outputs:</h3>
+                    <div className='tensors'>
+                        {operationList
+                            .find((op) => op.id === currentOperationId)
+                            ?.outputs.map((tensor, index) => (
+                                <TensorDetailsComponent
+                                    tensor={tensor}
+                                    key={`output-${currentOperationId} ${tensor.id} ${index}`}
+                                />
+                            ))}
+                    </div>
+                </div>
+            )}
             {isLoading && (
                 <div className='graph-tree-loader'>
                     <LoadingSpinner />
                 </div>
             )}
             <div
+                className='operation-graph-container'
                 ref={containerRef}
-                style={{ width: '100%', height: 'calc(100vh - 120px)' }}
             />
-            <div>
+
+            <div className='aside'>
                 <aside>Scroll to zoom. Drag to pan. Click a node to see operation details.</aside>
             </div>
+        </div>
+    );
+};
+
+const TensorDetailsComponent: React.FC<{ tensor: Tensor }> = ({ tensor }) => {
+    return (
+        <div className='tensor-details'>
+            <h3>{toReadableShape(tensor.shape)}</h3>
+            <div>{tensor.dtype}</div>
+            <div>{tensor.layout}</div>
+            <div>{tensor.buffer_type !== null && BufferType[tensor.buffer_type]}</div>
+            <div>{tensor.operationIdentifier && [tensor.operationIdentifier]}</div>
+            {tensor?.memory_config
+                ? Object.entries(tensor.memory_config).map(([key, value]) => (
+                      <table key={key}>
+                          <tbody>
+                              <MemoryConfigRow
+                                  key={key}
+                                  header={key}
+                                  value={value as string | ShardSpec}
+                              />
+                          </tbody>
+                      </table>
+                  ))
+                : null}
         </div>
     );
 };

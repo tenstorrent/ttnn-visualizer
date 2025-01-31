@@ -1,0 +1,9 @@
+.chart-container {
+    margin-bottom: 60px;
+    height: 500px; // TEMP: Stops charts from collapsing on occasion
+
+    .chart {
+        width: 100%;
+        height: 450px;
+    }
+}

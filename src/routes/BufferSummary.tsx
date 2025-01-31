@@ -2,47 +2,33 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import { useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { AnchorButton, ButtonGroup, Intent } from '@blueprintjs/core';
+import { AnchorButton, ButtonGroup, Intent, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { BuffersByOperationData, useBuffers, useOperationsList, useReportMeta } from '../hooks/useAPI';
-import { reportMetaAtom, selectedDeviceAtom } from '../store/app';
-import 'styles/components/BufferSummary.scss';
-import BufferSummaryPlotRenderer from '../components/buffer-summary/BufferSummaryPlotRenderer';
-import BufferSummaryTable from '../components/buffer-summary/BufferSummaryTable';
-import ROUTES from '../definitions/routes';
-import { BufferType } from '../model/BufferType';
-import LoadingSpinner from '../components/LoadingSpinner';
-import { HistoricalTensor, Operation, Tensor } from '../model/Graph';
-import { HistoricalTensorsByOperation } from '../model/BufferSummary';
-import DeviceSelector from '../components/DeviceSelector';
+import { BuffersByOperationData, useBuffers, useOperationsList } from '../hooks/useAPI';
 import useBufferFocus from '../hooks/useBufferFocus';
-
-const SECTION_IDS = {
-    PLOT: 'plot',
-    TABLE: 'table',
-};
+import { BufferType } from '../model/BufferType';
+import { TensorsByOperationByAddress } from '../model/BufferSummary';
+import { Operation, Tensor } from '../model/APIData';
+import ROUTES from '../definitions/routes';
+import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
+import LoadingSpinner from '../components/LoadingSpinner';
+import 'styles/components/BufferSummary.scss';
+import { SECTION_IDS, TAB_IDS } from '../definitions/BufferSummary';
 
 function BufferSummary() {
-    const report = useReportMeta();
-    const setMeta = useSetAtom(reportMetaAtom);
     const plotRef = useRef<HTMLHeadingElement>(null);
     const tableRef = useRef<HTMLHeadingElement>(null);
-    const selectedDevice = useAtomValue(selectedDeviceAtom);
     const [activeSection, setActiveSection] = useState(SECTION_IDS.PLOT);
-    const { data: buffersByOperation } = useBuffers(BufferType.L1, selectedDevice);
+    const [selectedTabId, setSelectedTabId] = useState<TabId>(TAB_IDS.L1);
+    const { data: buffersByOperation } = useBuffers(BufferType.L1);
+    const { data: dramBuffersByOperation } = useBuffers(BufferType.DRAM);
     const { data: operationsList } = useOperationsList();
 
     const { activeToast, resetToasts } = useBufferFocus();
 
-    // Needs to be in a useEffect to avoid a bad setState call
-    useEffect(() => {
-        if (report.status === 'success' && report.data) {
-            setMeta(report.data);
-        }
-    }, [report, setMeta]);
+    const isDramActive = selectedTabId === TAB_IDS.DRAM;
 
     useEffect(() => {
         const scrollRefs = [plotRef, tableRef];
@@ -67,16 +53,16 @@ function BufferSummary() {
         return () => window.removeEventListener('scroll', navHighlighter);
     }, []);
 
-    const tensorListByOperation = useMemo(
-        () => createHistoricalTensorList(operationsList, buffersByOperation),
-        [operationsList, buffersByOperation],
+    const tensorListByOperation = createTensorListByOperationById(
+        operationsList,
+        isDramActive ? dramBuffersByOperation : buffersByOperation,
     );
 
     return (
         <div className='buffer-summary'>
             <Helmet title='Buffer summary' />
 
-            <h1 className='page-title'>L1 buffers by operation</h1>
+            <h1 className='page-title'>Buffers by operation</h1>
 
             <ButtonGroup className='sticky-nav'>
                 <AnchorButton
@@ -96,8 +82,6 @@ function BufferSummary() {
                 >
                     Table view
                 </AnchorButton>
-
-                <DeviceSelector />
             </ButtonGroup>
 
             {activeToast && (
@@ -108,60 +92,74 @@ function BufferSummary() {
                 />
             )}
 
-            {buffersByOperation && operationsList && tensorListByOperation ? (
-                <>
-                    <h2>Plot view</h2>
-                    <div
-                        ref={plotRef}
-                        id={SECTION_IDS.PLOT}
-                    >
-                        <BufferSummaryPlotRenderer
-                            buffersByOperation={buffersByOperation}
-                            tensorListByOperation={tensorListByOperation}
-                        />
-                    </div>
+            <Tabs
+                id='performance-tabs'
+                selectedTabId={selectedTabId}
+                onChange={setSelectedTabId}
+                large
+                renderActiveTabPanelOnly
+            >
+                <Tab
+                    id={TAB_IDS.L1}
+                    title='L1'
+                    icon={IconNames.PAGE_LAYOUT}
+                    panel={
+                        buffersByOperation && operationsList && tensorListByOperation ? (
+                            <BufferSummaryTab
+                                plotRef={plotRef}
+                                tableRef={tableRef}
+                                buffersByOperation={buffersByOperation}
+                                tensorListByOperation={tensorListByOperation}
+                            />
+                        ) : (
+                            <LoadingSpinner />
+                        )
+                    }
+                />
 
-                    <h2>Table view</h2>
-                    <div
-                        ref={tableRef}
-                        id={SECTION_IDS.TABLE}
-                    >
-                        <BufferSummaryTable
-                            buffersByOperation={buffersByOperation.filter((op) => op.buffers.length > 0)}
-                            tensorListByOperation={tensorListByOperation}
-                        />
-                    </div>
-                </>
-            ) : (
-                <LoadingSpinner />
-            )}
+                <Tab
+                    id={TAB_IDS.DRAM}
+                    title='DRAM'
+                    icon={IconNames.PAGE_LAYOUT}
+                    panel={
+                        dramBuffersByOperation && operationsList && tensorListByOperation ? (
+                            <BufferSummaryTab
+                                plotRef={plotRef}
+                                tableRef={tableRef}
+                                buffersByOperation={dramBuffersByOperation}
+                                tensorListByOperation={tensorListByOperation}
+                                isDram
+                            />
+                        ) : (
+                            <LoadingSpinner />
+                        )
+                    }
+                />
+            </Tabs>
         </div>
     );
 }
 
-// Modified from 'createHitoricalTensorList' function in OperationDetails.ts
+// Modified from 'createTensorListByOperationById' function in OperationDetails.ts
 // TODO: Refactor to optimise historical tensor lookup
-function createHistoricalTensorList(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
-    const historicalTensorsByOperation: HistoricalTensorsByOperation = new Map();
+function createTensorListByOperationById(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
+    const tensorsByOperationById: TensorsByOperationByAddress = new Map();
 
     if (!operations || !buffersByOperation) {
-        return historicalTensorsByOperation;
+        return tensorsByOperationById;
     }
 
     buffersByOperation.forEach((operation) => {
-        const tensorsByBufferAddress: Map<number, HistoricalTensor> = new Map();
+        const tensorsByBufferAddress: Map<number, Tensor> = new Map();
         const currentOperation = operations.find((op) => op.id === operation.id);
 
         for (const buffer of operation.buffers) {
             const bufferAddress = buffer.address;
             const bufferType = buffer.buffer_type;
-            let opId: number | undefined;
             let tensor: Tensor | undefined;
 
             for (let i = operations.indexOf(currentOperation!); i >= 0; i--) {
                 const op = operations[i];
-                opId = op.id;
-
                 tensor = op.inputs.find((input) => input.address === bufferAddress);
 
                 if (tensor !== undefined) {
@@ -176,20 +174,17 @@ function createHistoricalTensorList(operations?: Operation[], buffersByOperation
             }
 
             if (tensor !== undefined) {
-                const historicalTensor: HistoricalTensor = {
+                tensorsByBufferAddress.set(bufferAddress, {
                     ...tensor,
-                    parentOperationId: opId!,
-                    historical: opId! !== operation.id,
                     buffer_type: bufferType,
-                };
-                tensorsByBufferAddress.set(bufferAddress, historicalTensor);
+                });
             }
         }
 
-        historicalTensorsByOperation.set(operation.id, tensorsByBufferAddress);
+        tensorsByOperationById.set(operation.id, tensorsByBufferAddress);
     });
 
-    return historicalTensorsByOperation;
+    return tensorsByOperationById;
 }
 
 export default BufferSummary;

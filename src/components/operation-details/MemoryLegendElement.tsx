@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import React from 'react';
 import classNames from 'classnames';
@@ -9,7 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { DeviceOperationLayoutTypes, DeviceOperationTypes, FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { formatSize, prettyPrintAddress, toHex } from '../../functions/math';
+import { formatSize, prettyPrintAddress, toHex, toReadableShape, toReadableType } from '../../functions/math';
 import 'styles/components/MemoryLegendElement.scss';
 
 export const MemoryLegendElement: React.FC<{
@@ -35,7 +35,7 @@ export const MemoryLegendElement: React.FC<{
     const Component = chunk.empty ? 'div' : 'button';
     const emptyChunkLabel = (
         <>
-            Empty space{' '}
+            <span>Empty space </span>
             {chunk.largestEmpty && (
                 <Tooltip content='Largest empty memory space'>
                     <Icon
@@ -46,6 +46,7 @@ export const MemoryLegendElement: React.FC<{
             )}
         </>
     );
+    const derivedTensor = operationDetails.getTensorForAddress(chunk.address);
     return (
         <Component
             key={chunk.address}
@@ -70,23 +71,27 @@ export const MemoryLegendElement: React.FC<{
                     ...(chunk.empty
                         ? {}
                         : {
-                              backgroundColor: chunk.tensorId
-                                  ? getTensorColor(chunk.tensorId)
-                                  : getBufferColor(chunk.address + (colorVariance || 0)),
+                              backgroundColor:
+                                  chunk.tensorId || derivedTensor
+                                      ? getTensorColor(chunk.tensorId) || getTensorColor(derivedTensor?.id)
+                                      : getBufferColor(chunk.address + (colorVariance || 0)),
                           }),
                 }}
             />
             <div
                 className={classNames('legend-details', {
                     'extra-info': bufferType || layout,
+                    'shape-info': derivedTensor,
                 })}
             >
                 <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize)}</div>
                 <div className='format-numbers monospace keep-left'>({toHex(chunk.address)})</div>
                 <div className='format-numbers monospace'>{formatSize(chunk.size)} </div>
                 <div>
-                    {!chunk.empty && operationDetails.getTensorForAddress(chunk.address) && (
-                        <>Tensor {operationDetails.getTensorForAddress(chunk.address)?.id}</>
+                    {!chunk.empty && derivedTensor && (
+                        <>
+                            {derivedTensor.operationIdentifier} : Tensor {derivedTensor.id}
+                        </>
                     )}
                     {chunk.empty && emptyChunkLabel}
                 </div>
@@ -94,6 +99,11 @@ export const MemoryLegendElement: React.FC<{
                     <div className='extra-info-slot'>
                         {bufferType && <span className='monospace'>{DeviceOperationTypes[bufferType]} </span>}
                         {layout && <span className='monospace'>{DeviceOperationLayoutTypes[layout]}</span>}
+                    </div>
+                )}
+                {derivedTensor && (
+                    <div className='shape-info-slot'>
+                        {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)}
                     </div>
                 )}
             </div>

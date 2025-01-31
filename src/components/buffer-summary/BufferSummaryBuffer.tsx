@@ -1,19 +1,23 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useState } from 'react';
-import { useAtom } from 'jotai';
-import { Buffer } from '../../model/APIData';
-import { formatSize, toHex } from '../../functions/math';
-import { HistoricalTensor } from '../../model/Graph';
+import { useAtom, useAtomValue } from 'jotai';
+import { Buffer, Tensor } from '../../model/APIData';
+import { formatSize, toHex, toReadableShape, toReadableType } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
+import { renderMemoryLayoutAtom, selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import { getDimmedColour } from '../../functions/colour';
 import useBufferFocus from '../../hooks/useBufferFocus';
+import { TensorMemoryLayout } from '../../functions/parseMemoryConfig';
 
 interface BufferSummaryBufferProps {
     buffer: Buffer;
     size: number;
     position: number;
-    tensor?: HistoricalTensor;
+    tensor?: Tensor;
 }
 
 function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBufferProps) {
@@ -22,15 +26,23 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
     const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
 
+    const showPattern = useAtomValue(renderMemoryLayoutAtom);
+
     const { createToast, resetToasts } = useBufferFocus();
 
+    const tensorMemoryLayout = tensor?.memory_config?.memory_layout;
     const originalColour = tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address);
     const dimmedColour = originalColour ? getDimmedColour(originalColour) : '#000';
+    const currentColour = (selectedTensor && selectedTensor !== tensor?.id ? dimmedColour : originalColour) ?? '#000';
 
     const styleProps = {
         width: `${size}%`,
         left: `${position}%`,
-        backgroundColor: selectedTensor && selectedTensor !== tensor?.id ? dimmedColour : originalColour,
+        ...(showPattern && tensorMemoryLayout
+            ? getBackgroundPattern(tensorMemoryLayout, currentColour)
+            : {
+                  backgroundColor: currentColour,
+              }),
     };
 
     const clearFocusedBuffer = () => {
@@ -38,9 +50,9 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
     };
 
     const setFocusedBuffer = () => {
-        setSelectedTensor(tensor?.id === selectedTensor ? null : tensor?.id);
-        setSelectedAddress(tensor?.address === selectedTensor ? null : tensor?.address ?? null);
-        createToast(tensor?.address ?? undefined, tensor?.id ?? undefined);
+        setSelectedTensor(tensor?.id === selectedTensor ? null : tensor?.id ?? null);
+        setSelectedAddress(tensor?.address === selectedTensor ? null : tensor?.address ?? buffer.address);
+        createToast(tensor?.address ?? buffer.address, tensor?.id);
     };
 
     const handleFocusBuffer = (address: number) => {
@@ -61,10 +73,23 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
                 <Tooltip
                     content={
                         <div>
-                            {buffer.address} ({toHex(buffer.address)})<br />
-                            Size: {formatSize(buffer.size)}
-                            <br />
-                            {tensor?.id ? `Tensor ${tensor.id}` : ''}
+                            <strong>
+                                <span style={{ fontSize: '20px', color: currentColour, marginRight: '2px' }}>
+                                    &#9632;
+                                </span>
+                                {buffer.address} ({toHex(buffer.address)})<br />
+                                Size: {formatSize(buffer.size)}
+                                <br />
+                                {tensor?.shape ? toReadableShape(tensor.shape) : ''}{' '}
+                                {tensor?.dtype ? toReadableType(tensor.dtype) : ''}{' '}
+                                {tensor?.id ? `Tensor ${tensor.id}` : ''}
+                                {tensor?.memory_config?.memory_layout ? (
+                                    <>
+                                        <br />
+                                        {tensor?.memory_config?.memory_layout}
+                                    </>
+                                ) : null}
+                            </strong>
                         </div>
                     }
                     position={PopoverPosition.TOP}
@@ -82,6 +107,36 @@ function BufferSummaryBuffer({ buffer, size, position, tensor }: BufferSummaryBu
             ) : null}
         </div>
     );
+}
+
+const FG_COLOUR = 'rgba(0, 0, 0, 0.7)';
+
+function getBackgroundPattern(
+    layout: TensorMemoryLayout,
+    colour: string,
+): { backgroundImage?: string; backgroundSize?: string } {
+    let pattern = {};
+
+    if (layout === TensorMemoryLayout.INTERLEAVED) {
+        pattern = {
+            backgroundImage: `radial-gradient(${FG_COLOUR} 0.8px, ${colour} 0.8px)`,
+            backgroundSize: '4px 4px',
+        };
+    }
+    if (layout === TensorMemoryLayout.BLOCK_SHARDED) {
+        pattern = {
+            backgroundImage: `linear-gradient(${FG_COLOUR} 0.4px, transparent 0.4px), linear-gradient(to right, ${FG_COLOUR} 0.4px, ${colour} 0.4px)`,
+            backgroundSize: '7px 7px',
+        };
+    }
+    if (layout === TensorMemoryLayout.HEIGHT_SHARDED) {
+        pattern = {
+            backgroundSize: '6px',
+            backgroundImage: `repeating-linear-gradient(to right, ${FG_COLOUR}, ${FG_COLOUR} 0.4px, ${colour} 0.4px, ${colour})`,
+        };
+    }
+
+    return pattern;
 }
 
 export default BufferSummaryBuffer;

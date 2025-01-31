@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 @use 'sass:color';
 @use './definitions/colours' as *;
@@ -11,6 +11,11 @@
 
 .em {
     font-style: italic;
+}
+
+.page-title {
+    font-size: 24px;
+    margin-top: 0;
 }
 
 // Using !important to override some 3rd party CSS
@@ -157,4 +162,13 @@ $row-background: $tt-grey-2;
     position: fixed;
     top: 0;
     z-index: 0;
+}
+
+.centred-loader {
+    position: absolute;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    width: 100%;
 }

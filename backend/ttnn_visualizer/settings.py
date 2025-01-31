@@ -1,8 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 from ttnn_visualizer.utils import str_to_bool
 
+load_dotenv()
 
 class DefaultConfig(object):
     # General Settings
@@ -13,6 +19,7 @@ class DefaultConfig(object):
 
     # Path Settings
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
+    VERSION = "0.14.2"
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
     REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
@@ -29,7 +36,9 @@ class DefaultConfig(object):
     USE_WEBSOCKETS = str_to_bool(os.getenv("USE_WEBSOCKETS", "true"))
 
     # SQL Alchemy Settings
-    SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(APPLICATION_DIR, 'ttnn.db')}"
+    SQLALCHEMY_DATABASE_URI = (
+        f"sqlite:///{os.path.join(APPLICATION_DIR, f"ttnn_{VERSION}.db")}"
+    )
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_size": 10,  # Adjust pool size as needed (default is 5)
         "max_overflow": 20,  # Allow overflow of the pool size if necessary

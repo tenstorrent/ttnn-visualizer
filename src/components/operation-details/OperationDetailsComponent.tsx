@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import React, { useState } from 'react';
 import { Button, ButtonGroup, Intent, Position, Switch, Tooltip } from '@blueprintjs/core';
@@ -11,8 +11,8 @@ import 'styles/components/OperationDetailsComponent.scss';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
-import { CONDENSED_PLOT_CHUNK_COLOR, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
-import { selectedAddressAtom, selectedTensorAtom, showHexAtom } from '../../store/app';
+import { PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
+import { renderMemoryLayoutAtom, selectedAddressAtom, selectedTensorAtom, showHexAtom } from '../../store/app';
 import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
@@ -33,7 +33,9 @@ interface OperationDetailsProps {
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
     const { data: operations } = useOperationsList();
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
+    const [renderMemoryLayoutPattern, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
+    const [showL1Small, setShowL1Small] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const {
         operationDetails: { data: operationDetails, isLoading, status },
@@ -71,22 +73,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         );
     }
 
-    const details: OperationDetails | null = new OperationDetails(operationDetails, operations);
+    const details: OperationDetails | null = new OperationDetails(operationDetails, operations, {
+        renderPattern: renderMemoryLayoutPattern,
+    });
     const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations);
 
     const l1Small = details.memoryData(BufferType.L1_SMALL);
 
     const { memory, cbChartDataByOperation } = details.memoryData();
     const { memory: previousMemory } = previousDetails.memoryData();
-
-    if (l1Small.condensedChart[0] !== undefined) {
-        l1Small.condensedChart[0].marker!.color = CONDENSED_PLOT_CHUNK_COLOR;
-        l1Small.condensedChart[0].hovertemplate = `
-<span style="color:${CONDENSED_PLOT_CHUNK_COLOR};font-size:20px;">&#9632;</span>
-<br />
-<span>L1 Small Condensed view</span>
-<extra></extra>`;
-    }
 
     const { memorySizeL1 } = details;
 
@@ -172,7 +167,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 </Button>
                             </ButtonGroup>
                         </div>
-                        <div className='zoom-controls'>
+
+                        <div className='controls'>
                             <Switch
                                 label='Buffer zoom'
                                 checked={zoomedInViewMainMemory}
@@ -190,6 +186,22 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 disabled={cbChartDataByOperation.size === 0}
                                 onChange={() => {
                                     setShowCircularBuffer(!showCircularBuffer);
+                                }}
+                            />
+                            <GlobalSwitch
+                                label='Tensor memory layout overlay'
+                                checked={renderMemoryLayoutPattern}
+                                onChange={() => {
+                                    setRenderMemoryLayout(!renderMemoryLayoutPattern);
+                                }}
+                            />
+
+                            <Switch
+                                label={!showCircularBuffer ? 'Show L1 Small' : 'Hide L1 Small'}
+                                checked={showL1Small}
+                                disabled={l1Small.condensed.size === 0}
+                                onChange={() => {
+                                    setShowL1Small(!showL1Small);
                                 }}
                             />
 
@@ -217,7 +229,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             />
                         ) : null}
 
-                        {isL1Active && (
+                        {isL1Active && operation && (
                             <>
                                 <h3>
                                     L1 Memory{' '}
@@ -252,25 +264,25 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     </Tooltip>
                                     {tensixIOVisualisationOpen && (
                                         <TensorVisualisationComponent
-                                            title={`Operation ${operationId} inputs/outputs`}
+                                            title={`${operationId} ${operation.name}  (${operation.operationFileIdentifier}) inputs/outputs`}
                                             operationId={operationId}
                                             address={inputOutputAddressList}
                                             bufferType={BufferType.L1}
                                             zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
                                             isOpen={tensixIOVisualisationOpen}
                                             onClose={() => setTensixIOVisualisationOpen(false)}
-                                            tensorByAddress={details.historicalTensorListByAddress}
+                                            tensorByAddress={details.tensorListByAddress}
                                         />
                                     )}
                                     {tensixFullVisualisationOpen && (
                                         <TensorVisualisationComponent
-                                            title={`Operation ${operationId} detailed memory report`}
+                                            title={`${operationId} ${operation.name}  (${operation.operationFileIdentifier})  detailed memory report`}
                                             operationId={operationId}
                                             bufferType={BufferType.L1}
                                             zoomRange={[plotZoomRangeStart, plotZoomRangeEnd]}
                                             isOpen={tensixFullVisualisationOpen}
                                             onClose={() => setTensixFullVisualisationOpen(false)}
-                                            tensorByAddress={details.historicalTensorListByAddress}
+                                            tensorByAddress={details.tensorListByAddress}
                                         />
                                     )}
                                 </h3>
@@ -282,6 +294,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                     plotZoomRangeStart={plotZoomRangeStart}
                                     plotZoomRangeEnd={plotZoomRangeEnd}
                                     showCircularBuffer={showCircularBuffer}
+                                    showL1Small={showL1Small}
                                     onBufferClick={onBufferClick}
                                     onLegendClick={onLegendClick}
                                 />
@@ -329,14 +342,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 />
                             </>
                         )}
-                        {operation?.arguments && (
-                            <>
-                                <hr />
 
-                                <div className='arguments-wrapper'>
-                                    <OperationArguments operation={operation} />
-                                </div>
-                            </>
+                        {operation?.arguments && (
+                            <div className='arguments-wrapper'>
+                                <OperationArguments operation={operation} />
+                            </div>
                         )}
                     </>
                 ) : (

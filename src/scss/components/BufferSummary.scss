@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 @use '../definitions/colours' as *;
 
 .buffer-summary {
     position: relative;
-
-    .page-title {
-        font-size: 24px;
-        margin-top: 0;
-    }
 
     .sticky-nav {
         display: flex;

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { MEMORY_CONFIG_HEADERS, MemoryKeys, ShardSpec, getMemoryConfigHeader } from '../functions/parseMemoryConfig';
 
 interface MemoryConfigRowProps {
@@ -14,12 +18,18 @@ const MemoryConfigRow = ({ header, value }: MemoryConfigRowProps) => {
                     <td>
                         <table className='ttnn-table alt-two-tone-rows'>
                             <tbody>
-                                {Object.entries(value as ShardSpec).map(([innerKey, innerValue]) => (
-                                    <tr key={innerKey}>
-                                        <th>{getMemoryConfigHeader(innerKey as MemoryKeys)}</th>
-                                        <td>{innerValue}</td>
-                                    </tr>
-                                ))}
+                                {Object.entries(value as ShardSpec).map(([innerKey, innerValue]) =>
+                                    innerValue !== undefined ? (
+                                        <tr key={innerKey}>
+                                            <th>{getMemoryConfigHeader(innerKey as MemoryKeys)}</th>
+                                            <td>
+                                                {typeof innerValue !== 'string'
+                                                    ? JSON.stringify(innerValue)
+                                                    : innerValue}
+                                            </td>
+                                        </tr>
+                                    ) : null,
+                                )}
                             </tbody>
                         </table>
                     </td>

@@ -92,7 +92,7 @@ module.exports = {
         'import/prefer-default-export': 'off',
         'unused-imports/no-unused-imports': 'error',
         'unused-imports/no-unused-vars': [
-            'warn',
+            'off',
             { vars: 'all', varsIgnorePattern: '^_', args: 'after-used', argsIgnorePattern: '^_' },
         ],
         'react/require-default-props': 'off',

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
 
 .legend-item {
-    display: inline-grid;
+    display: grid;
     gap: 5px;
     grid-template-columns: 20px 1fr;
     height: 18px;
@@ -36,24 +36,32 @@
 
     .legend-details {
         display: inline-grid;
-        grid-template-columns: 0.7fr 1.2fr 0.75fr 1fr;
+        grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 2fr;
         gap: 15px;
         text-align: left;
 
         &.extra-info {
-            grid-template-columns: 0.7fr 1.2fr 0.75fr 1fr 2fr;
+            grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 2fr;
         }
 
-        .format-numbers {
-            text-align: right;
+        &.shape-info {
+            grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 2fr;
+        }
 
-            &.keep-left {
-                text-align: left;
-            }
+        &.extra-info.shape-info {
+            grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 1.5fr 3fr;
         }
     }
 
     .legend-text {
         font-size: 0.875rem;
+    }
+}
+
+.format-numbers {
+    text-align: right;
+
+    &.keep-left {
+        text-align: left;
     }
 }

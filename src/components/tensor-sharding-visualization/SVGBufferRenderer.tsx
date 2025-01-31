@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import React from 'react';
 import { BufferPage } from '../../model/APIData';
 import { pageDataToChunkArray } from '../../functions/getChartData';

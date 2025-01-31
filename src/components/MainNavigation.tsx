@@ -5,21 +5,22 @@
 import { Alignment, Button, Navbar } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
-import { useQuery } from 'react-query';
+import { useAtomValue } from 'jotai';
 import ROUTES from '../definitions/routes';
-import { fetchTabSession } from '../hooks/useAPI';
 import 'styles/components/MainNavigation.scss';
+import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 
 function MainNavigation() {
     const navigate = useNavigate();
-    const { data: tabSession } = useQuery('tabSession', {
-        queryFn: fetchTabSession,
-        initialData: null,
-    });
+    const activeReport = useAtomValue(activeReportAtom);
+    const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
 
     const handleNavigate = (path: string) => {
         navigate(path);
     };
+
+    const hasActiveReport = !!activeReport;
+    const hasActiveProfile = !!activePerformanceTrace;
 
     return (
         <Navbar className='navbar'>
@@ -39,7 +40,7 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.OPERATIONS)}
                     active={hasMatchingPath(ROUTES.OPERATIONS)}
                     icon={IconNames.CUBE}
-                    disabled={!tabSession?.active_report}
+                    disabled={!hasActiveReport}
                     minimal
                     large
                     className='operations-button'
@@ -50,7 +51,7 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.TENSORS)}
                     active={hasMatchingPath(ROUTES.TENSORS)}
                     icon={IconNames.FLOW_LINEAR}
-                    disabled={!tabSession?.active_report}
+                    disabled={!hasActiveReport}
                     minimal
                     large
                     className='tensors-button'
@@ -61,20 +62,32 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.BUFFERS)}
                     active={window.location.pathname === ROUTES.BUFFERS}
                     icon={IconNames.SMALL_SQUARE}
-                    disabled={!tabSession?.active_report}
+                    disabled={!hasActiveReport}
                     minimal
                     large
                     className='buffers-button'
                 />
+
                 <Button
                     text='Graph'
                     onClick={() => handleNavigate(ROUTES.GRAPHTREE)}
                     active={window.location.pathname === ROUTES.GRAPHTREE}
                     icon={IconNames.GRAPH}
-                    disabled={!tabSession?.active_report}
+                    disabled={!hasActiveReport}
                     minimal
                     large
                     className='graph-button'
+                />
+
+                <Button
+                    text='Performance'
+                    onClick={() => handleNavigate(ROUTES.PERFORMANCE)}
+                    active={window.location.pathname === ROUTES.PERFORMANCE}
+                    icon={IconNames.LIGHTNING}
+                    disabled={!hasActiveProfile}
+                    minimal
+                    large
+                    className='performance-button'
                 />
             </Navbar.Group>
         </Navbar>

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { useState } from 'react';
 import { Button, Icon } from '@blueprintjs/core';
@@ -12,13 +12,12 @@ import { OperationDetails } from '../../model/OperationDetails';
 import 'styles/components/ProducerConsumersData.scss';
 import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
 import { getTensorColor } from '../../functions/colorGenerator';
-import { TensorData } from '../../model/APIData';
-import { HistoricalTensor } from '../../model/Graph';
+import { Tensor } from '../../model/APIData';
 
 const ITEM_HEIGHT = 16; // Height in px
 
 interface ProducerConsumersDataProps {
-    selectedTensor: TensorData | HistoricalTensor | null;
+    selectedTensor: Tensor | null;
     details: OperationDetails;
     operationId: number;
 }

@@ -1,12 +1,13 @@
 [project]
 name = "ttnn_visualizer"
 authors = []
-version = "0.11.0"
+version = "0.19.0"
 description = "TT Visualizer"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "flask",
+    "pandas",
     "gunicorn~=22.0.0",
     "paramiko~=3.4.0",
     "flask_cors==4.0.1",
@@ -14,11 +15,13 @@ dependencies = [
     "pydantic_core==2.18.4",
     "flask_static_digest==0.4.1",
     "setuptools==65.5.0",
-    "gevent===24.10.1",
+    "gevent===24.10.2",
     "python-dotenv==1.0.1",
     "sqlalchemy==2.0.34",
     "flask-socketio==5.4.1",
-    "flask-sqlalchemy==3.1.1"
+    "flask-sqlalchemy==3.1.1",
+    "PyYAML==6.0.2",
+    "python-dotenv==1.0.1"
 ]
 
 classifiers = [

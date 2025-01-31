@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import classNames from 'classnames';
 import { Button, Checkbox, MenuItem } from '@blueprintjs/core';
@@ -12,6 +12,8 @@ import { selectedDeviceAtom } from '../store/app';
 import isValidNumber from '../functions/isValidNumber';
 import 'styles/components/DeviceSelector.scss';
 
+// KEEPING THIS FOR NOW - Device selection works differently than we thought but we might reuse this in the future
+
 function DeviceSelector() {
     const { data: devices } = useDevices();
 
@@ -19,10 +21,10 @@ function DeviceSelector() {
     const [selectedDevice, setSelectedDevice] = useAtom(selectedDeviceAtom);
 
     const updateSelectedDevices = (device?: number) => {
-        setSelectedDevice(device !== selectedDevice ? device : undefined);
+        setSelectedDevice(device !== undefined && device !== selectedDevice ? device : null);
     };
 
-    return (
+    return devices && devices?.length > 1 ? (
         <Select
             className={classNames('device-selector', {
                 'has-selection': selectedDevice !== undefined,
@@ -46,10 +48,10 @@ function DeviceSelector() {
                 outlined
             />
         </Select>
-    );
+    ) : null;
 }
 
-const DeviceItem = (device: number, onClick: (device: number) => void, selectedDevice?: number) => {
+const DeviceItem = (device: number, onClick: (device: number) => void, selectedDevice: number | null) => {
     return (
         <li key={device}>
             <Checkbox

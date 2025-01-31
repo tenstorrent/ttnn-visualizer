@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import React, { useState } from 'react';
 import classNames from 'classnames';
 import { Button, Icon, Intent, PopoverPosition, Position, Tooltip } from '@blueprintjs/core';
@@ -5,11 +9,10 @@ import { IconNames } from '@blueprintjs/icons';
 
 import { useAtomValue } from 'jotai';
 import { getTensorColor } from '../../functions/colorGenerator';
-import { TensorData } from '../../model/APIData';
-import { prettyPrintAddress, toHex } from '../../functions/math';
+import { Tensor } from '../../model/APIData';
+import { prettyPrintAddress, toHex, toReadableShape, toReadableType } from '../../functions/math';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { useOperationsList } from '../../hooks/useAPI';
-import getDeallocationOperation from '../../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../../functions/getNextAllocationOperation';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
@@ -19,7 +22,7 @@ import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator'
 import { selectedTensorAtom } from '../../store/app';
 
 export interface TensorDetailsComponentProps {
-    tensor: TensorData;
+    tensor: Tensor;
     memorySize: number;
     onTensorClick: (address?: number, tensorId?: number) => void;
     operationId: number;
@@ -36,16 +39,17 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
     const { address } = tensor;
     const { data: operations } = useOperationsList();
     const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations)?.id : null;
-    const deallocationOperationId = operations ? getDeallocationOperation(tensor, operations)?.id : null;
     const selectedTensorId = useAtomValue(selectedTensorAtom);
 
     const [overlayOpen, setOverlayOpen] = useState(false);
+
+    const shardSpec = tensor.memory_config?.shard_spec;
 
     return (
         <div
             className={classNames('tensor-item', {
                 active: tensor.id === selectedTensorId,
-                dimmed: tensor.id !== selectedTensorId && selectedTensorId !== null,
+                dimmed: selectedTensorId !== null && tensor.id !== selectedTensorId,
             })}
         >
             <div className='tensor-header'>
@@ -63,33 +67,8 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         }}
                     />
                     <h4>Tensor ID: {tensor.id}</h4>
-
-                    <span className={classNames('format-numbers monospace', { em: tensor.address === null })}>
-                        {prettyPrintAddress(tensor.address, memorySize)}
-                    </span>
+                    <h5>{tensor.operationIdentifier}</h5>
                 </button>
-
-                {isValidNumber(deallocationOperationId) && operations ? (
-                    <Tooltip
-                        content={`Deallocation in ${deallocationOperationId} ${operations.find((operation) => operation.id === deallocationOperationId)?.name}`}
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Icon
-                            icon={IconNames.TICK}
-                            intent={Intent.SUCCESS}
-                        />
-                    </Tooltip>
-                ) : (
-                    <Tooltip
-                        content='Missing deallocation operation'
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Icon
-                            icon={IconNames.WARNING_SIGN}
-                            intent={Intent.WARNING}
-                        />
-                    </Tooltip>
-                )}
 
                 {(tensor.consumers.length > MAX_NUM_CONSUMERS || tensor.producers.length > MAX_NUM_CONSUMERS) && (
                     <Tooltip
@@ -132,7 +111,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 )}
                 {overlayOpen && address !== null && tensor.buffer_type !== null && (
                     <TensorVisualisationComponent
-                        title={`Tensor ${tensor.id}`}
+                        title={`${BufferTypeLabel[tensor.buffer_type]} ${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensor.operationIdentifier} Tensor ${tensor.id}`}
                         operationId={operationId}
                         address={address}
                         bufferType={tensor.buffer_type}
@@ -145,20 +124,50 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
             </div>
 
             <div className='tensor-meta'>
+                <p>
+                    <strong>Address:</strong> {prettyPrintAddress(tensor.address, memorySize)}
+                </p>
                 {tensor.buffer_type !== null && (
                     <p>
                         <strong>Buffer type:</strong> {BufferTypeLabel[tensor.buffer_type]}
                     </p>
                 )}
                 <p>
-                    <strong>Shape:</strong> {tensor.shape}
+                    <strong>Shape:</strong> {toReadableShape(tensor.shape)}
                 </p>
                 <p>
-                    <strong>Dtype:</strong> {tensor.dtype}
+                    <strong>Dtype:</strong> {toReadableType(tensor.dtype)}
                 </p>
                 <p>
                     <strong>Layout:</strong> {tensor.layout}
                 </p>
+                <p>
+                    {tensor.memory_config?.memory_layout && (
+                        <>
+                            <strong>Memory layout:</strong> {tensor.memory_config.memory_layout}
+                        </>
+                    )}
+                </p>
+
+                {shardSpec ? (
+                    <>
+                        <p>
+                            <strong>Sharding: </strong>
+                            {typeof shardSpec === 'string' ? shardSpec : null}
+                        </p>
+
+                        {typeof shardSpec === 'object' ? (
+                            <ul className='shard-spec'>
+                                {Object.entries(shardSpec).map(([prop, value]) => (
+                                    <li key={value}>
+                                        {prop}=<em>{typeof value !== 'string' ? JSON.stringify(value) : value}</em>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : null}
+                    </>
+                ) : null}
+
                 {tensor.comparison?.global ? (
                     <>
                         <GoldenTensorComparisonIndicator

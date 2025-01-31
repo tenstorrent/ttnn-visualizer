@@ -15,7 +15,7 @@ import '@blueprintjs/table/lib/css/table.css';
 import 'styles/components/BufferSummaryTable.scss';
 import HighlightedText from '../HighlightedText';
 import useBuffersTable, { SortingDirection } from '../../hooks/useBuffersTable';
-import { HistoricalTensorsByOperation } from '../../model/BufferSummary';
+import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { BufferData } from '../../model/APIData';
@@ -30,7 +30,7 @@ interface ColumnDefinition {
 
 enum COLUMN_HEADERS {
     operation_id = 'Operation',
-    tensor_id = 'Tensor Id',
+    tensor_id = 'Tensor',
     address = 'Address',
     hexAddress = 'Address (hex)',
     size = 'Size',
@@ -82,7 +82,7 @@ const COLUMNS: ColumnDefinition[] = [
 
 interface BufferSummaryTableProps {
     buffersByOperation: BuffersByOperationData[];
-    tensorListByOperation: HistoricalTensorsByOperation;
+    tensorListByOperation: TensorsByOperationByAddress;
 }
 
 interface SummaryTableBuffer extends BufferData {
@@ -291,7 +291,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
 }
 
 const getCellText = (buffer: SummaryTableBuffer, key: COLUMN_KEYS) => {
-    let textValue = buffer[key].toString();
+    let textValue = buffer[key]?.toString() || '';
 
     if (key === 'tensor_id') {
         textValue = buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : '';

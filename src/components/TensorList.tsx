@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -8,24 +8,24 @@ import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Button, ButtonGroup, Checkbox, Icon, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom } from 'jotai';
 import { MultiSelect } from '@blueprintjs/select';
 import SearchField from './SearchField';
 import LoadingSpinner from './LoadingSpinner';
 import { useOperationsList, useTensors } from '../hooks/useAPI';
 import ROUTES from '../definitions/routes';
-import { Tensor } from '../model/Graph';
-import { OperationDescription, TensorData } from '../model/APIData';
+import { Tensor } from '../model/APIData';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
-import { expandedTensorsAtom, selectedDeviceAtom } from '../store/app';
+import { expandedTensorsAtom } from '../store/app';
 import ListItem from './ListItem';
 import '@blueprintjs/select/lib/css/blueprint-select.css';
 import 'styles/components/ListView.scss';
 import 'styles/components/TensorList.scss';
 import BufferDetails from './BufferDetails';
 import isValidNumber from '../functions/isValidNumber';
-import DeviceSelector from './DeviceSelector';
+import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
+import { toReadableShape, toReadableType } from '../functions/math';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -38,17 +38,15 @@ const TensorList = () => {
 
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [filterQuery, setFilterQuery] = useState('');
-    const [memoryLeakCount, setMemoryLeakCount] = useState(0);
-    const [filteredTensorList, setFilteredTensorList] = useState<TensorData[]>([]);
+    const [filteredTensorList, setFilteredTensorList] = useState<Tensor[]>([]);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
-    const [filterMemoryLeaks, setFilterMemoryLeaks] = useState(false);
     const [bufferTypeFilters, setBufferTypeFilters] = useState<BufferType[]>([]);
+    const [showHighConsumerTensors, setShowHighConsumerTensors] = useState(false);
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
-    const selectedDevice = useAtomValue(selectedDeviceAtom);
 
     const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
-    const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors(selectedDevice);
+    const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
 
     // TODO: Figure out an initial scroll position based on last used tensor
     const virtualizer = useVirtualizer({
@@ -88,10 +86,6 @@ const TensorList = () => {
         );
     };
 
-    const handleToggleMemoryLeaks = () => {
-        setFilterMemoryLeaks(!filterMemoryLeaks);
-    };
-
     const updateBufferTypeFilter = (bufferType: BufferType) => {
         setBufferTypeFilters((currentFilters: BufferType[]) => {
             if (currentFilters.includes(bufferType)) {
@@ -100,22 +94,6 @@ const TensorList = () => {
             return [...currentFilters, bufferType];
         });
     };
-
-    useMemo(() => {
-        let count = 0;
-
-        if (operations) {
-            filteredTensorList.forEach((tensor) => {
-                const deallocationOperation = getDeallocation(tensor, operations);
-
-                if (!deallocationOperation) {
-                    count++;
-                }
-            });
-        }
-
-        setMemoryLeakCount(count);
-    }, [operations, filteredTensorList]);
 
     useMemo(() => {
         if (fetchedTensors && operations) {
@@ -127,19 +105,19 @@ const TensorList = () => {
                 );
             }
 
-            if (filterMemoryLeaks) {
-                tensors = tensors.filter((tensor) => !getDeallocation(tensor, operations));
-            }
-
             if (bufferTypeFilters?.length > 0) {
                 tensors = tensors.filter(
                     (tensor) => tensor?.buffer_type !== null && bufferTypeFilters.includes(tensor.buffer_type),
                 );
             }
 
+            if (showHighConsumerTensors) {
+                tensors = tensors.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS);
+            }
+
             setFilteredTensorList(tensors);
         }
-    }, [operations, fetchedTensors, filterQuery, filterMemoryLeaks, bufferTypeFilters]);
+    }, [operations, fetchedTensors, filterQuery, bufferTypeFilters, showHighConsumerTensors]);
 
     useEffect(() => {
         const initialTensorId = location.state?.previousOperationId;
@@ -180,25 +158,27 @@ const TensorList = () => {
 
                 <ButtonGroup minimal>
                     <Tooltip
+                        content='Toggle high consumer tensors'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => setShowHighConsumerTensors(!showHighConsumerTensors)}
+                            rightIcon={IconNames.ISSUE}
+                            disabled={!fetchedTensors?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
+                            intent={Intent.DANGER}
+                            outlined={showHighConsumerTensors}
+                        >
+                            {filteredTensorList?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS).length}
+                        </Button>
+                    </Tooltip>
+
+                    <Tooltip
                         content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={() => handleExpandAllToggle()}
                             rightIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
-                        />
-                    </Tooltip>
-
-                    <Tooltip
-                        content={memoryLeakCount ? 'Toggle only memory leaks' : 'No memory leaks found'}
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            onClick={() => handleToggleMemoryLeaks()}
-                            icon={memoryLeakCount ? IconNames.WARNING_SIGN : IconNames.TICK}
-                            intent={memoryLeakCount && filterMemoryLeaks ? Intent.WARNING : Intent.NONE}
-                            text={memoryLeakCount}
-                            disabled={!memoryLeakCount}
                         />
                     </Tooltip>
 
@@ -251,8 +231,6 @@ const TensorList = () => {
                     />
                 </ButtonGroup>
 
-                <DeviceSelector />
-
                 {!isTensorsLoading && !isOperationsLoading ? (
                     <p className='result-count'>
                         {fetchedTensors && filterQuery
@@ -287,7 +265,6 @@ const TensorList = () => {
                         {operations && filteredTensorList?.length ? (
                             virtualItems.map((virtualRow) => {
                                 const tensor = filteredTensorList[virtualRow.index];
-                                const deallocationOperation = getDeallocation(tensor, operations);
 
                                 return (
                                     <li
@@ -306,15 +283,34 @@ const TensorList = () => {
                                                     filterQuery={filterQuery}
                                                     icon={IconNames.FLOW_LINEAR}
                                                     iconColour='tensor'
-                                                />
-                                            }
-                                            additionalElements={
-                                                !deallocationOperation ? (
-                                                    <Icon
-                                                        icon={IconNames.WARNING_SIGN}
-                                                        intent={Intent.WARNING}
-                                                    />
-                                                ) : undefined
+                                                    tags={
+                                                        isValidNumber(tensor.buffer_type) &&
+                                                        BufferTypeLabel[tensor.buffer_type]
+                                                            ? [
+                                                                  {
+                                                                      htmlTitle: BufferTypeLabel[tensor.buffer_type],
+                                                                      className:
+                                                                          tensor.buffer_type === BufferType.L1
+                                                                              ? 'tag-l1'
+                                                                              : 'tag-dram',
+                                                                  },
+                                                              ]
+                                                            : undefined
+                                                    }
+                                                >
+                                                    {tensor.consumers.length > MAX_NUM_CONSUMERS ? (
+                                                        <Tooltip
+                                                            content='Unusually high number of consumers'
+                                                            position={PopoverPosition.TOP}
+                                                            className='high-number-consumers'
+                                                        >
+                                                            <Icon
+                                                                icon={IconNames.ISSUE}
+                                                                intent={Intent.DANGER}
+                                                            />
+                                                        </Tooltip>
+                                                    ) : null}
+                                                </ListItem>
                                             }
                                         >
                                             <div className='arguments-wrapper'>
@@ -340,21 +336,8 @@ const TensorList = () => {
     );
 };
 
-function getTensorFilterName(tensor: Tensor) {
-    const bufferTypeLabel = isValidNumber(tensor.buffer_type) ? BufferTypeLabel[tensor.buffer_type] : 'n/a';
-
-    return `Tensor ${tensor.id} ${bufferTypeLabel}`;
-}
-
-function getDeallocation(tensor: Tensor, operations: OperationDescription[]) {
-    // TODO: Maybe we can strengthen this logic to ensure we're looking at deallocations
-    const matchingInputs = operations.filter(
-        (operation) =>
-            operation.name.includes('deallocate') && operation.inputs.find((input) => input.id === tensor.id),
-    );
-
-    return matchingInputs.map((x) => x.id).toString() || '';
-}
+const getTensorFilterName = (tensor: Tensor) =>
+    `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensor.operationIdentifier ? tensor.operationIdentifier : ''}`;
 
 function getBufferTypeFilterOptions(tensors: Tensor[]) {
     return [

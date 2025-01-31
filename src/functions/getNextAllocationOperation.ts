@@ -1,5 +1,8 @@
-import { OperationDescription } from '../model/APIData';
-import { Tensor } from '../model/Graph';
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
+import { OperationDescription, Tensor } from '../model/APIData';
 
 function getNextAllocationOperation(
     tensor: Tensor,

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { ProgressBar as BlueprintProgressBar } from '@blueprintjs/core';
 import 'styles/components/ProgressBar.scss';
 

@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 from http import HTTPStatus
 
 from ttnn_visualizer.enums import ConnectionTestStates

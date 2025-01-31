@@ -13,20 +13,19 @@ import {
     NodeType,
     OperationDescription,
     OperationDetailsData,
-    TensorData,
+    Tensor,
 } from './APIData';
 import { BufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
-import { HistoricalTensor, Tensor } from './Graph';
-import { PlotDataOverrides } from '../definitions/PlotConfigurations';
+import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import getChartData from '../functions/getChartData';
 
 export class OperationDetails implements Partial<OperationDetailsData> {
     id: number;
 
-    inputs: TensorData[];
+    inputs: Tensor[];
 
-    outputs: TensorData[];
+    outputs: Tensor[];
 
     buffers: BufferData[];
 
@@ -34,19 +33,21 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     stack_trace: string;
 
-    tensorList: TensorData[];
+    tensorList: Tensor[];
 
     device_operations: Node[] = [];
 
-    historicalTensorListByAddress: Map<number, HistoricalTensor> = new Map();
+    tensorListByAddress: Map<number, Tensor> = new Map();
 
-    private historicalTensorListById: Map<number, HistoricalTensor> = new Map();
+    private tensorListById: Map<number, Tensor> = new Map();
 
     private operations: OperationDescription[] = [];
 
     public deviceOperations: DeviceOperation[] = [];
 
-    constructor(data: OperationDetailsData, operations: OperationDescription[]) {
+    private options: { renderPattern: boolean } = { renderPattern: false };
+
+    constructor(data: OperationDetailsData, operations: OperationDescription[], options?: { renderPattern: boolean }) {
         this.id = data.id;
         this.inputs = data.inputs;
         this.outputs = data.outputs;
@@ -55,6 +56,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.stack_trace = data.stack_trace;
         this.operations = operations;
         this.device_operations = data.device_operations;
+        this.options = options || { renderPattern: false };
 
         this.inputs.forEach((tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
@@ -63,33 +65,41 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             tensor.consumerNames = tensor.consumers.map((op) => {
                 return this.operations.find((operation) => operation.id === op)?.name || '';
             });
+            tensor.operationIdentifier = tensor.producers
+                .map((op) => {
+                    return this.operations.find((operation) => operation.id === op)?.operationFileIdentifier || '';
+                })
+                .join('');
         });
 
-        this.outputs.forEach((tensor: TensorData) => {
+        this.outputs.forEach((tensor: Tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
                 return this.operations.find((operation) => operation.id === op)?.name || '';
             });
             tensor.consumerNames = tensor.consumers.map((op) => {
                 return this.operations.find((operation) => operation.id === op)?.name || '';
             });
+            tensor.operationIdentifier = this.operations.find(
+                (operation) => operation.id === this.id,
+            )?.operationFileIdentifier;
         });
 
         this.tensorList =
             [
                 [
                     ...(this.inputs.map((input) => {
-                        return { ...input, io: 'input' } as TensorData;
+                        return { ...input, io: 'input' } as Tensor;
                     }) || []),
                 ],
                 [
                     ...(this.outputs.map((output) => {
-                        return { ...output, io: 'output' } as TensorData;
+                        return { ...output, io: 'output' } as Tensor;
                     }) || []),
                 ],
             ].flat() || [];
 
-        this.historicalTensorListByAddress = this.createHitoricalTensorList();
-        this.historicalTensorListByAddress.forEach((tensor) => {
+        this.tensorListByAddress = this.getTensorListByAddress();
+        this.tensorListByAddress.forEach((tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
                 return this.operations.find((operation) => operation.id === op)?.name || '';
             });
@@ -97,12 +107,14 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 return this.operations.find((operation) => operation.id === op)?.name || '';
             });
         });
-        this.historicalTensorListById = new Map(
-            Array.from(this.historicalTensorListByAddress.values()).map((tensor) => [tensor.id, tensor]),
+        this.tensorListById = new Map(
+            Array.from(this.tensorListByAddress.values()).map((tensor) => [tensor.id, tensor]),
         );
 
         const deviceOpList: Node[] = [];
         if (this.device_operations !== null) {
+            this.device_operations = this.sortDeviceOperationsByBufferDeallocation(this.device_operations);
+
             this.device_operations.forEach((node) => {
                 if (node.node_type === NodeType.function_start) {
                     this.deviceOperations.push({
@@ -206,7 +218,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
     }
 
     private getChartData(memory: Chunk[], overrides?: PlotDataOverrides): Partial<PlotData>[] {
-        return getChartData(memory, this.getTensorForAddress.bind(this), overrides);
+        return getChartData(memory, this.getTensorForAddress.bind(this), overrides, this.options);
     }
 
     get memorySizeL1(): number {
@@ -214,12 +226,8 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         return this.l1_sizes?.[0] || 0;
     }
 
-    getTensorForAddress(address: number): TensorData | HistoricalTensor | null {
-        const tensorData = this.tensorList.find((tensor) => tensor.address === address) || null;
-        if (!tensorData) {
-            return this.historicalTensorListByAddress.get(address) || null;
-        }
-        return tensorData;
+    getTensorForAddress(address: number): Tensor | null {
+        return this.tensorListByAddress.get(address) || null;
     }
 
     getTensorProducerConsumer(id: number | null) {
@@ -227,10 +235,10 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             return { producers: [], consumers: [] };
         }
 
-        let tensor: TensorData | HistoricalTensor | undefined = this.tensorList.find((t) => t.id === id);
+        let tensor: Tensor | undefined = this.tensorList.find((t) => t.id === id);
 
         if (!tensor) {
-            tensor = this.historicalTensorListById.get(id);
+            tensor = this.tensorListById.get(id);
             if (!tensor) {
                 return { producers: [], consumers: [] };
             }
@@ -249,7 +257,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
     }
 
     memoryData(bufferType: BufferType = BufferType.L1): {
-        chartData: Partial<PlotData>[];
+        chartData: Partial<PlotDataCustom>[];
         memory: Chunk[];
         fragmentation: FragmentationEntry[];
         condensed: Chunk;
@@ -340,7 +348,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
         const condensed: Chunk = this.calculateCondensed(memory);
         const cbCondensed: Chunk = this.calculateCondensed(cbMemory);
-        const bufferCondesed: Chunk = this.calculateCondensed(bufferMemory);
+        const bufferCondensed: Chunk = this.calculateCondensed(bufferMemory);
 
         const chartData = this.getChartData(memory);
         const cbColor = '#e2defc';
@@ -367,10 +375,10 @@ ${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cb
         const bufferColor = '#fcdefa';
         const bufferHoverTemplate = `
 <span style="color:${bufferColor};font-size:20px;">&#9632;</span>
-${bufferCondesed.address} (${toHex(bufferCondesed.address)}) <br>Size: ${formatSize(bufferCondesed.size)}
+${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${formatSize(bufferCondensed.size)}
 <br><br>Buffers Summary
 <extra></extra>`;
-        const bufferChartData = this.getChartData([bufferCondesed], {
+        const bufferChartData = this.getChartData([bufferCondensed], {
             color: bufferColor,
             hovertemplate: bufferHoverTemplate,
         });
@@ -387,12 +395,23 @@ ${bufferCondesed.address} (${toHex(bufferCondesed.address)}) <br>Size: ${formatS
             }
         });
 
+        const condensedChart = this.getChartData([condensed]);
+
+        if (condensedChart[0] !== undefined && bufferType === BufferType.L1_SMALL) {
+            condensedChart[0].marker!.color = CONDENSED_PLOT_CHUNK_COLOR;
+            condensedChart[0].hovertemplate = `
+    <span style="color:${CONDENSED_PLOT_CHUNK_COLOR};font-size:20px;">&#9632;</span>
+<br />
+<span>L1 Small Condensed view</span>
+<extra></extra>`;
+        }
+
         return {
             chartData,
             memory,
             fragmentation,
             condensed,
-            condensedChart: this.getChartData([condensed]),
+            condensedChart,
             cbChartData,
             cbChartDataByOperation,
             cbMemory,
@@ -415,21 +434,18 @@ ${bufferCondesed.address} (${toHex(bufferCondesed.address)}) <br>Size: ${formatS
         };
     }
 
-    private createHitoricalTensorList() {
-        const tensorsByBufferAddress: Map<number, HistoricalTensor> = new Map();
+    private getTensorListByAddress() {
+        const tensorsByBufferAddress: Map<number, Tensor> = new Map();
 
         const currentOperation = this.operations.find((op) => op.id === this.id);
 
         for (const buffer of this.buffers) {
             const bufferAddress = buffer.address;
             const bufferType = buffer.buffer_type;
-            let opId: number | undefined;
             let tensor: Tensor | undefined;
 
             for (let i = this.operations.indexOf(currentOperation!); i >= 0; i--) {
                 const op = this.operations[i];
-                opId = op.id;
-
                 tensor = op.inputs.find((input) => input.address === bufferAddress);
 
                 if (tensor !== undefined) {
@@ -444,13 +460,10 @@ ${bufferCondesed.address} (${toHex(bufferCondesed.address)}) <br>Size: ${formatS
             }
 
             if (tensor !== undefined) {
-                const historicalTensor: HistoricalTensor = {
+                tensorsByBufferAddress.set(bufferAddress, {
                     ...tensor,
-                    parentOperationId: opId!,
-                    historical: opId! !== this.id,
                     buffer_type: bufferType,
-                };
-                tensorsByBufferAddress.set(bufferAddress, historicalTensor);
+                });
             }
         }
 
@@ -473,5 +486,48 @@ ${bufferCondesed.address} (${toHex(bufferCondesed.address)}) <br>Size: ${formatS
             address: mem[0].address || 0,
             size: rangeEnd - mem[0].address,
         };
+    }
+
+    // eslint-disable-next-line class-methods-use-this
+    sortDeviceOperationsByBufferDeallocation(deviceOperations: Node[]): Node[] {
+        const circularBufferDeallocations: Map<number, Node> = new Map();
+        const nodes: Node[] = [];
+        const opList: Node[] = [];
+
+        for (const node of deviceOperations) {
+            if (node.node_type === NodeType.function_start) {
+                opList.push(node);
+            }
+            if (node.node_type === NodeType.function_end) {
+                opList.pop();
+            }
+            if (node.node_type === NodeType.circular_buffer_deallocate_all) {
+                const opId = opList.length > 0 ? opList[opList.length - 1].id : -1;
+                circularBufferDeallocations.set(opId, node);
+            } else {
+                nodes.push(node);
+            }
+        }
+
+        const sortedNodes: Node[] = [];
+        nodes.forEach((node, index) => {
+            sortedNodes.push(node);
+            if (node.node_type === NodeType.function_start) {
+                opList.push(node);
+            }
+            if (node.node_type === NodeType.function_end) {
+                opList.pop();
+            }
+            if (node.node_type === NodeType.circular_buffer_allocate) {
+                const nextNode = nodes[index + 1];
+                const matchingDeallocate = circularBufferDeallocations.get(
+                    opList.length > 0 ? opList[opList.length - 1].id : -1,
+                );
+                if (matchingDeallocate && nextNode && nextNode.node_type !== NodeType.circular_buffer_allocate) {
+                    sortedNodes.push(matchingDeallocate);
+                }
+            }
+        });
+        return sortedNodes;
     }
 }

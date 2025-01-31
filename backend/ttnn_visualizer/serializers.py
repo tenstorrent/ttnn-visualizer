@@ -1,6 +1,10 @@
 import dataclasses
 from collections import defaultdict
 from typing import List
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 
 from ttnn_visualizer.models import BufferType, Operation, TensorComparisonRecord
 
@@ -168,8 +172,10 @@ def serialize_operation(
     id = operation_data.pop("operation_id", None)
 
     device_operations_data = []
-    if hasattr(device_operations, "captured_graph"):
-        device_operations_data = device_operations.captured_graph
+    for do in device_operations:
+        if do.operation_id == operation.operation_id:
+            device_operations_data = do.captured_graph
+            break
 
     return {
         **operation_data,

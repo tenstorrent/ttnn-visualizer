@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 @use '../definitions/colours' as *;
 
 $label-width: 50px;
@@ -10,6 +10,13 @@ $height-offset: 15px;
 
 .buffer-summary-chart {
     margin-bottom: $height-offset * 2;
+
+    .controls {
+        display: inline-flex;
+        flex-direction: column;
+        margin-bottom: 0;
+        align-items: flex-start;
+    }
 
     .chart-position {
         position: relative;

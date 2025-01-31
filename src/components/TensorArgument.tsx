@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Switch } from '@blueprintjs/core';
 import { useState } from 'react';
@@ -12,14 +12,14 @@ interface TensorArgumentProps {
     argument: {
         name: string;
         value: string;
-        parsedValue?: MemoryConfig;
+        parsedValue: MemoryConfig | null;
     };
     onCollapse?: () => void;
 }
 
 function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
     const [isExpanded, setIsExpanded] = useState(false);
-    const splitArgument = typeof argument.value === 'string' ? argument.value.split('\n') : argument.value;
+    const splitArgument = argument.value.split('\n');
 
     const handleExpandToggle = () => {
         setIsExpanded((previousValue) => !previousValue);
@@ -29,7 +29,7 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
         }
     };
 
-    if (argument.name === 'memory_config') {
+    if (argument?.parsedValue) {
         return (
             <table className='ttnn-table alt-two-tone-rows buffer-table'>
                 <tbody>
