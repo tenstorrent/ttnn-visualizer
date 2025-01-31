@@ -4,7 +4,6 @@
 
 import { atomWithStorage } from 'jotai/utils';
 import { atom } from 'jotai';
-import { NumberRange } from '@blueprintjs/core';
 import { FileProgress, FileStatus } from '../model/APIData';
 import { DEFAULT_DEVICE_ID } from '../definitions/Devices';
 
@@ -20,9 +19,6 @@ export const expandedTensorsAtom = atom<number[]>([]);
 export const activeToastAtom = atom<number | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorAtom = atom<number | null>(null);
-
-export const operationRangeAtom = atomWithStorage<NumberRange | null>('operationRange', [0, 1]);
-export const selectedRangeAtom = atom<NumberRange | null>(null);
 
 // This atom stores the file transfer progress data in localStorage (or sessionStorage)
 export const fileTransferProgressAtom = atom<FileProgress>({

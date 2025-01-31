@@ -15,7 +15,6 @@ import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
 import { useGetDeviceOperationListPerf, useSession } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
-import Range from './RangeSlider';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -63,23 +62,7 @@ function Layout() {
                     </a>
                     <MainNavigation />
                 </nav>
-            </header>
 
-            <main>
-                <Outlet />
-
-                <ToastContainer
-                    position='top-right'
-                    autoClose={false}
-                    newestOnTop={false}
-                    closeOnClick
-                    closeButton={false}
-                    theme='light'
-                    transition={BounceIn}
-                />
-            </main>
-
-            <footer className='app-footer'>
                 <div className='current-data'>
                     {activeReport &&
                         (activeReport.length > MAX_TITLE_LENGTH ? (
@@ -94,9 +77,9 @@ function Layout() {
                                 </span>
                             </Tooltip>
                         ) : (
-                            <span>
+                            <>
                                 <strong>Report:</strong> {activeReport}
-                            </span>
+                            </>
                         ))}
 
                     {activePerformanceTrace &&
@@ -112,9 +95,9 @@ function Layout() {
                                 </span>
                             </Tooltip>
                         ) : (
-                            <span>
+                            <>
                                 <strong>Performance:</strong> {activePerformanceTrace}
-                            </span>
+                            </>
                         ))}
                     {activeReport && activePerformanceTrace && (
                         <span>
@@ -124,7 +107,7 @@ function Layout() {
                                         icon={IconNames.TickCircle}
                                         className='intent-ok'
                                     />{' '}
-                                    Profiler and perf reports synchronised
+                                    Profiler and perf reports syncronized
                                 </strong>
                             ) : (
                                 <strong>
@@ -138,11 +121,21 @@ function Layout() {
                         </span>
                     )}
                 </div>
+            </header>
 
-                <div className='slider'>
-                    <Range />
-                </div>
-            </footer>
+            <main>
+                <Outlet />
+
+                <ToastContainer
+                    position='top-right'
+                    autoClose={false}
+                    newestOnTop={false}
+                    closeOnClick
+                    closeButton={false}
+                    theme='light'
+                    transition={BounceIn}
+                />
+            </main>
         </div>
     );
 }
