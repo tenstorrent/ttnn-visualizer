@@ -28,13 +28,13 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const transfers = npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));
     const [animationInterval, setAnimationInterval] = React.useState<number | null>(null);
     const [selectedTransferList, setSelectedTransferList] = React.useState<NoCTransfer[]>([]);
-    const [selectedIndex, setSelectedIndex] = React.useState<number>(0);
+    const [selectedIndex, setSelectedIndex] = React.useState<{ index: number; coords: number[] } | null>(null);
     const [isPlaying, setIsPlaying] = React.useState<boolean>(false);
 
     useEffect(() => {
         stopAnimation();
-        setSelectedTimestep(0);
-        setSelectedIndex(-1);
+        setSelectedTimestep(863);
+        setSelectedIndex(null);
         setSelectedTransferList([]);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [npeData]);
@@ -88,21 +88,24 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const handleScrubberChange = (value: number) => {
         stopAnimation();
         setSelectedTimestep(value);
-        setSelectedIndex(-1);
+        setSelectedIndex(null);
         setSelectedTransferList([]);
     };
     const showActiveTransfers = (route: [number, number, NoCID, number] | null, index?: number) => {
         if (route === null) {
             setSelectedTransferList([]);
-            setSelectedIndex(-1);
+            setSelectedIndex(null);
             return;
         }
-        if (selectedIndex === index) {
-            setSelectedIndex(-1);
+        if (selectedIndex?.index === index) {
+            setSelectedIndex(null);
             setSelectedTransferList([]);
             return;
         }
-        setSelectedIndex(index || -1);
+        if (index !== undefined) {
+            setSelectedIndex({ index, coords: [route[0], route[1]] });
+        }
+
         onPause();
 
         const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
@@ -177,7 +180,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     <div
                         className='tensix-grid'
                         style={{
-                            // ...(selectedTransferList.length !== 0 ? { opacity: 0.5 } : { opacity: 1 }),
                             display: 'grid',
                             gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
                             gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
@@ -288,7 +290,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             row.map((transferForNoc, colIndex) => (
                                 <div
                                     key={`-${rowIndex}-${colIndex}`}
-                                    className='tensix no-click'
+                                    className={
+                                        selectedIndex?.coords[0] === rowIndex && selectedIndex?.coords[1] === colIndex
+                                            ? 'selected tensix no-click'
+                                            : 'tensix no-click'
+                                    }
                                     style={{
                                         position: 'relative',
                                         gridColumn: colIndex + 1,
@@ -302,6 +308,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             left: 0,
                                             width: '100%',
                                             height: '100%',
+
                                             // background: 'rgba(255, 0, 0, 0.5)',
                                         }}
                                     >
@@ -321,10 +328,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     <div>
                         {selectedTransferList.length !== 0 && (
                             <>
-                                <h3>Active transfers through {selectedIndex}</h3>
-                                <ul>
+                                <h3>Active transfers through {selectedIndex?.coords.join('-')}</h3>
+                                <div>
                                     {selectedTransferList.map((transfer) => (
-                                        <li
+                                        <div
                                             key={transfer.id}
                                             style={{
                                                 display: 'flex',
@@ -359,9 +366,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             </div>
                                             <div>bytes: {transfer.total_bytes}</div>
                                             <div>type: {transfer.noc_event_type}</div>
-                                        </li>
+                                        </div>
                                     ))}
-                                </ul>
+                                </div>
                             </>
                         )}
                     </div>

@@ -50,8 +50,12 @@
                 pointer-events: none;
 
                 &:hover {
-                    border-color: transparent;
+                    border: 1px solid $tt-yellow-tint-2;
                 }
+            }
+
+            &.selected {
+                border-color: $tt-yellow-tint-2;
             }
         }
     }
