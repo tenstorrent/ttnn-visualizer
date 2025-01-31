@@ -290,7 +290,24 @@ class DatabaseQueries:
     ) -> Generator[Tensor, None, None]:
         rows = self._query_table("tensors", filters)
         for row in rows:
-            yield Tensor(*row)
+            device_addresses = []
+
+            try:
+                device_tensors = self._query_table(
+                    "device_tensors", filters={"tensor_id": row[0]}
+                )
+            except sqlite3.OperationalError as err:
+                if str(err).startswith("no such table"):
+                    pass
+                else:
+                    raise err
+            else:
+                for device_tensor in sorted(device_tensors, key=lambda x: x[1]):
+                    while len(device_addresses) < device_tensor[1]:
+                        device_addresses.append(None)
+                    device_addresses.append(device_tensor[2])
+
+            yield Tensor(*row, device_addresses)
 
     def query_input_tensors(
         self, filters: Optional[Dict[str, Any]] = None

@@ -2,7 +2,4 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-export enum SECTION_IDS {
-    PLOT = 'plot',
-    TABLE = 'table',
-}
+export const DEFAULT_DEVICE_ID = 0;

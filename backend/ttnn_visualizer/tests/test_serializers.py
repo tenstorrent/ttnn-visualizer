@@ -51,6 +51,7 @@ class TestSerializers(unittest.TestCase):
                 1,
                 1000,
                 BufferType.DRAM,
+                [25],
             ),
             Tensor(
                 2,
@@ -61,6 +62,7 @@ class TestSerializers(unittest.TestCase):
                 2,
                 2000,
                 BufferType.L1,
+                [50],
             ),
         ]
         devices = [
@@ -109,6 +111,7 @@ class TestSerializers(unittest.TestCase):
                         "device_id": 1,
                         "address": 1000,
                         "buffer_type": 0,
+                        "device_addresses": [25],
                     }
                 ],
                 "outputs": [
@@ -128,6 +131,7 @@ class TestSerializers(unittest.TestCase):
                         "device_id": 1,
                         "address": 1000,
                         "buffer_type": 0,
+                        "device_addresses": [50],
                     }
                 ],
             }
@@ -283,6 +287,7 @@ class TestSerializers(unittest.TestCase):
                 1,
                 1000,
                 BufferType.DRAM,
+                [25],
             )
         }
 
@@ -308,6 +313,7 @@ class TestSerializers(unittest.TestCase):
                     "device_id": 1,
                     "address": 1000,
                     "buffer_type": 0,
+                    "device_addresses": [25],
                 }
             ]
         }
@@ -354,6 +360,7 @@ class TestSerializers(unittest.TestCase):
                 1,
                 1000,
                 BufferType.DRAM,
+                [200, 300]
             )
         ]
         devices = [
@@ -407,6 +414,7 @@ class TestSerializers(unittest.TestCase):
                     "operation_id": 1,
                     "producers": [2],
                     "shape": "shape1",
+                    "device_addresses": [200, 300]
                 }
             ],
             "l1_sizes": [256],
@@ -428,6 +436,7 @@ class TestSerializers(unittest.TestCase):
                     "output_index": 0,
                     "producers": [2],
                     "shape": "shape1",
+                    "device_addresses": [200, 300],
                 }
             ],
             "stack_trace": "trace1",
@@ -507,6 +516,7 @@ class TestSerializers(unittest.TestCase):
                 1,
                 1000,
                 BufferType.DRAM,
+                [500, 1500],
             ),
             Tensor(
                 2,
@@ -517,6 +527,7 @@ class TestSerializers(unittest.TestCase):
                 2,
                 2000,
                 BufferType.L1,
+                [2000, 2500],
             ),
         ]
         producers_consumers = [
@@ -542,6 +553,7 @@ class TestSerializers(unittest.TestCase):
                 "comparison": None,
                 "consumers": [3],
                 "producers": [2],
+                "device_addresses": [500, 1500],
             },
             {
                 "id": 2,
@@ -558,6 +570,7 @@ class TestSerializers(unittest.TestCase):
                 "comparison": None,
                 "consumers": [],
                 "producers": [],
+                "device_addresses": [2000, 2500],
             },
         ]
 

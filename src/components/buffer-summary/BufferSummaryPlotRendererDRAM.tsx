@@ -15,7 +15,7 @@ import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
-import ROUTES from '../../definitions/routes';
+import ROUTES from '../../definitions/Routes';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';

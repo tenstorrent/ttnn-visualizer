@@ -17,6 +17,7 @@ import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import createToastNotification from '../../functions/createToastNotification';
+import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
@@ -116,7 +117,7 @@ const RemoteSyncConfigurator: FC = () => {
     const updateReportSelection = (fileName: string) => {
         queryClient.clear();
         setReportLocation('remote');
-        setSelectedDevice(0);
+        setSelectedDevice(DEFAULT_DEVICE_ID);
         setActiveReport(fileName);
         createToastNotification('Active report data', fileName);
     };
@@ -124,7 +125,7 @@ const RemoteSyncConfigurator: FC = () => {
     const updatePerformanceSelection = (fileName: string) => {
         queryClient.clear();
         setReportLocation('remote');
-        setSelectedDevice(0);
+        setSelectedDevice(DEFAULT_DEVICE_ID);
         setActivePerformanceTrace(fileName);
         createToastNotification('Active performance data', fileName);
     };

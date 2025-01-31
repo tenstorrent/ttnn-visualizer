@@ -4,24 +4,29 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { AnchorButton, ButtonGroup, Intent, Tab, TabId, Tabs } from '@blueprintjs/core';
+import { AnchorButton, ButtonGroup, Intent, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { BuffersByOperationData, useBuffers, useOperationsList } from '../hooks/useAPI';
 import useBufferFocus from '../hooks/useBufferFocus';
 import { BufferType } from '../model/BufferType';
 import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import { Operation, Tensor } from '../model/APIData';
-import ROUTES from '../definitions/routes';
+import ROUTES from '../definitions/Routes';
 import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
 import LoadingSpinner from '../components/LoadingSpinner';
 import 'styles/components/BufferSummary.scss';
-import { SECTION_IDS, TAB_IDS } from '../definitions/BufferSummary';
+import { SECTION_IDS } from '../definitions/BufferSummary';
+
+enum TAB_IDS {
+    L1 = 'L1',
+    DRAM = 'DRAM',
+}
 
 function BufferSummary() {
     const plotRef = useRef<HTMLHeadingElement>(null);
     const tableRef = useRef<HTMLHeadingElement>(null);
-    const [activeSection, setActiveSection] = useState(SECTION_IDS.PLOT);
-    const [selectedTabId, setSelectedTabId] = useState<TabId>(TAB_IDS.L1);
+    const [activeSection, setActiveSection] = useState<SECTION_IDS>(SECTION_IDS.PLOT);
+    const [selectedTabId, setSelectedTabId] = useState<TAB_IDS>(TAB_IDS.L1);
     const { data: buffersByOperation } = useBuffers(BufferType.L1);
     const { data: dramBuffersByOperation } = useBuffers(BufferType.DRAM);
     const { data: operationsList } = useOperationsList();
@@ -40,7 +45,7 @@ function BufferSummary() {
                 if (ref?.current?.offsetHeight && ref?.current?.offsetTop) {
                     const sectionHeight = ref.current.offsetHeight;
                     const sectionTop = ref.current.offsetTop - 250;
-                    const sectionId = ref.current.getAttribute('id');
+                    const sectionId = ref.current.getAttribute('id') as SECTION_IDS | null;
 
                     if (sectionId && scrollY > sectionTop && scrollY <= sectionTop + sectionHeight) {
                         setActiveSection(sectionId);
@@ -95,7 +100,7 @@ function BufferSummary() {
             <Tabs
                 id='performance-tabs'
                 selectedTabId={selectedTabId}
-                onChange={setSelectedTabId}
+                onChange={(id: TAB_IDS) => setSelectedTabId(id)}
                 large
                 renderActiveTabPanelOnly
             >
