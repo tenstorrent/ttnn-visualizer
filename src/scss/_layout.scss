@@ -26,16 +26,28 @@
             }
         }
     }
+}
+
+.app-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 1;
+    width: 100%;
+    background-color: $tt-grey-4;
+    padding: 5px 15px;
+    gap: 5px;
+
+    .slider {
+        margin-top: 5px;
+        padding-left: 10px;
+        padding-right: 10px;
+    }
 
     .current-data {
-        position: fixed;
-        bottom: 0;
-        left: 0;
         display: flex;
-        z-index: 1;
-        width: 100%;
-        background-color: $tt-grey-4;
         gap: 20px;
-        padding: 5px 15px;
     }
 }
