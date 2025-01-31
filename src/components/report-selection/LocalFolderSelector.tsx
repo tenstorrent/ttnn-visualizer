@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
+import { FormGroup, Icon, IconName, Intent, NumberRange } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
@@ -10,11 +10,19 @@ import 'styles/components/FolderPicker.scss';
 import { useQueryClient } from 'react-query';
 import { useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
-import { activePerformanceTraceAtom, activeReportAtom, reportLocationAtom, selectedDeviceAtom } from '../../store/app';
+import {
+    activePerformanceTraceAtom,
+    activeReportAtom,
+    operationRangeAtom,
+    reportLocationAtom,
+    selectedDeviceAtom,
+    selectedRangeAtom,
+} from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification from '../../functions/createToastNotification';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
+import { fetchOperations } from '../../hooks/useAPI';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -61,6 +69,8 @@ const LocalFolderOptions: FC = () => {
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
     const setActiveReport = useSetAtom(activeReportAtom);
     const setActivePerformanceTrace = useSetAtom(activePerformanceTraceAtom);
+    const setOperationRange = useSetAtom(operationRangeAtom);
+    const setSelectedRange = useSetAtom(selectedRangeAtom);
 
     const {
         uploadLocalFolder,
@@ -102,6 +112,7 @@ const LocalFolderOptions: FC = () => {
         setLocalUploadLabel(`${files.length} files selected.`);
 
         const response = await uploadLocalFolder(files);
+        const operations = await fetchOperations();
 
         if (response.status !== 200) {
             connectionStatus = connectionFailedStatus;
@@ -115,6 +126,12 @@ const LocalFolderOptions: FC = () => {
             setSelectedDevice(DEFAULT_DEVICE_ID);
             setActiveReport(fileName);
             createToastNotification('Active report', fileName);
+
+            if (operations) {
+                const range: NumberRange = [operations[0].id, operations[operations.length - 1].id];
+                setOperationRange(range);
+                setSelectedRange(range);
+            }
         }
 
         queryClient.clear();

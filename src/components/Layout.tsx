@@ -15,6 +15,7 @@ import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
 import { useGetDeviceOperationListPerf, useSession } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
+import Range from './RangeSlider';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -62,65 +63,6 @@ function Layout() {
                     </a>
                     <MainNavigation />
                 </nav>
-
-                <div className='current-data'>
-                    {activeReport &&
-                        (activeReport.length > MAX_TITLE_LENGTH ? (
-                            <Tooltip
-                                content={activeReport}
-                                className={classNames('title', {
-                                    'is-lengthy': activeReport.length > MAX_TITLE_LENGTH,
-                                })}
-                            >
-                                <span>
-                                    <strong>Report:</strong> {activeReport}
-                                </span>
-                            </Tooltip>
-                        ) : (
-                            <>
-                                <strong>Report:</strong> {activeReport}
-                            </>
-                        ))}
-
-                    {activePerformanceTrace &&
-                        (activePerformanceTrace.length > MAX_TITLE_LENGTH ? (
-                            <Tooltip
-                                content={activePerformanceTrace}
-                                className={classNames('title', {
-                                    'is-lengthy': activePerformanceTrace.length > MAX_TITLE_LENGTH,
-                                })}
-                            >
-                                <span>
-                                    <strong>Performance:</strong> {activePerformanceTrace}
-                                </span>
-                            </Tooltip>
-                        ) : (
-                            <>
-                                <strong>Performance:</strong> {activePerformanceTrace}
-                            </>
-                        ))}
-                    {activeReport && activePerformanceTrace && (
-                        <span>
-                            {isInSync ? (
-                                <strong>
-                                    <Icon
-                                        icon={IconNames.TickCircle}
-                                        className='intent-ok'
-                                    />{' '}
-                                    Profiler and perf reports syncronized
-                                </strong>
-                            ) : (
-                                <strong>
-                                    <Icon
-                                        icon={IconNames.ISSUE}
-                                        className='intent-not-ok'
-                                    />{' '}
-                                    Profiler and perf reports can&apos;t be synchronized
-                                </strong>
-                            )}
-                        </span>
-                    )}
-                </div>
             </header>
 
             <main>
@@ -136,6 +78,71 @@ function Layout() {
                     transition={BounceIn}
                 />
             </main>
+
+            <footer className='app-footer'>
+                <div className='current-data'>
+                    {activeReport &&
+                        (activeReport.length > MAX_TITLE_LENGTH ? (
+                            <Tooltip
+                                content={activeReport}
+                                className={classNames('title', {
+                                    'is-lengthy': activeReport.length > MAX_TITLE_LENGTH,
+                                })}
+                            >
+                                <span>
+                                    <strong>Report:</strong> {activeReport}
+                                </span>
+                            </Tooltip>
+                        ) : (
+                            <span>
+                                <strong>Report:</strong> {activeReport}
+                            </span>
+                        ))}
+
+                    {activePerformanceTrace &&
+                        (activePerformanceTrace.length > MAX_TITLE_LENGTH ? (
+                            <Tooltip
+                                content={activePerformanceTrace}
+                                className={classNames('title', {
+                                    'is-lengthy': activePerformanceTrace.length > MAX_TITLE_LENGTH,
+                                })}
+                            >
+                                <span>
+                                    <strong>Performance:</strong> {activePerformanceTrace}
+                                </span>
+                            </Tooltip>
+                        ) : (
+                            <span>
+                                <strong>Performance:</strong> {activePerformanceTrace}
+                            </span>
+                        ))}
+                    {activeReport && activePerformanceTrace && (
+                        <span>
+                            {isInSync ? (
+                                <strong>
+                                    <Icon
+                                        icon={IconNames.TickCircle}
+                                        className='intent-ok'
+                                    />{' '}
+                                    Profiler and perf reports synchronised
+                                </strong>
+                            ) : (
+                                <strong>
+                                    <Icon
+                                        icon={IconNames.ISSUE}
+                                        className='intent-not-ok'
+                                    />{' '}
+                                    Profiler and perf reports can&apos;t be synchronized
+                                </strong>
+                            )}
+                        </span>
+                    )}
+                </div>
+
+                <div className='slider'>
+                    <Range />
+                </div>
+            </footer>
         </div>
     );
 }

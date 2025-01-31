@@ -8,6 +8,7 @@ import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import Papa, { ParseResult } from 'papaparse';
 import { useMemo } from 'react';
+import { useAtomValue } from 'jotai';
 import axiosInstance from '../libs/axiosInstance';
 import {
     Buffer,
@@ -29,6 +30,7 @@ import isValidNumber from '../functions/isValidNumber';
 import { getUniqueDeviceIDs, mergeMultideviceRows } from '../functions/perfFunctions';
 import { RowData } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
+import { selectedRangeAtom } from '../store/app';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -90,7 +92,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
     return defaultOperationDetailsData;
 };
 
-const fetchOperations = async (deviceId?: number): Promise<OperationDescription[]> => {
+export const fetchOperations = async (deviceId?: number): Promise<OperationDescription[]> => {
     const tensorList: Map<number, Tensor> = new Map<number, Tensor>();
     const { data: operationList } = await axiosInstance.get<OperationDescription[]>('/api/operations', {
         params: {
@@ -264,11 +266,22 @@ const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
 };
 
 export const useOperationsList = () => {
-    return useQuery<OperationDescription[], AxiosError>({
+    const range = useAtomValue(selectedRangeAtom);
+
+    const response = useQuery<OperationDescription[], AxiosError>({
         queryFn: () => fetchOperations(),
         queryKey: ['get-operations'],
         retry: false,
     });
+
+    return useMemo(() => {
+        if (response.data && range) {
+            response.data = response.data.filter((operation) => operation.id >= range[0] && operation.id <= range[1]);
+        }
+
+        return response;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [range, response.isLoading]);
 };
 
 export const useOperationDetails = (operationId: number | null) => {
@@ -502,7 +515,7 @@ export const useOptoPerfIdFiltered = () => {
     );
 };
 
-// Not currently used anymore
+// Not currently used
 export const useReportMeta = () => {
     return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
 };
@@ -517,6 +530,7 @@ export const useBufferPages = (
         fetchBufferPages(operationId, address, bufferType, deviceId),
     );
 };
+
 export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> => {
     try {
         const { data: tensorList } = await axiosInstance.get<Tensor[]>('/api/tensors', {
@@ -557,11 +571,26 @@ export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> 
 };
 
 export const useTensors = (deviceId?: number | null) => {
-    return useQuery<Tensor[], AxiosError>({
+    const range = useAtomValue(selectedRangeAtom);
+
+    const response = useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(deviceId),
         queryKey: ['get-tensors', deviceId],
         retry: false,
     });
+
+    return useMemo(() => {
+        if (response.data && range) {
+            response.data = response.data.filter(
+                (tensor) =>
+                    tensor.consumers.some((id) => id >= range[0] && id <= range[1]) ||
+                    tensor.producers.some((id) => id >= range[0] && id <= range[1]),
+            );
+        }
+
+        return response;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [range, response.isLoading]);
 };
 
 export const useDevices = () => {
