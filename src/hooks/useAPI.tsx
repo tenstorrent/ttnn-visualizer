@@ -619,10 +619,21 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
 };
 
 export const useBuffers = (bufferType: BufferType) => {
-    return useQuery({
+    const range = useAtomValue(selectedRangeAtom);
+
+    const response = useQuery({
         queryFn: () => fetchAllBuffers(bufferType),
         queryKey: ['fetch-all-buffers', bufferType],
     });
+
+    return useMemo(() => {
+        if (response.data && range) {
+            response.data = response.data.filter((operation) => operation.id >= range[0] && operation.id <= range[1]);
+        }
+
+        return response;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [range, response.isLoading]);
 };
 
 export const useDeviceLog = () => {
