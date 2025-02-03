@@ -1,5 +1,6 @@
 import React, { Fragment } from 'react';
 import { LinkPoints } from './drawingApi';
+import { NoCID } from '../../model/NPEModel';
 
 interface SVGTensixRendererProps {
     width: number;
@@ -17,7 +18,20 @@ const TensixTransferRenderer: React.FC<SVGTensixRendererProps> = ({
     style,
 }: SVGTensixRendererProps) => {
     const strokeLength = 5;
-    const dashArray = [strokeLength, (data.length - 1) * strokeLength];
+    const dashMap: Map<NoCID, number> = new Map();
+    const dashArray: Map<NoCID, number[]> = new Map();
+    data.forEach((line) => {
+        if (!dashMap.has(line.nocId)) {
+            dashMap.set(line.nocId, 1);
+        } else {
+            const cnt = dashMap.get(line.nocId)!;
+            dashMap.set(line.nocId, cnt + 1);
+        }
+    });
+    dashMap.forEach((cnt, nocId) => {
+        dashArray.set(nocId, [strokeLength, (cnt - 1) * strokeLength]);
+    });
+
     return (
         <svg
             width={width}
@@ -36,9 +50,9 @@ const TensixTransferRenderer: React.FC<SVGTensixRendererProps> = ({
                                 stroke={line.color}
                                 strokeWidth={1}
                                 // eslint-disable-next-line react/jsx-props-no-spreading
-                                {...(isMulticolor ? { strokeDasharray: dashArray.join(',') } : {})}
+                                {...(isMulticolor ? { strokeDasharray: dashArray.get(line.nocId)!.join(',') } : {})}
                                 // eslint-disable-next-line react/jsx-props-no-spreading
-                                {...(isMulticolor ? { strokeDashoffset: index * dashArray[0]! } : {})}
+                                {...(isMulticolor ? { strokeDashoffset: index * dashArray.get(line.nocId)![0] } : {})}
                             />
                             {line.arrow && !isMulticolor && (
                                 <polygon

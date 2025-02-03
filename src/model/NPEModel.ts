@@ -28,7 +28,7 @@ export interface NoCTransfer {
     src: [row, col];
     dst: [row, col];
     total_bytes: number;
-    noc_event_type: 'UNICAST' | 'MULTICAST';
+    noc_event_type: '';
     noc_type: NoCType;
     injection_rate: number;
     start_cycle: number;

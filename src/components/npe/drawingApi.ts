@@ -25,6 +25,7 @@ export interface LinkPoints {
     arrow: { p1: string; p2: string; p3: string };
     color?: string;
     colors?: string[];
+    nocId: NoCID;
 }
 
 const colorList: string[] = [
@@ -62,7 +63,7 @@ export const getRouteColor = (transferId: number): string => {
     return routeColorMap.get(transferId) || '#ffffff';
 };
 
-export const getLinkPoints = (linkName: NoCID, color?: string) => {
+export const getLinkPoints = (nocId: NoCID, color?: string): LinkPoints => {
     let x1: number = 0;
     let x2: number = 0;
     let y1: number = 0;
@@ -77,7 +78,7 @@ export const getLinkPoints = (linkName: NoCID, color?: string) => {
     let arrow = { p1: '', p2: '', p3: '' };
     // const arrowSecondary = { p1: '', p2: '', p3: '' };
 
-    switch (linkName) {
+    switch (nocId) {
         case NoCID.NOC1_NORTH:
             // up out
             arrowOffset = 0;
@@ -138,10 +139,10 @@ export const getLinkPoints = (linkName: NoCID, color?: string) => {
             break;
         default:
             // eslint-disable-next-line no-console
-            console.warn('Unknown link type', linkName);
+            console.warn('Unknown link type', nocId);
             break;
     }
-    return { x2, y2, x1, y1, arrow, color };
+    return { x2, y2, x1, y1, arrow, color, nocId } as LinkPoints;
 };
 export const calculateLinkCongestionColor = (value: number, min: number = 0, isHC: boolean = false): string => {
     if (value === -1) {

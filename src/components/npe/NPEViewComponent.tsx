@@ -5,7 +5,7 @@
 
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Slider } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { NPEData, NoCID, NoCTransfer } from '../../model/NPEModel';
@@ -23,14 +23,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const SVG_SIZE = tensixSize;
     const width = npeData.common_info.num_cols;
     const height = npeData.common_info.num_rows;
-    const [highlightedTransfer, setHighlightedTransfer] = React.useState<NoCTransfer | null>(null);
-    const [selectedTimestep, setSelectedTimestep] = React.useState<number>(0);
+    const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
+    const [selectedTimestep, setSelectedTimestep] = useState<number>(0);
     const links = npeData.timestep_data[selectedTimestep];
     const transfers = npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));
-    const [animationInterval, setAnimationInterval] = React.useState<number | null>(null);
-    const [selectedTransferList, setSelectedTransferList] = React.useState<NoCTransfer[]>([]);
-    const [selectedNode, setSelectedNode] = React.useState<{ index: number; coords: number[] } | null>(null);
-    const [isPlaying, setIsPlaying] = React.useState<boolean>(false);
+    const [animationInterval, setAnimationInterval] = useState<number | null>(null);
+    const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
+    const [selectedNode, setSelectedNode] = useState<{ index: number; coords: number[] } | null>(null);
+    const [isPlaying, setIsPlaying] = useState<boolean>(false);
 
     useEffect(() => {
         stopAnimation();
@@ -40,21 +40,24 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [npeData]);
 
-    const getLines = (nocs: Array<{ transfer: number; nocId: NoCID | undefined }>) => {
+    const getLines = (nocs: Array<{ transfer: number; nocId: NoCID }>) => {
         return nocs.map((noc) => {
-            return getLinkPoints(noc.nocId!, getRouteColor(noc.transfer));
+            return getLinkPoints(noc.nocId, getRouteColor(noc.transfer));
         });
     };
     // coords, [NoCID]
     const transferListSelectionRendering = useMemo(() => {
         return selectedTransferList.reduce(
-            (list: Array<Array<Array<{ transfer: number; nocId: NoCID | undefined }>>>, transfer) => {
+            (list: Array<Array<Array<{ transfer: number; nocId: NoCID }>>>, transfer) => {
                 transfer.route.forEach(([row, col]) => {
                     list[row] = list[row] || [];
                     list[row][col] = list[row][col] || [];
-                    list[row][col].push({
-                        transfer: transfer.id,
-                        nocId: transfer.route.find((r) => r[0] === row && r[1] === col)?.[2],
+                    const routes = transfer.route.filter((r) => r[0] === row && r[1] === col);
+                    routes?.forEach((route) => {
+                        list[row][col].push({
+                            transfer: transfer.id,
+                            nocId: route[2],
+                        });
                     });
                 });
                 return list;
@@ -69,23 +72,23 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         }
 
         const [targetRow, targetCol] = selectedNode.coords;
+        const groups: Record<NoCID, NoCTransfer[]> = {} as Record<NoCID, NoCTransfer[]>;
 
-        return selectedTransferList.reduce(
-            (acc, transfer) => {
-                const matchingRoute = transfer.route.find(([row, col]) => row === targetRow && col === targetCol);
-                if (!matchingRoute) {
-                    return acc;
-                }
-                const nocId = matchingRoute[2];
+        selectedTransferList.forEach((transfer) => {
+            const matchingRoutes = transfer.route.filter(([row, col]) => row === targetRow && col === targetCol);
 
-                if (!acc[nocId]) {
-                    acc[nocId] = [];
-                }
-                acc[nocId].push(transfer);
-                return acc;
-            },
-            {} as Record<NoCID, NoCTransfer[]>,
-        );
+            if (matchingRoutes.length) {
+                matchingRoutes.forEach((matchingRoute) => {
+                    const nocId = matchingRoute[2];
+                    if (!groups[nocId]) {
+                        groups[nocId] = [];
+                    }
+                    groups[nocId].push(transfer);
+                });
+            }
+        });
+
+        return groups;
     }, [selectedTransferList, selectedNode]);
 
     const startAnimation = () => {
@@ -147,7 +150,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             .filter((tr) => tr !== null);
         setSelectedTransferList(activeTransfers as NoCTransfer[]);
     };
-
     return (
         <div className='npe'>
             <div className='header'>
@@ -283,9 +285,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         }}
                     >
                         {transferListSelectionRendering.map((row, rowIndex) =>
-                            row.map((transferForNoc, colIndex) => (
+                            row.map((transfersForNoc, colIndex) => (
                                 <div
-                                    key={`${rowIndex}-${colIndex}`}
+                                    key={`selected-transfer-${rowIndex}-${colIndex}`}
                                     className={
                                         selectedNode?.coords[0] === rowIndex && selectedNode?.coords[1] === colIndex
                                             ? 'selected tensix no-click'
@@ -312,7 +314,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             }}
                                             width={SVG_SIZE}
                                             height={SVG_SIZE}
-                                            data={getLines(transferForNoc)}
+                                            data={getLines(transfersForNoc)}
                                             isMulticolor
                                         />
                                     </div>
@@ -336,7 +338,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         >
                             {highlightedTransfer?.route.map((point) => (
                                 <div
-                                    key={`${point[0]}-${point[1]}`}
+                                    key={`${point[0]}-${point[1]}-${point[2]}`}
                                     className='tensix'
                                     style={{
                                         position: 'relative',
@@ -371,12 +373,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     <div>
                         {Object.keys(groupedTransfersByNoCID).length !== 0 && (
                             <>
-                                <h3 style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     Active transfers through {selectedNode?.coords.join('-')}
                                     <Button
                                         minimal
                                         icon={IconNames.CROSS}
-                                        onClick={() => setSelectedNode(null)}
+                                        onClick={() => showActiveTransfers(null)}
                                     />
                                 </h3>
                                 {Object.entries(groupedTransfersByNoCID).map(([nocId, localTransferList]) => (
