@@ -1,4 +1,4 @@
-import { Button, NumberRange, NumericInput, RangeSlider } from '@blueprintjs/core';
+import { Button, InputGroup, NumberRange, RangeSlider } from '@blueprintjs/core';
 import { useAtom, useAtomValue } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation } from 'react-router';
@@ -28,18 +28,8 @@ function Range() {
 
     return selectedRange && min && max ? (
         <div className='range-slider'>
-            <div>
-                <NumericInput
-                    value={selectedRange[0]}
-                    onValueChange={(value) => setSelectedRange([value, selectedRange[1]])}
-                />
-                <NumericInput
-                    value={selectedRange[1]}
-                    onValueChange={(value) => setSelectedRange([selectedRange[0], value])}
-                />
-            </div>
-
             <RangeSlider
+                className='slider'
                 value={selectedRange}
                 onChange={(value) => setSelectedRange(value)}
                 min={min}
@@ -48,12 +38,29 @@ function Range() {
                 disabled={location.pathname.includes(`${ROUTES.OPERATIONS}/`)}
             />
 
-            <Button
-                icon={IconNames.RESET}
-                onClick={() => setSelectedRange([min, max])}
-                minimal
-                outlined
-            />
+            <div className='inputs'>
+                <InputGroup
+                    value={selectedRange[0].toString()}
+                    onValueChange={(value) => setSelectedRange([parseInt(value, 10), selectedRange[1]])}
+                    fill={false}
+                    small
+                />
+
+                <InputGroup
+                    value={selectedRange[1].toString()}
+                    onValueChange={(value) => setSelectedRange([selectedRange[0], parseInt(value, 10)])}
+                    fill={false}
+                    small
+                />
+
+                <Button
+                    icon={IconNames.RESET}
+                    onClick={() => setSelectedRange([min, max])}
+                    minimal
+                    outlined
+                    small
+                />
+            </div>
         </div>
     ) : null;
 }

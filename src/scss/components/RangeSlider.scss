@@ -6,4 +6,26 @@
     display: flex;
     flex-wrap: nowrap;
     gap: 30px;
+    align-items: flex-start;
+
+    .inputs {
+        display: flex;
+        flex-wrap: nowrap;
+        flex-grow: 0;
+        flex-shrink: 1;
+        gap: 5px;
+
+        > .bp5-input-group {
+            width: 55px;
+        }
+    }
+
+    .slider {
+        flex-grow: 1;
+    }
+
+    .reset {
+        flex-grow: 0;
+        flex-shrink: 1;
+    }
 }
