@@ -12,6 +12,7 @@ import { NPEData, NoCID, NoCTransfer } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import { NODE_SIZE, calculateLinkCongestionColor, getLinkPoints, getRouteColor } from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
+import { formatSize } from '../../functions/math';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -22,19 +23,19 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const SVG_SIZE = tensixSize;
     const width = npeData.common_info.num_cols;
     const height = npeData.common_info.num_rows;
-    const [, setSelectedTransfer] = React.useState<number | null>(null);
+    const [highlightedTransfer, setHighlightedTransfer] = React.useState<NoCTransfer | null>(null);
     const [selectedTimestep, setSelectedTimestep] = React.useState<number>(0);
     const links = npeData.timestep_data[selectedTimestep];
     const transfers = npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));
     const [animationInterval, setAnimationInterval] = React.useState<number | null>(null);
     const [selectedTransferList, setSelectedTransferList] = React.useState<NoCTransfer[]>([]);
-    const [selectedIndex, setSelectedIndex] = React.useState<{ index: number; coords: number[] } | null>(null);
+    const [selectedNode, setSelectedNode] = React.useState<{ index: number; coords: number[] } | null>(null);
     const [isPlaying, setIsPlaying] = React.useState<boolean>(false);
 
     useEffect(() => {
         stopAnimation();
-        setSelectedTimestep(863);
-        setSelectedIndex(null);
+        setSelectedTimestep(0);
+        setSelectedNode(null);
         setSelectedTransferList([]);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [npeData]);
@@ -45,7 +46,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         });
     };
     // coords, [NoCID]
-    const transferList = useMemo(() => {
+    const transferListSelectionRendering = useMemo(() => {
         return selectedTransferList.reduce(
             (list: Array<Array<Array<{ transfer: number; nocId: NoCID | undefined }>>>, transfer) => {
                 transfer.route.forEach(([row, col]) => {
@@ -61,6 +62,31 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             [],
         );
     }, [selectedTransferList]);
+
+    const groupedTransfersByNoCID = useMemo<Record<NoCID, NoCTransfer[]>>(() => {
+        if (!selectedNode?.coords) {
+            return {} as Record<NoCID, NoCTransfer[]>;
+        }
+
+        const [targetRow, targetCol] = selectedNode.coords;
+
+        return selectedTransferList.reduce(
+            (acc, transfer) => {
+                const matchingRoute = transfer.route.find(([row, col]) => row === targetRow && col === targetCol);
+                if (!matchingRoute) {
+                    return acc;
+                }
+                const nocId = matchingRoute[2];
+
+                if (!acc[nocId]) {
+                    acc[nocId] = [];
+                }
+                acc[nocId].push(transfer);
+                return acc;
+            },
+            {} as Record<NoCID, NoCTransfer[]>,
+        );
+    }, [selectedTransferList, selectedNode]);
 
     const startAnimation = () => {
         setIsPlaying(true);
@@ -88,22 +114,22 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const handleScrubberChange = (value: number) => {
         stopAnimation();
         setSelectedTimestep(value);
-        setSelectedIndex(null);
+        setSelectedNode(null);
         setSelectedTransferList([]);
     };
     const showActiveTransfers = (route: [number, number, NoCID, number] | null, index?: number) => {
         if (route === null) {
             setSelectedTransferList([]);
-            setSelectedIndex(null);
+            setSelectedNode(null);
             return;
         }
-        if (selectedIndex?.index === index) {
-            setSelectedIndex(null);
+        if (selectedNode?.index === index) {
+            setSelectedNode(null);
             setSelectedTransferList([]);
             return;
         }
         if (index !== undefined) {
-            setSelectedIndex({ index, coords: [route[0], route[1]] });
+            setSelectedNode({ index, coords: [route[0], route[1]] });
         }
 
         onPause();
@@ -198,7 +224,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             color: 'red',
                                         }}
                                     >
-                                        <div style={{ position: 'absolute', right: 0 }}>&deg;</div>
+                                        <div style={{ position: 'absolute', right: '4px' }}>&deg;</div>
                                     </div>
                                 )}
                                 {transfer?.dst && (
@@ -221,19 +247,19 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         {links?.link_demand.map((route, index) => (
                             <button
                                 type='button'
-                                key={`-${index}`}
+                                key={`${index}${route[0]}-${route[1]}`}
                                 className='tensix'
                                 style={{
-                                    ...(selectedTransferList.length !== 0 ? { opacity: 0.15 } : { opacity: 1 }),
                                     position: 'relative',
                                     gridColumn: route[1] + 1,
                                     gridRow: route[0] + 1,
                                 }}
                                 onClick={() => showActiveTransfers(route, index)}
-
-                                // onMouseOut={() => showActiveTransfers(null)}
                             >
                                 <TensixTransferRenderer
+                                    style={{
+                                        ...(selectedTransferList.length !== 0 ? { opacity: 0.15 } : { opacity: 1 }),
+                                    }}
                                     width={SVG_SIZE}
                                     height={SVG_SIZE}
                                     data={[getLinkPoints(route[2], calculateLinkCongestionColor(route[3]))]}
@@ -249,8 +275,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         className='tensix-grid transfers'
                         style={{
                             position: 'absolute',
-                            // top: '-5px',
-                            // left: '-5px',
                             top: 0,
                             left: 0,
                             display: 'grid',
@@ -258,40 +282,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
                         }}
                     >
-                        {selectedTransferList.map((transfer, index) => (
-                            <>
-                                <div
-                                    key={`-${index} src`}
-                                    className='tensix no-click'
-                                    style={{
-                                        opacity: 0.75,
-                                        border: '1px solid red',
-                                        position: 'relative',
-                                        // backgroundColor: getRouteColor(transfer.id),
-                                        gridColumn: transfer.src[1] + 1,
-                                        gridRow: transfer.src[0] + 1,
-                                    }}
-                                />
-                                <div
-                                    key={`-${index} dst`}
-                                    className='tensix no-click'
-                                    style={{
-                                        opacity: 0.75,
-                                        border: '1px solid blue',
-                                        position: 'relative',
-                                        // backgroundColor: getRouteColor(transfer.id),
-                                        gridColumn: transfer.dst[1] + 1,
-                                        gridRow: transfer.dst[0] + 1,
-                                    }}
-                                />
-                            </>
-                        ))}
-                        {transferList.map((row, rowIndex) =>
+                        {transferListSelectionRendering.map((row, rowIndex) =>
                             row.map((transferForNoc, colIndex) => (
                                 <div
-                                    key={`-${rowIndex}-${colIndex}`}
+                                    key={`${rowIndex}-${colIndex}`}
                                     className={
-                                        selectedIndex?.coords[0] === rowIndex && selectedIndex?.coords[1] === colIndex
+                                        selectedNode?.coords[0] === rowIndex && selectedNode?.coords[1] === colIndex
                                             ? 'selected tensix no-click'
                                             : 'tensix no-click'
                                     }
@@ -308,11 +304,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             left: 0,
                                             width: '100%',
                                             height: '100%',
-
-                                            // background: 'rgba(255, 0, 0, 0.5)',
                                         }}
                                     >
                                         <TensixTransferRenderer
+                                            style={{
+                                                ...(highlightedTransfer !== null ? { opacity: 0.25 } : { opacity: 1 }),
+                                            }}
                                             width={SVG_SIZE}
                                             height={SVG_SIZE}
                                             data={getLines(transferForNoc)}
@@ -323,52 +320,117 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             )),
                         )}
                     </div>
+                    {highlightedTransfer !== null && (
+                        <div
+                            className='tensix-grid transfer-single'
+                            style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                display: 'grid',
+                                gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
+                                gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
+                                // backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                                zIndex: 1,
+                            }}
+                        >
+                            {highlightedTransfer?.route.map((point) => (
+                                <div
+                                    key={`${point[0]}-${point[1]}`}
+                                    className='tensix'
+                                    style={{
+                                        position: 'relative',
+                                        gridColumn: point[1] + 1,
+                                        gridRow: point[0] + 1,
+                                    }}
+                                >
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            width: '100%',
+                                            height: '100%',
+                                        }}
+                                    >
+                                        <TensixTransferRenderer
+                                            width={SVG_SIZE}
+                                            height={SVG_SIZE}
+                                            data={getLines([{ transfer: highlightedTransfer.id, nocId: point[2] }])}
+                                            // data={getLinkPoints([{ transfer: highlightedTransfer.id, nocId: point[2] }])}
+
+                                            isMulticolor={false}
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
                 <div className='side-data'>
                     <div>
-                        {selectedTransferList.length !== 0 && (
+                        {Object.keys(groupedTransfersByNoCID).length !== 0 && (
                             <>
-                                <h3>Active transfers through {selectedIndex?.coords.join('-')}</h3>
-                                <div>
-                                    {selectedTransferList.map((transfer) => (
-                                        <div
-                                            key={transfer.id}
-                                            style={{
-                                                display: 'flex',
-                                                gap: '5px',
-                                                alignContent: 'center',
-                                                alignItems: 'center',
-                                                padding: '5px',
-                                                margin: '5px',
-                                            }}
-                                            // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
-                                            onMouseOver={() => setSelectedTransfer(transfer.id)}
-                                            // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
-                                            onMouseOut={() => setSelectedTransfer(null)}
-                                        >
+                                <h3 style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    Active transfers through {selectedNode?.coords.join('-')}
+                                    <Button
+                                        minimal
+                                        icon={IconNames.CROSS}
+                                        onClick={() => setSelectedNode(null)}
+                                    />
+                                </h3>
+                                {Object.entries(groupedTransfersByNoCID).map(([nocId, localTransferList]) => (
+                                    <div
+                                        key={nocId}
+                                        style={{ marginBottom: '20px' }}
+                                    >
+                                        <h4>NOC ID: {nocId}</h4>
+                                        {localTransferList.map((transfer) => (
                                             <div
+                                                key={transfer.id}
                                                 style={{
-                                                    //
-                                                    backgroundColor: getRouteColor(transfer.id),
-                                                    width: '10px',
-                                                    height: '10px',
+                                                    display: 'flex',
+                                                    gap: '5px',
+                                                    alignContent: 'center',
+                                                    alignItems: 'center',
+                                                    padding: '5px',
+                                                    margin: '5px',
+                                                    transition: 'opacity 0.2s',
+                                                    cursor: 'pointer',
+                                                    opacity:
+                                                        highlightedTransfer == null || highlightedTransfer === transfer
+                                                            ? 1
+                                                            : 0.25,
                                                 }}
-                                            />
-                                            {transfer.id}
-                                            <div>
-                                                <span style={{ border: '1px solid red' }}>
-                                                    {transfer.src.join('-')}
-                                                </span>{' '}
-                                                -&gt;
-                                                <span style={{ border: '1px solid blue' }}>
-                                                    {transfer.dst.join('-')}
-                                                </span>
+                                                // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                                onMouseOver={() => setHighlightedTransfer(transfer)}
+                                                // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                                onMouseOut={() => setHighlightedTransfer(null)}
+                                            >
+                                                <div
+                                                    style={{
+                                                        backgroundColor: getRouteColor(transfer.id),
+                                                        width: '10px',
+                                                        height: '10px',
+                                                    }}
+                                                />
+                                                {transfer.id}
+                                                <div>
+                                                    <span style={{ border: '1px solid red' }}>
+                                                        {transfer.src.join('-')}
+                                                    </span>{' '}
+                                                    -&gt;
+                                                    <span style={{ border: '1px solid blue' }}>
+                                                        {transfer.dst.join('-')}
+                                                    </span>
+                                                </div>
+                                                <div>{formatSize(transfer.total_bytes)}B</div>
+                                                <div>{transfer.noc_event_type}</div>
+                                                <div>injection rate: {transfer.injection_rate.toFixed(2)}</div>
                                             </div>
-                                            <div>bytes: {transfer.total_bytes}</div>
-                                            <div>type: {transfer.noc_event_type}</div>
-                                        </div>
-                                    ))}
-                                </div>
+                                        ))}
+                                    </div>
+                                ))}
                             </>
                         )}
                     </div>

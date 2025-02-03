@@ -147,7 +147,7 @@ export const calculateLinkCongestionColor = (value: number, min: number = 0, isH
     if (value === -1) {
         return `rgb(100, 100, 100)`;
     }
-    const max = 120;
+    const max = 150;
     const normalizedVal = Math.min(value, max);
     const ratio = (normalizedVal - min) / (max - min);
     const intensity = Math.round(ratio * 255);

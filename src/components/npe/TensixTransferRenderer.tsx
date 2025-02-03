@@ -6,6 +6,7 @@ interface SVGTensixRendererProps {
     height: number;
     data: LinkPoints[];
     isMulticolor?: boolean;
+    style?: React.CSSProperties;
 }
 
 const TensixTransferRenderer: React.FC<SVGTensixRendererProps> = ({
@@ -13,6 +14,7 @@ const TensixTransferRenderer: React.FC<SVGTensixRendererProps> = ({
     height,
     data,
     isMulticolor = false,
+    style,
 }: SVGTensixRendererProps) => {
     const strokeLength = 5;
     const dashArray = [strokeLength, (data.length - 1) * strokeLength];
@@ -20,11 +22,12 @@ const TensixTransferRenderer: React.FC<SVGTensixRendererProps> = ({
         <svg
             width={width}
             height={height}
+            style={style}
         >
             <g>
                 {data.map((line, index) => {
                     return (
-                        <Fragment key={index}>
+                        <Fragment key={`${index}-${line.x1}-${line.y1}-${line.x2}-${line.y2}`}>
                             <line
                                 x1={line.x1}
                                 y1={line.y1}
