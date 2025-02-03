@@ -21,7 +21,8 @@ export const activeToastAtom = atom<number | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorAtom = atom<number | null>(null);
 
-export const operationRangeAtom = atomWithStorage<NumberRange | null>('operationRange', [0, 1]);
+export const operationRangeAtom = atomWithStorage<NumberRange>('operationRange', [0, 0]);
+// export const performanceRangeAtom = atomWithStorage<NumberRange>('performanceRange', [0, 0]);
 export const selectedRangeAtom = atom<NumberRange | null>(null);
 
 // This atom stores the file transfer progress data in localStorage (or sessionStorage)

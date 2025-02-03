@@ -3,14 +3,14 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Outlet } from 'react-router-dom';
-import { Classes, Icon, Tooltip } from '@blueprintjs/core';
+import { Button, Classes, Collapse, Icon, Tooltip } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { useAtom } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
 import classNames from 'classnames';
 import { IconNames } from '@blueprintjs/icons';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
 import { useGetDeviceOperationListPerf, useSession } from '../hooks/useAPI';
@@ -32,6 +32,7 @@ function Layout() {
     const [activeReport, setActiveReport] = useAtom(activeReportAtom);
     const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceTraceAtom);
     const { data: session } = useSession(activeReport, activePerformanceTrace);
+    const [sliderIsOpen, setSliderIsOpen] = useState(true);
 
     useEffect(() => {
         if (session?.active_report) {
@@ -137,11 +138,15 @@ function Layout() {
                             )}
                         </span>
                     )}
+
+                    <Button onClick={() => setSliderIsOpen(!sliderIsOpen)}>Close</Button>
                 </div>
 
-                <div className='slider'>
-                    <Range />
-                </div>
+                <Collapse isOpen={sliderIsOpen}>
+                    <div className='slider'>
+                        <Range />
+                    </div>
+                </Collapse>
             </footer>
         </div>
     );
