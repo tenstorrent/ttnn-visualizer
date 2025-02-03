@@ -147,7 +147,7 @@ function Layout() {
                             Selected: {selectedRange && `[${selectedRange[0]}, ${selectedRange[1]}]`}
                         </span>
                         <Button
-                            icon={sliderIsOpen ? IconNames.CARET_DOWN : IconNames.CARET_UP}
+                            icon={sliderIsOpen ? IconNames.CARET_UP : IconNames.CARET_DOWN}
                             onClick={() => setSliderIsOpen(!sliderIsOpen)}
                         >
                             Range
