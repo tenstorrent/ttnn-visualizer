@@ -14,7 +14,7 @@ import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
-import ROUTES from '../../definitions/routes';
+import ROUTES from '../../definitions/Routes';
 import isValidNumber from '../../functions/isValidNumber';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, selectedDeviceAtom, showHexAtom } from '../../store/app';
@@ -46,11 +46,10 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
         [buffersByOperation],
     );
 
+    const getMemorySize = () => (!isLoadingDevices && devices ? devices[deviceId].worker_l1_size : 0);
+
     // TODO: Multi device support
-    const memorySize = useMemo(
-        () => (!isLoadingDevices && devices ? devices[deviceId].worker_l1_size : 0),
-        [deviceId, devices, isLoadingDevices],
-    );
+    const memorySize = useMemo(getMemorySize, [deviceId, devices, isLoadingDevices]);
 
     const zoomedMemorySize = useMemo(() => {
         let minValue: undefined | number;
@@ -177,7 +176,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                                 >
                                     <BufferSummaryRow
                                         buffers={operation.buffers}
-                                        operationId={operation.id}
+                                        // operationId={operation.id}
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}

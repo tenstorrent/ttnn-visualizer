@@ -29,6 +29,7 @@ function PerfChart({ chartData, configuration, title }: PerfChartProps) {
             b: 50,
             t: 0,
         },
+        barmode: configuration.barMode,
         xaxis: {
             gridcolor: GRID_COLOUR,
             linecolor: LINE_COLOUR,

@@ -1,6 +1,6 @@
 import dataclasses
 from collections import defaultdict
-from typing import List, Optional
+from typing import List
 # SPDX-License-Identifier: Apache-2.0
 #
 # SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
@@ -191,7 +191,7 @@ def serialize_operation(
 
 
 def serialize_operation_buffers(operation: Operation, operation_buffers):
-    buffer_data = [dataclasses.asdict(b) for b in operation_buffers]
+    buffer_data = [b.to_dict() for b in operation_buffers]
     for b in buffer_data:
         b.pop("operation_id")
         b.update({"size": b.pop("max_size_per_bank")})
@@ -203,7 +203,7 @@ def serialize_operation_buffers(operation: Operation, operation_buffers):
 
 
 def serialize_devices(devices):
-    return [dataclasses.asdict(d) for d in devices]
+    return [d.to_dict() for d in devices]
 
 
 def serialize_operations_buffers(operations, buffers):
@@ -226,7 +226,7 @@ def serialize_tensors(
     results = []
     comparisons = comparisons_by_tensor_id(local_comparisons, global_comparisons)
     for tensor in tensors:
-        tensor_data = dataclasses.asdict(tensor)
+        tensor_data = tensor.to_dict()
         tensor_id = tensor_data.pop("tensor_id")
         tensor_data.update(
             {

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import path, { join } from 'path';
 import react from '@vitejs/plugin-react';
 // @ts-expect-error don't have types declaration for node-build-scripts
@@ -12,41 +12,46 @@ import { legacySassSvgInlinerFactory } from './src/libs/blueprintjs/legacySassSv
 import { version } from './package.json';
 
 // https://vitejs.dev/config/
-export default defineConfig({
-    build: {
-        outDir: './backend/ttnn_visualizer/static/',
-        emptyOutDir: true,
-    },
-    define: {
-        'import.meta.env.APP_VERSION': JSON.stringify(version),
-    },
-    plugins: [react()],
-    server: {
-        proxy: {
-            '/api': 'http://localhost:8000',
+export default defineConfig(({ mode }) => {
+    const env = loadEnv(mode, process.cwd(), '');
+
+    return {
+        build: {
+            outDir: './backend/ttnn_visualizer/static/',
+            emptyOutDir: true,
         },
-    },
-    resolve: {
-        alias: {
-            'styles/': `${path.resolve(__dirname, 'src/scss')}/`,
-            '@blueprintjs': path.resolve(__dirname, './node_modules/@blueprintjs'),
+        define: {
+            'import.meta.env.APP_VERSION': JSON.stringify(version),
+            'import.meta.env.VITE_API_ROOT': JSON.stringify(env.VITE_API_ROOT) ?? '"http://localhost:8000/api"',
         },
-    },
-    css: {
-        devSourcemap: true,
-        preprocessorOptions: {
-            scss: {
-                functions: {
-                    'svg-icon($path, $selectors: null)': legacySassSvgInlinerFactory(
-                        join(__dirname, '/src/libs/blueprintjs/icons'),
-                        {
-                            optimize: true,
-                            encodingFormat: 'uri',
-                        },
-                    ),
-                },
-                loadPaths: sassNodeModulesLoadPaths,
+        plugins: [react()],
+        server: {
+            proxy: {
+                '/api': 'http://localhost:8000',
             },
         },
-    },
+        resolve: {
+            alias: {
+                'styles/': `${path.resolve(__dirname, 'src/scss')}/`,
+                '@blueprintjs': path.resolve(__dirname, './node_modules/@blueprintjs'),
+            },
+        },
+        css: {
+            devSourcemap: true,
+            preprocessorOptions: {
+                scss: {
+                    functions: {
+                        'svg-icon($path, $selectors: null)': legacySassSvgInlinerFactory(
+                            join(__dirname, '/src/libs/blueprintjs/icons'),
+                            {
+                                optimize: true,
+                                encodingFormat: 'uri',
+                            },
+                        ),
+                    },
+                    loadPaths: sassNodeModulesLoadPaths,
+                },
+            },
+        },
+    };
 });

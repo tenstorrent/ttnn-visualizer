@@ -10,37 +10,53 @@ import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 
 interface PerfDeviceKernelRuntimeChartProps {
     data?: RowData[];
+    maxCores: number;
 }
 
-function PerfDeviceKernelRuntimeChart({ data }: PerfDeviceKernelRuntimeChartProps) {
-    const filteredOps = data?.filter((row) => row?.['CORE COUNT'] && row?.['DEVICE KERNEL DURATION [ns]']);
-
-    const chartData = useMemo(
+function PerfDeviceKernelRuntimeChart({ data, maxCores }: PerfDeviceKernelRuntimeChartProps) {
+    const chartDataCoreCount = useMemo(
         () =>
             ({
-                x: filteredOps?.map((row) => row['CORE COUNT']),
-                y: filteredOps?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
-                mode: 'markers',
-                type: 'scatter',
+                x: data?.map((_row, index) => index + 1),
+                y: data?.map((row) => row['CORE COUNT']),
+                type: 'bar',
+                hovertemplate: `Operation: %{x}<br />Cores: %{y}`,
                 name: '',
-                marker: {
-                    size: 10,
-                },
-                hovertemplate: `Cores: %{x}<br />Duration: %{y} ns`,
             }) as Partial<PlotData>,
-        [filteredOps],
+        [data],
+    );
+
+    const chartDataDuration = useMemo(
+        () =>
+            ({
+                x: data?.map((_row, index) => index + 1),
+                y: data?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
+                yaxis: 'y2',
+                hovertemplate: `Operation: %{x}<br />Device Kernel Duration: %{y} ns`,
+                name: '',
+            }) as Partial<PlotData>,
+        [data],
     );
 
     const configuration: PlotConfiguration = {
+        margin: {
+            l: 100,
+            r: 0,
+            b: 50,
+            t: 0,
+        },
         xAxis: {
-            title: {
-                text: 'Core Count',
-            },
+            title: { text: 'Operation' },
+            range: [0, data?.length ?? 0],
         },
         yAxis: {
-            title: {
-                text: 'Device Kernel Duration (ns)',
-            },
+            title: { text: 'Core Count' },
+            tickformat: 'd',
+            hoverformat: ',.2r',
+            range: [0, maxCores],
+        },
+        yAxis2: {
+            title: { text: 'Device Kernel Duration (ns)' },
             tickformat: 'd',
             hoverformat: ',.2r',
         },
@@ -48,8 +64,8 @@ function PerfDeviceKernelRuntimeChart({ data }: PerfDeviceKernelRuntimeChartProp
 
     return (
         <PerfChart
-            title='Device Kernel Runtime vs Core Count'
-            chartData={[chartData]}
+            title='Core Count + Device Kernel Runtime'
+            chartData={[chartDataCoreCount, chartDataDuration]}
             configuration={configuration}
         />
     );

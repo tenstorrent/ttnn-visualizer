@@ -4,9 +4,11 @@
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 from ttnn_visualizer.utils import str_to_bool
 
+load_dotenv()
 
 class DefaultConfig(object):
     # General Settings
@@ -24,7 +26,7 @@ class DefaultConfig(object):
     STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0
 
-    LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "false"))
+    LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "true"))
 
     # File Name Configs
     TEST_CONFIG_FILE = "config.json"

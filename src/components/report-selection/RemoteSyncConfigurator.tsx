@@ -17,6 +17,7 @@ import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import createToastNotification from '../../functions/createToastNotification';
+import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
@@ -112,6 +113,22 @@ const RemoteSyncConfigurator: FC = () => {
     const isUsingRemoteQuerying = remote.persistentState.selectedConnection?.useRemoteQuerying;
     const isLoading = isSyncingReportFolder || isSyncingPerformanceFolder;
     const isDisabled = isFetching || isLoading;
+
+    const updateReportSelection = (fileName: string) => {
+        queryClient.clear();
+        setReportLocation('remote');
+        setSelectedDevice(DEFAULT_DEVICE_ID);
+        setActiveReport(fileName);
+        createToastNotification('Active report data', fileName);
+    };
+
+    const updatePerformanceSelection = (fileName: string) => {
+        queryClient.clear();
+        setReportLocation('remote');
+        setSelectedDevice(DEFAULT_DEVICE_ID);
+        setActivePerformanceTrace(fileName);
+        createToastNotification('Active performance data', fileName);
+    };
 
     return (
         <>
@@ -247,11 +264,8 @@ const RemoteSyncConfigurator: FC = () => {
 
                             if (response.status === 200) {
                                 const fileName = folder.testName;
-                                queryClient.clear();
-                                setReportLocation('remote');
-                                setSelectedDevice(0);
-                                setActiveReport(fileName);
-                                createToastNotification('Active report data', fileName);
+
+                                updateReportSelection(fileName);
                             }
                         }
                     }}
@@ -310,12 +324,14 @@ const RemoteSyncConfigurator: FC = () => {
                                             );
 
                                             if (response.status === 200) {
-                                                const fileName = selectedReportFolder.testName;
-                                                queryClient.clear();
-                                                setReportLocation('remote');
-                                                setSelectedDevice(0);
-                                                setActiveReport(fileName);
-                                                createToastNotification('Active performance data', fileName);
+                                                const reportFileName = selectedReportFolder.testName;
+                                                const performanceFileName = selectedPerformanceFolder?.testName;
+
+                                                updateReportSelection(reportFileName);
+
+                                                if (performanceFileName) {
+                                                    updatePerformanceSelection(performanceFileName);
+                                                }
                                             }
                                         }
                                     }
@@ -350,12 +366,9 @@ const RemoteSyncConfigurator: FC = () => {
                                 );
 
                                 if (response.status === 200) {
-                                    const fileName = folder?.testName;
-                                    queryClient.clear();
-                                    setReportLocation('remote');
-                                    setSelectedDevice(0);
-                                    setActivePerformanceTrace(fileName);
-                                    createToastNotification('Active performance data', fileName);
+                                    const fileName = folder.testName;
+
+                                    updatePerformanceSelection(fileName);
                                 }
                             }
                         }}
@@ -414,12 +427,9 @@ const RemoteSyncConfigurator: FC = () => {
                                                     );
 
                                                     if (response.status === 200) {
-                                                        const fileName = selectedPerformanceFolder?.testName;
-                                                        queryClient.clear();
-                                                        setReportLocation('remote');
-                                                        setSelectedDevice(0);
-                                                        setActivePerformanceTrace(fileName);
-                                                        createToastNotification('Active performance data', fileName);
+                                                        const fileName = selectedPerformanceFolder.testName;
+
+                                                        updatePerformanceSelection(fileName);
                                                     }
                                                 }
                                             }

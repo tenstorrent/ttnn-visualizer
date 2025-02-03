@@ -1,48 +1,10 @@
 # Contributing
 
-## React + TypeScript + Vite {#react-typescript-vite}
+**NOTE:** If you're just looking to run the app, [using the wheel](https://github.com/tenstorrent/ttnn-visualizer/blob/dev/docs/getting-started.md) is recommended as it is very simple to install and run.
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Running the app from source
 
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md)
-  uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast
-  Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
-
-- Configure the top-level `parserOptions` property like this:
-
-```js
-export default {
-    // other rules...
-    parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
-        project: ['./tsconfig.json', './tsconfig.node.json'],
-        tsconfigRootDir: __dirname,
-    },
-}
-```
-
-- Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked`
-  or `plugin:@typescript-eslint/strict-type-checked`
-- Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and
-  add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
-
-## Running the app
-
-### Environment
-
-Copy the provided `.env.sample` file to `.env` and change any necessary options. See the section on options
-for more details on the available configuration options.
-
-### Frontend
+### Front end
 
 ```shell
 nvm use
@@ -50,7 +12,7 @@ npm install
 npm run dev
 ```
 
-### Backend
+### Back end
 
 create env
 
@@ -82,13 +44,29 @@ Starting with hot reload:
 npm run flask:start-debug
 ```
 
-access on localhost:8000/
+When both the frontend and backend are running you can access the app on [http://localhost:5173](http://localhost:5173) or whatever **Local** uri is printed in your terminal where you ran `npm run dev`.
 
-### Development
+### Environment
 
-Copy report contents to `backend/data/active` - IE - `backend/data/active/db.sqlite`
+The application should run out of the box, but should you need to you can adjust certain values in the front end or back end code using a `.env` file. See `.env.sample` for some of the key variables available.
 
 ## Troubleshooting
+
+### Fix for 'no keys found' error
+
+<img width="492" alt="Screenshot 2025-01-30 at 1 55 10 PM" src="https://github.com/user-attachments/assets/3f7f9983-f92d-4900-9321-9d46c6355c36" />
+
+Check your local ssh agent has your ssh key by running:
+
+```shell
+ssh-add -L
+```
+
+If your key isn't present, run the following on your local machine:
+
+```shell
+ssh-add
+```
 
 ### Fix for python random errors not finding modules
 

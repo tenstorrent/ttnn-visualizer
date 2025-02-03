@@ -206,10 +206,10 @@ export const color_row = (op_data: ProcessedRow, min_percentage: number) => {
             op_data.Bound.color = 'red';
         }
 
-        // Dispatch time >6.5us?
-        const dispatch_time = op_data['Dispatch Time'].raw_value as number | null;
+        // Op-to-Op Gap >6.5us?
+        const dispatch_time = op_data['Op-to-Op Gap'].raw_value as number | null;
         if (dispatch_time != null && dispatch_time > 6.5) {
-            op_data['Dispatch Time'].color = 'red';
+            op_data['Op-to-Op Gap'].color = 'red';
         }
 
         // Math Fidelity evaluation
@@ -257,4 +257,13 @@ export const mergeMultideviceRows = (rows: RowData[]): RowData[] => {
             (currRow['DEVICE FW DURATION [ns]'] || 0) > (bestRow['DEVICE FW DURATION [ns]'] || 0) ? currRow : bestRow,
         );
     });
+};
+export const getUniqueDeviceIDs = (rows: RowData[]): number[] => {
+    const ids = new Set<number>();
+    for (const row of rows) {
+        if (row['DEVICE ID'] !== undefined) {
+            ids.add(Number(row['DEVICE ID']));
+        }
+    }
+    return [...ids];
 };

@@ -7,8 +7,8 @@ export const toHex = (num: number): string => {
     return `0x${(num >>> 0).toString(16).toUpperCase()}`;
 };
 
-export const formatSize = (number: number): string => {
-    return new Intl.NumberFormat('en-US').format(number);
+export const formatSize = (number: number, decimals?: number): string => {
+    return new Intl.NumberFormat('en-US', { maximumFractionDigits: decimals }).format(number);
 };
 
 /**
@@ -83,4 +83,14 @@ export const isEqual = <T>(value: T, other: T): boolean => {
         }
         return isEqual(valueObj[key], otherObj[key]);
     });
+};
+export const toReadableShape = (input: string) => {
+    const match = input.match(/Shape\((\[.*\])\)/);
+    if (!match) {
+        return input;
+    }
+    return match[1];
+};
+export const toReadableType = (input: string) => {
+    return input.replace(/^DataType\./, '');
 };

@@ -5,47 +5,38 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { RowData } from '../../definitions/PerfTable';
-import { DeviceArchitecture } from '../../model/APIData';
 import getCoreUtilization from '../../functions/getCoreUtilization';
-import getCoreCount from '../../functions/getCoreCount';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 
 interface PerfCoreCountUtilizationChartProps {
     data?: RowData[];
-    architecture: DeviceArchitecture;
+    maxCores: number;
 }
 
-const DESIRED_OP_CODES = ['matmul', 'conv'];
-
-function PerfCoreCountUtilizationChart({ data, architecture }: PerfCoreCountUtilizationChartProps) {
-    const filteredOps = useMemo(
-        () => data?.filter((row) => isDesiredOperation(row?.['OP CODE'] as string | undefined)) ?? [],
-        [data],
-    );
-
+function PerfCoreCountUtilizationChart({ data, maxCores }: PerfCoreCountUtilizationChartProps) {
     const chartDataDuration = useMemo(
         () =>
             ({
-                x: filteredOps?.map((_row, index) => index + 1),
-                y: filteredOps?.map((row) => row['CORE COUNT']),
+                x: data?.map((_row, index) => index + 1),
+                y: data?.map((row) => row['CORE COUNT']),
                 type: 'bar',
-                hovertemplate: `Operation: %{x}<br />Core Count: %{y}`,
+                hovertemplate: `Operation: %{x}<br />Cores: %{y}`,
                 name: '',
             }) as Partial<PlotData>,
-        [filteredOps],
+        [data],
     );
 
     const chartDataUtilization = useMemo(
         () =>
             ({
-                x: filteredOps?.map((_row, index) => index + 1),
-                y: filteredOps?.map((row) => getCoreUtilization(row, architecture)).filter((value) => value !== -1),
+                x: data?.map((_row, index) => index + 1),
+                y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
                 yaxis: 'y2',
                 hovertemplate: `Operation: %{x}<br />Utilization: %{y}`,
                 name: '',
             }) as Partial<PlotData>,
-        [filteredOps, architecture],
+        [data, maxCores],
     );
 
     const configuration: PlotConfiguration = {
@@ -57,13 +48,13 @@ function PerfCoreCountUtilizationChart({ data, architecture }: PerfCoreCountUtil
         },
         xAxis: {
             title: { text: 'Operation' },
-            range: [0, filteredOps.length],
+            range: [0, data?.length ?? 0],
         },
         yAxis: {
             title: { text: 'Core Count' },
             tickformat: 'd',
             hoverformat: ',.2r',
-            range: [0, getCoreCount(architecture)],
+            range: [0, maxCores],
         },
         yAxis2: {
             title: { text: 'Utilization (%)' },
@@ -75,17 +66,11 @@ function PerfCoreCountUtilizationChart({ data, architecture }: PerfCoreCountUtil
 
     return (
         <PerfChart
-            title='Operation Core Count + Utilization (MatMul)'
+            title='Core Count + Utilization'
             chartData={[chartDataDuration, chartDataUtilization]}
             configuration={configuration}
         />
     );
 }
-
-const isDesiredOperation = (operation?: string): boolean => {
-    const opCode = operation?.toLowerCase();
-
-    return DESIRED_OP_CODES.some((code) => opCode?.includes(code));
-};
 
 export default PerfCoreCountUtilizationChart;

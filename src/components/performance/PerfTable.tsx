@@ -12,11 +12,13 @@ import {
     color_row,
     evaluate_fidelity,
     formatCell,
+    getUniqueDeviceIDs,
     get_datatype_size,
     mergeMultideviceRows,
     tflops_per_core,
 } from '../../functions/perfFunctions';
 import { Cell, MathFidelity, ProcessedRow, RowData } from '../../definitions/PerfTable';
+import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
 
 const analyze_matmul = (row: RowData) => {
     const input_0_from_dram = String(row.INPUT_0_MEMORY || '').includes('DRAM');
@@ -167,11 +169,12 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
 
         return {
             ID: { raw_value: null },
+            OP: { raw_value: null },
             'Total %': { raw_value: null },
             Bound: bound,
             'OP Code': { raw_value: op_code },
             'Device Time': { raw_value: device_time_val, unit: 'µs', decimals: 0 },
-            'Dispatch Time': { raw_value: dispatch_time_val, unit: 'µs', decimals: 0 },
+            'Op-to-Op Gap': { raw_value: dispatch_time_val, unit: 'µs', decimals: 0 },
             Cores: { raw_value: Number(row['CORE COUNT']) },
             DRAM: dram_speed,
             'DRAM %': dram_percentage,
@@ -190,11 +193,12 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
     }
     return {
         ID: { raw_value: null },
+        OP: { raw_value: null },
         'Total %': { raw_value: null },
         Bound: bound,
         'OP Code': { raw_value: op_code_val },
         'Device Time': { raw_value: device_time_val || null, unit: 'µs', decimals: 0 },
-        'Dispatch Time': { raw_value: dispatch_time_val, unit: 'µs', decimals: 0 },
+        'Op-to-Op Gap': { raw_value: dispatch_time_val, unit: 'µs', decimals: 0 },
         Cores: { raw_value: Number(row['CORE COUNT']) || null },
         DRAM: dram_speed,
         'DRAM %': dram_percentage,
@@ -215,13 +219,13 @@ const analyze_op = (row: RowData, prevRow: RowData | null): ProcessedRow => {
 const add_derived_columns = (rows: ProcessedRow[]) => {
     const total_duration = rows.reduce(
         (acc, r) =>
-            acc + ((r['Device Time'].raw_value as number) || 0) + ((r['Dispatch Time'].raw_value as number) || 0),
+            acc + ((r['Device Time'].raw_value as number) || 0) + ((r['Op-to-Op Gap'].raw_value as number) || 0),
         0,
     );
 
     rows.forEach((r) => {
         const device_time = (r['Device Time'].raw_value as number) || 0;
-        const dispatch_time = (r['Dispatch Time'].raw_value as number) || 0;
+        const dispatch_time = (r['Op-to-Op Gap'].raw_value as number) || 0;
         if (total_duration > 0) {
             r['Total %'] = {
                 raw_value: ((device_time + dispatch_time) / total_duration) * 100,
@@ -252,16 +256,6 @@ const add_derived_columns = (rows: ProcessedRow[]) => {
     });
 };
 
-const getUniqueDeviceIDs = (rows: RowData[]): number[] => {
-    const ids = new Set<number>();
-    for (const row of rows) {
-        if (row['DEVICE ID'] !== undefined) {
-            ids.add(Number(row['DEVICE ID']));
-        }
-    }
-    return [...ids];
-};
-
 // The main React component
 interface PerformanceReportProps {
     data?: RowData[];
@@ -270,16 +264,19 @@ interface PerformanceReportProps {
 
 export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercentage = 0.5 }) => {
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
-    const [showHostOps, setShowHostOps] = useState<boolean>(false);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, setIsMultiDevice] = useState<boolean>(false);
+    const opIdsMap = useOptoPerfIdFiltered();
 
     const processedRows = useMemo(() => {
         if (data === undefined) {
             return [];
         }
+
         let df = data.slice();
+
+        df = df.filter((r) => !r['OP CODE']?.toString().includes('(torch)') && !(r['OP CODE']?.toString() === ''));
 
         df.forEach((r, index) => {
             r.ORIGINAL_ID = index + 2;
@@ -296,17 +293,14 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
             df = mergeMultideviceRows(df);
         }
 
-        // Filter out host ops if we should
-        if (!showHostOps) {
-            df = df.filter((r) => !r['OP CODE']?.toString().includes('(torch)') && !(r['OP CODE']?.toString() === ''));
-        }
-
         let rows: ProcessedRow[] = [];
         let prevRow: RowData | null = null;
 
         df.forEach((r) => {
             const opData = analyze_op(r, prevRow);
+            const linkedObj = opIdsMap.find((op) => op.perfId === r.ORIGINAL_ID);
             opData.ID.raw_value = String(r.ORIGINAL_ID);
+            opData.OP.raw_value = linkedObj?.opId || null;
             rows.push(opData);
             prevRow = r;
         });
@@ -316,7 +310,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
 
         if (hiliteHighDispatch) {
             rows.forEach((op_data: ProcessedRow) => {
-                const val = op_data['Dispatch Time'].raw_value;
+                const val = op_data['Op-to-Op Gap'].raw_value;
                 const highDispatch = val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
                 op_data.Slow = {
                     raw_value: null,
@@ -328,15 +322,16 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         }
 
         return rows;
-    }, [data, mergeDeviceData, minPercentage, showHostOps, hiliteHighDispatch]);
+    }, [data, opIdsMap, mergeDeviceData, hiliteHighDispatch, minPercentage]);
 
     const baseHeaders = [
         'ID',
+        'OP',
         'Total %',
         'Bound',
         'OP Code',
         'Device Time',
-        'Dispatch Time',
+        'Op-to-Op Gap',
         'Cores',
         'DRAM',
         'DRAM %',
@@ -352,7 +347,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         const highDispatchOps = rows
             .map((op_data: ProcessedRow, idx: number) => [idx + 1, op_data] as [number, ProcessedRow])
             .filter(([_, op_data]) => {
-                const val = op_data['Dispatch Time'].raw_value;
+                const val = op_data['Op-to-Op Gap'].raw_value;
                 return val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
             });
 
@@ -362,17 +357,17 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
 
         // Compute the max dispatch overhead
         const max_dispatch_overhead = highDispatchOps.reduce((acc, [_, op_data]) => {
-            const val = op_data['Dispatch Time'].raw_value as number;
+            const val = op_data['Op-to-Op Gap'].raw_value as number;
             return acc + (val - 6);
         }, 0);
 
-        // Compute total_duration as sum of device times + dispatch times
+        // Compute total_duration as sum of device times + Op-to-Op Gaps
         const total_device_time = rows.reduce((acc, r) => {
             const val = r['Device Time'].raw_value;
             return acc + (typeof val === 'number' ? val : 0);
         }, 0);
         const total_dispatch_time = rows.reduce((acc, r) => {
-            const val = r['Dispatch Time'].raw_value;
+            const val = r['Op-to-Op Gap'].raw_value;
             return acc + (typeof val === 'number' ? val : 0);
         }, 0);
 
@@ -390,6 +385,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
             </div>
         );
     };
+
     return (
         <>
             <Switch
@@ -399,12 +395,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                 checked={mergeDeviceData && isMultiDevice}
                 disabled={!isMultiDevice}
             />
-            <Switch
-                className='expand-button'
-                label={showHostOps ? 'Hide host ops' : 'Show host ops'}
-                onChange={() => setShowHostOps(!showHostOps)}
-                checked={showHostOps}
-            />
+
             <Switch
                 className='expand-button'
                 label={provideMatmulAdvice ? 'Hide Matmul optimization analysis' : 'Show Matmul optimization analysis'}

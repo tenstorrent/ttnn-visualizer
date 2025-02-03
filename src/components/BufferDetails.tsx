@@ -5,8 +5,8 @@
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import { Operation, OperationDescription, Tensor } from '../model/APIData';
-import { toHex } from '../functions/math';
-import ROUTES from '../definitions/routes';
+import { toHex, toReadableShape, toReadableType } from '../functions/math';
+import ROUTES from '../definitions/Routes';
 import 'styles/components/BufferDetails.scss';
 import getDeallocationOperation from '../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../functions/getNextAllocationOperation';
@@ -31,6 +31,11 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
         <>
             <table className='ttnn-table analysis-table'>
                 <tbody>
+                    <tr>
+                        <th>Tensor Id</th>
+                        <td>{tensor.id}</td>
+                    </tr>
+
                     <tr>
                         <th>Last used</th>
                         <td>
@@ -72,8 +77,13 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                     </tr>
 
                     <tr>
+                        <th>Shape</th>
+                        <td>{toReadableShape(shape)}</td>
+                    </tr>
+
+                    <tr>
                         <th>DataType</th>
-                        <td>{dtype}</td>
+                        <td>{toReadableType(dtype)}</td>
                     </tr>
 
                     <tr>
@@ -90,11 +100,6 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                               />
                           ))
                         : null}
-
-                    <tr>
-                        <th>Shape</th>
-                        <td>{shape}</td>
-                    </tr>
 
                     {tensor.comparison ? (
                         <>
@@ -142,7 +147,7 @@ function getLastOperation(lastOperationId: number, operations: Operation[], tens
 
     return lastOperation ? (
         <Link to={`${ROUTES.OPERATIONS}/${lastOperation.id}`}>
-            {lastOperation?.id} {lastOperation.name}
+            {lastOperation?.id} {lastOperation.name} ({lastOperation.operationFileIdentifier})
         </Link>
     ) : null;
 }
