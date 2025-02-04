@@ -12,6 +12,7 @@ import { activePerformanceTraceAtom, activeReportAtom, operationRangeAtom, selec
 import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
+import 'styles/components/FooterInfobar.scss';
 
 const MAX_TITLE_LENGTH = 20;
 
@@ -116,6 +117,7 @@ function FooterInfobar() {
             </div>
 
             <Collapse
+                className='slider-container'
                 isOpen={sliderIsOpen}
                 keepChildrenMounted
             >
