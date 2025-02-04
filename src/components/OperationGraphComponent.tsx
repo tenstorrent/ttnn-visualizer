@@ -259,6 +259,8 @@ const OperationGraph: React.FC<{
         [networkRef, scale],
     );
 
+    const focusedNode = currentOperationId ?? operationList[0].id;
+
     return (
         <div className='operation-graph-component'>
             <div className='operation-graph-header'>
@@ -278,14 +280,14 @@ const OperationGraph: React.FC<{
                     <Tooltip
                         disabled={isLoading}
                         placement={PopoverPosition.TOP}
-                        content={`Center on operation ${currentOperationId}`}
+                        content={`Center on operation ${focusedNode}`}
                     >
                         <Button
                             outlined
-                            onClick={() => focusOnNode(currentOperationId)}
+                            onClick={() => focusOnNode(focusedNode)}
                             disabled={isLoading}
                         >
-                            {currentOperationId}
+                            {focusedNode}
                         </Button>
                     </Tooltip>
                     <Tooltip
