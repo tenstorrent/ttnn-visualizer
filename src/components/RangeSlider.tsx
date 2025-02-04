@@ -67,15 +67,16 @@ function Range() {
                     value={selectedRange[0].toString()}
                     onValueChange={(value) => setSelectedRange([parseInt(value, 10), selectedRange[1]])}
                     fill={false}
-                    small
                     disabled={isOperationDetails}
+                    small
                 />
+
                 <InputGroup
                     value={selectedRange[1].toString()}
                     onValueChange={(value) => setSelectedRange([selectedRange[0], parseInt(value, 10)])}
                     fill={false}
-                    small
                     disabled={isOperationDetails}
+                    small
                 />
             </div>
 
@@ -108,10 +109,8 @@ function Range() {
                     <Button
                         icon={IconNames.RESET}
                         onClick={() => setSelectedRange([min, max])}
-                        minimal
-                        outlined
-                        small
                         disabled={isOperationDetails}
+                        small
                     />
                 </Tooltip>
             </div>

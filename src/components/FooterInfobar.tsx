@@ -104,11 +104,12 @@ function FooterInfobar() {
                                 Selected: {selectedRange && `${selectedRange[0]} - ${selectedRange[1]}`}
                             </span>
                         )}
+
                         <Button
                             icon={sliderIsOpen ? IconNames.CARET_DOWN : IconNames.CARET_UP}
                             onClick={() => setSliderIsOpen(!sliderIsOpen)}
-                            small
                             disabled={isOperationDetails}
+                            small
                         >
                             Range
                         </Button>

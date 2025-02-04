@@ -41,11 +41,4 @@ $alt-axis-padding: 20px;
         flex-grow: 0;
         flex-shrink: 1;
     }
-
-    // Stops the label text from wrapping onto two lines
-    .bp5-slider-handle {
-        > .bp5-slider-label {
-            // white-space: nowrap;
-        }
-    }
 }
