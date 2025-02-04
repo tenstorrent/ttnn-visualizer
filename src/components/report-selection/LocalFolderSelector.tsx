@@ -280,36 +280,4 @@ const LocalFolderOptions: FC = () => {
 
 const getReportName = (files: FileList) => files[0].webkitRelativePath.split('/')[0];
 
-// const getPerformanceRange = async (operationRange: NumberRange | null): Promise<NumberRange> => {
-//     if (operationRange?.[0] !== 0 && operationRange?.[1] !== 0) {
-//         return [0, 0];
-//     }
-
-//     const data = await fetchPerformanceDataRaw();
-
-//     if (!data?.data || data.data.length === 0) {
-//         return [0, 0];
-//     }
-//     // @ts-expect-error this should be just fine
-//     let df: RowData[] = (data.data.slice() as RowData[]).filter(
-//         (r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE'] === ''),
-//     );
-
-//     df.forEach((r, index) => {
-//         r.ORIGINAL_ID = index + 2;
-//     });
-
-//     if (df.length > 0 && 'HOST START TS' in df[0]) {
-//         df = df.sort((a, b) => Number(a['HOST START TS'] || 0) - Number(b['HOST START TS'] || 0));
-//     }
-
-//     const uniqueDeviceIDs = getUniqueDeviceIDs(df);
-
-//     if (uniqueDeviceIDs.length > 1) {
-//         df = mergeMultideviceRows(df);
-//     }
-
-//     return [df[0].ORIGINAL_ID ?? 0, df[df.length - 1].ORIGINAL_ID ?? 0];
-// };
-
 export default LocalFolderOptions;

@@ -92,7 +92,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
     return defaultOperationDetailsData;
 };
 
-export const fetchOperations = async (deviceId?: number): Promise<OperationDescription[]> => {
+const fetchOperations = async (deviceId?: number): Promise<OperationDescription[]> => {
     const tensorList: Map<number, Tensor> = new Map<number, Tensor>();
     const { data: operationList } = await axiosInstance.get<OperationDescription[]>('/api/operations', {
         params: {

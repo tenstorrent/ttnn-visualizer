@@ -18,7 +18,6 @@ const RANGE_STEP = 25;
 function Range() {
     const { data: operations } = useOperationsList();
     const setOperationRange = useSetAtom(operationRangeAtom);
-    // const performanceRange = useAtomValue(performanceRangeAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedRangeAtom);
     const location = useLocation();
 

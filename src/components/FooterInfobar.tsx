@@ -1,16 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import classNames from 'classnames';
 import { Button, Collapse, Icon, NumberRange, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
-import {
-    activePerformanceTraceAtom,
-    activeReportAtom,
-    operationRangeAtom,
-    performanceRangeAtom,
-    selectedRangeAtom,
-} from '../store/app';
+import { activePerformanceTraceAtom, activeReportAtom, operationRangeAtom, selectedRangeAtom } from '../store/app';
 import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
@@ -21,7 +19,6 @@ function FooterInfobar() {
     const [sliderIsOpen, setSliderIsOpen] = useState(true);
     const selectedRange = useAtomValue(selectedRangeAtom);
     const operationRange = useAtomValue(operationRangeAtom);
-    const performanceRange = useAtomValue(performanceRangeAtom);
     const activeReport = useAtomValue(activeReportAtom);
     const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
     const location = useLocation();
@@ -99,7 +96,7 @@ function FooterInfobar() {
                     )}
                 </div>
 
-                {(operationRange || performanceRange) && (
+                {operationRange && (
                     <div className='slider-controls'>
                         {!sliderIsOpen && !hasRangeSelected(selectedRange, operationRange) && (
                             <span className='current-range'>
