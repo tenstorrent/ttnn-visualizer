@@ -118,7 +118,10 @@ function FooterInfobar() {
                 )}
             </div>
 
-            <Collapse isOpen={sliderIsOpen}>
+            <Collapse
+                isOpen={sliderIsOpen}
+                keepChildrenMounted
+            >
                 <Range />
             </Collapse>
         </footer>

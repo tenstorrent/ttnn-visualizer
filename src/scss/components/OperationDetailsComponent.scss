@@ -8,7 +8,7 @@
     .chart-controls {
         display: flex;
         gap: 10px;
-        align-items: center;
+        align-items: flex-start;
         margin-bottom: 20px;
 
         .bp5-control {
@@ -106,7 +106,6 @@
     }
 
     .arguments-wrapper {
-        padding-top: 20px;
         display: flex;
         flex-wrap: wrap;
         gap: 20px;

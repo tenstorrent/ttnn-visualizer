@@ -34,7 +34,7 @@ enum SortingOptions {
 const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { data: fetchedOperations, error, isLoading } = useOperationsList();
+    const { data: fetchedOperations, error, isLoading } = useOperationsList(true);
     const perfData = useGetDeviceOperationListPerf();
     const scrollElementRef = useRef<HTMLDivElement>(null);
 

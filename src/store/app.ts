@@ -21,7 +21,7 @@ export const activeToastAtom = atom<number | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorAtom = atom<number | null>(null);
 
-export const operationRangeAtom = atomWithStorage<NumberRange | null>('operationRange', null);
+export const operationRangeAtom = atom<NumberRange | null>(null);
 export const performanceRangeAtom = atomWithStorage<NumberRange | null>('performanceRange', null);
 export const selectedRangeAtom = atom<NumberRange | null>(null);
 

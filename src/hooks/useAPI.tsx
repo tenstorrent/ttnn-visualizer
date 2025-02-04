@@ -265,7 +265,7 @@ const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
     });
 };
 
-export const useOperationsList = () => {
+export const useOperationsList = (useRange?: boolean) => {
     const range = useAtomValue(selectedRangeAtom);
 
     const response = useQuery<OperationDescription[], AxiosError>({
@@ -275,7 +275,7 @@ export const useOperationsList = () => {
     });
 
     return useMemo(() => {
-        if (response.data && range) {
+        if (useRange && response.data && range) {
             response.data = response.data.filter((operation) => operation.id >= range[0] && operation.id <= range[1]);
         }
 
@@ -570,7 +570,7 @@ export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> 
     return [defaultTensorData];
 };
 
-export const useTensors = (deviceId?: number | null) => {
+export const useTensors = (useRange?: boolean, deviceId?: number | null) => {
     const range = useAtomValue(selectedRangeAtom);
 
     const response = useQuery<Tensor[], AxiosError>({
@@ -580,7 +580,7 @@ export const useTensors = (deviceId?: number | null) => {
     });
 
     return useMemo(() => {
-        if (response.data && range) {
+        if (response.data && range && useRange) {
             response.data = response.data.filter(
                 (tensor) =>
                     tensor.consumers.some((id) => id >= range[0] && id <= range[1]) ||
@@ -618,7 +618,7 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
     });
 };
 
-export const useBuffers = (bufferType: BufferType) => {
+export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     const range = useAtomValue(selectedRangeAtom);
 
     const response = useQuery({
@@ -627,7 +627,7 @@ export const useBuffers = (bufferType: BufferType) => {
     });
 
     return useMemo(() => {
-        if (response.data && range) {
+        if (response.data && range && useRange) {
             response.data = response.data.filter((operation) => operation.id >= range[0] && operation.id <= range[1]);
         }
 

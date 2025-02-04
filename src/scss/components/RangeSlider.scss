@@ -9,7 +9,7 @@ $alt-axis-padding: 20px;
     display: flex;
     flex-wrap: nowrap;
     gap: 20px;
-    align-items: center;
+    align-items: flex-start;
 
     .inputs {
         display: flex;
@@ -28,7 +28,6 @@ $alt-axis-padding: 20px;
         flex-grow: 1;
         margin-top: 5px;
         padding-left: 10px;
-        padding-top: $alt-axis-padding;
     }
 
     .alt-x-axis {
@@ -42,5 +41,12 @@ $alt-axis-padding: 20px;
     .reset {
         flex-grow: 0;
         flex-shrink: 1;
+    }
+
+    // Stops the label text from wrapping onto two lines
+    .bp5-slider-handle {
+        > .bp5-slider-label {
+            // white-space: nowrap;
+        }
     }
 }
