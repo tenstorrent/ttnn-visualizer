@@ -36,14 +36,13 @@
     flex-direction: column;
     z-index: 1;
     width: 100%;
-    background-color: $tt-grey-4;
+    background-color: rgba($tt-grey-4, 0.9);
     padding: 5px 15px;
     gap: 5px;
 
     .active-reports {
         display: flex;
         gap: 30px;
-        margin-top: -1px;
     }
 
     .slider-controls {
@@ -55,11 +54,6 @@
     .current-range {
         display: inline-block;
         text-align: right;
-    }
-
-    .slider {
-        margin-top: 5px;
-        padding-left: 10px;
     }
 
     .current-data {

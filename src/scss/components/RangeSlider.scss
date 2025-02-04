@@ -2,11 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+$alt-axis-offset: 10px;
+$alt-axis-padding: 20px;
+
 .range-slider {
     display: flex;
     flex-wrap: nowrap;
-    gap: 10px;
-    align-items: flex-start;
+    gap: 20px;
+    align-items: center;
 
     .inputs {
         display: flex;
@@ -21,7 +24,19 @@
     }
 
     .slider {
+        position: relative;
         flex-grow: 1;
+        margin-top: 5px;
+        padding-left: 10px;
+        padding-top: $alt-axis-padding;
+    }
+
+    .alt-x-axis {
+        display: flex;
+        width: calc(100% - $alt-axis-offset);
+        position: absolute;
+        left: $alt-axis-offset;
+        top: -#{$alt-axis-padding};
     }
 
     .reset {

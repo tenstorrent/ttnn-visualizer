@@ -3,19 +3,17 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Outlet } from 'react-router-dom';
-import { Button, Classes, Collapse, Icon, Tooltip } from '@blueprintjs/core';
+import { Classes } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
-import classNames from 'classnames';
-import { IconNames } from '@blueprintjs/icons';
-import { useEffect, useState } from 'react';
-import { activePerformanceTraceAtom, activeReportAtom, selectedRangeAtom } from '../store/app';
+import { useEffect } from 'react';
+import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
-import { useGetDeviceOperationListPerf, useSession } from '../hooks/useAPI';
+import { useSession } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
-import Range from './RangeSlider';
+import FooterInfobar from './FooterInfobar';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -25,15 +23,11 @@ const BounceIn = cssTransition({
     collapse: true,
 });
 
-const MAX_TITLE_LENGTH = 20;
-
 function Layout() {
     const appVersion = import.meta.env.APP_VERSION;
     const [activeReport, setActiveReport] = useAtom(activeReportAtom);
     const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceTraceAtom);
     const { data: session } = useSession(activeReport, activePerformanceTrace);
-    const [sliderIsOpen, setSliderIsOpen] = useState(true);
-    const selectedRange = useAtomValue(selectedRangeAtom);
 
     useEffect(() => {
         if (session?.active_report) {
@@ -41,9 +35,6 @@ function Layout() {
             setActivePerformanceTrace(session.active_report?.profile_name ?? null);
         }
     }, [session, setActiveReport, setActivePerformanceTrace]);
-
-    const useGetDeviceOperationListPerfResult = useGetDeviceOperationListPerf();
-    const isInSync = useGetDeviceOperationListPerfResult.length > 0;
 
     return (
         <div className={Classes.DARK}>
@@ -81,86 +72,7 @@ function Layout() {
                 />
             </main>
 
-            <footer className='app-footer'>
-                <div className='current-data'>
-                    <div className='active-reports'>
-                        {activeReport &&
-                            (activeReport.length > MAX_TITLE_LENGTH ? (
-                                <Tooltip
-                                    content={activeReport}
-                                    className={classNames('title', {
-                                        'is-lengthy': activeReport.length > MAX_TITLE_LENGTH,
-                                    })}
-                                >
-                                    <span>
-                                        <strong>Report:</strong> {activeReport}
-                                    </span>
-                                </Tooltip>
-                            ) : (
-                                <span>
-                                    <strong>Report:</strong> {activeReport}
-                                </span>
-                            ))}
-
-                        {activePerformanceTrace &&
-                            (activePerformanceTrace.length > MAX_TITLE_LENGTH ? (
-                                <Tooltip
-                                    content={activePerformanceTrace}
-                                    className={classNames('title', {
-                                        'is-lengthy': activePerformanceTrace.length > MAX_TITLE_LENGTH,
-                                    })}
-                                >
-                                    <span>
-                                        <strong>Performance:</strong> {activePerformanceTrace}
-                                    </span>
-                                </Tooltip>
-                            ) : (
-                                <span>
-                                    <strong>Performance:</strong> {activePerformanceTrace}
-                                </span>
-                            ))}
-                        {activeReport && activePerformanceTrace && (
-                            <span>
-                                {isInSync ? (
-                                    <strong>
-                                        <Icon
-                                            icon={IconNames.TickCircle}
-                                            className='intent-ok'
-                                        />{' '}
-                                        Profiler and perf reports synchronised
-                                    </strong>
-                                ) : (
-                                    <strong>
-                                        <Icon
-                                            icon={IconNames.ISSUE}
-                                            className='intent-not-ok'
-                                        />{' '}
-                                        Profiler and perf reports can&apos;t be synchronized
-                                    </strong>
-                                )}
-                            </span>
-                        )}
-                    </div>
-
-                    <div className='slider-controls'>
-                        <span className='current-range'>
-                            Selected: {selectedRange && `[${selectedRange[0]}, ${selectedRange[1]}]`}
-                        </span>
-                        <Button
-                            icon={sliderIsOpen ? IconNames.CARET_UP : IconNames.CARET_DOWN}
-                            onClick={() => setSliderIsOpen(!sliderIsOpen)}
-                        >
-                            Range
-                        </Button>
-                    </div>
-                </div>
-
-                <Collapse isOpen={sliderIsOpen}>
-                    <div className='slider'>
-                        <Range />
-                    </div>
-                </Collapse>
-            </footer>
+            <FooterInfobar />
         </div>
     );
 }
