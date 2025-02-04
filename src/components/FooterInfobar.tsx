@@ -36,7 +36,7 @@ function FooterInfobar() {
     }, [isOperationDetails]);
 
     return (
-        <footer className='app-footer'>
+        <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
             <div className='current-data'>
                 <div className='active-reports'>
                     {activeReport &&

@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+@use '../definitions/colours' as *;
+
 .app-footer {
     position: fixed;
     bottom: 0;
@@ -12,6 +14,10 @@
     width: 100%;
     background-color: rgba($tt-grey-4, 0.9);
     padding: 5px 15px;
+
+    &.is-open {
+        gap: 5px;
+    }
 
     .active-reports {
         display: flex;
