@@ -223,6 +223,9 @@ export interface Node {
     id: number;
     node_type: NodeType;
     params: DeviceOperationParams;
+    inputs: Node[];
+    outputs: Node[];
+    operation?: Node;
 }
 
 export interface DeviceOperation {
