@@ -27,8 +27,8 @@ function BufferSummary() {
     const tableRef = useRef<HTMLHeadingElement>(null);
     const [activeSection, setActiveSection] = useState<SECTION_IDS>(SECTION_IDS.PLOT);
     const [selectedTabId, setSelectedTabId] = useState<TAB_IDS>(TAB_IDS.L1);
-    const { data: buffersByOperation } = useBuffers(BufferType.L1);
-    const { data: dramBuffersByOperation } = useBuffers(BufferType.DRAM);
+    const { data: buffersByOperation } = useBuffers(BufferType.L1, true);
+    const { data: dramBuffersByOperation } = useBuffers(BufferType.DRAM, true);
     const { data: operationsList } = useOperationsList();
 
     const { activeToast, resetToasts } = useBufferFocus();

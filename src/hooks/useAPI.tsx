@@ -8,6 +8,7 @@ import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import Papa, { ParseResult } from 'papaparse';
 import { useMemo } from 'react';
+import { useAtomValue } from 'jotai';
 import axiosInstance from '../libs/axiosInstance';
 import {
     Buffer,
@@ -29,6 +30,7 @@ import isValidNumber from '../functions/isValidNumber';
 import { getUniqueDeviceIDs, mergeMultideviceRows } from '../functions/perfFunctions';
 import { RowData } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
+import { selectedRangeAtom } from '../store/app';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -263,12 +265,23 @@ const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
     });
 };
 
-export const useOperationsList = () => {
-    return useQuery<OperationDescription[], AxiosError>({
+export const useOperationsList = (useRange?: boolean) => {
+    const range = useAtomValue(selectedRangeAtom);
+
+    const response = useQuery<OperationDescription[], AxiosError>({
         queryFn: () => fetchOperations(),
         queryKey: ['get-operations'],
         retry: false,
     });
+
+    return useMemo(() => {
+        if (useRange && response.data && range) {
+            response.data = response.data.filter((operation) => operation.id >= range[0] && operation.id <= range[1]);
+        }
+
+        return response;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [range, response.isLoading]);
 };
 
 export const useOperationDetails = (operationId: number | null) => {
@@ -502,7 +515,7 @@ export const useOptoPerfIdFiltered = () => {
     );
 };
 
-// Not currently used anymore
+// Not currently used
 export const useReportMeta = () => {
     return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
 };
@@ -517,12 +530,13 @@ export const useBufferPages = (
         fetchBufferPages(operationId, address, bufferType, deviceId),
     );
 };
+
 export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> => {
     try {
         const { data: tensorList } = await axiosInstance.get<Tensor[]>('/api/tensors', {
             maxRedirects: 1,
             params: {
-                // device_id: deviceId,Ignatius Holidaya,
+                // device_id: deviceId,
             },
         });
 
@@ -556,12 +570,27 @@ export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> 
     return [defaultTensorData];
 };
 
-export const useTensors = (deviceId?: number | null) => {
-    return useQuery<Tensor[], AxiosError>({
+export const useTensors = (useRange?: boolean, deviceId?: number | null) => {
+    const range = useAtomValue(selectedRangeAtom);
+
+    const response = useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(deviceId),
         queryKey: ['get-tensors', deviceId],
         retry: false,
     });
+
+    return useMemo(() => {
+        if (response.data && range && useRange) {
+            response.data = response.data.filter(
+                (tensor) =>
+                    tensor.consumers.some((id) => id >= range[0] && id <= range[1]) ||
+                    tensor.producers.some((id) => id >= range[0] && id <= range[1]),
+            );
+        }
+
+        return response;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [range, response.isLoading]);
 };
 
 export const useDevices = () => {
@@ -589,11 +618,22 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
     });
 };
 
-export const useBuffers = (bufferType: BufferType) => {
-    return useQuery({
+export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
+    const range = useAtomValue(selectedRangeAtom);
+
+    const response = useQuery({
         queryFn: () => fetchAllBuffers(bufferType),
         queryKey: ['fetch-all-buffers', bufferType],
     });
+
+    return useMemo(() => {
+        if (response.data && range && useRange) {
+            response.data = response.data.filter((operation) => operation.id >= range[0] && operation.id <= range[1]);
+        }
+
+        return response;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [range, response.isLoading]);
 };
 
 export const useDeviceLog = () => {

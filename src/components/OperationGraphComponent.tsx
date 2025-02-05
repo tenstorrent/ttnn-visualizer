@@ -220,7 +220,7 @@ const OperationGraph: React.FC<{
             networkRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [edges]);
 
     const getNextOperationId = (currentId: number | null) => {
         if (nodes === null || currentId === null) {
@@ -239,6 +239,7 @@ const OperationGraph: React.FC<{
         const currentIndex = nodeIds.indexOf(currentId);
         return currentIndex > 0 ? (nodeIds[currentIndex - 1] as number) : null;
     };
+
     const focusOnNode = useCallback(
         (nodeId: number | null) => {
             if (nodeId === null) {
@@ -257,6 +258,9 @@ const OperationGraph: React.FC<{
         },
         [networkRef, scale],
     );
+
+    const focusedNode = currentOperationId ?? operationList[0].id;
+
     return (
         <div className='operation-graph-component'>
             <div className='operation-graph-header'>
@@ -276,14 +280,14 @@ const OperationGraph: React.FC<{
                     <Tooltip
                         disabled={isLoading}
                         placement={PopoverPosition.TOP}
-                        content={`Center on operation ${currentOperationId}`}
+                        content={`Center on operation ${focusedNode}`}
                     >
                         <Button
                             outlined
-                            onClick={() => focusOnNode(currentOperationId)}
+                            onClick={() => focusOnNode(focusedNode)}
                             disabled={isLoading}
                         >
-                            {currentOperationId}
+                            {focusedNode}
                         </Button>
                     </Tooltip>
                     <Tooltip

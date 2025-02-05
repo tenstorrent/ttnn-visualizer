@@ -12,7 +12,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 
 const GraphView: React.FC = () => {
-    const { data: operationList, isLoading } = useOperationsList();
+    const { data: operationList, isLoading } = useOperationsList(true);
     const { operationId } = useParams<{ operationId?: string }>();
 
     useClearSelectedBuffer();
