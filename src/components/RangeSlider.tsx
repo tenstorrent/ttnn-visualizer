@@ -118,7 +118,7 @@ function Range() {
     ) : null;
 }
 
-const getStepSize = (max: number) => (RANGE_STEP > max ? 1 : max / RANGE_STEP);
+const getStepSize = (max: number) => (RANGE_STEP > max ? 1 : Math.ceil(max / RANGE_STEP));
 
 const getOperationLabel = (selectedId: number, operations?: OperationDescription[], isTooltip?: boolean): string => {
     const matchingOperation = operations?.find((operation) => operation.id === selectedId);
