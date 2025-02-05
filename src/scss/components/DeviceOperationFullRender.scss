@@ -30,12 +30,16 @@
         .collapsible-controls {
             h4 {
                 margin-top: 0;
-                margin-bottom: 4px;
+                margin-bottom: 0;
                 font-size: 16px;
                 display: flex;
                 align-items: center;
                 gap: 10px;
             }
+        }
+
+        .params {
+            font-weight: lighter;
         }
     }
 
@@ -44,7 +48,7 @@
     }
 
     .function-content {
-        padding-left: 20px;
+        padding-left: 30px;
     }
 
     .memory-info {

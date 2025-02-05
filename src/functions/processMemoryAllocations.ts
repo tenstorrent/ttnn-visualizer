@@ -7,9 +7,11 @@ import { DeviceOperationTypes, Node, NodeType } from '../model/APIData';
 export type AllocationDetails = {
     id: number;
     name: string | null;
+    type: NodeType;
     total_cb: number;
     total_buffer: number;
     total_memory: number;
+    deviceId: number;
 };
 
 export function processMemoryAllocations(graph: Node[]): {
@@ -18,7 +20,7 @@ export function processMemoryAllocations(graph: Node[]): {
 } {
     let peakMemoryLoad = 0;
     const memoryAllocationList: AllocationDetails[] = [];
-    const curOp: { name: string; id: number }[] = [];
+    const curOp: { name: string; id: number; deviceId?: string | number }[] = [];
     let totalCb = 0;
     let totalBuffer = 0;
 
@@ -26,7 +28,6 @@ export function processMemoryAllocations(graph: Node[]): {
     while (i < graph.length) {
         const node = graph[i];
         i += 1;
-
         if (node.node_type === NodeType.function_start) {
             if (curOp.length === 0) {
                 while (i < graph.length) {
@@ -42,7 +43,26 @@ export function processMemoryAllocations(graph: Node[]): {
             }
 
             const { name } = node.params;
-            curOp.push({ name, id: node.id });
+            curOp.push({ name, id: node.id, deviceId: node.params.device_id });
+        }
+
+        if (node.params.device_id !== undefined && curOp.length > 1) {
+            // TODO: this may or may not work correctly, and might not be the best approach, to investigate later
+            // const update = curOp[curOp.length - 1];
+            // const mutable = memoryAllocationList.find((x) => x.id === update.id);
+            // if (mutable) {
+            //     mutable.deviceId = node.params.device_id;
+            // }
+            //
+            // console.log(
+            //     'depth', curOp.length,
+            //     `setting device id ${node.params.device_id} by`,
+            //     node.node_type,
+            //     'for',
+            //     curOp[curOp.length - 1].name,
+            // );
+
+            curOp[curOp.length - 1].deviceId = node.params.device_id;
         }
 
         if (node.node_type === NodeType.circular_buffer_allocate) {
@@ -71,7 +91,9 @@ export function processMemoryAllocations(graph: Node[]): {
         if (curOp.length > 0) {
             const obj: AllocationDetails = {
                 name: curOp[curOp.length - 1].name,
+                deviceId: curOp[curOp.length - 1].deviceId as number,
                 id: node.id,
+                type: node.node_type,
                 total_cb: totalCb,
                 total_buffer: totalBuffer,
                 total_memory: totalCb + totalBuffer,

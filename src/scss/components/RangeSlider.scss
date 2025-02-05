@@ -1,0 +1,44 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
+$alt-axis-offset: 10px;
+$alt-axis-padding: 20px;
+
+.range-slider {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 20px;
+    align-items: flex-start;
+
+    .inputs {
+        display: flex;
+        flex-wrap: nowrap;
+        flex-grow: 0;
+        flex-shrink: 1;
+        gap: 5px;
+
+        > .bp5-input-group {
+            width: 55px;
+        }
+    }
+
+    .slider {
+        position: relative;
+        flex-grow: 1;
+        margin-top: 4px;
+    }
+
+    .alt-x-axis {
+        display: flex;
+        width: calc(100% - $alt-axis-offset);
+        position: absolute;
+        left: $alt-axis-offset;
+        top: -#{$alt-axis-padding};
+    }
+
+    .reset {
+        flex-grow: 0;
+        flex-shrink: 1;
+    }
+}

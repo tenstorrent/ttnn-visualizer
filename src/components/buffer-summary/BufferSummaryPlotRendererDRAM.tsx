@@ -5,7 +5,7 @@
 import { Fragment, UIEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
-import { Switch } from '@blueprintjs/core';
+import { Switch, Tooltip } from '@blueprintjs/core';
 import { Link } from 'react-router-dom';
 import { useAtom } from 'jotai';
 import { PlotData } from 'plotly.js';
@@ -15,7 +15,7 @@ import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
-import ROUTES from '../../definitions/routes';
+import ROUTES from '../../definitions/Routes';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
@@ -192,12 +192,15 @@ function BufferSummaryPlotRendererDRAM({
                                                 memoryPadding={zoomedMemoryOptions[index].padding}
                                                 tensorList={tensorListByOperation.get(operation.id)!}
                                             />
-                                            <Link
-                                                to={`${ROUTES.OPERATIONS}/${operation.id}`}
+
+                                            <Tooltip
+                                                content={`${operation.id} ${operation.name}`}
                                                 className='y-axis-tick'
                                             >
-                                                {operation.id}
-                                            </Link>
+                                                <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
+                                                    {operation.id}&nbsp;{operation.name}
+                                                </Link>
+                                            </Tooltip>
                                         </div>
                                     ) : null;
                                 })}

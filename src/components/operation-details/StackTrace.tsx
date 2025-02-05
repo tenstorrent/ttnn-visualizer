@@ -43,7 +43,6 @@ function StackTrace({ stackTrace }: StackTraceProps) {
     const connectionType = useAtomValue(reportLocationAtom);
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
 
-    // TODO: Look at how we store this as an atom vs useAppConfig localStorage
     const isRemote = connectionType === 'remote';
 
     const stackTraceWithHighlights = useMemo(() => {

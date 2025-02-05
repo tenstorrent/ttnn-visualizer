@@ -13,7 +13,7 @@ import { MultiSelect } from '@blueprintjs/select';
 import SearchField from './SearchField';
 import LoadingSpinner from './LoadingSpinner';
 import { useOperationsList, useTensors } from '../hooks/useAPI';
-import ROUTES from '../definitions/routes';
+import ROUTES from '../definitions/Routes';
 import { Tensor } from '../model/APIData';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
@@ -46,7 +46,7 @@ const TensorList = () => {
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
 
     const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
-    const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
+    const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors(true);
 
     // TODO: Figure out an initial scroll position based on last used tensor
     const virtualizer = useVirtualizer({

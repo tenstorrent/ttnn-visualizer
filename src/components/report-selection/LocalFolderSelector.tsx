@@ -14,6 +14,7 @@ import { activePerformanceTraceAtom, activeReportAtom, reportLocationAtom, selec
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification from '../../functions/createToastNotification';
+import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -100,7 +101,6 @@ const LocalFolderOptions: FC = () => {
         setIsUploadingReport(true);
         setLocalUploadLabel(`${files.length} files selected.`);
 
-        // TODO Get the report name from the successfully uploaded files
         const response = await uploadLocalFolder(files);
 
         if (response.status !== 200) {
@@ -109,9 +109,10 @@ const LocalFolderOptions: FC = () => {
             connectionStatus = directoryErrorStatus;
         } else {
             const fileName = getReportName(files);
+
             setLocalUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
-            setSelectedDevice(0);
+            setSelectedDevice(DEFAULT_DEVICE_ID);
             setActiveReport(fileName);
             createToastNotification('Active report', fileName);
         }

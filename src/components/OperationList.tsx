@@ -15,7 +15,7 @@ import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ListView.scss';
 import { DeviceOperationMapping, useGetDeviceOperationListPerf, useOperationsList } from '../hooks/useAPI';
-import ROUTES from '../definitions/routes';
+import ROUTES from '../definitions/Routes';
 import { expandedOperationsAtom, shouldCollapseAllOperationsAtom } from '../store/app';
 import { OperationDescription } from '../model/APIData';
 import ListItem from './ListItem';
@@ -34,7 +34,7 @@ enum SortingOptions {
 const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { data: fetchedOperations, error, isLoading } = useOperationsList();
+    const { data: fetchedOperations, error, isLoading } = useOperationsList(true);
     const perfData = useGetDeviceOperationListPerf();
     const scrollElementRef = useRef<HTMLDivElement>(null);
 

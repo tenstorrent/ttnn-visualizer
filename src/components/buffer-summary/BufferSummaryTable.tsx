@@ -298,7 +298,7 @@ const getCellText = (buffer: SummaryTableBuffer, key: COLUMN_KEYS) => {
     }
 
     if (key === 'operation_id') {
-        textValue = `${buffer.operation_id} - ${buffer.operation_name}`;
+        textValue = `${buffer.operation_id} ${buffer.operation_name}`;
     }
 
     if (key === 'buffer_type') {
