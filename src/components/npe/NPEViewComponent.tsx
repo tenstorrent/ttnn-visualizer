@@ -169,7 +169,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     min={0}
                     max={npeData.timestep_data.length - 1}
                     stepSize={1}
-                    labelStepSize={25}
+                    labelStepSize={npeData.timestep_data.length / 20}
                     value={selectedTimestep}
                     onChange={(value: number) => handleScrubberChange(value)}
                 />
