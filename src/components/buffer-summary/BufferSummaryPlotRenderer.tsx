@@ -9,7 +9,7 @@ import { Switch, Tooltip } from '@blueprintjs/core';
 import { Link } from 'react-router-dom';
 import { useAtom, useAtomValue } from 'jotai';
 import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
-import { BuffersByOperationData, useDevices } from '../../hooks/useAPI';
+import { BuffersByOperationData, useDevices, useOperationsList } from '../../hooks/useAPI';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
@@ -39,6 +39,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const [isZoomedIn, setIsZoomedIn] = useState(false);
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const scrollElementRef = useRef(null);
+    const { data: operations } = useOperationsList();
 
     const numberOfOperations = useMemo(
         () =>
@@ -184,7 +185,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                                     />
 
                                     <Tooltip
-                                        content={`${operation.id} ${operation.name}`}
+                                        content={`${operation.id} ${operation.name} (${operations?.find((op) => op.id === operation.id)?.operationFileIdentifier})`}
                                         className='y-axis-tick'
                                     >
                                         <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
