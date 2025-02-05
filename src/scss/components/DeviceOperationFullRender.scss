@@ -17,15 +17,9 @@
     position: relative;
 
     .device-operation {
-        padding: 10px;
-
         hr {
             opacity: 0.2;
             padding-top: 5px;
-        }
-
-        .legend-item {
-            position: absolute;
         }
 
         .function-container {
@@ -54,7 +48,7 @@
     }
 
     .function-content {
-        padding-left: 20px;
+        padding-left: 30px;
     }
 
     .memory-info {
