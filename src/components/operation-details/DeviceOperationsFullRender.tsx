@@ -12,7 +12,7 @@ import 'styles/components/DeviceOperationFullRender.scss';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
-import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
+import Collapsible from '../Collapsible';
 import { AllocationDetails, processMemoryAllocations } from '../../functions/processMemoryAllocations';
 import { formatSize, toReadableShape } from '../../functions/math';
 
@@ -43,13 +43,9 @@ const DeviceOperationsFullRender: React.FC<{
         const getConnectedNodes = (node: Node): Node[] => {
             return node.connections
                 .map((connection) => {
-                    const n = operations.find((connectedNode) => connectedNode.id === connection);
-                    if (n) {
-                        return n;
-                    }
-                    return undefined;
+                    return operations.find((connectedNode) => connectedNode.id === connection);
                 })
-                .filter((n) => n !== undefined) as Node[];
+                .filter((n) => n) as Node[];
         };
         operations.forEach((op) => {
             if (op.node_type === NodeType.function_start) {
@@ -96,7 +92,7 @@ const DeviceOperationsFullRender: React.FC<{
                 );
                 const memoryInfo = memoryDetails ? (
                     <span
-                        className={classNames('memory-info monospace ', {
+                        className={classNames('memory-info monospace', {
                             peak: memoryDetails.total_memory === peakMemoryLoad,
                         })}
                     >
@@ -148,7 +144,9 @@ const DeviceOperationsFullRender: React.FC<{
                             key={`end-${index}`}
                             label={label}
                             isOpen
-                            collapseClassName={`device-operation function-container ${!hasContent && COLLAPSIBLE_EMPTY_CLASS}`}
+                            collapseClassName={classNames('device-operation function-container', {
+                                COLLAPSIBLE_EMPTY_CLASS: !hasContent,
+                            })}
                         >
                             <div className='function-content'>{innerContent}</div>
                             <div className='end-function'>
@@ -218,6 +216,7 @@ const DeviceOperationsFullRender: React.FC<{
                                 title='Circular buffer deallocate all'
                             />
                         );
+                        // PLO
                         // } else if (nodeType === NodeType.tensor) {
                         //     const tensorData = node.params;
                         //     operationContent = (

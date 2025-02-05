@@ -89,7 +89,6 @@ export function processMemoryAllocations(graph: Node[]): {
         }
 
         if (curOp.length > 0) {
-            // console.log('pushing at', node.node_type, curOp[curOp.length - 1].name, 'id?', curOp[curOp.length - 1].deviceId as number, node.params.device_id);
             const obj: AllocationDetails = {
                 name: curOp[curOp.length - 1].name,
                 deviceId: curOp[curOp.length - 1].deviceId as number,
