@@ -24,7 +24,7 @@ const DeviceOperationsFullRender: React.FC<{
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const { memoryAllocationList, peakMemoryLoad } = processMemoryAllocations(deviceOperations);
 
-    const formatNodeOutput = (node: Node) => {
+    const formatDeviceOpParameters = (node: Node) => {
         if (node.node_type === NodeType.tensor) {
             return (
                 <span>
@@ -38,7 +38,7 @@ const DeviceOperationsFullRender: React.FC<{
         return node.node_type;
     };
 
-    const processConnections = useCallback((ops: Node[]) => {
+    const preprocessConnections = useCallback((ops: Node[]) => {
         const operations: Node[] = ops.map((op) => ({ ...op, inputs: [], outputs: [] }));
         const getConnectedNodes = (node: Node): Node[] => {
             return node.connections
@@ -85,7 +85,7 @@ const DeviceOperationsFullRender: React.FC<{
     const renderOperations = useCallback(
         (ops: Node[]) => {
             const deviceOpList: Node[] = [];
-            const operations = processConnections(ops);
+            const operations = preprocessConnections(ops);
             const stack: JSX.Element[][] = [];
             const output: JSX.Element[] = [];
             let consecutiveCBsOutput: boolean = false;
@@ -126,7 +126,7 @@ const DeviceOperationsFullRender: React.FC<{
                                     className='params'
                                     key={arg.id}
                                 >
-                                    {formatNodeOutput(arg)}
+                                    {formatDeviceOpParameters(arg)}
                                 </span>
                             ))}
                             ) &nbsp;{' => '}
@@ -135,7 +135,7 @@ const DeviceOperationsFullRender: React.FC<{
                                     className='params'
                                     key={arg.id}
                                 >
-                                    {formatNodeOutput(arg)}
+                                    {formatDeviceOpParameters(arg)}
                                 </span>
                             ))}
                         </h4>
@@ -270,7 +270,7 @@ const DeviceOperationsFullRender: React.FC<{
 
             return output;
         },
-        [details, memoryAllocationList, onLegendClick, peakMemoryLoad, processConnections, selectedAddress],
+        [details, memoryAllocationList, onLegendClick, peakMemoryLoad, preprocessConnections, selectedAddress],
     );
 
     return (
