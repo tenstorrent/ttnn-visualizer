@@ -15,9 +15,9 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
            node-version: v22.1.0
       - run: npm install
@@ -38,7 +38,7 @@ jobs:
           python -m build --wheel
 
       - name: Upload wheel as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: python-wheel
           path: dist/*.whl
@@ -50,17 +50,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Download wheel artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: python-wheel
           path: /home/runner/work/ttnn-visualizer/
       - name: get-npm-version
         id: package-version
         uses: martinbeentjes/npm-get-version-action@v1.3.1
-        
+
       - name: Get wheel file name
         id: get_wheel
         run: |

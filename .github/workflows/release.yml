@@ -12,13 +12,13 @@ jobs:
     update-version:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v2
+            - uses: actions/checkout@v4
               # TODO Replace email with official email
             - run: git config --global user.email "support@tenstorrent.com"
             - run: git config --global user.name "CI Job"
 
             - name: Use Node.js
-              uses: actions/setup-node@v3
+              uses: actions/setup-node@v4
               with:
                   node-version: v22.1.0
 
