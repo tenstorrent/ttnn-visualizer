@@ -46,7 +46,7 @@ const TensorList = () => {
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
 
     const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
-    const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
+    const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors(true);
 
     // TODO: Figure out an initial scroll position based on last used tensor
     const virtualizer = useVirtualizer({
