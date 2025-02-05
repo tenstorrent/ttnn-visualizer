@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 @use '../definitions/colours' as *;
 
-$label-width: 50px;
+$label-width: 160px;
 $label-margin: 10px;
 $width-offset: $label-width;
 $height-offset: 15px;
@@ -47,15 +47,20 @@ $height-offset: 15px;
 
         .y-axis-tick {
             width: $label-width;
-            padding-right: $label-margin;
+            padding-left: $label-margin;
             margin-bottom: 0;
-            text-align: right;
             flex-shrink: 0;
-            color: $tt-white;
-            text-decoration: none;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
 
-            &:hover {
-                text-decoration: underline;
+            > a {
+                color: $tt-white;
+                text-decoration: none;
+
+                &:hover {
+                    text-decoration: underline;
+                }
             }
         }
     }

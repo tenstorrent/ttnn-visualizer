@@ -5,7 +5,7 @@
 import { UIEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
-import { Switch } from '@blueprintjs/core';
+import { Switch, Tooltip } from '@blueprintjs/core';
 import { Link } from 'react-router-dom';
 import { useAtom, useAtomValue } from 'jotai';
 import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
@@ -182,12 +182,15 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                                         memoryPadding={memoryPadding}
                                         tensorList={tensorListByOperation.get(operation.id)!}
                                     />
-                                    <Link
-                                        to={`${ROUTES.OPERATIONS}/${operation.id}`}
+
+                                    <Tooltip
+                                        content={`${operation.id} ${operation.name}`}
                                         className='y-axis-tick'
                                     >
-                                        {operation.id}
-                                    </Link>
+                                        <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
+                                            {operation.id}&nbsp;{operation.name}
+                                        </Link>
+                                    </Tooltip>
                                 </div>
                             );
                         })}
