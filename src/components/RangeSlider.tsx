@@ -123,8 +123,7 @@ const getStepSize = (max: number) => (RANGE_STEP > max ? 1 : max / RANGE_STEP);
 const getOperationLabel = (selectedId: number, operations?: OperationDescription[], isTooltip?: boolean): string => {
     const matchingOperation = operations?.find((operation) => operation.id === selectedId);
 
-    // TODO: Not sure why but the id is not always a round number here, hence the Math.round. Figure out why.
-    return matchingOperation && isTooltip ? matchingOperation.name : Math.round(selectedId).toString();
+    return matchingOperation && isTooltip ? matchingOperation.name : selectedId.toString();
 };
 
 export default Range;
