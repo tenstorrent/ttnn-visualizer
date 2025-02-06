@@ -8,7 +8,13 @@ import { IconNames } from '@blueprintjs/icons';
 import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
-import { activePerformanceTraceAtom, activeReportAtom, operationRangeAtom, selectedRangeAtom } from '../store/app';
+import {
+    activePerformanceTraceAtom,
+    activeReportAtom,
+    operationRangeAtom,
+    performanceRangeAtom,
+    selectedRangeAtom,
+} from '../store/app';
 import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
@@ -17,9 +23,10 @@ import 'styles/components/FooterInfobar.scss';
 const MAX_TITLE_LENGTH = 20;
 
 function FooterInfobar() {
-    const [sliderIsOpen, setSliderIsOpen] = useState(true);
+    const [sliderIsOpen, setSliderIsOpen] = useState(false);
     const selectedRange = useAtomValue(selectedRangeAtom);
     const operationRange = useAtomValue(operationRangeAtom);
+    const performanceRange = useAtomValue(performanceRangeAtom);
     const activeReport = useAtomValue(activeReportAtom);
     const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
     const location = useLocation();
@@ -97,24 +104,25 @@ function FooterInfobar() {
                     )}
                 </div>
 
-                {operationRange && (
-                    <div className='slider-controls'>
-                        {!sliderIsOpen && !hasRangeSelected(selectedRange, operationRange) && (
-                            <span className='current-range'>
-                                Selected: {selectedRange && `${selectedRange[0]} - ${selectedRange[1]}`}
-                            </span>
-                        )}
+                {operationRange ||
+                    (performanceRange && (
+                        <div className='slider-controls'>
+                            {!sliderIsOpen && !hasRangeSelected(selectedRange, operationRange) && (
+                                <span className='current-range'>
+                                    Selected: {selectedRange && `${selectedRange[0]} - ${selectedRange[1]}`}
+                                </span>
+                            )}
 
-                        <Button
-                            icon={sliderIsOpen ? IconNames.CARET_DOWN : IconNames.CARET_UP}
-                            onClick={() => setSliderIsOpen(!sliderIsOpen)}
-                            disabled={isOperationDetails}
-                            small
-                        >
-                            Range
-                        </Button>
-                    </div>
-                )}
+                            <Button
+                                icon={sliderIsOpen ? IconNames.CARET_DOWN : IconNames.CARET_UP}
+                                onClick={() => setSliderIsOpen(!sliderIsOpen)}
+                                disabled={isOperationDetails}
+                                small
+                            >
+                                Range
+                            </Button>
+                        </div>
+                    ))}
             </div>
 
             <Collapse
