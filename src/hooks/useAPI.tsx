@@ -214,11 +214,11 @@ const fetchDevices = async () => {
     return meta;
 };
 
-const fetchPerformanceDataRaw = async (): Promise<ParseResult<string>> => {
+const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, string>>> => {
     const { data } = await axiosInstance.get<string>('/api/profiler/perf-results/raw');
 
-    return new Promise<ParseResult<string>>((resolve, reject) => {
-        Papa.parse<string>(data, {
+    return new Promise((resolve, reject) => {
+        Papa.parse<Record<string, string>>(data, {
             complete: (results) => resolve(results),
             error: (error: Error) => reject(error),
             header: true,
@@ -233,7 +233,7 @@ interface MetaData {
 
 interface FetchDeviceLogRawResult {
     deviceMeta: MetaData;
-    deviceLog: ParseResult<string>;
+    deviceLog: ParseResult<Record<string, string>[]>;
 }
 
 const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
@@ -257,7 +257,7 @@ const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
             .split(/,\s{1,2}/)
             .join(','); // headers without spaces
         const processedCsv = [headers, ...csv].join('\n');
-        Papa.parse<string>(processedCsv, {
+        Papa.parse<Record<string, string>[]>(processedCsv, {
             header: true,
             complete: (deviceLog) => resolve({ deviceMeta, deviceLog }),
             error: (error: Error) => reject(error),
@@ -590,7 +590,7 @@ export const useTensors = (useRange?: boolean, deviceId?: number | null) => {
 
         return response;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [range, response.isLoading]);
+    }, [range, response.isLoading, useRange]);
 };
 
 export const useDevices = () => {
@@ -633,7 +633,7 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
 
         return response;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [range, response.isLoading]);
+    }, [range, response.isLoading, useRange]);
 };
 
 export const useDeviceLog = () => {
