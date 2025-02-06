@@ -7,6 +7,7 @@ import React, { FC, useMemo, useState } from 'react';
 import '../../scss/components/PerfTable.scss';
 import { Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { useAtomValue } from 'jotai';
 import { formatSize, toSecondsPretty } from '../../functions/math';
 import {
     color_row,
@@ -19,6 +20,7 @@ import {
 } from '../../functions/perfFunctions';
 import { Cell, MathFidelity, ProcessedRow, RowData } from '../../definitions/PerfTable';
 import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
+import { selectedRangeAtom } from '../../store/app';
 
 const analyze_matmul = (row: RowData) => {
     const input_0_from_dram = String(row.INPUT_0_MEMORY || '').includes('DRAM');
@@ -267,6 +269,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, setIsMultiDevice] = useState<boolean>(false);
+    const selectedRange = useAtomValue(selectedRangeAtom);
     const opIdsMap = useOptoPerfIdFiltered();
 
     const processedRows = useMemo(() => {
@@ -301,7 +304,15 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
             const linkedObj = opIdsMap.find((op) => op.perfId === r.ORIGINAL_ID);
             opData.ID.raw_value = String(r.ORIGINAL_ID);
             opData.OP.raw_value = linkedObj?.opId || null;
-            rows.push(opData);
+
+            if (selectedRange) {
+                if (r.ORIGINAL_ID > selectedRange[0] && r.ORIGINAL_ID < selectedRange[1]) {
+                    rows.push(opData);
+                }
+            } else {
+                rows.push(opData);
+            }
+
             prevRow = r;
         });
 
@@ -321,8 +332,10 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
             });
         }
 
+        // df = selectedRange ? rows.filter((r) => r.ID >= selectedRange[0] && r.ID <= selectedRange[1]) : df;
+
         return rows;
-    }, [data, opIdsMap, mergeDeviceData, hiliteHighDispatch, minPercentage]);
+    }, [data, opIdsMap, mergeDeviceData, hiliteHighDispatch, minPercentage, selectedRange]);
 
     const baseHeaders = [
         'ID',

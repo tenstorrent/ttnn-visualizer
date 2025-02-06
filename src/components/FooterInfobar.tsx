@@ -104,25 +104,24 @@ function FooterInfobar() {
                     )}
                 </div>
 
-                {operationRange ||
-                    (performanceRange && (
-                        <div className='slider-controls'>
-                            {!sliderIsOpen && !hasRangeSelected(selectedRange, operationRange) && (
-                                <span className='current-range'>
-                                    Selected: {selectedRange && `${selectedRange[0]} - ${selectedRange[1]}`}
-                                </span>
-                            )}
+                {(operationRange || performanceRange) && (
+                    <div className='slider-controls'>
+                        {!sliderIsOpen && !hasRangeSelected(selectedRange, operationRange) && (
+                            <span className='current-range'>
+                                Selected: {selectedRange && `${selectedRange[0]} - ${selectedRange[1]}`}
+                            </span>
+                        )}
 
-                            <Button
-                                icon={sliderIsOpen ? IconNames.CARET_DOWN : IconNames.CARET_UP}
-                                onClick={() => setSliderIsOpen(!sliderIsOpen)}
-                                disabled={isOperationDetails}
-                                small
-                            >
-                                Range
-                            </Button>
-                        </div>
-                    ))}
+                        <Button
+                            icon={sliderIsOpen ? IconNames.CARET_DOWN : IconNames.CARET_UP}
+                            onClick={() => setSliderIsOpen(!sliderIsOpen)}
+                            disabled={isOperationDetails}
+                            small
+                        >
+                            Range
+                        </Button>
+                    </div>
+                )}
             </div>
 
             <Collapse
