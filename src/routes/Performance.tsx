@@ -27,10 +27,14 @@ export default function Performance() {
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformance();
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
 
+    // TODO: Typing here is still a little weird
     const data = useMemo(
-        () => (perfData?.data ? (perfData.data as RowData[]) : []).filter((row) => row['OP TYPE'] === 'tt_dnn_device'),
+        () =>
+            (perfData?.data ? (perfData.data as Partial<RowData>[]) : []).filter(
+                (row) => row['OP TYPE'] === 'tt_dnn_device',
+            ),
         [perfData?.data],
-    );
+    ) as RowData[];
 
     const opCodeOptions = useMemo(
         () =>
