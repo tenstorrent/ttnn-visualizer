@@ -20,7 +20,7 @@ import {
 } from '../../functions/perfFunctions';
 import { Cell, MathFidelity, ProcessedRow, RowData } from '../../definitions/PerfTable';
 import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
-import { selectedRangeAtom } from '../../store/app';
+import { selectedPerformanceRangeAtom } from '../../store/app';
 
 const analyze_matmul = (row: RowData) => {
     const input_0_from_dram = String(row.INPUT_0_MEMORY || '').includes('DRAM');
@@ -269,7 +269,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, setIsMultiDevice] = useState<boolean>(false);
-    const selectedRange = useAtomValue(selectedRangeAtom);
+    const selectedRange = useAtomValue(selectedPerformanceRangeAtom);
     const opIdsMap = useOptoPerfIdFiltered();
 
     const processedRows = useMemo(() => {
@@ -306,7 +306,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
             opData.OP.raw_value = linkedObj?.opId || null;
 
             if (selectedRange) {
-                if (r.ORIGINAL_ID > selectedRange[0] && r.ORIGINAL_ID < selectedRange[1]) {
+                if ((r.ORIGINAL_ID ?? 0) > selectedRange[0] && (r.ORIGINAL_ID ?? 0) < selectedRange[1]) {
                     rows.push(opData);
                 }
             } else {

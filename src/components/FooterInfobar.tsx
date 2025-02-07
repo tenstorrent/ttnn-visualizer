@@ -13,7 +13,7 @@ import {
     activeReportAtom,
     operationRangeAtom,
     performanceRangeAtom,
-    selectedRangeAtom,
+    selectedOperationRangeAtom,
 } from '../store/app';
 import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
 import Range from './RangeSlider';
@@ -24,7 +24,7 @@ const MAX_TITLE_LENGTH = 20;
 
 function FooterInfobar() {
     const [sliderIsOpen, setSliderIsOpen] = useState(false);
-    const selectedRange = useAtomValue(selectedRangeAtom);
+    const selectedRange = useAtomValue(selectedOperationRangeAtom);
     const operationRange = useAtomValue(operationRangeAtom);
     const performanceRange = useAtomValue(performanceRangeAtom);
     const activeReport = useAtomValue(activeReportAtom);

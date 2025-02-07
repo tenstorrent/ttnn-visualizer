@@ -22,8 +22,9 @@ export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorAtom = atom<number | null>(null);
 
 export const operationRangeAtom = atom<NumberRange | null>(null);
+export const selectedOperationRangeAtom = atom<NumberRange | null>(null);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
-export const selectedRangeAtom = atom<NumberRange | null>(null);
+export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
 
 // This atom stores the file transfer progress data in localStorage (or sessionStorage)
 export const fileTransferProgressAtom = atom<FileProgress>({

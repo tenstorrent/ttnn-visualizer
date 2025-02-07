@@ -30,7 +30,7 @@ import isValidNumber from '../functions/isValidNumber';
 import { getUniqueDeviceIDs, mergeMultideviceRows } from '../functions/perfFunctions';
 import { RowData } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
-import { selectedRangeAtom } from '../store/app';
+import { selectedOperationRangeAtom } from '../store/app';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -266,7 +266,7 @@ const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
 };
 
 export const useOperationsList = (useRange?: boolean) => {
-    const range = useAtomValue(selectedRangeAtom);
+    const range = useAtomValue(selectedOperationRangeAtom);
 
     const response = useQuery<OperationDescription[], AxiosError>({
         queryFn: () => fetchOperations(),
@@ -571,7 +571,7 @@ export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> 
 };
 
 export const useTensors = (useRange?: boolean, deviceId?: number | null) => {
-    const range = useAtomValue(selectedRangeAtom);
+    const range = useAtomValue(selectedOperationRangeAtom);
 
     const response = useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(deviceId),
@@ -619,7 +619,7 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
 };
 
 export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
-    const range = useAtomValue(selectedRangeAtom);
+    const range = useAtomValue(selectedOperationRangeAtom);
 
     const response = useQuery({
         queryFn: () => fetchAllBuffers(bufferType),

@@ -6,35 +6,37 @@ $alt-axis-offset: 10px;
 $alt-axis-padding: 20px;
 
 .range-slider {
-    display: flex;
-    flex-wrap: nowrap;
-    gap: 20px;
-    align-items: flex-start;
-
     .inputs {
         display: flex;
-        flex-wrap: nowrap;
+        flex-flow: column nowrap;
         flex-grow: 0;
         flex-shrink: 1;
         gap: 5px;
 
-        > .bp5-input-group {
-            width: 55px;
+        .group {
+            display: flex;
+            flex-wrap: nowrap;
+
+            > .bp5-input-group {
+                width: 55px;
+            }
         }
     }
 
-    .slider {
-        position: relative;
+    .slider-container {
+        display: flex;
+        flex-flow: column nowrap;
         flex-grow: 1;
-        margin-top: 4px;
+        align-items: center;
     }
 
-    .alt-x-axis {
+    .slider {
         display: flex;
-        width: calc(100% - $alt-axis-offset);
-        position: absolute;
-        left: $alt-axis-offset;
-        top: -#{$alt-axis-padding};
+        flex-wrap: nowrap;
+        gap: 20px;
+        align-items: flex-start;
+        flex-grow: 1;
+        margin-top: 4px;
     }
 
     .reset {
