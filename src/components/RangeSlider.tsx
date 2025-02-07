@@ -27,8 +27,8 @@ function Range() {
     const location = useLocation();
 
     const setOperationRange = useSetAtom(operationRangeAtom);
-    const setPerformanceRange = useSetAtom(performanceRangeAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedOperationRangeAtom);
+    const setPerformanceRange = useSetAtom(performanceRangeAtom);
     const [selectedPerformanceRange, setSelectedPerformanceRange] = useAtom(selectedPerformanceRangeAtom);
 
     const range = useMemo(
@@ -49,31 +49,21 @@ function Range() {
     const perfMax = perfRange?.[1];
 
     const isOperationDetails = location.pathname.includes(`${ROUTES.OPERATIONS}/`);
-    const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
+    const isPerformanceRoute = true;
 
     useEffect(() => {
         if (range) {
             setOperationRange(range);
-            setSelectedRange(null);
+            setSelectedRange(range);
         }
+    }, [range, setOperationRange, setSelectedRange]);
 
+    useEffect(() => {
         if (perfRange) {
             setPerformanceRange(perfRange);
-            setSelectedPerformanceRange(null);
+            setSelectedPerformanceRange(perfRange);
         }
-    }, [range, perfRange, setOperationRange, setSelectedRange, setPerformanceRange, setSelectedPerformanceRange]);
-
-    useEffect(() => {
-        if (!selectedRange && min && max) {
-            setSelectedRange([min, max]);
-        }
-    }, [min, max, selectedRange, setSelectedRange]);
-
-    useEffect(() => {
-        if (!selectedPerformanceRange && perfMin && perfMax) {
-            setSelectedPerformanceRange([perfMin, perfMax]);
-        }
-    }, [perfMin, perfMax, selectedPerformanceRange, setSelectedPerformanceRange]);
+    }, [perfRange, setPerformanceRange, setSelectedPerformanceRange]);
 
     return selectedRange ? (
         <div className='range-slider'>
