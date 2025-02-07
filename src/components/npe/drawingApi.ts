@@ -138,8 +138,7 @@ export const getLinkPoints = (nocId: NoCID, color?: string): LinkPoints => {
             };
             break;
         default:
-            // eslint-disable-next-line no-console
-            console.warn('Unknown link type', nocId);
+            // console.warn('Unknown link type', nocId);
             break;
     }
     return { x2, y2, x1, y1, arrow, color, nocId } as LinkPoints;

@@ -28,6 +28,13 @@ function FooterInfobar() {
 
     const isInSync = useGetDeviceOperationListPerfResult.length > 0;
     const isOperationDetails = location.pathname.includes(`${ROUTES.OPERATIONS}/`);
+    const isNPE = location.pathname.includes(`${ROUTES.NPE}`);
+
+    useEffect(() => {
+        if (isNPE) {
+            setSliderIsOpen(false);
+        }
+    }, [isNPE]);
 
     useEffect(() => {
         if (isOperationDetails) {

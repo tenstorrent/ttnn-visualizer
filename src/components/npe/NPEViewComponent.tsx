@@ -6,7 +6,7 @@
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Slider } from '@blueprintjs/core';
+import { Button, Icon, Slider } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { NPEData, NoCID, NoCTransfer } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
@@ -37,6 +37,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedTimestep(0);
         setSelectedNode(null);
         setSelectedTransferList([]);
+        setHighlightedTransfer(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [npeData]);
 
@@ -150,6 +151,23 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             .filter((tr) => tr !== null);
         setSelectedTransferList(activeTransfers as NoCTransfer[]);
     };
+
+    const getOriginOpacity = (transfer: NoCTransfer): number => {
+        if (highlightedTransfer !== null && highlightedTransfer.id === transfer.id) {
+            return 1;
+        }
+        if (highlightedTransfer !== null) {
+            return 0.15;
+        }
+        const isSelected = selectedTransferList.some((t) => t.id === transfer.id);
+
+        if (selectedTransferList.length !== 0 && !isSelected) {
+            return 0.15;
+        }
+
+        return 1;
+    };
+
     return (
         <div className='npe'>
             <div className='header'>
@@ -169,7 +187,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     min={0}
                     max={npeData.timestep_data.length - 1}
                     stepSize={1}
-                    labelStepSize={npeData.timestep_data.length / 20}
+                    labelStepSize={npeData.timestep_data.length > 20 ? npeData.timestep_data.length / 20 : 1}
                     value={selectedTimestep}
                     onChange={(value: number) => handleScrubberChange(value)}
                 />
@@ -223,10 +241,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             position: 'relative',
                                             gridColumn: transfer.src[1] + 1,
                                             gridRow: transfer.src[0] + 1,
-                                            color: 'red',
+                                            color: 'yellow',
+                                            fontSize: '20px',
+                                            opacity: getOriginOpacity(transfer),
                                         }}
                                     >
-                                        <div style={{ position: 'absolute', right: '4px' }}>&deg;</div>
+                                        <div style={{ position: 'absolute', right: '5px', top: '-4px' }}>&deg;</div>
                                     </div>
                                 )}
                                 {transfer?.dst && (
@@ -237,10 +257,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             position: 'relative',
                                             gridColumn: transfer.dst[1] + 1,
                                             gridRow: transfer.dst[0] + 1,
-                                            color: 'blue',
+                                            color: 'orangered',
+                                            fontSize: '20px',
+                                            opacity: getOriginOpacity(transfer),
                                         }}
                                     >
-                                        <div style={{ position: 'absolute', right: 0 }}>&deg;</div>
+                                        <div style={{ position: 'absolute', right: '-1px', top: '-4px' }}>&deg;</div>
                                     </div>
                                 )}
                             </>
@@ -418,11 +440,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                 />
                                                 {transfer.id}
                                                 <div>
-                                                    <span style={{ border: '1px solid red' }}>
+                                                    <span style={{ border: '1px solid yellow' }}>
                                                         {transfer.src.join('-')}
                                                     </span>{' '}
-                                                    -&gt;
-                                                    <span style={{ border: '1px solid blue' }}>
+                                                    <Icon
+                                                        size={12}
+                                                        icon={IconNames.ArrowRight}
+                                                    />{' '}
+                                                    <span style={{ border: '1px solid orangered' }}>
                                                         {transfer.dst.join('-')}
                                                     </span>
                                                 </div>
