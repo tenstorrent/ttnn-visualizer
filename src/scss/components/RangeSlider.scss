@@ -28,6 +28,7 @@ $alt-axis-padding: 20px;
         flex-flow: column nowrap;
         flex-grow: 1;
         align-items: center;
+        margin-top: 4px;
     }
 
     .slider {
@@ -35,7 +36,6 @@ $alt-axis-padding: 20px;
         flex-wrap: nowrap;
         gap: 20px;
         align-items: flex-start;
-        flex-grow: 1;
         margin-top: 4px;
     }
 
