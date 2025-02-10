@@ -159,6 +159,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         if (highlightedTransfer !== null) {
             return 0.15;
         }
+        if (selectedTransferList.length === 0) {
+            return 0.45;
+        }
         const isSelected = selectedTransferList.some((t) => t.id === transfer.id);
 
         if (selectedTransferList.length !== 0 && !isSelected) {
@@ -168,8 +171,39 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         return 1;
     };
 
+    const formatMetadata = (value: string | number) => {
+        if (typeof value === 'number') {
+            return value.toFixed(2);
+        }
+        return value;
+    };
+
     return (
         <div className='npe'>
+            <div className='metadata'>
+                <div>
+                    <div>
+                        <div>
+                            {Object.keys(npeData.common_info).map((key) => (
+                                <div key={key}>
+                                    <span>{key}:</span>
+                                    {/* @ts-expect-error ts-migrate(2531) */}
+                                    <span>{formatMetadata(npeData.common_info[key])}</span>
+                                </div>
+                            ))}
+                        </div>
+                        <hr />
+                        <div>
+                            <span>Timestamp:</span>
+                            <span>{selectedTimestep}</span>
+                        </div>
+                        <div>
+                            <span>Active transfers:</span>
+                            <span>{transfers.length}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div className='header'>
                 {!isPlaying && (
                     <Button
@@ -244,27 +278,25 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             color: 'yellow',
                                             fontSize: '20px',
                                             opacity: getOriginOpacity(transfer),
+                                            border: '1px solid yellow',
                                         }}
-                                    >
-                                        <div style={{ position: 'absolute', right: '5px', top: '-4px' }}>&deg;</div>
-                                    </div>
+                                    />
                                 )}
-                                {transfer?.dst && (
+                                {transfer.dst.map((dst) => (
                                     <div
+                                        key={`${transfer.id}-dst-${dst[0]}-${dst[1]}`}
                                         className='tensix'
-                                        key={`${transfer.id}-dst`}
                                         style={{
                                             position: 'relative',
-                                            gridColumn: transfer.dst[1] + 1,
-                                            gridRow: transfer.dst[0] + 1,
+                                            gridColumn: dst[1] + 1,
+                                            gridRow: dst[0] + 1,
                                             color: 'orangered',
                                             fontSize: '20px',
                                             opacity: getOriginOpacity(transfer),
+                                            border: '1px solid orangered',
                                         }}
-                                    >
-                                        <div style={{ position: 'absolute', right: '-1px', top: '-4px' }}>&deg;</div>
-                                    </div>
-                                )}
+                                    />
+                                ))}
                             </>
                         ))}
 
@@ -321,15 +353,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                         gridRow: rowIndex + 1,
                                     }}
                                 >
-                                    <div
-                                        style={{
-                                            position: 'absolute',
-                                            top: 0,
-                                            left: 0,
-                                            width: '100%',
-                                            height: '100%',
-                                        }}
-                                    >
+                                    <div className='transfer-render-ctn'>
                                         <TensixTransferRenderer
                                             style={{
                                                 ...(highlightedTransfer !== null ? { opacity: 0.25 } : { opacity: 1 }),
@@ -448,7 +472,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                         icon={IconNames.ArrowRight}
                                                     />{' '}
                                                     <span style={{ border: '1px solid orangered' }}>
-                                                        {transfer.dst.join('-')}
+                                                        {transfer.dst.length === 1
+                                                            ? transfer.dst[0].join('-')
+                                                            : `${transfer.dst[0].join('-')} - ${transfer.dst[transfer.dst.length - 1].join('-')}`}
                                                     </span>
                                                 </div>
                                                 <div>{formatSize(transfer.total_bytes)}B</div>

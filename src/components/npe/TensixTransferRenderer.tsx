@@ -37,6 +37,7 @@ const TensixTransferRenderer: React.FC<SVGTensixRendererProps> = ({
             width={width}
             height={height}
             style={style}
+            aria-description={data.map((line) => line.nocId).join(',')}
         >
             <g>
                 {data.map((line, index) => {
@@ -56,12 +57,14 @@ const TensixTransferRenderer: React.FC<SVGTensixRendererProps> = ({
                             />
                             {line.arrow && !isMulticolor && (
                                 <polygon
+                                    transform={line.transform}
                                     points={`${line.arrow.p1} ${line.arrow.p2} ${line.arrow.p3}`}
                                     fill={line.color || 'white'}
                                 />
                             )}
                             {line.arrow && isMulticolor && (
                                 <polygon
+                                    transform={line.transform}
                                     points={`${line.arrow.p1} ${line.arrow.p2} ${line.arrow.p3}`}
                                     fill='#999'
                                 />
