@@ -21,7 +21,6 @@ import {
 import { Cell, MathFidelity, ProcessedRow, RowData } from '../../definitions/PerfTable';
 import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
 import { selectedPerformanceRangeAtom } from '../../store/app';
-import isValidNumber from '../../functions/isValidNumber';
 
 const analyze_matmul = (row: RowData) => {
     const input_0_from_dram = String(row.INPUT_0_MEMORY || '').includes('DRAM');
@@ -392,14 +391,12 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
 
     const getFilteredRows = () =>
         selectedRange && processedRows.length > 0
-            ? processedRows.filter(
-                  (row) =>
-                      isValidNumber(row?.ID?.raw_value) &&
-                      row.ID.raw_value >= selectedRange[0] &&
-                      row.ID.raw_value <= selectedRange[1],
-              )
-            : processedRows;
+            ? processedRows.filter((row) => {
+                  const rowId = parseInt(String(row?.ID?.raw_value), 10);
 
+                  return rowId >= selectedRange[0] && rowId <= selectedRange[1];
+              })
+            : processedRows;
     return (
         <>
             <Switch
