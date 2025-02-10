@@ -98,7 +98,9 @@ function MainNavigation() {
                     minimal
                     large
                     className='npe-button'
-                />
+                >
+                    <small>beta</small>
+                </Button>
             </Navbar.Group>
         </Navbar>
     );
