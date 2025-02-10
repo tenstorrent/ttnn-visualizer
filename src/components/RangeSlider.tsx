@@ -6,7 +6,7 @@ import { Button, InputGroup, NumberRange, RangeSlider, Tooltip } from '@blueprin
 import { useAtom, useSetAtom } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation } from 'react-router';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     operationRangeAtom,
     performanceRangeAtom,
@@ -38,6 +38,7 @@ function Range() {
     const [selectedRange, setSelectedRange] = useAtom(selectedOperationRangeAtom);
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
     const [selectedPerformanceRange, setSelectedPerformanceRange] = useAtom(selectedPerformanceRangeAtom);
+    const [isUserChange, setIsUserChange] = useState(false);
 
     const range = useMemo(
         () => (operations ? ([operations?.[0].id, operations?.[operations.length - 1].id] as NumberRange) : null),
@@ -75,7 +76,7 @@ function Range() {
     }, [perfRange, setPerformanceRange, setSelectedPerformanceRange]);
 
     useEffect(() => {
-        if (isInSync && selectedRange && perfRange && selectedPerformanceRange) {
+        if (isInSync && selectedRange && perfRange && selectedPerformanceRange && isUserChange) {
             const updatedMin = opIdsMap.find((op) => selectedRange[0] === op.opId)?.perfId;
             const updatedMax = opIdsMap.find((op) => selectedRange[1] === op.opId)?.perfId;
 
@@ -84,10 +85,24 @@ function Range() {
                     updatedMin || selectedPerformanceRange[0],
                     updatedMax || selectedPerformanceRange[1],
                 ]);
+                setIsUserChange(false);
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isInSync, selectedRange, opIdsMap, perfRange]);
+    }, [isInSync, selectedRange]);
+
+    useEffect(() => {
+        if (isInSync && selectedRange && perfRange && selectedPerformanceRange && isUserChange) {
+            const updatedMin = opIdsMap.find((op) => selectedPerformanceRange[0] === op.perfId)?.opId;
+            const updatedMax = opIdsMap.find((op) => selectedPerformanceRange[1] === op.perfId)?.opId;
+
+            if (updatedMin || updatedMax) {
+                setSelectedRange([updatedMin || selectedRange[0], updatedMax || selectedRange[1]]);
+                setIsUserChange(false);
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isInSync, selectedPerformanceRange]);
 
     return selectedRange || selectedPerformanceRange ? (
         <div className='range-slider'>
@@ -97,24 +112,26 @@ function Range() {
                         <div className='group'>
                             <InputGroup
                                 value={selectedPerformanceRange[0].toString()}
-                                onValueChange={(value) =>
+                                onValueChange={(value) => {
                                     setSelectedPerformanceRange([
                                         parseInt(value, 10) || perfMin!,
                                         selectedPerformanceRange[1],
-                                    ])
-                                }
+                                    ]);
+                                    setIsUserChange(true);
+                                }}
                                 fill={false}
                                 disabled={!isPerformanceRoute}
                                 small
                             />
                             <InputGroup
                                 value={selectedPerformanceRange[1].toString()}
-                                onValueChange={(value) =>
+                                onValueChange={(value) => {
                                     setSelectedPerformanceRange([
                                         selectedPerformanceRange[0],
                                         parseInt(value, 10) || perfMax!,
-                                    ])
-                                }
+                                    ]);
+                                    setIsUserChange(true);
+                                }}
                                 fill={false}
                                 disabled={!isPerformanceRoute}
                                 small
@@ -126,7 +143,10 @@ function Range() {
                         <div className='slider-container'>
                             <RangeSlider
                                 value={selectedPerformanceRange}
-                                onChange={(value) => setSelectedPerformanceRange(value)}
+                                onChange={(value) => {
+                                    setSelectedPerformanceRange(value);
+                                    setIsUserChange(true);
+                                }}
                                 min={perfMin}
                                 max={perfMax}
                                 labelStepSize={getStepSize(perfMax)}
@@ -160,18 +180,20 @@ function Range() {
                         <div className='group'>
                             <InputGroup
                                 value={selectedRange[0].toString()}
-                                onValueChange={(value) =>
-                                    setSelectedRange([parseInt(value, 10) || min!, selectedRange[1]])
-                                }
+                                onValueChange={(value) => {
+                                    setSelectedRange([parseInt(value, 10) || min!, selectedRange[1]]);
+                                    setIsUserChange(true);
+                                }}
                                 fill={false}
                                 disabled={shouldDisableOpRange}
                                 small
                             />
                             <InputGroup
                                 value={selectedRange[1].toString()}
-                                onValueChange={(value) =>
-                                    setSelectedRange([selectedRange[0], parseInt(value, 10) || max!])
-                                }
+                                onValueChange={(value) => {
+                                    setSelectedRange([selectedRange[0], parseInt(value, 10) || max!]);
+                                    setIsUserChange(true);
+                                }}
                                 fill={false}
                                 disabled={shouldDisableOpRange}
                                 small
@@ -184,7 +206,10 @@ function Range() {
                     <div className='slider-container'>
                         <RangeSlider
                             value={selectedRange}
-                            onChange={(value) => setSelectedRange(value)}
+                            onChange={(value) => {
+                                setSelectedRange(value);
+                                setIsUserChange(true);
+                            }}
                             min={min}
                             max={max}
                             labelStepSize={getStepSize(max)}
