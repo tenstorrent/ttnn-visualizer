@@ -38,7 +38,8 @@ function Range() {
     const [selectedRange, setSelectedRange] = useAtom(selectedOperationRangeAtom);
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
     const [selectedPerformanceRange, setSelectedPerformanceRange] = useAtom(selectedPerformanceRangeAtom);
-    const [isUserChange, setIsUserChange] = useState(false);
+    const [isUserOpChange, setIsUserOpChange] = useState(false);
+    const [isUserPerfChange, setIsUserPerfChange] = useState(false);
 
     const range = useMemo(
         () => (operations ? ([operations?.[0].id, operations?.[operations.length - 1].id] as NumberRange) : null),
@@ -76,7 +77,7 @@ function Range() {
     }, [perfRange, setPerformanceRange, setSelectedPerformanceRange]);
 
     useEffect(() => {
-        if (isInSync && selectedRange && perfRange && selectedPerformanceRange && isUserChange) {
+        if (isInSync && selectedRange && perfRange && selectedPerformanceRange && isUserOpChange) {
             const updatedMin = opIdsMap.find((op) => selectedRange[0] === op.opId)?.perfId;
             const updatedMax = opIdsMap.find((op) => selectedRange[1] === op.opId)?.perfId;
 
@@ -85,20 +86,20 @@ function Range() {
                     updatedMin || selectedPerformanceRange[0],
                     updatedMax || selectedPerformanceRange[1],
                 ]);
-                setIsUserChange(false);
+                setIsUserOpChange(false);
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isInSync, selectedRange]);
 
     useEffect(() => {
-        if (isInSync && selectedRange && perfRange && selectedPerformanceRange && isUserChange) {
+        if (isInSync && selectedRange && perfRange && selectedPerformanceRange && isUserPerfChange) {
             const updatedMin = opIdsMap.find((op) => selectedPerformanceRange[0] === op.perfId)?.opId;
             const updatedMax = opIdsMap.find((op) => selectedPerformanceRange[1] === op.perfId)?.opId;
 
             if (updatedMin || updatedMax) {
                 setSelectedRange([updatedMin || selectedRange[0], updatedMax || selectedRange[1]]);
-                setIsUserChange(false);
+                setIsUserPerfChange(false);
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -117,7 +118,7 @@ function Range() {
                                         parseInt(value, 10) || perfMin!,
                                         selectedPerformanceRange[1],
                                     ]);
-                                    setIsUserChange(true);
+                                    setIsUserPerfChange(true);
                                 }}
                                 fill={false}
                                 disabled={!isPerformanceRoute}
@@ -130,7 +131,7 @@ function Range() {
                                         selectedPerformanceRange[0],
                                         parseInt(value, 10) || perfMax!,
                                     ]);
-                                    setIsUserChange(true);
+                                    setIsUserPerfChange(true);
                                 }}
                                 fill={false}
                                 disabled={!isPerformanceRoute}
@@ -145,7 +146,7 @@ function Range() {
                                 value={selectedPerformanceRange}
                                 onChange={(value) => {
                                     setSelectedPerformanceRange(value);
-                                    setIsUserChange(true);
+                                    setIsUserPerfChange(true);
                                 }}
                                 min={perfMin}
                                 max={perfMax}
@@ -182,7 +183,7 @@ function Range() {
                                 value={selectedRange[0].toString()}
                                 onValueChange={(value) => {
                                     setSelectedRange([parseInt(value, 10) || min!, selectedRange[1]]);
-                                    setIsUserChange(true);
+                                    setIsUserOpChange(true);
                                 }}
                                 fill={false}
                                 disabled={shouldDisableOpRange}
@@ -192,7 +193,7 @@ function Range() {
                                 value={selectedRange[1].toString()}
                                 onValueChange={(value) => {
                                     setSelectedRange([selectedRange[0], parseInt(value, 10) || max!]);
-                                    setIsUserChange(true);
+                                    setIsUserOpChange(true);
                                 }}
                                 fill={false}
                                 disabled={shouldDisableOpRange}
@@ -208,7 +209,7 @@ function Range() {
                             value={selectedRange}
                             onChange={(value) => {
                                 setSelectedRange(value);
-                                setIsUserChange(true);
+                                setIsUserOpChange(true);
                             }}
                             min={min}
                             max={max}
