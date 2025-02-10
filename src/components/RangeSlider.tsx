@@ -15,7 +15,7 @@ import {
 } from '../store/app';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/RangeSlider.scss';
-import { useNormalizedPerformance, useOperationsList } from '../hooks/useAPI';
+import { useGetDeviceOperationListPerf, useNormalizedPerformance, useOperationsList } from '../hooks/useAPI';
 import { OperationDescription } from '../model/APIData';
 import { RowData } from '../definitions/PerfTable';
 
@@ -25,6 +25,9 @@ function Range() {
     const { data: operations } = useOperationsList();
     const perfData = useNormalizedPerformance();
     const location = useLocation();
+    const listPerf = useGetDeviceOperationListPerf();
+    const isInSync = listPerf?.length > 0;
+    // const opIdsMap = useOptoPerfIdFiltered();
 
     const setOperationRange = useSetAtom(operationRangeAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedOperationRangeAtom);
@@ -49,7 +52,8 @@ function Range() {
     const perfMax = perfRange?.[1];
 
     const isOperationDetails = location.pathname.includes(`${ROUTES.OPERATIONS}/`);
-    const isPerformanceRoute = true;
+    const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
+    const shouldDisableOpRange = isOperationDetails || (isPerformanceRoute && !isInSync);
 
     useEffect(() => {
         if (range) {
@@ -131,7 +135,7 @@ function Range() {
                             value={selectedRange[0].toString()}
                             onValueChange={(value) => setSelectedRange([parseInt(value, 10), selectedRange[1]])}
                             fill={false}
-                            disabled={isOperationDetails || isPerformanceRoute}
+                            disabled={shouldDisableOpRange}
                             small
                         />
 
@@ -139,7 +143,7 @@ function Range() {
                             value={selectedRange[1].toString()}
                             onValueChange={(value) => setSelectedRange([selectedRange[0], parseInt(value, 10)])}
                             fill={false}
-                            disabled={isOperationDetails || isPerformanceRoute}
+                            disabled={shouldDisableOpRange}
                             small
                         />
                     </div>
@@ -153,7 +157,7 @@ function Range() {
                             min={min}
                             max={max}
                             labelStepSize={getStepSize(max)}
-                            disabled={isOperationDetails || isPerformanceRoute}
+                            disabled={shouldDisableOpRange}
                             labelRenderer={(id, options) => getOperationLabel(id, operations, options?.isHandleTooltip)}
                         />
                         <p>Operations</p>
@@ -165,7 +169,7 @@ function Range() {
                         <Button
                             icon={IconNames.RESET}
                             onClick={() => setSelectedRange([min, max])}
-                            disabled={isOperationDetails || isPerformanceRoute}
+                            disabled={shouldDisableOpRange}
                             small
                         />
                     </Tooltip>

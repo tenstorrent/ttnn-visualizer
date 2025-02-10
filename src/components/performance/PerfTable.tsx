@@ -21,6 +21,7 @@ import {
 import { Cell, MathFidelity, ProcessedRow, RowData } from '../../definitions/PerfTable';
 import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
 import { selectedPerformanceRangeAtom } from '../../store/app';
+import isValidNumber from '../../functions/isValidNumber';
 
 const analyze_matmul = (row: RowData) => {
     const input_0_from_dram = String(row.INPUT_0_MEMORY || '').includes('DRAM');
@@ -304,15 +305,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
             const linkedObj = opIdsMap.find((op) => op.perfId === r.ORIGINAL_ID);
             opData.ID.raw_value = String(r.ORIGINAL_ID);
             opData.OP.raw_value = linkedObj?.opId || null;
-
-            if (selectedRange) {
-                if ((r.ORIGINAL_ID ?? 0) > selectedRange[0] && (r.ORIGINAL_ID ?? 0) < selectedRange[1]) {
-                    rows.push(opData);
-                }
-            } else {
-                rows.push(opData);
-            }
-
+            rows.push(opData);
             prevRow = r;
         });
 
@@ -332,10 +325,8 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
             });
         }
 
-        // df = selectedRange ? rows.filter((r) => r.ID >= selectedRange[0] && r.ID <= selectedRange[1]) : df;
-
         return rows;
-    }, [data, opIdsMap, mergeDeviceData, hiliteHighDispatch, minPercentage, selectedRange]);
+    }, [data, opIdsMap, mergeDeviceData, hiliteHighDispatch, minPercentage]);
 
     const baseHeaders = [
         'ID',
@@ -399,6 +390,16 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         );
     };
 
+    const getFilteredRows = () =>
+        selectedRange && processedRows.length > 0
+            ? processedRows.filter(
+                  (row) =>
+                      isValidNumber(row?.ID?.raw_value) &&
+                      row.ID.raw_value >= selectedRange[0] &&
+                      row.ID.raw_value <= selectedRange[1],
+              )
+            : processedRows;
+
     return (
         <>
             <Switch
@@ -443,7 +444,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                         </tr>
                     </thead>
                     <tbody>
-                        {processedRows.map((row, i) => (
+                        {getFilteredRows().map((row, i) => (
                             <React.Fragment key={i}>
                                 <tr key={i}>
                                     {visibleHeaders.map((h) => (
