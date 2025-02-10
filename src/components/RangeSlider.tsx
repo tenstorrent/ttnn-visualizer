@@ -15,7 +15,12 @@ import {
 } from '../store/app';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/RangeSlider.scss';
-import { useGetDeviceOperationListPerf, useNormalizedPerformance, useOperationsList } from '../hooks/useAPI';
+import {
+    useGetDeviceOperationListPerf,
+    useNormalizedPerformance,
+    useOperationsList,
+    useOptoPerfIdFiltered,
+} from '../hooks/useAPI';
 import { OperationDescription } from '../model/APIData';
 import { RowData } from '../definitions/PerfTable';
 
@@ -27,7 +32,7 @@ function Range() {
     const location = useLocation();
     const listPerf = useGetDeviceOperationListPerf();
     const isInSync = listPerf?.length > 0;
-    // const opIdsMap = useOptoPerfIdFiltered();
+    const opIdsMap = useOptoPerfIdFiltered();
 
     const setOperationRange = useSetAtom(operationRangeAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedOperationRangeAtom);
@@ -69,7 +74,22 @@ function Range() {
         }
     }, [perfRange, setPerformanceRange, setSelectedPerformanceRange]);
 
-    return selectedRange ? (
+    useEffect(() => {
+        if (isInSync && selectedRange && perfRange && selectedPerformanceRange) {
+            const updatedMin = opIdsMap.find((op) => selectedRange[0] === op.opId)?.perfId;
+            const updatedMax = opIdsMap.find((op) => selectedRange[1] === op.opId)?.perfId;
+
+            if (updatedMin || updatedMax) {
+                setSelectedPerformanceRange([
+                    updatedMin || selectedPerformanceRange[0],
+                    updatedMax || selectedPerformanceRange[1],
+                ]);
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isInSync, selectedRange, opIdsMap, perfRange]);
+
+    return selectedRange || selectedPerformanceRange ? (
         <div className='range-slider'>
             {selectedPerformanceRange && (
                 <div className='slider'>
@@ -78,17 +98,22 @@ function Range() {
                             <InputGroup
                                 value={selectedPerformanceRange[0].toString()}
                                 onValueChange={(value) =>
-                                    setSelectedPerformanceRange([parseInt(value, 10), selectedPerformanceRange[1]])
+                                    setSelectedPerformanceRange([
+                                        parseInt(value, 10) || perfMin!,
+                                        selectedPerformanceRange[1],
+                                    ])
                                 }
                                 fill={false}
                                 disabled={!isPerformanceRoute}
                                 small
                             />
-
                             <InputGroup
                                 value={selectedPerformanceRange[1].toString()}
                                 onValueChange={(value) =>
-                                    setSelectedPerformanceRange([selectedPerformanceRange[0], parseInt(value, 10)])
+                                    setSelectedPerformanceRange([
+                                        selectedPerformanceRange[0],
+                                        parseInt(value, 10) || perfMax!,
+                                    ])
                                 }
                                 fill={false}
                                 disabled={!isPerformanceRoute}
@@ -96,6 +121,7 @@ function Range() {
                             />
                         </div>
                     </div>
+
                     {perfMin && perfMax && selectedPerformanceRange && (
                         <div className='slider-container'>
                             <RangeSlider
@@ -129,27 +155,32 @@ function Range() {
             )}
 
             <div className='slider'>
-                <div className='inputs'>
-                    <div className='group'>
-                        <InputGroup
-                            value={selectedRange[0].toString()}
-                            onValueChange={(value) => setSelectedRange([parseInt(value, 10), selectedRange[1]])}
-                            fill={false}
-                            disabled={shouldDisableOpRange}
-                            small
-                        />
-
-                        <InputGroup
-                            value={selectedRange[1].toString()}
-                            onValueChange={(value) => setSelectedRange([selectedRange[0], parseInt(value, 10)])}
-                            fill={false}
-                            disabled={shouldDisableOpRange}
-                            small
-                        />
+                {selectedRange && (
+                    <div className='inputs'>
+                        <div className='group'>
+                            <InputGroup
+                                value={selectedRange[0].toString()}
+                                onValueChange={(value) =>
+                                    setSelectedRange([parseInt(value, 10) || min!, selectedRange[1]])
+                                }
+                                fill={false}
+                                disabled={shouldDisableOpRange}
+                                small
+                            />
+                            <InputGroup
+                                value={selectedRange[1].toString()}
+                                onValueChange={(value) =>
+                                    setSelectedRange([selectedRange[0], parseInt(value, 10) || max!])
+                                }
+                                fill={false}
+                                disabled={shouldDisableOpRange}
+                                small
+                            />
+                        </div>
                     </div>
-                </div>
+                )}
 
-                {min && max && (
+                {min && max && selectedRange && (
                     <div className='slider-container'>
                         <RangeSlider
                             value={selectedRange}
