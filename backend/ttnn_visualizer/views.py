@@ -387,6 +387,15 @@ def get_profiler_perf_results_data_raw(session: TabSession):
     )
 
 
+@api.route("/profiler/perf-results/report", methods=["GET"])
+@with_session
+def get_profiler_perf_results_report(session: TabSession):
+    if not session.profiler_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+    report = OpsPerformanceQueries.generate_report(session)
+    return jsonify(report), 200
+
+
 @api.route("/profiler/device-log/raw", methods=["GET"])
 @with_session
 def get_profiler_data_raw(session: TabSession):

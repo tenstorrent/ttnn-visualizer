@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
-
+import csv
 import os
+import tempfile
+from io import StringIO
 from pathlib import Path
 from typing import List, Dict, Union, Optional
 
 import pandas as pd
+from tt_perf_report import perf_report
 
 from ttnn_visualizer.models import TabSession
 from ttnn_visualizer.ssh_client import get_client
@@ -449,6 +452,28 @@ class OpsPerformanceQueries:
         "CompileProgram_TT_HOST_FUNC [ns]",
         "HWCommandQueue_write_buffer_TT_HOST_FUNC [ns]",
     ]
+    REPORT_COLUMNS = [
+        "id",
+        "total_percent",
+        "bound",
+        "op_code",
+        "device_time",
+        "op_to_op_gap",
+        "cores",
+        "dram",
+        "dram_percent",
+        "flops",
+        "flops_percent",
+        "math_fidelity",
+        "output_datatype",
+        "input_0_datatype",
+        "input_1_datatype",
+        "dram_sharded",
+        "input_0_Memory",
+        "inner_dim_block_size",
+        "output_subblock_h",
+        "output_subblock_w"
+    ]
 
     def __init__(self, session: TabSession):
         """
@@ -511,6 +536,33 @@ class OpsPerformanceQueries:
         else:
             path = OpsPerformanceQueries.get_remote_ops_perf_file_path(session)
             return read_remote_file(session.remote_connection, path)
+
+    @classmethod
+    def generate_report(cls, session):
+        raw_csv = OpsPerformanceQueries.get_raw_csv(session)
+        csv_file = StringIO(raw_csv)
+        signpost = None
+        ignore_signposts = None
+        min_percentage = 0.5
+        id_range = None
+        csv_output_file = tempfile.mktemp(suffix=".csv")
+        no_advice = False
+        perf_report.generate_perf_report(
+            csv_file, signpost, ignore_signposts, min_percentage, id_range, csv_output_file, no_advice)
+
+        report = []
+
+        with open(csv_output_file, newline="") as csvfile:
+            reader = csv.reader(csvfile, delimiter=",")
+            next(reader, None)
+            for row in reader:
+                report.append({
+                    column: row[index] for index, column in enumerate(cls.REPORT_COLUMNS)
+                })
+
+        os.unlink(csv_output_file)
+
+        return report
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """

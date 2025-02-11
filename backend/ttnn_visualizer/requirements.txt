@@ -1,4 +1,3 @@
-
 gunicorn~=22.0.0
 uvicorn==0.30.1
 paramiko~=3.4.0
@@ -17,6 +16,7 @@ wheel
 build
 PyYAML==6.0.2
 python-dotenv==1.0.1
+tt-perf-report==1.0.0
 
 # Dev dependencies
 mypy
