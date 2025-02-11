@@ -428,14 +428,14 @@ export interface DeviceOperationMapping {
 }
 
 export const useNormalizedPerformance = (): RowData[] => {
-    const { data } = usePerformance();
+    const response = usePerformance();
 
     return useMemo(() => {
-        if (!data?.data || data.data.length === 0) {
+        if (!response?.data?.data || response?.data.data.length === 0) {
             return [];
         }
         // @ts-expect-error this should be just fine
-        let df: RowData[] = (data.data.slice() as RowData[]).filter(
+        let df: RowData[] = (response.data.data.slice() as RowData[]).filter(
             (r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE'] === ''),
         );
 
@@ -454,8 +454,10 @@ export const useNormalizedPerformance = (): RowData[] => {
         }
 
         return df;
-    }, [data]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [response.isLoading]);
 };
+
 export const useGetDeviceOperationListPerf = () => {
     const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
     const data = useNormalizedPerformance();
