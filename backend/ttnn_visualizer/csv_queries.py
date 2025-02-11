@@ -11,6 +11,7 @@ from typing import List, Dict, Union, Optional
 import pandas as pd
 from tt_perf_report import perf_report
 
+from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import TabSession
 from ttnn_visualizer.ssh_client import get_client
 
@@ -590,14 +591,17 @@ class OpsPerformanceReportQueries:
 
         report = []
 
-        with open(csv_output_file, newline="") as csvfile:
-            reader = csv.reader(csvfile, delimiter=",")
-            next(reader, None)
-            for row in reader:
-                report.append({
-                    column: row[index] for index, column in enumerate(cls.REPORT_COLUMNS)
-                })
-
-        os.unlink(csv_output_file)
+        try:
+            with open(csv_output_file, newline="") as csvfile:
+                reader = csv.reader(csvfile, delimiter=",")
+                next(reader, None)
+                for row in reader:
+                    report.append({
+                        column: row[index] for index, column in enumerate(cls.REPORT_COLUMNS)
+                    })
+        except csv.Error as e:
+            raise DataFormatError() from e
+        finally:
+            os.unlink(csv_output_file)
 
         return report

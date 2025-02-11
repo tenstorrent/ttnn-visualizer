@@ -16,6 +16,7 @@ from flask import request, current_app
 
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries, OpsPerformanceReportQueries
 from ttnn_visualizer.decorators import with_session
+from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.file_uploads import (
@@ -392,7 +393,12 @@ def get_profiler_perf_results_data_raw(session: TabSession):
 def get_profiler_perf_results_report(session: TabSession):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
-    report = OpsPerformanceReportQueries.generate_report(session)
+
+    try:
+        report = OpsPerformanceReportQueries.generate_report(session)
+    except DataFormatError:
+        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+
     return jsonify(report), 200
 
 
