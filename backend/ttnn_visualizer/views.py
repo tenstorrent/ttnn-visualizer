@@ -14,7 +14,7 @@ import yaml
 from flask import Blueprint, Response, jsonify
 from flask import request, current_app
 
-from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries
+from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries, OpsPerformanceReportQueries
 from ttnn_visualizer.decorators import with_session
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import RemoteConnectionException
@@ -392,7 +392,7 @@ def get_profiler_perf_results_data_raw(session: TabSession):
 def get_profiler_perf_results_report(session: TabSession):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
-    report = OpsPerformanceQueries.generate_report(session)
+    report = OpsPerformanceReportQueries.generate_report(session)
     return jsonify(report), 200
 
 
