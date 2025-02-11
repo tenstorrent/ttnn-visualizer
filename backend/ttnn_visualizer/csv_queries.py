@@ -562,7 +562,7 @@ class OpsPerformanceReportQueries:
         "input_0_datatype",
         "input_1_datatype",
         "dram_sharded",
-        "input_0_Memory",
+        "input_0_memory",
         "inner_dim_block_size",
         "output_subblock_h",
         "output_subblock_w"
