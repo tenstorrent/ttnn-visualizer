@@ -69,6 +69,10 @@ https://github.com/user-attachments/assets/d00a2629-0bd1-4ee1-bb12-bd796d85221d
 |-----------------------------------------------|------------------------------------------|
 | <img width="400" alt="Performance analysis" src="https://github.com/user-attachments/assets/03f64a7a-262a-4b2a-a0b6-c70f3f14705c" /> |  <img width="400" alt="" src="https://github.com/user-attachments/assets/224d14f7-c7b3-4f4c-99c6-528c800b1a84" /> |
 
+| NPE |  |
+|-----------------------------------------------|------------------------------------------|
+| <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/1f4441c6-9d9e-4834-9e71-edec1955243c" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/7159992e-7691-41cf-a152-8bc6a3606ade" /> |
+
 ## Getting started
 
 How to [get started](./docs/getting-started.md) with TT-NN Visualizer.
@@ -92,8 +96,11 @@ Unzip the files into their own directories and select them with the local folder
 **Llama mlp**
 [report + performance trace](https://github.com/user-attachments/files/18770763/llama_attn_32l_10iter_30jan.zip)
 
+### NPE report
+
 **Llama decode**
-[npe data](https://github.com/user-attachments/files/18770763/llama_attn_32l_10iter_30jan.zip)
+[npe data](https://github.com/user-attachments/files/18772778/llama-decode-3B.zip)
+
 
 ## Contributing
 
