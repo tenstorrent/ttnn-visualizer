@@ -94,7 +94,6 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.NPE)}
                     active={window.location.pathname === ROUTES.NPE}
                     icon={IconNames.Random}
-                    // disabled={!hasActiveProfile}
                     minimal
                     large
                     className='npe-button'

@@ -40,13 +40,12 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList }) => {
 
     useEffect(() => {
         const canvas = canvasRef.current;
-        if (!canvas) {
+        const ctx = canvas?.getContext('2d');
+
+        if (!canvas || !ctx) {
             return;
         }
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-            return;
-        }
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const chunkWidth = canvas.width / congestionMapPerTimestamp.worst.length;
         congestionMapPerTimestamp.worst.forEach(({ color }, index) => {

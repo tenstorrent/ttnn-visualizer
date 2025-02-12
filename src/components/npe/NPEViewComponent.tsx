@@ -182,26 +182,22 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         <div className='npe'>
             <div className='metadata'>
                 <div>
-                    <div>
-                        <div>
-                            {Object.keys(npeData.common_info).map((key) => (
-                                <div key={key}>
-                                    <span>{key}:</span>
-                                    {/* @ts-expect-error ts-migrate(2531) */}
-                                    <span>{formatMetadata(npeData.common_info[key])}</span>
-                                </div>
-                            ))}
+                    {Object.keys(npeData.common_info).map((key) => (
+                        <div key={key}>
+                            <span>{key}:</span>
+                            {/* @ts-expect-error ts-migrate(2531) */}
+                            <span>{formatMetadata(npeData.common_info[key])}</span>
                         </div>
-                        <hr />
-                        <div>
-                            <span>Timestamp:</span>
-                            <span>{selectedTimestep}</span>
-                        </div>
-                        <div>
-                            <span>Active transfers:</span>
-                            <span>{transfers.length}</span>
-                        </div>
-                    </div>
+                    ))}
+                </div>
+                <hr />
+                <div>
+                    <span>Timestamp:</span>
+                    <span>{selectedTimestep}</span>
+                </div>
+                <div>
+                    <span>Active transfers:</span>
+                    <span>{transfers.length}</span>
                 </div>
             </div>
             <div className='header'>
@@ -416,77 +412,75 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     )}
                 </div>
                 <div className='side-data'>
-                    <div>
-                        {Object.keys(groupedTransfersByNoCID).length !== 0 && (
-                            <>
-                                <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    Active transfers through {selectedNode?.coords.join('-')}
-                                    <Button
-                                        minimal
-                                        icon={IconNames.CROSS}
-                                        onClick={() => showActiveTransfers(null)}
-                                    />
-                                </h3>
-                                {Object.entries(groupedTransfersByNoCID).map(([nocId, localTransferList]) => (
-                                    <div
-                                        key={nocId}
-                                        style={{ marginBottom: '20px' }}
-                                    >
-                                        <h4>NOC ID: {nocId}</h4>
-                                        {localTransferList.map((transfer) => (
+                    {Object.keys(groupedTransfersByNoCID).length !== 0 && (
+                        <>
+                            <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                Active transfers through {selectedNode?.coords.join('-')}
+                                <Button
+                                    minimal
+                                    icon={IconNames.CROSS}
+                                    onClick={() => showActiveTransfers(null)}
+                                />
+                            </h3>
+                            {Object.entries(groupedTransfersByNoCID).map(([nocId, localTransferList]) => (
+                                <div
+                                    key={nocId}
+                                    style={{ marginBottom: '20px' }}
+                                >
+                                    <h4>NOC ID: {nocId}</h4>
+                                    {localTransferList.map((transfer) => (
+                                        <div
+                                            key={transfer.id}
+                                            style={{
+                                                display: 'flex',
+                                                gap: '5px',
+                                                alignContent: 'center',
+                                                alignItems: 'center',
+                                                padding: '5px',
+                                                margin: '5px',
+                                                transition: 'opacity 0.2s',
+                                                cursor: 'pointer',
+                                                opacity:
+                                                    highlightedTransfer == null || highlightedTransfer === transfer
+                                                        ? 1
+                                                        : 0.25,
+                                            }}
+                                            // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                            onMouseOver={() => setHighlightedTransfer(transfer)}
+                                            // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                            onMouseOut={() => setHighlightedTransfer(null)}
+                                        >
                                             <div
-                                                key={transfer.id}
                                                 style={{
-                                                    display: 'flex',
-                                                    gap: '5px',
-                                                    alignContent: 'center',
-                                                    alignItems: 'center',
-                                                    padding: '5px',
-                                                    margin: '5px',
-                                                    transition: 'opacity 0.2s',
-                                                    cursor: 'pointer',
-                                                    opacity:
-                                                        highlightedTransfer == null || highlightedTransfer === transfer
-                                                            ? 1
-                                                            : 0.25,
+                                                    backgroundColor: getRouteColor(transfer.id),
+                                                    width: '10px',
+                                                    height: '10px',
                                                 }}
-                                                // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
-                                                onMouseOver={() => setHighlightedTransfer(transfer)}
-                                                // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
-                                                onMouseOut={() => setHighlightedTransfer(null)}
-                                            >
-                                                <div
-                                                    style={{
-                                                        backgroundColor: getRouteColor(transfer.id),
-                                                        width: '10px',
-                                                        height: '10px',
-                                                    }}
-                                                />
-                                                {transfer.id}
-                                                <div>
-                                                    <span style={{ border: '1px solid yellow' }}>
-                                                        {transfer.src.join('-')}
-                                                    </span>{' '}
-                                                    <Icon
-                                                        size={12}
-                                                        icon={IconNames.ArrowRight}
-                                                    />{' '}
-                                                    <span style={{ border: '1px solid orangered' }}>
-                                                        {transfer.dst.length === 1
-                                                            ? transfer.dst[0].join('-')
-                                                            : `${transfer.dst[0].join('-')} - ${transfer.dst[transfer.dst.length - 1].join('-')}`}
-                                                    </span>
-                                                </div>
-                                                <div>{formatSize(transfer.total_bytes)}B</div>
-                                                <div>{transfer.noc_event_type}</div>
-                                                <div>injection rate: {transfer.injection_rate.toFixed(2)}</div>
+                                            />
+                                            {transfer.id}
+                                            <div>
+                                                <span style={{ border: '1px solid yellow' }}>
+                                                    {transfer.src.join('-')}
+                                                </span>{' '}
+                                                <Icon
+                                                    size={12}
+                                                    icon={IconNames.ArrowRight}
+                                                />{' '}
+                                                <span style={{ border: '1px solid orangered' }}>
+                                                    {transfer.dst.length === 1
+                                                        ? transfer.dst[0].join('-')
+                                                        : `${transfer.dst[0].join('-')} - ${transfer.dst[transfer.dst.length - 1].join('-')}`}
+                                                </span>
                                             </div>
-                                        ))}
-                                    </div>
-                                ))}
-                            </>
-                        )}
-                    </div>
+                                            <div>{formatSize(transfer.total_bytes)}B</div>
+                                            <div>{transfer.noc_event_type}</div>
+                                            <div>injection rate: {transfer.injection_rate.toFixed(2)}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ))}
+                        </>
+                    )}
                 </div>
             </div>
         </div>
