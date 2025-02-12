@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { PlotData } from 'plotly.js';
+import { noop } from 'react-query/types/core/utils';
 import { formatSize, toHex } from '../functions/math';
 import {
     BufferData,
@@ -153,6 +154,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
                 if (node.node_type === NodeType.circular_buffer_deallocate_all) {
                     // noop
+                    noop();
                 }
                 if (node.node_type === NodeType.buffer_allocate) {
                     const deviceOpNode = deviceOpList.at(-1);
@@ -170,7 +172,6 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                                 type: node.params.type,
                                 tensorId: this.getTensorForAddress(parseInt(node.params.address, 10))?.id,
                             });
-                            // deviceOp.events.push(node.node_type);
                         }
                     }
                 }
