@@ -35,12 +35,21 @@ function FooterInfobar() {
 
     const isInSync = useGetDeviceOperationListPerfResult.length > 0;
     const isOperationDetails = location.pathname.includes(`${ROUTES.OPERATIONS}/`);
+    const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
 
     useEffect(() => {
         if (isOperationDetails) {
             setSliderIsOpen(false);
         }
     }, [isOperationDetails]);
+
+    const getSelectedRange = (): string | null => {
+        if (isPerformanceRoute) {
+            return performanceRange && `${performanceRange[0]} - ${performanceRange[1]}`;
+        }
+
+        return selectedRange && `${selectedRange[0]} - ${selectedRange[1]}`;
+    };
 
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
@@ -107,9 +116,7 @@ function FooterInfobar() {
                 {(operationRange || performanceRange) && (
                     <div className='slider-controls'>
                         {!sliderIsOpen && !hasRangeSelected(selectedRange, operationRange) && (
-                            <span className='current-range'>
-                                Selected: {selectedRange && `${selectedRange[0]} - ${selectedRange[1]}`}
-                            </span>
+                            <span className='current-range'>Selected: {getSelectedRange()}</span>
                         )}
 
                         <Button
