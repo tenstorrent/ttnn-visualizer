@@ -45,6 +45,12 @@ Consult the TT Metal documentation on [how to generate a performance trace](http
 
 <img width="916" alt="Screenshot 2024-12-13 at 12 29 44 PM" src="https://github.com/user-attachments/assets/8209f500-7913-41dc-8952-c1307e7720c3" />
 
+### NPE
+
+Network-on-chip performance estimator data can be loaded separately on the `/npe` route.
+
+To generate this data for your model, refer to the [TT-NPE documentation](https://github.com/tenstorrent/tt-npe).
+
 ## Installing as a Python Wheel
 
 The application is designed to run on user local system and has python requirement of `3.12.3`.
