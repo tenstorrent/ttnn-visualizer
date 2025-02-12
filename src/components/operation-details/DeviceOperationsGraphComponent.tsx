@@ -73,6 +73,7 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
         ));
         return (
             <>
+                ID: {node.id}
                 {tensorSquare}
                 <strong>{formatOperationName(node)}</strong>
                 <br />
@@ -99,7 +100,7 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
 
                     return {
                         id: node.id,
-                        label: formatOperationName(node),
+                        label: `${node.id} ${formatOperationName(node)}`,
                         shape: 'box',
                         // level,
                     };

@@ -3,18 +3,21 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import React, { Fragment, JSX, useCallback } from 'react';
-import { Icon, Intent } from '@blueprintjs/core';
+import { Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai/index';
 import classNames from 'classnames';
-import { DeviceOperationTypes, Node, NodeType } from '../../model/APIData';
+import { DeviceOperationTypes, Node, NodeType, Tensor } from '../../model/APIData';
 import 'styles/components/DeviceOperationFullRender.scss';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
-import Collapsible from '../Collapsible';
+import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
 import { AllocationDetails, processMemoryAllocations } from '../../functions/processMemoryAllocations';
-import { formatSize, toReadableShape } from '../../functions/math';
+import { formatSize, prettyPrintAddress, toReadableShape } from '../../functions/math';
+import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
+
+// TODO: this component definitely needs to be broken down into smaller components
 
 const DeviceOperationsFullRender: React.FC<{
     deviceOperations: Node[];
@@ -24,21 +27,96 @@ const DeviceOperationsFullRender: React.FC<{
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const { memoryAllocationList, peakMemoryLoad } = processMemoryAllocations(deviceOperations);
 
-    const formatDeviceOpParameters = (node: Node) => {
-        if (node.node_type === NodeType.tensor) {
-            return (
-                <span>
-                    Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
-                </span>
-            );
-        }
-        if (node.node_type === NodeType.circular_buffer_deallocate_all) {
-            return '';
-        }
-        return node.node_type;
-    };
+    const formatDeviceOpParameters = useCallback(
+        (node: Node) => {
+            const bufferDetails = (buffer: Node, tensorId?: number) => {
+                const { allocation } = buffer;
+                let tensorSquare = null;
+                const address =
+                    allocation?.params.address === undefined ? undefined : parseInt(allocation.params.address, 10);
+                if (address !== undefined || tensorId !== undefined) {
+                    const tensor: Tensor | undefined =
+                        address !== undefined
+                            ? details.tensorListByAddress.get(address)
+                            : Object.values(details.tensorListByAddress).find((t) => t.id === tensorId);
+                    tensorSquare = (
+                        <div
+                            className={classNames('memory-color-block', {
+                                'empty-tensor': address === null,
+                            })}
+                            style={{
+                                backgroundColor:
+                                    tensor?.id !== undefined || tensorId !== undefined
+                                        ? getTensorColor(tensor?.id) || getTensorColor(tensorId)
+                                        : getBufferColor(address || null),
+                            }}
+                        />
+                    );
+                }
+                return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <span
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                            }}
+                        >
+                            {tensorSquare} {address !== undefined && `${prettyPrintAddress(address, 0)}`}
+                        </span>
+                        <br />
+                        <span> {formatSize(parseInt(buffer.params.size, 10))}</span>
+                        <span>{buffer.params.type}</span>
+                    </div>
+                );
+            };
+            if (node.node_type === NodeType.tensor) {
+                const buffers = node.buffer?.map((buffer) => <>{bufferDetails(buffer, node.params.tensor_id)}</>);
 
+                const tensor = details.tensorList.find((t) => t.id === parseInt(node.params.tensor_id.toString(), 10));
+                const square =
+                    (tensor && (
+                        <div
+                            className={classNames('memory-color-block', {
+                                'empty-tensor': tensor.address === null,
+                            })}
+                            style={{
+                                backgroundColor: getTensorColor(parseInt(node.params.tensor_id.toString(), 10)),
+                            }}
+                        />
+                    )) ||
+                    null;
+                const producer = tensor?.operationIdentifier || '';
+
+                return buffers ? (
+                    <Tooltip
+                        content={
+                            <>
+                                {buffers}
+                                {producer}
+                            </>
+                        }
+                        position='top'
+                    >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            {square} Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
+                        </span>
+                    </Tooltip>
+                ) : (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        {square} Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
+                    </span>
+                );
+            }
+            if (node.node_type === NodeType.circular_buffer_deallocate_all) {
+                return '';
+            }
+            return node.node_type;
+        },
+        [details],
+    );
     const preprocessConnections = useCallback((ops: Node[]) => {
+        const captureStart = ops.find((op) => op.node_type === NodeType.capture_start);
         const operations: Node[] = ops.map((op) => ({ ...op, inputs: [], outputs: [] }));
         const getConnectedNodes = (node: Node): Node[] => {
             return node.connections
@@ -59,22 +137,67 @@ const DeviceOperationsFullRender: React.FC<{
                     }
                     return [];
                 });
+
                 // connect end to start
-                getConnectedNodes(op).forEach((node) => {
-                    if (node.node_type === NodeType.function_end) {
-                        node.operation = op;
+                getConnectedNodes(op).forEach((n) => {
+                    if (n.node_type === NodeType.function_end) {
+                        n.operation = op;
+                    }
+                });
+            } else if (op.node_type === NodeType.buffer) {
+                const connectedNodes = getConnectedNodes(op);
+                connectedNodes.forEach((n) => {
+                    if (n.node_type === NodeType.tensor) {
+                        n.params.device_id = op.params.device_id;
+                        if (!n.buffer) {
+                            n.buffer = [];
+                        }
+                        const deviceId = (op.params.device_id as number) || 0;
+                        n.buffer[deviceId] = op;
+                    }
+                });
+            } else if (op.node_type === NodeType.buffer_allocate) {
+                const connectedNodes = getConnectedNodes(op);
+                connectedNodes.forEach((n) => {
+                    if (n.node_type === NodeType.buffer) {
+                        const deviceId = (op.params.device_id as number) || 0;
+                        const bufferDeviceId = (n.params.device_id as number) || 0;
+                        if (deviceId === bufferDeviceId) {
+                            n.allocation = op;
+                        }
+                        // n.params.device_id = op.params.device_id;
+                        // if (!n.allocation) {
+                        //     n.allocation = [];
+                        // }
+                        // n.allocation.push(op);
                     }
                 });
             } else if (op.node_type !== NodeType.function_end && op.node_type !== NodeType.capture_start) {
                 // inputs reversed
                 const connectedNodes = getConnectedNodes(op);
-                connectedNodes.forEach((node) => {
-                    if (node.node_type === NodeType.function_start) {
-                        node.inputs.push(op);
+                connectedNodes.forEach((n) => {
+                    if (n.node_type === NodeType.function_start) {
+                        n.inputs.push(op);
                     }
                 });
             }
         });
+        operations
+            .filter((op) => op.node_type === NodeType.function_start)
+            .filter((op) => !captureStart?.connections.includes(op.id))
+            .forEach((op) => {
+                op.outputs.forEach((n) => {
+                    if (n.node_type === NodeType.tensor) {
+                        if (n.params.device_id !== undefined) {
+                            // KEEPING in case device id arrays confirmed
+                            // op.params.derived_device_id = [
+                            //     ...new Set(op.params.derived_device_id || [n.params.device_id]),
+                            // ];
+                            op.params.device_id = n.params.device_id;
+                        }
+                    }
+                });
+            });
         return operations;
     }, []);
 
@@ -116,12 +239,17 @@ const DeviceOperationsFullRender: React.FC<{
                                 intent={Intent.SUCCESS}
                                 icon={IconNames.CUBE_ADD}
                             />
+                            {/* DEBUGGING */}
+                            {/* <span style={{ color: 'yellow' }}>{node.operation?.params.device_id}</span> */}
                             {opName} (
                             {node.operation?.inputs.map((arg) => (
                                 <span
                                     className='params'
                                     key={arg.id}
                                 >
+                                    {/* <span style={{ color: 'yellow' }}> */}
+                                    {/*    id: {arg.id} {node.connections.join(',')} */}
+                                    {/* </span> */}
                                     {formatDeviceOpParameters(arg)}
                                 </span>
                             ))}
@@ -131,6 +259,9 @@ const DeviceOperationsFullRender: React.FC<{
                                     className='params'
                                     key={arg.id}
                                 >
+                                    {/* <span style={{ color: 'yellow' }}> */}
+                                    {/*    id: {arg.id} {node.connections.join(',')} */}
+                                    {/* </span> */}
                                     {formatDeviceOpParameters(arg)}
                                 </span>
                             ))}
@@ -145,7 +276,7 @@ const DeviceOperationsFullRender: React.FC<{
                             label={label}
                             isOpen
                             collapseClassName={classNames('device-operation function-container', {
-                                COLLAPSIBLE_EMPTY_CLASS: !hasContent,
+                                [COLLAPSIBLE_EMPTY_CLASS]: !hasContent,
                             })}
                         >
                             <div className='function-content'>{innerContent}</div>
@@ -174,12 +305,16 @@ const DeviceOperationsFullRender: React.FC<{
                         const buffer = node.params;
                         operationContent = (
                             <DeviceOperationNode
+                                _node={node}
                                 memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
                                 key={index}
                                 title='Buffer allocate'
                             >
                                 <MemoryLegendElement
-                                    chunk={{ address: parseInt(buffer.address, 10), size: parseInt(buffer.size, 10) }}
+                                    chunk={{
+                                        address: parseInt(buffer.address, 10),
+                                        size: parseInt(buffer.size, 10),
+                                    }}
                                     key={buffer.address}
                                     memSize={details.l1_sizes[0]}
                                     selectedTensorAddress={selectedAddress}
@@ -190,19 +325,22 @@ const DeviceOperationsFullRender: React.FC<{
                                 />
                             </DeviceOperationNode>
                         );
-                    } else if (nodeType === NodeType.buffer) {
-                        const buffer = node.params;
-                        operationContent = (
-                            <DeviceOperationNode
-                                memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
-                                key={index}
-                                title={`Buffer ${formatSize(parseInt(buffer.size, 10))} ${buffer.type}`}
-                            />
-                        );
+                        // KEEPING
+                        // } else if (nodeType === NodeType.buffer) {
+                        //     const buffer = node.params;
+                        //     operationContent = (
+                        //         <DeviceOperationNode
+                        //             _node={node}
+                        //             memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
+                        //             key={index}
+                        //             title={`Buffer ${formatSize(parseInt(buffer.size, 10))} ${buffer.type}`}
+                        //         />
+                        //     );
                     } else if (nodeType === NodeType.buffer_deallocate) {
                         const buffer = node.params;
                         operationContent = (
                             <DeviceOperationNode
+                                _node={node}
                                 memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
                                 key={index}
                                 title={`Buffer deallocate ${formatSize(parseInt(operations[node.connections[0]].params.size, 10))} ${buffer.type}`}
@@ -211,6 +349,7 @@ const DeviceOperationsFullRender: React.FC<{
                     } else if (nodeType === NodeType.circular_buffer_deallocate_all) {
                         operationContent = (
                             <DeviceOperationNode
+                                _node={node}
                                 memoryInfo={memoryInfo}
                                 key={index}
                                 title='Circular buffer deallocate all'
@@ -269,7 +408,15 @@ const DeviceOperationsFullRender: React.FC<{
 
             return output;
         },
-        [details, memoryAllocationList, onLegendClick, peakMemoryLoad, preprocessConnections, selectedAddress],
+        [
+            details,
+            formatDeviceOpParameters,
+            memoryAllocationList,
+            onLegendClick,
+            peakMemoryLoad,
+            preprocessConnections,
+            selectedAddress,
+        ],
     );
 
     return (
@@ -296,16 +443,23 @@ const DeviceOperationsFullRender: React.FC<{
 
 export default DeviceOperationsFullRender;
 
-const DeviceOperationNode: React.FC<React.PropsWithChildren<{ title: string; memoryInfo?: JSX.Element }>> = ({
-    title,
-    memoryInfo,
-    children,
-}) => {
+const DeviceOperationNode: React.FC<
+    React.PropsWithChildren<{
+        title: string;
+        memoryInfo?: JSX.Element;
+        _node: Node;
+    }>
+> = ({ title, memoryInfo, _node, children }) => {
     return (
         <div className='device-operation'>
             <hr />
             <h4>
-                {title} {memoryInfo}
+                {title}
+                {/* DEBUGGING */}
+                {/* <span style={{ color: 'yellow' }}> */}
+                {/*    (id: {_node.id}) {_node.connections.join(',')} */}
+                {/* </span> */}
+                {memoryInfo}
             </h4>
             {children}
         </div>
