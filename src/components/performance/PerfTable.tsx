@@ -7,6 +7,7 @@ import React, { FC, useMemo, useState } from 'react';
 import '../../scss/components/PerfTable.scss';
 import { Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { useAtomValue } from 'jotai';
 import { formatSize, toSecondsPretty } from '../../functions/math';
 import {
     color_row,
@@ -19,6 +20,7 @@ import {
 } from '../../functions/perfFunctions';
 import { Cell, MathFidelity, ProcessedRow, RowData } from '../../definitions/PerfTable';
 import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
+import { selectedPerformanceRangeAtom } from '../../store/app';
 
 const analyze_matmul = (row: RowData) => {
     const input_0_from_dram = String(row.INPUT_0_MEMORY || '').includes('DRAM');
@@ -267,6 +269,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, setIsMultiDevice] = useState<boolean>(false);
+    const selectedRange = useAtomValue(selectedPerformanceRangeAtom);
     const opIdsMap = useOptoPerfIdFiltered();
 
     const processedRows = useMemo(() => {
@@ -386,6 +389,16 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         );
     };
 
+    const getFilteredRows = () => {
+        return selectedRange && processedRows.length > 0
+            ? processedRows.filter((row) => {
+                  const rowId = parseInt(String(row?.ID?.raw_value), 10);
+
+                  return rowId >= selectedRange[0] && rowId <= selectedRange[1];
+              })
+            : processedRows;
+    };
+
     return (
         <>
             <Switch
@@ -430,7 +443,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
                         </tr>
                     </thead>
                     <tbody>
-                        {processedRows.map((row, i) => (
+                        {getFilteredRows().map((row, i) => (
                             <React.Fragment key={i}>
                                 <tr key={i}>
                                     {visibleHeaders.map((h) => (

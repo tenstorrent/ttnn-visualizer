@@ -8,7 +8,13 @@ import { IconNames } from '@blueprintjs/icons';
 import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
-import { activePerformanceTraceAtom, activeReportAtom, operationRangeAtom, selectedRangeAtom } from '../store/app';
+import {
+    activePerformanceTraceAtom,
+    activeReportAtom,
+    operationRangeAtom,
+    performanceRangeAtom,
+    selectedOperationRangeAtom,
+} from '../store/app';
 import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
@@ -17,9 +23,10 @@ import 'styles/components/FooterInfobar.scss';
 const MAX_TITLE_LENGTH = 20;
 
 function FooterInfobar() {
-    const [sliderIsOpen, setSliderIsOpen] = useState(true);
-    const selectedRange = useAtomValue(selectedRangeAtom);
+    const [sliderIsOpen, setSliderIsOpen] = useState(false);
+    const selectedRange = useAtomValue(selectedOperationRangeAtom);
     const operationRange = useAtomValue(operationRangeAtom);
+    const performanceRange = useAtomValue(performanceRangeAtom);
     const activeReport = useAtomValue(activeReportAtom);
     const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
     const location = useLocation();
@@ -28,6 +35,7 @@ function FooterInfobar() {
 
     const isInSync = useGetDeviceOperationListPerfResult.length > 0;
     const isOperationDetails = location.pathname.includes(`${ROUTES.OPERATIONS}/`);
+    const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
     const isNPE = location.pathname.includes(`${ROUTES.NPE}`);
 
     useEffect(() => {
@@ -41,6 +49,14 @@ function FooterInfobar() {
             setSliderIsOpen(false);
         }
     }, [isOperationDetails]);
+
+    const getSelectedRangeLabel = (): string | null => {
+        if (isPerformanceRoute) {
+            return performanceRange && `Selected Performance:  ${performanceRange[0]} - ${performanceRange[1]}`;
+        }
+
+        return selectedRange && `Selected: ${selectedRange[0]} - ${selectedRange[1]}`;
+    };
 
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
@@ -104,12 +120,10 @@ function FooterInfobar() {
                     )}
                 </div>
 
-                {operationRange && (
+                {(operationRange || performanceRange) && (
                     <div className='slider-controls'>
                         {!sliderIsOpen && !hasRangeSelected(selectedRange, operationRange) && (
-                            <span className='current-range'>
-                                Selected: {selectedRange && `${selectedRange[0]} - ${selectedRange[1]}`}
-                            </span>
+                            <span className='current-range'>{getSelectedRangeLabel()}</span>
                         )}
 
                         <Button

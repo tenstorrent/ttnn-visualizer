@@ -37,6 +37,7 @@ For the latest updates and features, please see [releases](https://github.com/te
 - Operation flow graph for a holistic view of model execution
 - Load reports via the local file system or through an SSH connection
 - Supports multiple instances of the application running concurrently
+- BETA: Network-on-chip performance estimator (NPE) for Tenstorrent Tensix-based devices
 
 ### Demo
 
@@ -68,6 +69,10 @@ https://github.com/user-attachments/assets/d00a2629-0bd1-4ee1-bb12-bd796d85221d
 |-----------------------------------------------|------------------------------------------|
 | <img width="400" alt="Performance analysis" src="https://github.com/user-attachments/assets/03f64a7a-262a-4b2a-a0b6-c70f3f14705c" /> |  <img width="400" alt="" src="https://github.com/user-attachments/assets/224d14f7-c7b3-4f4c-99c6-528c800b1a84" /> |
 
+| NPE |  |
+|-----------------------------------------------|------------------------------------------|
+| <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/1f4441c6-9d9e-4834-9e71-edec1955243c" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/7159992e-7691-41cf-a152-8bc6a3606ade" /> |
+
 ## Getting started
 
 How to [get started](./docs/getting-started.md) with TT-NN Visualizer.
@@ -76,11 +81,11 @@ How to [get started](./docs/getting-started.md) with TT-NN Visualizer.
 
 Use [remote querying](./docs/remote-querying.md) instead of syncing the report data to your local file system.
 
-## Sample models
+## Sample reports
 
 You may test the application using the following sample reports.
 
-Unzip the files into their own directories and select them with the local folder selector.
+Unzip the files into their own directories and select them with the local folder selector, or load the NPE data on the `/npe` route.
 
 **Segformer encoder**
 [report](https://github.com/user-attachments/files/17996493/segformer_encoder.zip)
@@ -89,8 +94,13 @@ Unzip the files into their own directories and select them with the local folder
 [report](https://github.com/user-attachments/files/17996491/segformer_decoder_good.zip)
 
 **Llama mlp**
-[report](https://github.com/user-attachments/files/18129462/llama_mlp.zip)
-[performance trace](https://github.com/user-attachments/files/18129457/llama_mlp_tracy.zip)
+[report + performance trace](https://github.com/user-attachments/files/18770763/llama_attn_32l_10iter_30jan.zip)
+
+### NPE report
+
+**Llama decode**
+[npe data](https://github.com/user-attachments/files/18772778/llama-decode-3B.zip)
+
 
 ## Contributing
 
