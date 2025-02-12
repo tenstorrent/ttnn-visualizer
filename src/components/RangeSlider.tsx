@@ -2,11 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Button, InputGroup, NumberRange, RangeSlider, Tooltip } from '@blueprintjs/core';
+import { Button, InputGroup, RangeSlider, Tooltip } from '@blueprintjs/core';
 import { useAtom, useSetAtom } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation } from 'react-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     operationRangeAtom,
     performanceRangeAtom,
@@ -18,11 +18,14 @@ import 'styles/components/RangeSlider.scss';
 import {
     useGetDeviceOperationListPerf,
     useNormalizedPerformance,
+    useOperationRange,
     useOperationsList,
     useOptoPerfIdFiltered,
+    usePerformanceRange,
 } from '../hooks/useAPI';
 import { OperationDescription } from '../model/APIData';
 import { RowData } from '../definitions/PerfTable';
+import LoadingSpinner from './LoadingSpinner';
 
 const RANGE_STEP = 25;
 
@@ -33,28 +36,18 @@ function Range() {
     const listPerf = useGetDeviceOperationListPerf();
     const isInSync = listPerf?.length > 0;
     const opIdsMap = useOptoPerfIdFiltered();
+    const operationRange = useOperationRange();
+    const perfRange = usePerformanceRange();
 
     const setOperationRange = useSetAtom(operationRangeAtom);
-    const [selectedRange, setSelectedRange] = useAtom(selectedOperationRangeAtom);
+    const [selectedOperationRange, setSelectedOperationRange] = useAtom(selectedOperationRangeAtom);
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
     const [selectedPerformanceRange, setSelectedPerformanceRange] = useAtom(selectedPerformanceRangeAtom);
     const [isUserOpChange, setIsUserOpChange] = useState(false);
     const [isUserPerfChange, setIsUserPerfChange] = useState(false);
 
-    const range = useMemo(
-        () => (operations ? ([operations?.[0].id, operations?.[operations.length - 1].id] as NumberRange) : null),
-        [operations],
-    );
-    const opMin = range?.[0];
-    const opMax = range?.[1];
-
-    const perfRange = useMemo(
-        () =>
-            perfData?.length
-                ? ([perfData[0].ORIGINAL_ID, perfData[perfData.length - 1].ORIGINAL_ID] as NumberRange)
-                : null,
-        [perfData],
-    );
+    const opMin = operationRange?.[0];
+    const opMax = operationRange?.[1];
     const perfMin = perfRange?.[0];
     const perfMax = perfRange?.[1];
 
@@ -63,11 +56,11 @@ function Range() {
     const shouldDisableOpRange = isOperationDetails || isPerformanceRoute;
 
     useEffect(() => {
-        if (range) {
-            setOperationRange(range);
-            setSelectedRange(range);
+        if (operationRange) {
+            setOperationRange(operationRange);
+            setSelectedOperationRange(operationRange);
         }
-    }, [range, setOperationRange, setSelectedRange]);
+    }, [operationRange, setOperationRange, setSelectedOperationRange]);
 
     useEffect(() => {
         if (perfRange) {
@@ -77,37 +70,41 @@ function Range() {
     }, [perfRange, setPerformanceRange, setSelectedPerformanceRange]);
 
     useEffect(() => {
-        if (isInSync && selectedRange && perfRange && selectedPerformanceRange && isUserOpChange) {
+        if (isInSync && selectedOperationRange && perfRange && selectedPerformanceRange && isUserOpChange) {
             // Try to find matching perfIds for the selected operation range
             const matchMin =
-                opIdsMap.find((op) => selectedRange[0] === op.opId)?.perfId ??
+                opIdsMap.find((op) => selectedOperationRange[0] === op.opId)?.perfId ??
                 opIdsMap.reduce((prev, curr) =>
-                    Math.abs((curr.opId ?? 0) - selectedRange[0]) < Math.abs((prev.opId ?? 0) - selectedRange[0])
+                    Math.abs((curr.opId ?? 0) - selectedOperationRange[0]) <
+                    Math.abs((prev.opId ?? 0) - selectedOperationRange[0])
                         ? curr
                         : prev,
                 ).perfId;
             const matchMax =
-                opIdsMap.find((op) => selectedRange[1] === op.opId)?.perfId ??
+                opIdsMap.find((op) => selectedOperationRange[1] === op.opId)?.perfId ??
                 opIdsMap.reduce((prev, curr) =>
-                    Math.abs((curr.opId ?? 0) - selectedRange[1]) < Math.abs((prev.opId ?? 0) - selectedRange[1])
+                    Math.abs((curr.opId ?? 0) - selectedOperationRange[1]) <
+                    Math.abs((prev.opId ?? 0) - selectedOperationRange[1])
                         ? curr
                         : prev,
                 ).perfId;
 
             const updatedMin =
-                matchMin || (selectedRange[0] < opIdsMap[0].opId ? perfMin! : selectedPerformanceRange[0]);
+                matchMin || (selectedOperationRange[0] < opIdsMap[0].opId ? perfMin! : selectedPerformanceRange[0]);
             const updatedMax =
                 matchMax ||
-                (selectedRange[1] > opIdsMap[opIdsMap.length - 1].opId ? perfMax! : selectedPerformanceRange[1]);
+                (selectedOperationRange[1] > opIdsMap[opIdsMap.length - 1].opId
+                    ? perfMax!
+                    : selectedPerformanceRange[1]);
 
             setSelectedPerformanceRange([updatedMin, updatedMax]);
             setIsUserOpChange(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isInSync, selectedRange]);
+    }, [isInSync, selectedOperationRange]);
 
     useEffect(() => {
-        if (isInSync && selectedRange && perfRange && selectedPerformanceRange && isUserPerfChange) {
+        if (isInSync && selectedOperationRange && perfRange && selectedPerformanceRange && isUserPerfChange) {
             // Try to find matching opIds for the selected performance range
             const matchMin =
                 opIdsMap.find((op) => selectedPerformanceRange[0] === op.perfId)?.opId ??
@@ -127,20 +124,21 @@ function Range() {
                 ).opId;
 
             const updatedMin =
-                matchMin || (selectedPerformanceRange[0] < (opIdsMap?.[0]?.perfId ?? 0) ? opMin! : selectedRange[0]);
+                matchMin ||
+                (selectedPerformanceRange[0] < (opIdsMap?.[0]?.perfId ?? 0) ? opMin! : selectedOperationRange[0]);
             const updatedMax =
                 matchMax ||
                 (selectedPerformanceRange[1] > (opIdsMap?.[opIdsMap.length - 1]?.perfId ?? 0)
                     ? opMax!
-                    : selectedRange[1]);
+                    : selectedOperationRange[1]);
 
-            setSelectedRange([updatedMin, updatedMax]);
+            setSelectedOperationRange([updatedMin, updatedMax]);
             setIsUserPerfChange(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isInSync, selectedPerformanceRange]);
 
-    return selectedRange || selectedPerformanceRange ? (
+    return selectedOperationRange || selectedPerformanceRange ? (
         <div className='range-slider'>
             {selectedPerformanceRange && (
                 <div className='slider'>
@@ -211,13 +209,16 @@ function Range() {
             )}
 
             <div className='slider'>
-                {selectedRange && (
+                {selectedOperationRange && (
                     <div className='inputs'>
                         <div className='group'>
                             <InputGroup
-                                value={selectedRange[0].toString()}
+                                value={selectedOperationRange[0].toString()}
                                 onValueChange={(value) => {
-                                    setSelectedRange([parseInt(value, 10) || opMin!, selectedRange[1]]);
+                                    setSelectedOperationRange([
+                                        parseInt(value, 10) || opMin!,
+                                        selectedOperationRange[1],
+                                    ]);
                                     setIsUserOpChange(true);
                                 }}
                                 fill={false}
@@ -225,9 +226,12 @@ function Range() {
                                 small
                             />
                             <InputGroup
-                                value={selectedRange[1].toString()}
+                                value={selectedOperationRange[1].toString()}
                                 onValueChange={(value) => {
-                                    setSelectedRange([selectedRange[0], parseInt(value, 10) || opMax!]);
+                                    setSelectedOperationRange([
+                                        selectedOperationRange[0],
+                                        parseInt(value, 10) || opMax!,
+                                    ]);
                                     setIsUserOpChange(true);
                                 }}
                                 fill={false}
@@ -238,12 +242,12 @@ function Range() {
                     </div>
                 )}
 
-                {opMin && opMax && selectedRange && (
+                {opMin && opMax && selectedOperationRange && (
                     <div className='slider-container'>
                         <RangeSlider
-                            value={selectedRange}
+                            value={selectedOperationRange}
                             onChange={(value) => {
-                                setSelectedRange(value);
+                                setSelectedOperationRange(value);
                                 setIsUserOpChange(true);
                             }}
                             min={opMin}
@@ -260,7 +264,7 @@ function Range() {
                     <Tooltip content='Reset range'>
                         <Button
                             icon={IconNames.RESET}
-                            onClick={() => setSelectedRange([opMin, opMax])}
+                            onClick={() => setSelectedOperationRange([opMin, opMax])}
                             disabled={shouldDisableOpRange}
                             small
                         />
@@ -268,7 +272,9 @@ function Range() {
                 )}
             </div>
         </div>
-    ) : null;
+    ) : (
+        <LoadingSpinner />
+    );
 }
 
 const getStepSize = (max: number) => (RANGE_STEP > max ? 1 : Math.ceil(max / RANGE_STEP));

@@ -9,6 +9,7 @@ import { useQuery } from 'react-query';
 import Papa, { ParseResult } from 'papaparse';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
+import { NumberRange } from '@blueprintjs/core';
 import axiosInstance from '../libs/axiosInstance';
 import {
     Buffer,
@@ -265,23 +266,21 @@ const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
     });
 };
 
-export const useOperationsList = (useRange?: boolean) => {
-    const range = useAtomValue(selectedOperationRangeAtom);
-
-    const response = useQuery<OperationDescription[], AxiosError>({
+export const useOperationsList = () =>
+    useQuery<OperationDescription[], AxiosError>({
         queryFn: () => fetchOperations(),
         queryKey: ['get-operations'],
         retry: false,
     });
 
-    return useMemo(() => {
-        if (useRange && response.data && range) {
-            response.data = response.data.filter((operation) => operation.id >= range[0] && operation.id <= range[1]);
-        }
+export const useOperationRange = (): NumberRange | null => {
+    const response = useOperationsList();
 
-        return response;
+    return useMemo(
+        () => (response.data ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [range, response.isLoading]);
+        [response.isLoading],
+    );
 };
 
 export const useOperationDetails = (operationId: number | null) => {
@@ -514,6 +513,19 @@ export const useOptoPerfIdFiltered = () => {
                 };
             }),
         [opMapping],
+    );
+};
+
+export const usePerformanceRange = (): NumberRange | null => {
+    const response = useNormalizedPerformance();
+
+    return useMemo(
+        () =>
+            response?.length
+                ? ([response[0].ORIGINAL_ID, response[response.length - 1].ORIGINAL_ID] as NumberRange)
+                : null,
+
+        [response],
     );
 };
 
