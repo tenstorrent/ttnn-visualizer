@@ -147,23 +147,12 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                                 core_range_set: node.params.core_range_set,
                                 colorVariance: deviceOp.id,
                             });
-                            deviceOp.events.push(node.node_type);
                         }
                     }
                 }
 
                 if (node.node_type === NodeType.circular_buffer_deallocate_all) {
-                    const deviceOpNode = deviceOpList.at(-1);
-                    if (deviceOpNode) {
-                        const deviceOp = this.deviceOperations
-                            .slice()
-                            .reverse()
-                            .find((op) => op.name === deviceOpNode.params.name);
-
-                        if (deviceOp) {
-                            deviceOp.events.push(node.node_type);
-                        }
-                    }
+                    // noop
                 }
                 if (node.node_type === NodeType.buffer_allocate) {
                     const deviceOpNode = deviceOpList.at(-1);
@@ -181,7 +170,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                                 type: node.params.type,
                                 tensorId: this.getTensorForAddress(parseInt(node.params.address, 10))?.id,
                             });
-                            deviceOp.events.push(node.node_type);
+                            // deviceOp.events.push(node.node_type);
                         }
                     }
                 }
@@ -195,23 +184,12 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
                         if (deviceOp) {
                             deviceOp.tensor = { shape: node.params.shape, id: node.params.tensor_id };
-                            deviceOp.events.push(node.node_type);
                         }
                     }
                 }
 
                 if (node.node_type === NodeType.buffer_deallocate) {
-                    const deviceOpNode = deviceOpList.at(-1);
-                    if (deviceOpNode) {
-                        const deviceOp = this.deviceOperations
-                            .slice()
-                            .reverse()
-                            .find((op) => op.name === deviceOpNode.params.name);
-
-                        if (deviceOp) {
-                            deviceOp.events.push(node.node_type);
-                        }
-                    }
+                    // noop
                 }
             });
         }
