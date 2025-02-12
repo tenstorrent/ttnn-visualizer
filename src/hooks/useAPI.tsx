@@ -9,6 +9,7 @@ import { useQuery } from 'react-query';
 import Papa, { ParseResult } from 'papaparse';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
+import { NumberRange } from '@blueprintjs/core';
 import axiosInstance from '../libs/axiosInstance';
 import {
     Buffer,
@@ -30,7 +31,7 @@ import isValidNumber from '../functions/isValidNumber';
 import { getUniqueDeviceIDs, mergeMultideviceRows } from '../functions/perfFunctions';
 import { RowData } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
-import { selectedRangeAtom } from '../store/app';
+import { selectedOperationRangeAtom } from '../store/app';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -214,11 +215,11 @@ const fetchDevices = async () => {
     return meta;
 };
 
-const fetchPerformanceDataRaw = async (): Promise<ParseResult<string>> => {
+const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, string>>> => {
     const { data } = await axiosInstance.get<string>('/api/profiler/perf-results/raw');
 
-    return new Promise<ParseResult<string>>((resolve, reject) => {
-        Papa.parse<string>(data, {
+    return new Promise((resolve, reject) => {
+        Papa.parse<Record<string, string>>(data, {
             complete: (results) => resolve(results),
             error: (error: Error) => reject(error),
             header: true,
@@ -233,7 +234,7 @@ interface MetaData {
 
 interface FetchDeviceLogRawResult {
     deviceMeta: MetaData;
-    deviceLog: ParseResult<string>;
+    deviceLog: ParseResult<Record<string, string>[]>;
 }
 
 const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
@@ -257,7 +258,7 @@ const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
             .split(/,\s{1,2}/)
             .join(','); // headers without spaces
         const processedCsv = [headers, ...csv].join('\n');
-        Papa.parse<string>(processedCsv, {
+        Papa.parse<Record<string, string>[]>(processedCsv, {
             header: true,
             complete: (deviceLog) => resolve({ deviceMeta, deviceLog }),
             error: (error: Error) => reject(error),
@@ -265,23 +266,21 @@ const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
     });
 };
 
-export const useOperationsList = (useRange?: boolean) => {
-    const range = useAtomValue(selectedRangeAtom);
-
-    const response = useQuery<OperationDescription[], AxiosError>({
+export const useOperationsList = () =>
+    useQuery<OperationDescription[], AxiosError>({
         queryFn: () => fetchOperations(),
         queryKey: ['get-operations'],
         retry: false,
     });
 
-    return useMemo(() => {
-        if (useRange && response.data && range) {
-            response.data = response.data.filter((operation) => operation.id >= range[0] && operation.id <= range[1]);
-        }
+export const useOperationListRange = (): NumberRange | null => {
+    const response = useOperationsList();
 
-        return response;
+    return useMemo(
+        () => (response.data ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [range, response.isLoading]);
+        [response.isLoading],
+    );
 };
 
 export const useOperationDetails = (operationId: number | null) => {
@@ -428,14 +427,14 @@ export interface DeviceOperationMapping {
 }
 
 export const useNormalizedPerformance = (): RowData[] => {
-    const { data } = usePerformance();
+    const response = usePerformance();
 
     return useMemo(() => {
-        if (!data?.data || data.data.length === 0) {
+        if (!response?.data?.data || response?.data.data.length === 0) {
             return [];
         }
         // @ts-expect-error this should be just fine
-        let df: RowData[] = (data.data.slice() as RowData[]).filter(
+        let df: RowData[] = (response.data.data.slice() as RowData[]).filter(
             (r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE'] === ''),
         );
 
@@ -454,8 +453,10 @@ export const useNormalizedPerformance = (): RowData[] => {
         }
 
         return df;
-    }, [data]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [response.isLoading]);
 };
+
 export const useGetDeviceOperationListPerf = () => {
     const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
     const data = useNormalizedPerformance();
@@ -515,6 +516,19 @@ export const useOptoPerfIdFiltered = () => {
     );
 };
 
+export const usePerformanceRange = (): NumberRange | null => {
+    const response = useNormalizedPerformance();
+
+    return useMemo(
+        () =>
+            response?.length
+                ? ([response[0].ORIGINAL_ID, response[response.length - 1].ORIGINAL_ID] as NumberRange)
+                : null,
+
+        [response],
+    );
+};
+
 // Not currently used
 export const useReportMeta = () => {
     return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
@@ -571,7 +585,7 @@ export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> 
 };
 
 export const useTensors = (useRange?: boolean, deviceId?: number | null) => {
-    const range = useAtomValue(selectedRangeAtom);
+    const range = useAtomValue(selectedOperationRangeAtom);
 
     const response = useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(deviceId),
@@ -590,7 +604,7 @@ export const useTensors = (useRange?: boolean, deviceId?: number | null) => {
 
         return response;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [range, response.isLoading]);
+    }, [range, response.isLoading, useRange]);
 };
 
 export const useDevices = () => {
@@ -619,7 +633,7 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
 };
 
 export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
-    const range = useAtomValue(selectedRangeAtom);
+    const range = useAtomValue(selectedOperationRangeAtom);
 
     const response = useQuery({
         queryFn: () => fetchAllBuffers(bufferType),
@@ -633,7 +647,7 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
 
         return response;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [range, response.isLoading]);
+    }, [range, response.isLoading, useRange]);
 };
 
 export const useDeviceLog = () => {

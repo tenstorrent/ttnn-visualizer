@@ -1,13 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
-
+import csv
 import os
+import tempfile
+from io import StringIO
 from pathlib import Path
 from typing import List, Dict, Union, Optional
 
 import pandas as pd
+from tt_perf_report import perf_report
 
+from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import TabSession
 from ttnn_visualizer.ssh_client import get_client
 
@@ -538,3 +542,66 @@ class OpsPerformanceQueries:
         return self.runner.execute_query(
             columns=self.PERF_RESULTS_COLUMNS, as_dict=as_dict, limit=limit
         )
+
+
+class OpsPerformanceReportQueries:
+    REPORT_COLUMNS = [
+        "id",
+        "total_percent",
+        "bound",
+        "op_code",
+        "device_time",
+        "op_to_op_gap",
+        "cores",
+        "dram",
+        "dram_percent",
+        "flops",
+        "flops_percent",
+        "math_fidelity",
+        "output_datatype",
+        "input_0_datatype",
+        "input_1_datatype",
+        "dram_sharded",
+        "input_0_memory",
+        "inner_dim_block_size",
+        "output_subblock_h",
+        "output_subblock_w"
+    ]
+
+    DEFAULT_SIGNPOST = None
+    DEFAULT_IGNORE_SIGNPOSTS = None
+    DEFAULT_MIN_PERCENTAGE = 0.5
+    DEFAULT_ID_RANGE = None
+    DEFAULT_NO_ADVICE = False
+
+    @classmethod
+    def generate_report(cls, session):
+        raw_csv = OpsPerformanceQueries.get_raw_csv(session)
+        csv_file = StringIO(raw_csv)
+        csv_output_file = tempfile.mktemp(suffix=".csv")
+        perf_report.generate_perf_report(
+            csv_file,
+            cls.DEFAULT_SIGNPOST,
+            cls.DEFAULT_IGNORE_SIGNPOSTS,
+            cls.DEFAULT_MIN_PERCENTAGE,
+            cls.DEFAULT_ID_RANGE,
+            csv_output_file,
+            cls.DEFAULT_NO_ADVICE,
+        )
+
+        report = []
+
+        try:
+            with open(csv_output_file, newline="") as csvfile:
+                reader = csv.reader(csvfile, delimiter=",")
+                next(reader, None)
+                for row in reader:
+                    report.append({
+                        column: row[index] for index, column in enumerate(cls.REPORT_COLUMNS)
+                    })
+        except csv.Error as e:
+            raise DataFormatError() from e
+        finally:
+            os.unlink(csv_output_file)
+
+        return report

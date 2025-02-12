@@ -1,7 +1,7 @@
 [project]
 name = "ttnn_visualizer"
 authors = []
-version = "0.20.0"
+version = "0.21.0"
 description = "TT Visualizer"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,7 +21,8 @@ dependencies = [
     "flask-socketio==5.4.1",
     "flask-sqlalchemy==3.1.1",
     "PyYAML==6.0.2",
-    "python-dotenv==1.0.1"
+    "python-dotenv==1.0.1",
+    "tt-perf-report==1.0.0"
 ]
 
 classifiers = [

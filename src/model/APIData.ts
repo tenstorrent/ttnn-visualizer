@@ -216,6 +216,7 @@ interface DeviceOperationParams {
     type: DeviceOperationTypes;
     core_range_set: string;
     device_id?: number | string;
+    derived_device_id?: number[];
 }
 
 export interface Node {
@@ -226,6 +227,8 @@ export interface Node {
     inputs: Node[];
     outputs: Node[];
     operation?: Node;
+    buffer?: Node[];
+    allocation?: Node;
 }
 
 export interface DeviceOperation {

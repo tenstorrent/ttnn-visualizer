@@ -8,7 +8,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import SearchField from './SearchField';
 import Collapsible from './Collapsible';
 import OperationArguments from './OperationArguments';
@@ -16,7 +16,7 @@ import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ListView.scss';
 import { DeviceOperationMapping, useGetDeviceOperationListPerf, useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
-import { expandedOperationsAtom, shouldCollapseAllOperationsAtom } from '../store/app';
+import { expandedOperationsAtom, selectedOperationRangeAtom, shouldCollapseAllOperationsAtom } from '../store/app';
 import { OperationDescription } from '../model/APIData';
 import ListItem from './ListItem';
 import { formatSize } from '../functions/math';
@@ -34,7 +34,7 @@ enum SortingOptions {
 const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { data: fetchedOperations, error, isLoading } = useOperationsList(true);
+    const { data: fetchedOperations, error, isLoading } = useOperationsList();
     const perfData = useGetDeviceOperationListPerf();
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
@@ -46,6 +46,7 @@ const OperationList = () => {
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
     const [expandedOperations, setExpandedOperations] = useAtom(expandedOperationsAtom);
+    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
 
     // TODO: Figure out an initial scroll position based on last used operation
     const virtualizer = useVirtualizer({
@@ -125,11 +126,15 @@ const OperationList = () => {
                 }
             }
 
+            operations = selectedOperationRange
+                ? operations.filter((op) => op.id >= selectedOperationRange[0] && op.id <= selectedOperationRange[1])
+                : operations;
+
             setFilteredOperationsList(operations);
         }
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [fetchedOperations, filterQuery, shouldSortByID, shouldSortDuration, perfData]);
+    }, [fetchedOperations, filterQuery, shouldSortByID, shouldSortDuration, perfData, selectedOperationRange]);
 
     useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;

@@ -34,3 +34,7 @@ class RemoteSqliteException(Exception):
 
 class DatabaseFileNotFoundException(Exception):
     pass
+
+
+class DataFormatError(Exception):
+    pass
