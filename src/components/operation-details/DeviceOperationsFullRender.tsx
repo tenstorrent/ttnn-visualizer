@@ -12,7 +12,7 @@ import 'styles/components/DeviceOperationFullRender.scss';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
-import Collapsible from '../Collapsible';
+import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
 import { AllocationDetails, processMemoryAllocations } from '../../functions/processMemoryAllocations';
 import { formatSize, prettyPrintAddress, toReadableShape } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
@@ -276,7 +276,7 @@ const DeviceOperationsFullRender: React.FC<{
                             label={label}
                             isOpen
                             collapseClassName={classNames('device-operation function-container', {
-                                COLLAPSIBLE_EMPTY_CLASS: !hasContent,
+                                [COLLAPSIBLE_EMPTY_CLASS]: !hasContent,
                             })}
                         >
                             <div className='function-content'>{innerContent}</div>
