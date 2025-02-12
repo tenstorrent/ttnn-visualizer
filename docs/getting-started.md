@@ -49,7 +49,7 @@ Consult the TT Metal documentation on [how to generate a performance trace](http
 
 Network-on-chip performance estimator data can be loaded separately on the `/npe` route.
 
-To generate this data for your model, refer to the [TT-NPE documentation](https://github.com/tenstorrent/tt-npe).
+To generate this data for your model, refer to the [tt-npe documentation](https://github.com/tenstorrent/tt-npe).
 
 ## Installing as a Python Wheel
 
