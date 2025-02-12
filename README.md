@@ -92,6 +92,8 @@ Unzip the files into their own directories and select them with the local folder
 **Llama mlp**
 [report + performance trace](https://github.com/user-attachments/files/18770763/llama_attn_32l_10iter_30jan.zip)
 
+### NPE report
+
 **Llama decode**
 [npe data](https://github.com/user-attachments/files/18772778/llama-decode-3B.zip)
 
