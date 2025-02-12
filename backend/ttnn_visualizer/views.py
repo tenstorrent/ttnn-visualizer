@@ -14,8 +14,9 @@ import yaml
 from flask import Blueprint, Response, jsonify
 from flask import request, current_app
 
-from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries
+from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries, OpsPerformanceReportQueries
 from ttnn_visualizer.decorators import with_session
+from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.file_uploads import (
@@ -385,6 +386,20 @@ def get_profiler_perf_results_data_raw(session: TabSession):
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=op_perf_results.csv"},
     )
+
+
+@api.route("/profiler/perf-results/report", methods=["GET"])
+@with_session
+def get_profiler_perf_results_report(session: TabSession):
+    if not session.profiler_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+
+    try:
+        report = OpsPerformanceReportQueries.generate_report(session)
+    except DataFormatError:
+        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+
+    return jsonify(report), 200
 
 
 @api.route("/profiler/device-log/raw", methods=["GET"])
