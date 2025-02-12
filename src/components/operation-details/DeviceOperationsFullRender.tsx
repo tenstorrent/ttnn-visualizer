@@ -17,6 +17,8 @@ import { AllocationDetails, processMemoryAllocations } from '../../functions/pro
 import { formatSize, prettyPrintAddress, toReadableShape } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 
+// TODO: this component definitely needs to be broken down into smaller components
+
 const DeviceOperationsFullRender: React.FC<{
     deviceOperations: Node[];
     details: OperationDetails;
@@ -96,12 +98,12 @@ const DeviceOperationsFullRender: React.FC<{
                         }
                         position='top'
                     >
-                        <span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                             {square} Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
                         </span>
                     </Tooltip>
                 ) : (
-                    <span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                         {square} Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
                     </span>
                 );
