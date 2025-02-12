@@ -36,12 +36,13 @@ function FooterInfobar() {
     const isInSync = useGetDeviceOperationListPerfResult.length > 0;
     const isOperationDetails = location.pathname.includes(`${ROUTES.OPERATIONS}/`);
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
+    const isNPE = location.pathname.includes(`${ROUTES.NPE}`);
 
     useEffect(() => {
-        if (isOperationDetails) {
+        if (isOperationDetails || isNPE) {
             setSliderIsOpen(false);
         }
-    }, [isOperationDetails]);
+    }, [isNPE, isOperationDetails]);
 
     const getSelectedRangeLabel = (): string | null => {
         if (isPerformanceRoute) {

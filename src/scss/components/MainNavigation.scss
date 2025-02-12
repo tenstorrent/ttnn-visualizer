@@ -61,5 +61,20 @@
         &.performance-button {
             @include button-styles($tt-performance, $tt-performance-active, 'lightning');
         }
+
+        &.npe-button {
+            @include button-styles($tt-npe, $tt-npe-active, 'random');
+        }
+
+        small {
+            font-size: 11px;
+            position: absolute;
+            right: 1px;
+            top: 6px;
+            border-radius: 4px;
+            padding-left: 4px;
+            padding-right: 4px;
+            background-color: $tt-grey-2;
+        }
     }
 }

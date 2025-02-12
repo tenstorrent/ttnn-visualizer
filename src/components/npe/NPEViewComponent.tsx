@@ -1,0 +1,490 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// @eslint-disable jsx-a11y/mouse-events-have-key-events
+
+import 'highlight.js/styles/a11y-dark.css';
+import 'styles/components/NPEComponent.scss';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Icon, Slider } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import { NPEData, NoCID, NoCTransfer } from '../../model/NPEModel';
+import TensixTransferRenderer from './TensixTransferRenderer';
+import { NODE_SIZE, calculateLinkCongestionColor, getLinkPoints, getRouteColor } from './drawingApi';
+import NPECongestionHeatMap from './NPECongestionHeatMap';
+import { formatSize } from '../../functions/math';
+
+interface NPEViewProps {
+    npeData: NPEData;
+}
+
+const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
+    const tensixSize: number = NODE_SIZE; // * 0.75;
+    const SVG_SIZE = tensixSize;
+    const width = npeData.common_info.num_cols;
+    const height = npeData.common_info.num_rows;
+    const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
+    const [selectedTimestep, setSelectedTimestep] = useState<number>(0);
+    const links = npeData.timestep_data[selectedTimestep];
+    const transfers = npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));
+    const [animationInterval, setAnimationInterval] = useState<number | null>(null);
+    const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
+    const [selectedNode, setSelectedNode] = useState<{ index: number; coords: number[] } | null>(null);
+    const [isPlaying, setIsPlaying] = useState<boolean>(false);
+
+    useEffect(() => {
+        stopAnimation();
+        setSelectedTimestep(0);
+        setSelectedNode(null);
+        setSelectedTransferList([]);
+        setHighlightedTransfer(null);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [npeData]);
+
+    const getLines = (nocs: Array<{ transfer: number; nocId: NoCID }>) => {
+        return nocs.map((noc) => {
+            return getLinkPoints(noc.nocId, getRouteColor(noc.transfer));
+        });
+    };
+    // coords, [NoCID]
+    const transferListSelectionRendering = useMemo(() => {
+        return selectedTransferList.reduce(
+            (list: Array<Array<Array<{ transfer: number; nocId: NoCID }>>>, transfer) => {
+                transfer.route.forEach(([row, col]) => {
+                    list[row] = list[row] || [];
+                    list[row][col] = list[row][col] || [];
+                    const routes = transfer.route.filter((r) => r[0] === row && r[1] === col);
+                    routes?.forEach((route) => {
+                        list[row][col].push({
+                            transfer: transfer.id,
+                            nocId: route[2],
+                        });
+                    });
+                });
+                return list;
+            },
+            [],
+        );
+    }, [selectedTransferList]);
+
+    const groupedTransfersByNoCID = useMemo<Record<NoCID, NoCTransfer[]>>(() => {
+        if (!selectedNode?.coords) {
+            return {} as Record<NoCID, NoCTransfer[]>;
+        }
+
+        const [targetRow, targetCol] = selectedNode.coords;
+        const groups: Record<NoCID, NoCTransfer[]> = {} as Record<NoCID, NoCTransfer[]>;
+
+        selectedTransferList.forEach((transfer) => {
+            const matchingRoutes = transfer.route.filter(([row, col]) => row === targetRow && col === targetCol);
+
+            if (matchingRoutes.length) {
+                matchingRoutes.forEach((matchingRoute) => {
+                    const nocId = matchingRoute[2];
+                    if (!groups[nocId]) {
+                        groups[nocId] = [];
+                    }
+                    groups[nocId].push(transfer);
+                });
+            }
+        });
+
+        return groups;
+    }, [selectedTransferList, selectedNode]);
+
+    const startAnimation = () => {
+        setIsPlaying(true);
+        clearInterval(animationInterval as number);
+        const range = npeData.timestep_data.length;
+
+        const interval = setInterval(() => {
+            setSelectedTimestep((prev) => {
+                return prev < range - 1 ? prev + 1 : 0;
+            });
+        }, 100);
+        setAnimationInterval(interval as unknown as number);
+    };
+    const stopAnimation = () => {
+        setIsPlaying(false);
+        return clearInterval(animationInterval as number);
+    };
+
+    const onPlay = () => {
+        startAnimation();
+    };
+    const onPause = () => {
+        stopAnimation();
+    };
+    const handleScrubberChange = (value: number) => {
+        stopAnimation();
+        setSelectedTimestep(value);
+        setSelectedNode(null);
+        setSelectedTransferList([]);
+    };
+    const showActiveTransfers = (route: [number, number, NoCID, number] | null, index?: number) => {
+        if (route === null) {
+            setSelectedTransferList([]);
+            setSelectedNode(null);
+            return;
+        }
+        if (selectedNode?.index === index) {
+            setSelectedNode(null);
+            setSelectedTransferList([]);
+            return;
+        }
+        if (index !== undefined) {
+            setSelectedNode({ index, coords: [route[0], route[1]] });
+        }
+
+        onPause();
+
+        const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
+            .map((transferId) => {
+                const transfer = npeData.noc_transfers.find((tr) => tr.id === transferId);
+                if (transfer) {
+                    if (transfer.route.some((r) => r[0] === route[0] && r[1] === route[1])) {
+                        return transfer;
+                    }
+                }
+                return null;
+            })
+            .filter((tr) => tr !== null);
+        setSelectedTransferList(activeTransfers as NoCTransfer[]);
+    };
+
+    const getOriginOpacity = (transfer: NoCTransfer): number => {
+        if (highlightedTransfer !== null && highlightedTransfer.id === transfer.id) {
+            return 1;
+        }
+        if (highlightedTransfer !== null) {
+            return 0.15;
+        }
+        if (selectedTransferList.length === 0) {
+            return 0.45;
+        }
+        const isSelected = selectedTransferList.some((t) => t.id === transfer.id);
+
+        if (selectedTransferList.length !== 0 && !isSelected) {
+            return 0.15;
+        }
+
+        return 1;
+    };
+
+    const formatMetadata = (value: string | number) => {
+        if (typeof value === 'number') {
+            return value.toFixed(2);
+        }
+        return value;
+    };
+
+    return (
+        <div className='npe'>
+            <div className='metadata'>
+                <div>
+                    {Object.keys(npeData.common_info).map((key) => (
+                        <div key={key}>
+                            <span>{key}:</span>
+                            {/* @ts-expect-error ts-migrate(2531) */}
+                            <span>{formatMetadata(npeData.common_info[key])}</span>
+                        </div>
+                    ))}
+                </div>
+                <hr />
+                <div>
+                    <span>Timestamp:</span>
+                    <span>{selectedTimestep}</span>
+                </div>
+                <div>
+                    <span>Active transfers:</span>
+                    <span>{transfers.length}</span>
+                </div>
+            </div>
+            <div className='header'>
+                {!isPlaying && (
+                    <Button
+                        icon={IconNames.Play}
+                        onClick={onPlay}
+                    />
+                )}
+                {isPlaying && (
+                    <Button
+                        icon={IconNames.Pause}
+                        onClick={onPause}
+                    />
+                )}
+                <Slider
+                    min={0}
+                    max={npeData.timestep_data.length - 1}
+                    stepSize={1}
+                    labelStepSize={npeData.timestep_data.length > 20 ? npeData.timestep_data.length / 20 : 1}
+                    value={selectedTimestep}
+                    onChange={(value: number) => handleScrubberChange(value)}
+                />
+                <NPECongestionHeatMap timestepList={npeData.timestep_data} />
+            </div>
+            <div
+                className='split-grid'
+                style={{ display: 'flex' }}
+            >
+                <div className='chip'>
+                    <div
+                        className='tensix-grid empty'
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
+                            gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
+                        }}
+                    >
+                        {Array.from({ length: width }).map((_, x) =>
+                            Array.from({ length: height }).map((__, y) => (
+                                // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
+                                <div
+                                    onClick={() => showActiveTransfers(null)}
+                                    style={{
+                                        gridColumn: x + 1,
+                                        gridRow: y + 1,
+                                        width: `${tensixSize}px`,
+                                        height: `${tensixSize}px`,
+                                        border: '1px solid black',
+                                    }}
+                                    key={`${x}-${y}`}
+                                />
+                            )),
+                        )}
+                    </div>
+                    <div
+                        className='tensix-grid'
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
+                            gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
+                        }}
+                    >
+                        {transfers.map((transfer) => (
+                            <>
+                                {transfer?.src && (
+                                    <div
+                                        key={`${transfer.id}-src`}
+                                        className='tensix'
+                                        style={{
+                                            position: 'relative',
+                                            gridColumn: transfer.src[1] + 1,
+                                            gridRow: transfer.src[0] + 1,
+                                            color: 'yellow',
+                                            fontSize: '20px',
+                                            opacity: getOriginOpacity(transfer),
+                                            border: '1px solid yellow',
+                                        }}
+                                    />
+                                )}
+                                {transfer.dst.map((dst) => (
+                                    <div
+                                        key={`${transfer.id}-dst-${dst[0]}-${dst[1]}`}
+                                        className='tensix'
+                                        style={{
+                                            position: 'relative',
+                                            gridColumn: dst[1] + 1,
+                                            gridRow: dst[0] + 1,
+                                            color: 'orangered',
+                                            fontSize: '20px',
+                                            opacity: getOriginOpacity(transfer),
+                                            border: '1px solid orangered',
+                                        }}
+                                    />
+                                ))}
+                            </>
+                        ))}
+
+                        {links?.link_demand.map((route, index) => (
+                            <button
+                                type='button'
+                                key={`${index}${route[0]}-${route[1]}`}
+                                className='tensix'
+                                style={{
+                                    position: 'relative',
+                                    gridColumn: route[1] + 1,
+                                    gridRow: route[0] + 1,
+                                }}
+                                onClick={() => showActiveTransfers(route, index)}
+                            >
+                                <TensixTransferRenderer
+                                    style={{
+                                        ...(selectedTransferList.length !== 0 ? { opacity: 0.15 } : { opacity: 1 }),
+                                    }}
+                                    width={SVG_SIZE}
+                                    height={SVG_SIZE}
+                                    data={[getLinkPoints(route[2], calculateLinkCongestionColor(route[3]))]}
+                                    isMulticolor={false}
+                                />
+                                <div style={{ fontSize: '9px', position: 'absolute', top: 0 }}>
+                                    {route[0]}-{route[1]}
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                    <div
+                        className='tensix-grid transfers'
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            display: 'grid',
+                            gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
+                            gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
+                        }}
+                    >
+                        {transferListSelectionRendering.map((row, rowIndex) =>
+                            row.map((transfersForNoc, colIndex) => (
+                                <div
+                                    key={`selected-transfer-${rowIndex}-${colIndex}`}
+                                    className={
+                                        selectedNode?.coords[0] === rowIndex && selectedNode?.coords[1] === colIndex
+                                            ? 'selected tensix no-click'
+                                            : 'tensix no-click'
+                                    }
+                                    style={{
+                                        position: 'relative',
+                                        gridColumn: colIndex + 1,
+                                        gridRow: rowIndex + 1,
+                                    }}
+                                >
+                                    <div className='transfer-render-ctn'>
+                                        <TensixTransferRenderer
+                                            style={{
+                                                ...(highlightedTransfer !== null ? { opacity: 0.25 } : { opacity: 1 }),
+                                            }}
+                                            width={SVG_SIZE}
+                                            height={SVG_SIZE}
+                                            data={getLines(transfersForNoc)}
+                                            isMulticolor
+                                        />
+                                    </div>
+                                </div>
+                            )),
+                        )}
+                    </div>
+                    {highlightedTransfer !== null && (
+                        <div
+                            className='tensix-grid transfer-single'
+                            style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                display: 'grid',
+                                gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
+                                gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
+                                // backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                                zIndex: 1,
+                            }}
+                        >
+                            {highlightedTransfer?.route.map((point) => (
+                                <div
+                                    key={`${point[0]}-${point[1]}-${point[2]}`}
+                                    className='tensix'
+                                    style={{
+                                        position: 'relative',
+                                        gridColumn: point[1] + 1,
+                                        gridRow: point[0] + 1,
+                                    }}
+                                >
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            width: '100%',
+                                            height: '100%',
+                                        }}
+                                    >
+                                        <TensixTransferRenderer
+                                            width={SVG_SIZE}
+                                            height={SVG_SIZE}
+                                            data={getLines([{ transfer: highlightedTransfer.id, nocId: point[2] }])}
+                                            // data={getLinkPoints([{ transfer: highlightedTransfer.id, nocId: point[2] }])}
+
+                                            isMulticolor={false}
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <div className='side-data'>
+                    {Object.keys(groupedTransfersByNoCID).length !== 0 && (
+                        <>
+                            <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                Active transfers through {selectedNode?.coords.join('-')}
+                                <Button
+                                    minimal
+                                    icon={IconNames.CROSS}
+                                    onClick={() => showActiveTransfers(null)}
+                                />
+                            </h3>
+                            {Object.entries(groupedTransfersByNoCID).map(([nocId, localTransferList]) => (
+                                <div
+                                    key={nocId}
+                                    style={{ marginBottom: '20px' }}
+                                >
+                                    <h4>NOC ID: {nocId}</h4>
+                                    {localTransferList.map((transfer) => (
+                                        <div
+                                            key={transfer.id}
+                                            style={{
+                                                display: 'flex',
+                                                gap: '5px',
+                                                alignContent: 'center',
+                                                alignItems: 'center',
+                                                padding: '5px',
+                                                margin: '5px',
+                                                transition: 'opacity 0.2s',
+                                                cursor: 'pointer',
+                                                opacity:
+                                                    highlightedTransfer == null || highlightedTransfer === transfer
+                                                        ? 1
+                                                        : 0.25,
+                                            }}
+                                            // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                            onMouseOver={() => setHighlightedTransfer(transfer)}
+                                            // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                            onMouseOut={() => setHighlightedTransfer(null)}
+                                        >
+                                            <div
+                                                style={{
+                                                    backgroundColor: getRouteColor(transfer.id),
+                                                    width: '10px',
+                                                    height: '10px',
+                                                }}
+                                            />
+                                            {transfer.id}
+                                            <div>
+                                                <span style={{ border: '1px solid yellow' }}>
+                                                    {transfer.src.join('-')}
+                                                </span>{' '}
+                                                <Icon
+                                                    size={12}
+                                                    icon={IconNames.ArrowRight}
+                                                />{' '}
+                                                <span style={{ border: '1px solid orangered' }}>
+                                                    {transfer.dst.length === 1
+                                                        ? transfer.dst[0].join('-')
+                                                        : `${transfer.dst[0].join('-')} - ${transfer.dst[transfer.dst.length - 1].join('-')}`}
+                                                </span>
+                                            </div>
+                                            <div>{formatSize(transfer.total_bytes)}B</div>
+                                            <div>{transfer.noc_event_type}</div>
+                                            <div>injection rate: {transfer.injection_rate.toFixed(2)}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ))}
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default NPEView;
