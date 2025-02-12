@@ -37,6 +37,7 @@ For the latest updates and features, please see [releases](https://github.com/te
 - Operation flow graph for a holistic view of model execution
 - Load reports via the local file system or through an SSH connection
 - Supports multiple instances of the application running concurrently
+- BETA: Network-on-chip performance estimator (NPE) for Tenstorrent Tensix-based devices
 
 ### Demo
 
@@ -76,11 +77,11 @@ How to [get started](./docs/getting-started.md) with TT-NN Visualizer.
 
 Use [remote querying](./docs/remote-querying.md) instead of syncing the report data to your local file system.
 
-## Sample models
+## Sample reports
 
 You may test the application using the following sample reports.
 
-Unzip the files into their own directories and select them with the local folder selector.
+Unzip the files into their own directories and select them with the local folder selector, or load the NPE data on the `/npe` route.
 
 **Segformer encoder**
 [report](https://github.com/user-attachments/files/17996493/segformer_encoder.zip)
@@ -90,6 +91,9 @@ Unzip the files into their own directories and select them with the local folder
 
 **Llama mlp**
 [report + performance trace](https://github.com/user-attachments/files/18770763/llama_attn_32l_10iter_30jan.zip)
+
+**Llama decode**
+[npe data](https://github.com/user-attachments/files/18770763/llama_attn_32l_10iter_30jan.zip)
 
 ## Contributing
 
