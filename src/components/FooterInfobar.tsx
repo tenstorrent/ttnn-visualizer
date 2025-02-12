@@ -39,16 +39,10 @@ function FooterInfobar() {
     const isNPE = location.pathname.includes(`${ROUTES.NPE}`);
 
     useEffect(() => {
-        if (isNPE) {
+        if (isOperationDetails || isNPE) {
             setSliderIsOpen(false);
         }
-    }, [isNPE]);
-
-    useEffect(() => {
-        if (isOperationDetails) {
-            setSliderIsOpen(false);
-        }
-    }, [isOperationDetails]);
+    }, [isNPE, isOperationDetails]);
 
     const getSelectedRangeLabel = (): string | null => {
         if (isPerformanceRoute) {
