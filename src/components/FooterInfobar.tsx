@@ -43,12 +43,12 @@ function FooterInfobar() {
         }
     }, [isOperationDetails]);
 
-    const getSelectedRange = (): string | null => {
+    const getSelectedRangeLabel = (): string | null => {
         if (isPerformanceRoute) {
-            return performanceRange && `${performanceRange[0]} - ${performanceRange[1]}`;
+            return performanceRange && `Selected Performance:  ${performanceRange[0]} - ${performanceRange[1]}`;
         }
 
-        return selectedRange && `${selectedRange[0]} - ${selectedRange[1]}`;
+        return selectedRange && `Selected: ${selectedRange[0]} - ${selectedRange[1]}`;
     };
 
     return (
@@ -116,7 +116,7 @@ function FooterInfobar() {
                 {(operationRange || performanceRange) && (
                     <div className='slider-controls'>
                         {!sliderIsOpen && !hasRangeSelected(selectedRange, operationRange) && (
-                            <span className='current-range'>Selected: {getSelectedRange()}</span>
+                            <span className='current-range'>{getSelectedRangeLabel()}</span>
                         )}
 
                         <Button

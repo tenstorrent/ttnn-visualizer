@@ -389,14 +389,16 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercent
         );
     };
 
-    const getFilteredRows = () =>
-        selectedRange && processedRows.length > 0
+    const getFilteredRows = () => {
+        return selectedRange && processedRows.length > 0
             ? processedRows.filter((row) => {
                   const rowId = parseInt(String(row?.ID?.raw_value), 10);
 
                   return rowId >= selectedRange[0] && rowId <= selectedRange[1];
               })
             : processedRows;
+    };
+
     return (
         <>
             <Switch

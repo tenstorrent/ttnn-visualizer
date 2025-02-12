@@ -273,7 +273,7 @@ export const useOperationsList = () =>
         retry: false,
     });
 
-export const useOperationRange = (): NumberRange | null => {
+export const useOperationListRange = (): NumberRange | null => {
     const response = useOperationsList();
 
     return useMemo(

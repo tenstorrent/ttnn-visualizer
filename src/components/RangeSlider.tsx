@@ -18,7 +18,7 @@ import 'styles/components/RangeSlider.scss';
 import {
     useGetDeviceOperationListPerf,
     useNormalizedPerformance,
-    useOperationRange,
+    useOperationListRange,
     useOperationsList,
     useOptoPerfIdFiltered,
     usePerformanceRange,
@@ -36,7 +36,7 @@ function Range() {
     const listPerf = useGetDeviceOperationListPerf();
     const isInSync = listPerf?.length > 0;
     const opIdsMap = useOptoPerfIdFiltered();
-    const operationRange = useOperationRange();
+    const operationRange = useOperationListRange();
     const perfRange = usePerformanceRange();
 
     const setOperationRange = useSetAtom(operationRangeAtom);
