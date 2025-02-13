@@ -50,7 +50,7 @@ class DefaultConfig(object):
     GUNICORN_WORKER_CLASS = os.getenv("GUNICORN_WORKER_CLASS", "gevent")
     GUNICORN_WORKERS = os.getenv("GUNICORN_WORKERS", "1")
     PORT = os.getenv("PORT", "8000")
-    HOST = "0.0.0.0"
+    HOST = "localhost"
     DEV_SERVER_PORT = "5173"
     DEV_SERVER_HOST = "localhost"
 
