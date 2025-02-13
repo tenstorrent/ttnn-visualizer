@@ -1,0 +1,9 @@
+@use '../common.scss' as common;
+
+.tag-l1 {
+    @extend %tag-l1;
+}
+
+.tag-dram {
+    @extend %tag-dram;
+}

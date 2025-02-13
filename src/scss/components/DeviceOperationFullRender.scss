@@ -13,6 +13,32 @@
     }
 }
 
+.standard-flex-layout {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 5px;
+}
+
+.arg-tensor-tooltip {
+    display: flex;
+    justify-content: space-between;
+    gap: 5px;
+    flex-direction: column;
+
+    .buffer-details {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+
+        .address {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+    }
+}
+
 .device-operations-full-render {
     position: relative;
 

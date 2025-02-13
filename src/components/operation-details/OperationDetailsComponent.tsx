@@ -37,6 +37,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
     const [showL1Small, setShowL1Small] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
+
     const {
         operationDetails: { data: operationDetails, isLoading, status },
     } = useOperationDetails(operationId);
@@ -76,6 +77,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const details: OperationDetails | null = new OperationDetails(operationDetails, operations, {
         renderPattern: renderMemoryLayoutPattern,
     });
+
     const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations);
 
     const l1Small = details.memoryData(BufferType.L1_SMALL);

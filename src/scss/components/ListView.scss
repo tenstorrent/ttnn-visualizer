@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../common.scss' as *;
 
 .list-wrap {
     border: solid 1px #909096;
@@ -90,13 +91,5 @@
         margin-left: 5px;
         margin-right: 5px;
         margin-bottom: 5px;
-    }
-
-    .tag-l1 {
-        background-color: $tt-purple;
-    }
-
-    .tag-dram {
-        background-color: $tt-teal;
     }
 }

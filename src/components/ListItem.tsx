@@ -4,9 +4,10 @@
 
 import React from 'react';
 import classNames from 'classnames';
-import { Icon, IconName, Intent, Tag, TagProps } from '@blueprintjs/core';
+import { Icon, IconName, Intent, TagProps } from '@blueprintjs/core';
 import HighlightedText from './HighlightedText';
 import '../scss/components/ListItem.scss';
+import MemoryTag from './MemoryTag';
 
 interface ListItemProps {
     filterName: string;
@@ -49,14 +50,7 @@ const ListItem: React.FC<ListItemProps> = ({
 
             {children}
 
-            {tags?.map((tag) => (
-                <Tag
-                    key={tag.htmlTitle}
-                    className={tag.className}
-                >
-                    {tag.htmlTitle}
-                </Tag>
-            ))}
+            {tags?.map((tag) => <MemoryTag memory={tag.htmlTitle} />)}
         </div>
     );
 };
