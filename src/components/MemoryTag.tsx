@@ -1,5 +1,4 @@
 import { Tag } from '@blueprintjs/core';
-import '../scss/components/MemoryTag.scss';
 
 interface MemoryTagProps {
     memory: string | undefined;

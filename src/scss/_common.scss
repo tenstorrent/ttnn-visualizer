@@ -173,21 +173,12 @@ $row-background: $tt-grey-2;
     width: 100%;
 }
 
-// well this is clearly excessive but more flexible, so keeping
-%tag-l1 {
-    background-color: $tt-purple;
-}
-
-%tag-dram {
-    background-color: $tt-teal;
-}
-
 .bp5-tag {
     &.tag-l1 {
-        @extend %tag-l1;
+        background-color: $tt-purple;
     }
 
     .tag-dram {
-        @extend %tag-dram;
+        background-color: $tt-teal;
     }
 }
