@@ -60,7 +60,7 @@ using `pip install release_name.whl`.
 
 ## Running the application
 
-After installation run `ttnn-visualizer` to start the application. If the app does not open automatically in your browser you can navigate to `http://0.0.0.0:8000`.
+After installation run `ttnn-visualizer` to start the application. If the app does not open automatically in your browser you can navigate to `http://localhost:8000`.
 
 ### Docker
 
