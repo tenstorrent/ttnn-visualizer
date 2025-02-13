@@ -29,7 +29,7 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import isValidNumber from '../functions/isValidNumber';
 import { getUniqueDeviceIDs, mergeMultideviceRows } from '../functions/perfFunctions';
-import { RowData } from '../definitions/PerfTable';
+import { PerfTableRow, RowData } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import { selectedOperationRangeAtom } from '../store/app';
 
@@ -227,6 +227,12 @@ const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, str
     });
 };
 
+const fetchPerformanceDataReport = async (): Promise<PerfTableRow[]> => {
+    const { data } = await axiosInstance.get<PerfTableRow[]>('/api/profiler/perf-results/report');
+
+    return data;
+};
+
 interface MetaData {
     architecture: string | null;
     frequency: number | null;
@@ -288,7 +294,7 @@ export const useOperationDetails = (operationId: number | null) => {
     const operation = operations?.filter((_operation) => _operation.id === operationId)[0];
 
     // TEMP device id handling
-    const deviceId = 0;
+    const deviceId = null;
 
     const operationDetails = useQuery<OperationDetailsData>(
         ['get-operation-detail', operationId, deviceId],
@@ -661,6 +667,13 @@ export const usePerformance = () => {
     return useQuery({
         queryFn: () => fetchPerformanceDataRaw(),
         queryKey: 'get-performance-data-raw',
+    });
+};
+
+export const usePerformanceReport = () => {
+    return useQuery({
+        queryFn: () => fetchPerformanceDataReport(),
+        queryKey: 'get-performance-data-report',
     });
 };
 
