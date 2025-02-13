@@ -53,8 +53,10 @@ const TensorList = () => {
         if (fetchedTensors && selectedOperationRange) {
             return fetchedTensors.filter(
                 (tensor) =>
-                    tensor.producers.some((producer) => producer >= selectedOperationRange[0]) &&
-                    tensor.producers.some((producer) => producer <= selectedOperationRange[1]),
+                    (tensor.producers.some((producer) => producer >= selectedOperationRange[0]) &&
+                        tensor.producers.some((producer) => producer <= selectedOperationRange[1])) ||
+                    (tensor.consumers.some((consumer) => consumer >= selectedOperationRange[0]) &&
+                        tensor.consumers.some((consumer) => consumer <= selectedOperationRange[1])),
             );
         }
 
