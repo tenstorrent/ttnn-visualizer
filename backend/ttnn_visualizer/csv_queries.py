@@ -565,7 +565,8 @@ class OpsPerformanceReportQueries:
         "input_0_memory",
         "inner_dim_block_size",
         "output_subblock_h",
-        "output_subblock_w"
+        "output_subblock_w",
+        "advice",
     ]
 
     DEFAULT_SIGNPOST = None
@@ -573,6 +574,7 @@ class OpsPerformanceReportQueries:
     DEFAULT_MIN_PERCENTAGE = 0.5
     DEFAULT_ID_RANGE = None
     DEFAULT_NO_ADVICE = False
+    DEFAULT_TRACING_MODE = False
 
     @classmethod
     def generate_report(cls, session):
@@ -587,6 +589,7 @@ class OpsPerformanceReportQueries:
             cls.DEFAULT_ID_RANGE,
             csv_output_file,
             cls.DEFAULT_NO_ADVICE,
+            cls.DEFAULT_TRACING_MODE,
         )
 
         report = []
@@ -596,9 +599,14 @@ class OpsPerformanceReportQueries:
                 reader = csv.reader(csvfile, delimiter=",")
                 next(reader, None)
                 for row in reader:
-                    report.append({
-                        column: row[index] for index, column in enumerate(cls.REPORT_COLUMNS)
-                    })
+                    processed_row = {
+                        column: row[index] for index, column in enumerate(cls.REPORT_COLUMNS) if index < len(row)
+                    }
+                    if "advice" in processed_row and processed_row["advice"]:
+                        processed_row["advice"] = processed_row["advice"].split(" • ")
+                    else:
+                        processed_row["advice"] = []
+                    report.append(processed_row)
         except csv.Error as e:
             raise DataFormatError() from e
         finally:
