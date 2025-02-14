@@ -590,28 +590,12 @@ export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> 
     return [defaultTensorData];
 };
 
-export const useTensors = (useRange?: boolean, deviceId?: number | null) => {
-    const range = useAtomValue(selectedOperationRangeAtom);
-
-    const response = useQuery<Tensor[], AxiosError>({
+export const useTensors = (deviceId?: number | null) =>
+    useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(deviceId),
         queryKey: ['get-tensors', deviceId],
         retry: false,
     });
-
-    return useMemo(() => {
-        if (response.data && range && useRange) {
-            response.data = response.data.filter(
-                (tensor) =>
-                    tensor.consumers.some((id) => id >= range[0] && id <= range[1]) ||
-                    tensor.producers.some((id) => id >= range[0] && id <= range[1]),
-            );
-        }
-
-        return response;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [range, response.isLoading, useRange]);
-};
 
 export const useDevices = () => {
     return useQuery<DeviceData[], AxiosError>('get-devices', fetchDevices);

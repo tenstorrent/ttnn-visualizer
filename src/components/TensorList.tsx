@@ -8,7 +8,7 @@ import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Button, ButtonGroup, Checkbox, Icon, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { MultiSelect } from '@blueprintjs/select';
 import SearchField from './SearchField';
 import LoadingSpinner from './LoadingSpinner';
@@ -17,7 +17,7 @@ import ROUTES from '../definitions/Routes';
 import { Tensor } from '../model/APIData';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
-import { expandedTensorsAtom } from '../store/app';
+import { expandedTensorsAtom, selectedOperationRangeAtom } from '../store/app';
 import ListItem from './ListItem';
 import '@blueprintjs/select/lib/css/blueprint-select.css';
 import 'styles/components/ListView.scss';
@@ -44,9 +44,24 @@ const TensorList = () => {
     const [bufferTypeFilters, setBufferTypeFilters] = useState<BufferType[]>([]);
     const [showHighConsumerTensors, setShowHighConsumerTensors] = useState(false);
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
+    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
 
     const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
-    const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors(true);
+    const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
+
+    const tensorsWithRange = useMemo(() => {
+        if (fetchedTensors && selectedOperationRange) {
+            return fetchedTensors.filter(
+                (tensor) =>
+                    (tensor.producers.some((producer) => producer >= selectedOperationRange[0]) &&
+                        tensor.producers.some((producer) => producer <= selectedOperationRange[1])) ||
+                    (tensor.consumers.some((consumer) => consumer >= selectedOperationRange[0]) &&
+                        tensor.consumers.some((consumer) => consumer <= selectedOperationRange[1])),
+            );
+        }
+
+        return fetchedTensors;
+    }, [fetchedTensors, selectedOperationRange]);
 
     // TODO: Figure out an initial scroll position based on last used tensor
     const virtualizer = useVirtualizer({
@@ -96,11 +111,11 @@ const TensorList = () => {
     };
 
     useMemo(() => {
-        if (fetchedTensors && operations) {
-            let tensors = [...fetchedTensors];
+        if (tensorsWithRange && operations) {
+            let tensors = [...tensorsWithRange];
 
             if (filterQuery) {
-                tensors = fetchedTensors?.filter((tensor) =>
+                tensors = tensorsWithRange?.filter((tensor) =>
                     getTensorFilterName(tensor).toLowerCase().includes(filterQuery.toLowerCase()),
                 );
             }
@@ -117,7 +132,7 @@ const TensorList = () => {
 
             setFilteredTensorList(tensors);
         }
-    }, [operations, fetchedTensors, filterQuery, bufferTypeFilters, showHighConsumerTensors]);
+    }, [operations, tensorsWithRange, filterQuery, bufferTypeFilters, showHighConsumerTensors]);
 
     useEffect(() => {
         const initialTensorId = location.state?.previousOperationId;
@@ -164,7 +179,7 @@ const TensorList = () => {
                         <Button
                             onClick={() => setShowHighConsumerTensors(!showHighConsumerTensors)}
                             rightIcon={IconNames.ISSUE}
-                            disabled={!fetchedTensors?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
+                            disabled={!tensorsWithRange?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
                             intent={Intent.DANGER}
                             outlined={showHighConsumerTensors}
                         >
@@ -207,7 +222,7 @@ const TensorList = () => {
                     </Tooltip>
 
                     <MultiSelect
-                        items={fetchedTensors ? getBufferTypeFilterOptions(fetchedTensors) : []}
+                        items={tensorsWithRange ? getBufferTypeFilterOptions(tensorsWithRange) : []}
                         placeholder='Buffer type filter...'
                         // Type requires this but it seems pointless
                         onItemSelect={(selectedType) => updateBufferTypeFilter(selectedType)}
@@ -233,8 +248,8 @@ const TensorList = () => {
 
                 {!isTensorsLoading && !isOperationsLoading ? (
                     <p className='result-count'>
-                        {fetchedTensors && filterQuery
-                            ? `Showing ${numberOfTensors} of ${fetchedTensors.length} tensors`
+                        {tensorsWithRange && filterQuery
+                            ? `Showing ${numberOfTensors} of ${tensorsWithRange.length} tensors`
                             : `Showing ${numberOfTensors} tensors`}
                     </p>
                 ) : null}
