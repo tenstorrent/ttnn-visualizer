@@ -4,6 +4,29 @@
 
 import { IconName } from '@blueprintjs/core';
 
+export interface PerfTableRow {
+    id: string;
+    total_percent: string;
+    bound: string;
+    op_code: string;
+    device_time: string;
+    op_to_op_gap: string;
+    cores: string;
+    dram: string;
+    dram_percent: string;
+    flops: string;
+    flops_percent: string;
+    math_fidelity: string;
+    output_datatype: string;
+    input_0_datatype: string;
+    input_1_datatype: string;
+    dram_sharded: string;
+    input_0_memory: string;
+    inner_dim_block_size: string;
+    output_subblock_h: string;
+    output_subblock_w: string;
+}
+
 export interface Cell {
     raw_value: string | number | null | undefined | boolean;
     icon?: IconName;
