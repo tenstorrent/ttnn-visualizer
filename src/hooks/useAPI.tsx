@@ -27,7 +27,6 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
-import isValidNumber from '../functions/isValidNumber';
 import { getUniqueDeviceIDs, mergeMultideviceRows } from '../functions/perfFunctions';
 import { PerfTableRow, RowData } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
@@ -293,8 +292,7 @@ export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
     const operation = operations?.filter((_operation) => _operation.id === operationId)[0];
 
-    // TEMP device id handling
-    const deviceId = 0;
+    const deviceId = null;
 
     const operationDetails = useQuery<OperationDetailsData>(
         ['get-operation-detail', operationId, deviceId],
@@ -305,11 +303,22 @@ export const useOperationDetails = (operationId: number | null) => {
         },
     );
 
-    // TEMP device id handling
     if (operationDetails.data) {
-        operationDetails.data.buffers = operationDetails.data.buffers.filter((buffer) =>
-            isValidNumber(deviceId) ? buffer.device_id === deviceId : true,
-        );
+        const uniqueBuffers: Map<number, BufferData> = new Map<number, BufferData>();
+        operationDetails.data.buffers.forEach((buffer) => {
+            // eslint-disable-next-line camelcase
+            const { address, max_size_per_bank } = buffer;
+
+            if (address) {
+                const existingBuffer = uniqueBuffers.get(address);
+                // eslint-disable-next-line camelcase
+                if (!existingBuffer || max_size_per_bank > existingBuffer.max_size_per_bank) {
+                    uniqueBuffers.set(address, buffer);
+                }
+            }
+        });
+
+        operationDetails.data.buffersSummary = Array.from(uniqueBuffers.values()) || [];
     }
 
     return {

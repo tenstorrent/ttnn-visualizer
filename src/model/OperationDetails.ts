@@ -29,6 +29,8 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     buffers: BufferData[];
 
+    deviceBuffers: BufferData[];
+
     l1_sizes: number[];
 
     stack_trace: string;
@@ -51,7 +53,9 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.id = data.id;
         this.inputs = data.inputs;
         this.outputs = data.outputs;
-        this.buffers = data.buffers;
+        // yes, this is confusing. we have to retain this functionality
+        this.buffers = data.buffersSummary;
+        this.deviceBuffers = data.buffers;
         this.l1_sizes = data.l1_sizes;
         this.stack_trace = data.stack_trace;
         this.operations = operations;

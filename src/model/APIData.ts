@@ -69,6 +69,7 @@ export interface Buffer {
 export interface OperationDetailsData extends Operation {
     id: number;
     buffers: BufferData[];
+    buffersSummary: BufferData[];
     l1_sizes: number[];
 }
 
@@ -105,6 +106,7 @@ export const defaultOperationDetailsData: OperationDetailsData = {
     inputs: [],
     outputs: [],
     buffers: [],
+    buffersSummary: [],
     l1_sizes: [],
     stack_trace: '',
     device_operations: [],
