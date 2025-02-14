@@ -172,3 +172,13 @@ $row-background: $tt-grey-2;
     height: 100vh;
     width: 100%;
 }
+
+.bp5-tag {
+    &.tag-l1 {
+        background-color: $tt-purple;
+    }
+
+    .tag-dram {
+        background-color: $tt-teal;
+    }
+}

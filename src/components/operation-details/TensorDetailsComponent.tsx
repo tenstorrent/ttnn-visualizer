@@ -20,6 +20,7 @@ import 'styles/components/TensorDetailsComponent.scss';
 import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
 import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator';
 import { selectedTensorAtom } from '../../store/app';
+import MemoryTag from '../MemoryTag';
 
 export interface TensorDetailsComponentProps {
     tensor: Tensor;
@@ -125,26 +126,27 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
             <div className='tensor-meta'>
                 <p>
-                    <strong>Address:</strong> {prettyPrintAddress(tensor.address, memorySize)}
+                    Address: <strong> {prettyPrintAddress(tensor.address, memorySize)}</strong>
                 </p>
                 {tensor.buffer_type !== null && (
                     <p>
-                        <strong>Buffer type:</strong> {BufferTypeLabel[tensor.buffer_type]}
+                        Buffer type:
+                        <MemoryTag memory={BufferTypeLabel[tensor.buffer_type]} />
                     </p>
                 )}
                 <p>
-                    <strong>Shape:</strong> {toReadableShape(tensor.shape)}
+                    Shape:<strong> {toReadableShape(tensor.shape)}</strong>
                 </p>
                 <p>
-                    <strong>Dtype:</strong> {toReadableType(tensor.dtype)}
+                    Dtype:<strong> {toReadableType(tensor.dtype)}</strong>
                 </p>
                 <p>
-                    <strong>Layout:</strong> {tensor.layout}
+                    Layout:<strong> {tensor.layout}</strong>
                 </p>
                 <p>
                     {tensor.memory_config?.memory_layout && (
                         <>
-                            <strong>Memory layout:</strong> {tensor.memory_config.memory_layout}
+                            Memory layout:<strong> {tensor.memory_config.memory_layout}</strong>
                         </>
                     )}
                 </p>
@@ -152,8 +154,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 {shardSpec ? (
                     <>
                         <p>
-                            <strong>Sharding: </strong>
-                            {typeof shardSpec === 'string' ? shardSpec : null}
+                            Sharding: <strong>{typeof shardSpec === 'string' ? shardSpec : null}</strong>
                         </p>
 
                         {typeof shardSpec === 'object' ? (

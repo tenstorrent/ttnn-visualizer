@@ -289,10 +289,6 @@ const TensorList = () => {
                                                             ? [
                                                                   {
                                                                       htmlTitle: BufferTypeLabel[tensor.buffer_type],
-                                                                      className:
-                                                                          tensor.buffer_type === BufferType.L1
-                                                                              ? 'tag-l1'
-                                                                              : 'tag-dram',
                                                                   },
                                                               ]
                                                             : undefined
