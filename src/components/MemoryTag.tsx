@@ -5,12 +5,7 @@ interface MemoryTagProps {
 }
 
 const MemoryTag = ({ memory }: MemoryTagProps) => {
-    if (memory?.toLowerCase() === 'l1') {
-        return <Tag className='tag-l1'>L1</Tag>;
-    }
-    if (memory?.toLowerCase() === 'dram') {
-        return <Tag className='tag-dram'>DRAM</Tag>;
-    }
-    return <Tag>{memory}</Tag>;
+    const memoryType = memory?.toLowerCase() || '';
+    return <Tag className={`tag-${memoryType}`}>{memory}</Tag>;
 };
 export default MemoryTag;
