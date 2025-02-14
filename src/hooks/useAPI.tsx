@@ -294,7 +294,7 @@ export const useOperationDetails = (operationId: number | null) => {
     const operation = operations?.filter((_operation) => _operation.id === operationId)[0];
 
     // TEMP device id handling
-    const deviceId = null;
+    const deviceId = 0;
 
     const operationDetails = useQuery<OperationDetailsData>(
         ['get-operation-detail', operationId, deviceId],
