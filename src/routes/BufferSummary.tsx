@@ -58,7 +58,7 @@ function BufferSummary() {
         return () => window.removeEventListener('scroll', navHighlighter);
     }, []);
 
-    const tensorListByOperation = createTensorListByOperationById(
+    const tensorListByOperation = createTensorsByOperationByIdList(
         operationsList,
         isDramActive ? dramBuffersByOperation : buffersByOperation,
     );
@@ -147,7 +147,7 @@ function BufferSummary() {
 
 // Modified from 'createTensorListByOperationById' function in OperationDetails.ts
 // TODO: Refactor to optimise historical tensor lookup
-function createTensorListByOperationById(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
+function createTensorsByOperationByIdList(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
     const tensorsByOperationById: TensorsByOperationByAddress = new Map();
 
     if (!operations || !buffersByOperation) {

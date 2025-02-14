@@ -7,7 +7,7 @@
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import Papa, { ParseResult } from 'papaparse';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
 import axiosInstance from '../libs/axiosInstance';
@@ -290,21 +290,34 @@ export const useOperationListRange = (): NumberRange | null => {
 
 export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
-    const operation = operations?.filter((_operation) => _operation.id === operationId)[0];
+
+    // Memoize the operation lookup
+    const operation = useMemo(
+        () => operations?.find((_operation) => _operation.id === operationId) || null,
+        [operations, operationId],
+    );
 
     const deviceId = null;
 
+    // Memoized function for fetching operation details
+    const fetchDetails = useCallback(() => fetchOperationDetails(operationId), [operationId]);
+
     const operationDetails = useQuery<OperationDetailsData>(
         ['get-operation-detail', operationId, deviceId],
-        () => fetchOperationDetails(operationId),
+        fetchDetails,
         {
             retry: 2,
             retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
         },
     );
 
-    if (operationDetails.data) {
+    const buffersSummary = useMemo(() => {
+        if (!operationDetails.data) {
+            return [];
+        }
+
         const uniqueBuffers: Map<number, BufferData> = new Map<number, BufferData>();
+
         operationDetails.data.buffers.forEach((buffer) => {
             // eslint-disable-next-line camelcase
             const { address, max_size_per_bank } = buffer;
@@ -318,7 +331,11 @@ export const useOperationDetails = (operationId: number | null) => {
             }
         });
 
-        operationDetails.data.buffersSummary = Array.from(uniqueBuffers.values()) || [];
+        return Array.from(uniqueBuffers.values());
+    }, [operationDetails.data]);
+
+    if (operationDetails.data) {
+        operationDetails.data.buffersSummary = buffersSummary;
     }
 
     return {
