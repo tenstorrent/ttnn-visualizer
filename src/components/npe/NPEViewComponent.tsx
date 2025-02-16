@@ -308,6 +308,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 }}
                                 onClick={() => showActiveTransfers(route, index)}
                             >
+                                {/* // TENSIX CONGESTION */}
                                 <TensixTransferRenderer
                                     style={{
                                         ...(selectedTransferList.length !== 0 ? { opacity: 0.15 } : { opacity: 1 }),
@@ -350,6 +351,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     }}
                                 >
                                     <div className='transfer-render-ctn'>
+                                        {/* TENSIX TRANSFERS */}
                                         <TensixTransferRenderer
                                             style={{
                                                 ...(highlightedTransfer !== null ? { opacity: 0.25 } : { opacity: 1 }),
@@ -397,12 +399,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             height: '100%',
                                         }}
                                     >
+                                        {/* HIGHLIGHTED TRANSFER */}
                                         <TensixTransferRenderer
                                             width={SVG_SIZE}
                                             height={SVG_SIZE}
                                             data={getLines([{ transfer: highlightedTransfer.id, nocId: point[2] }])}
-                                            // data={getLinkPoints([{ transfer: highlightedTransfer.id, nocId: point[2] }])}
-
                                             isMulticolor={false}
                                         />
                                     </div>
