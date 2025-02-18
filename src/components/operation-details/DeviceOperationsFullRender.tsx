@@ -17,6 +17,7 @@ import { AllocationDetails, processMemoryAllocations } from '../../functions/pro
 import { formatSize, prettyPrintAddress, toReadableShape } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
+// import { JSX } from 'react/jsx-runtime';
 
 // TODO: this component definitely needs to be broken down into smaller components
 
@@ -30,7 +31,7 @@ const DeviceOperationsFullRender: React.FC<{
 
     const formatDeviceOpParameters = useCallback(
         (node: Node) => {
-            const bufferDetails = (buffer?: Node, tensorId?: number) => {
+            const bufferDetails = (buffer?: Node, tensorId?: number, optionalOutput?: JSX.Element | undefined) => {
                 // TODO: this will need grouping of same sized buffers. its impractical to render 32 lines that are the same
                 if (buffer === undefined) {
                     return null;
@@ -70,27 +71,22 @@ const DeviceOperationsFullRender: React.FC<{
                         <span>
                             <MemoryTag memory={buffer.params.type} />
                         </span>
+                        {optionalOutput && optionalOutput}
                     </div>
                 );
             };
 
             const createBuffersRender = (n: Node) => {
-                // const buffers = node.buffer?.map((buffer, index) => (
-                //     <Fragment key={`buffer-details-${node.params.tensor_id} ${index}`}>
-                //         {bufferDetails(buffer, node.params.tensor_id)}
-                //     </Fragment>
-                // ));
-
                 const deviceIds = n.buffer?.filter((b) => b).map((b) => b.params.device_id) || [];
                 if (deviceIds?.length > 1 && n.buffer !== undefined && n.buffer.length > 0) {
                     const buffer = n.buffer.find((b) => b);
-                    return (
-                        <>
-                            {bufferDetails(buffer, n.params.tensor_id)} <strong>x{deviceIds.length}</strong>
-                        </>
-                    );
+                    return <>{bufferDetails(buffer, n.params.tensor_id, <strong>x{deviceIds.length}</strong>)}</>;
                 }
-                return n.buffer?.map((buffer) => <>{bufferDetails(buffer, n.params.tensor_id)}</>);
+                return n.buffer?.map((buffer, index) => (
+                    <Fragment key={`buffer-details-${node.params.tensor_id} ${index}`}>
+                        {bufferDetails(buffer, node.params.tensor_id)}
+                    </Fragment>
+                ));
             };
 
             if (node.node_type === NodeType.tensor) {
