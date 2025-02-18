@@ -18,7 +18,7 @@ import useBuffersTable, { SortingDirection } from '../../hooks/useBuffersTable';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { BufferData } from '../../model/APIData';
+import { Buffer, BufferData } from '../../model/APIData';
 import { selectedTensorAtom } from '../../store/app';
 
 interface ColumnDefinition {
@@ -97,6 +97,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     const selectedTensor = useAtomValue(selectedTensorAtom);
     const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
     const [showOnlySelected, setShowOnlySelected] = useState(false);
+    const [mergedByDevice, setMergedByDevice] = useState(true);
 
     const tableRef = useRef<Table2 | null>(null);
     const filterableColumnKeys = useMemo(
@@ -110,23 +111,43 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         >,
     );
 
-    const listOfBuffers = useMemo(
-        () =>
-            buffersByOperation
-                ?.map((operation) =>
-                    operation.buffers
-                        .map((buffer) => ({
-                            ...buffer,
-                            hexAddress: toHex(buffer.address),
-                            operation_id: operation.id,
-                            operation_name: operation.name,
-                            tensor_id: tensorListByOperation.get(operation.id)?.get(buffer.address)?.id,
-                        }))
-                        .flat(),
-                )
-                .flat() as SummaryTableBuffer[],
-        [buffersByOperation, tensorListByOperation],
-    );
+    // TODO: move this to a hook. eventually
+    const uniqueBuffersByOperationList = useMemo(() => {
+        return buffersByOperation.map((operation) => {
+            const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
+            operation.buffers.forEach((buffer) => {
+                const { address, size } = buffer;
+                if (address) {
+                    const existingBuffer = uniqueBuffers.get(address);
+                    if (!existingBuffer || size > existingBuffer.size) {
+                        uniqueBuffers.set(address, buffer);
+                        // TODO: add device list to buffer fro rendering maybe
+                    }
+                }
+            });
+            return {
+                ...operation,
+                buffers: Array.from(uniqueBuffers.values()),
+            };
+        });
+    }, [buffersByOperation]);
+
+    const listOfBuffers = useMemo(() => {
+        const targetList = mergedByDevice ? uniqueBuffersByOperationList : buffersByOperation;
+        return targetList
+            ?.map((operation) =>
+                operation.buffers
+                    .map((buffer) => ({
+                        ...buffer,
+                        hexAddress: toHex(buffer.address),
+                        operation_id: operation.id,
+                        operation_name: operation.name,
+                        tensor_id: tensorListByOperation.get(operation.id)?.get(buffer.address)?.id,
+                    }))
+                    .flat(),
+            )
+            .flat() as SummaryTableBuffer[];
+    }, [buffersByOperation, tensorListByOperation, uniqueBuffersByOperationList, mergedByDevice]);
 
     const updateColumnFilter = (key: COLUMN_KEYS, value: string) => {
         setFilters({
@@ -258,6 +279,14 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     return tableFields ? (
         <HotkeysProvider>
             <div className='buffer-summary-table'>
+                <div className='aside-container'>
+                    <Checkbox
+                        checked={mergedByDevice}
+                        onChange={() => setMergedByDevice(!mergedByDevice)}
+                    >
+                        Merge buffers across devices
+                    </Checkbox>
+                </div>
                 <div className='aside-container'>
                     <Checkbox
                         checked={showOnlySelected}
