@@ -21,6 +21,7 @@ export const MemoryLegendElement: React.FC<{
     colorVariance?: number | undefined; // color uniqueness for the CB color
     bufferType?: DeviceOperationTypes;
     layout?: DeviceOperationLayoutTypes;
+    isCondensed?: boolean;
 }> = ({
     // no wrap eslint
     chunk,
@@ -31,6 +32,7 @@ export const MemoryLegendElement: React.FC<{
     colorVariance,
     bufferType,
     layout,
+    isCondensed = false,
 }) => {
     const Component = chunk.empty ? 'div' : 'button';
     const emptyChunkLabel = (
@@ -46,7 +48,9 @@ export const MemoryLegendElement: React.FC<{
             )}
         </>
     );
+
     const derivedTensor = operationDetails.getTensorForAddress(chunk.address);
+
     return (
         <Component
             key={chunk.address}
@@ -88,12 +92,12 @@ export const MemoryLegendElement: React.FC<{
                 <div className='format-numbers monospace keep-left'>({toHex(chunk.address)})</div>
                 <div className='format-numbers monospace'>{formatSize(chunk.size)} </div>
                 <div>
-                    {!chunk.empty && derivedTensor && (
+                    {!isCondensed && !chunk.empty && derivedTensor && (
                         <>
                             {derivedTensor.operationIdentifier} : Tensor {derivedTensor.id}
                         </>
                     )}
-                    {chunk.empty && emptyChunkLabel}
+                    {!isCondensed && chunk.empty && emptyChunkLabel}
                 </div>
                 {(bufferType || layout) && (
                     <div className='extra-info-slot'>
@@ -103,7 +107,8 @@ export const MemoryLegendElement: React.FC<{
                 )}
                 {derivedTensor && (
                     <div className='shape-info-slot'>
-                        {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)}
+                        {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)} &nbsp;{' '}
+                        {`Device ${chunk?.device_id ?? derivedTensor.device_id}`}
                     </div>
                 )}
             </div>

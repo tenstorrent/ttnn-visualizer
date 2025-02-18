@@ -38,7 +38,7 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
 
     const icon = isOpenState ? IconNames.CARET_UP : IconNames.CARET_DOWN;
     return (
-        <div className={`collapsible-component ${collapseClassName}`}>
+        <div className={classNames('collapsible-component', collapseClassName)}>
             <div className='collapsible-controls'>
                 {children && (
                     <Button

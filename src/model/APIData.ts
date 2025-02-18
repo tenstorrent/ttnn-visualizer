@@ -142,6 +142,7 @@ export interface Chunk {
     address: number;
     size: number;
     tensorId?: number;
+    device_id?: number;
 }
 
 export interface ColoredChunk extends Chunk {

@@ -4,6 +4,10 @@
 
 @use '../definitions/colours' as *;
 
+.legend-element-container {
+    display: flex;
+}
+
 .legend-item {
     display: grid;
     gap: 5px;

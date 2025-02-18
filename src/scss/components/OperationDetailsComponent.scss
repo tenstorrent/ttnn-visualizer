@@ -50,7 +50,6 @@
 
     .legend {
         display: inline-flex;
-        place-content: center space-between;
         margin-bottom: 20px;
         flex-direction: column;
         row-gap: 3px;
@@ -60,12 +59,20 @@
         }
 
         &.lengthy-legend {
-            height: 410px;
+            max-height: 410px;
             overflow-y: scroll;
         }
 
         h4 {
             margin: 0;
+        }
+    }
+
+    .collapsible-component {
+        > .collapsible-controls {
+            > .bp5-button {
+                margin-left: -7px;
+            }
         }
     }
 
