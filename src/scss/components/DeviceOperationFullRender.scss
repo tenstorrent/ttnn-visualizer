@@ -42,6 +42,12 @@
 .device-operations-full-render {
     position: relative;
 
+    .device-id {
+        color: $tt-orange;
+        font-weight: lighter;
+        font-size: 12px;
+    }
+
     .device-operation {
         hr {
             opacity: 0.2;

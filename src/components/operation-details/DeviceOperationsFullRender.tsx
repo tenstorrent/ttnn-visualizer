@@ -71,7 +71,11 @@ const DeviceOperationsFullRender: React.FC<{
                 );
             };
             if (node.node_type === NodeType.tensor) {
-                const buffers = node.buffer?.map((buffer) => <>{bufferDetails(buffer, node.params.tensor_id)}</>);
+                const buffers = node.buffer?.map((buffer, index) => (
+                    <Fragment key={`buffer-details-${node.params.tensor_id} ${index}`}>
+                        {bufferDetails(buffer, node.params.tensor_id)}
+                    </Fragment>
+                ));
                 const layout = node.buffer?.[0]?.params.layout;
                 const tensor = details.tensorList.find((t) => t.id === parseInt(node.params.tensor_id.toString(), 10));
                 const square =
@@ -242,7 +246,7 @@ const DeviceOperationsFullRender: React.FC<{
                             />
                             {/* DEBUGGING */}
                             {/* <span style={{ color: 'yellow' }}>{node.operation?.params.device_id}</span> */}
-                            {opName} (
+                            {opName} <DeviceID deviceId={node.operation?.params.device_id} /> (
                             {node.operation?.inputs.map((arg) => (
                                 <span
                                     className='params'
@@ -465,4 +469,8 @@ const DeviceOperationNode: React.FC<
             {children}
         </div>
     );
+};
+
+const DeviceID: React.FC<{ deviceId?: number | string }> = ({ deviceId }) => {
+    return deviceId !== undefined && <span className='device-id'>{deviceId}</span>;
 };
