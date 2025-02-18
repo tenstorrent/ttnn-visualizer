@@ -145,7 +145,6 @@ function BufferSummary() {
     );
 }
 
-// Modified from 'createTensorListByOperationById' function in OperationDetails.ts
 // TODO: Refactor to optimise historical tensor lookup
 function createTensorsByOperationByIdList(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
     const tensorsByOperationById: TensorsByOperationByAddress = new Map();
