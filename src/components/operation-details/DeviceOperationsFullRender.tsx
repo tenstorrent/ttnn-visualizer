@@ -75,6 +75,12 @@ const DeviceOperationsFullRender: React.FC<{
             };
 
             const createBuffersRender = (n: Node) => {
+                // const buffers = node.buffer?.map((buffer, index) => (
+                //     <Fragment key={`buffer-details-${node.params.tensor_id} ${index}`}>
+                //         {bufferDetails(buffer, node.params.tensor_id)}
+                //     </Fragment>
+                // ));
+
                 const deviceIds = n.buffer?.filter((b) => b).map((b) => b.params.device_id) || [];
                 if (deviceIds?.length > 1 && n.buffer !== undefined && n.buffer.length > 0) {
                     const buffer = n.buffer.find((b) => b);
@@ -259,7 +265,7 @@ const DeviceOperationsFullRender: React.FC<{
                             />
                             {/* DEBUGGING */}
                             {/* <span style={{ color: 'yellow' }}>{node.operation?.params.device_id}</span> */}
-                            {opName} (
+                            {opName} <DeviceID deviceId={node.operation?.params.device_id} /> (
                             {node.operation?.inputs.map((arg) => (
                                 <span
                                     className='params'
@@ -482,4 +488,8 @@ const DeviceOperationNode: React.FC<
             {children}
         </div>
     );
+};
+
+const DeviceID: React.FC<{ deviceId?: number | string }> = ({ deviceId }) => {
+    return deviceId !== undefined && <span className='device-id'>{deviceId}</span>;
 };
