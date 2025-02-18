@@ -30,8 +30,11 @@ const DeviceOperationsFullRender: React.FC<{
 
     const formatDeviceOpParameters = useCallback(
         (node: Node) => {
-            const bufferDetails = (buffer: Node, tensorId?: number) => {
+            const bufferDetails = (buffer?: Node, tensorId?: number) => {
                 // TODO: this will need grouping of same sized buffers. its impractical to render 32 lines that are the same
+                if (buffer === undefined) {
+                    return null;
+                }
                 const { allocation } = buffer;
                 let tensorSquare = null;
                 const address =
@@ -70,8 +73,22 @@ const DeviceOperationsFullRender: React.FC<{
                     </div>
                 );
             };
+
+            const createBuffersRender = (n: Node) => {
+                const deviceIds = n.buffer?.filter((b) => b).map((b) => b.params.device_id) || [];
+                if (deviceIds?.length > 1 && n.buffer !== undefined && n.buffer.length > 0) {
+                    const buffer = n.buffer.find((b) => b);
+                    return (
+                        <>
+                            {bufferDetails(buffer, n.params.tensor_id)} <strong>x{deviceIds.length}</strong>
+                        </>
+                    );
+                }
+                return n.buffer?.map((buffer) => <>{bufferDetails(buffer, n.params.tensor_id)}</>);
+            };
+
             if (node.node_type === NodeType.tensor) {
-                const buffers = node.buffer?.map((buffer) => <>{bufferDetails(buffer, node.params.tensor_id)}</>);
+                const buffers = createBuffersRender(node);
                 const layout = node.buffer?.[0]?.params.layout;
                 const tensor = details.tensorList.find((t) => t.id === parseInt(node.params.tensor_id.toString(), 10));
                 const square =
