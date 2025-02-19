@@ -51,8 +51,9 @@
     .legend {
         display: inline-flex;
         margin-bottom: 20px;
+        margin-top: 20px;
         flex-direction: column;
-        row-gap: 3px;
+        row-gap: 1px;
 
         &.nested-legend {
             padding-left: 18px;

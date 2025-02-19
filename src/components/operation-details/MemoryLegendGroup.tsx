@@ -2,12 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import React from 'react';
+import React, { useState } from 'react';
+import { Button, Collapse } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import { FragmentationEntry } from '../../model/APIData';
-import 'styles/components/MemoryLegendElement.scss';
 import { OperationDetails } from '../../model/OperationDetails';
 import { MemoryLegendElement } from './MemoryLegendElement';
-import Collapsible from '../Collapsible';
+import 'styles/components/MemoryLegendElement.scss';
 
 export const MemoryLegendGroup: React.FC<{
     group: FragmentationEntry[];
@@ -23,35 +24,44 @@ export const MemoryLegendGroup: React.FC<{
     operationDetails,
     onLegendClick,
 }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
     return (
-        <Collapsible
-            isOpen={false}
-            label={
-                <div className='legend-element-container'>
-                    <MemoryLegendElement
-                        chunk={group[0]}
-                        memSize={memSize}
-                        selectedTensorAddress={selectedTensorAddress}
-                        operationDetails={operationDetails}
-                        onLegendClick={onLegendClick}
-                    />
-                    &nbsp;<strong>x{group.length}</strong>
-                </div>
-            }
-        >
-            <div className='grouped-legend-elements'>
-                {group.slice(1).map((chunk: FragmentationEntry, index: number) => (
-                    <MemoryLegendElement
-                        chunk={chunk}
-                        key={`${chunk.address}-${index}`}
-                        memSize={memSize}
-                        selectedTensorAddress={selectedTensorAddress}
-                        operationDetails={operationDetails}
-                        onLegendClick={onLegendClick}
-                        isCondensed
-                    />
-                ))}
+        <>
+            <div className='legend-element-container'>
+                <MemoryLegendElement
+                    chunk={group[0]}
+                    memSize={memSize}
+                    selectedTensorAddress={selectedTensorAddress}
+                    operationDetails={operationDetails}
+                    onLegendClick={onLegendClick}
+                />
+                <strong>x{group.length}</strong>
+                <Button
+                    small
+                    minimal
+                    onClick={() => {
+                        setIsOpen(!isOpen);
+                    }}
+                    rightIcon={isOpen ? IconNames.CARET_UP : IconNames.CARET_DOWN}
+                />
             </div>
-        </Collapsible>
+
+            <Collapse isOpen={isOpen}>
+                <div className='grouped-legend-elements'>
+                    {group.slice(1).map((chunk: FragmentationEntry, index: number) => (
+                        <MemoryLegendElement
+                            chunk={chunk}
+                            key={`${chunk.address}-${index}`}
+                            memSize={memSize}
+                            selectedTensorAddress={selectedTensorAddress}
+                            operationDetails={operationDetails}
+                            onLegendClick={onLegendClick}
+                            isCondensed
+                        />
+                    ))}
+                </div>
+            </Collapse>
+        </>
     );
 };
