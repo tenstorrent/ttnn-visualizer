@@ -31,8 +31,8 @@ const ActiveTransferDetails = ({
                     </h3>
                     {Object.entries(groupedTransfersByNoCID).map(([nocId, localTransferList]) => (
                         <div
+                            className='local-transfer-ctn'
                             key={nocId}
-                            style={{ marginBottom: '20px' }}
                         >
                             <h4>NOC ID: {nocId}</h4>
                             {localTransferList.map((transfer) => (
@@ -49,20 +49,19 @@ const ActiveTransferDetails = ({
                                     onMouseOut={() => setHighlightedTransfer(null)}
                                 >
                                     <div
+                                        className='color-square'
                                         style={{
                                             backgroundColor: getRouteColor(transfer.id),
-                                            width: '10px',
-                                            height: '10px',
                                         }}
                                     />
                                     {transfer.id}
                                     <div>
-                                        <span style={{ border: '1px solid yellow' }}>{transfer.src.join('-')}</span>{' '}
+                                        <span className='transfer-src'>{transfer.src.join('-')}</span>{' '}
                                         <Icon
                                             size={12}
                                             icon={IconNames.ArrowRight}
                                         />{' '}
-                                        <span style={{ border: '1px solid orangered' }}>
+                                        <span className='transfer-dst'>
                                             {transfer.dst.length === 1
                                                 ? transfer.dst[0].join('-')
                                                 : `${transfer.dst[0].join('-')} - ${transfer.dst[transfer.dst.length - 1].join('-')}`}

@@ -1,6 +1,14 @@
 @use '../definitions/colours' as *;
 
 .npe {
+    $highlight-src: #ff0;
+    $highlight-dst: #ff4500;
+
+    .color-squares {
+        width: 10px;
+        height: 10px;
+    }
+
     .split-grid {
         display: flex;
         gap: 10px;
@@ -31,6 +39,14 @@
             align-items: center;
         }
 
+        h4 {
+            margin-bottom: 5px;
+        }
+
+        .local-transfer-ctn {
+            margin-bottom: 20px;
+        }
+
         .local-transfer {
             display: flex;
             gap: 5px;
@@ -40,6 +56,14 @@
             margin: 2px;
             transition: opacity 0.2s;
             cursor: pointer;
+        }
+
+        .transfer-src {
+            border: 1px solid $highlight-src;
+        }
+
+        .transfer-dst {
+            border: 1px solid $highlight-dst;
         }
     }
 
@@ -125,9 +149,6 @@
                     inset: -2px;
                 }
             }
-
-            $highlight-src: #ff0;
-            $highlight-dst: #ff4500;
 
             .src-dst {
                 position: relative;

@@ -16,13 +16,13 @@ const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
     return (
         <div className='metadata'>
             <div>
-                {/* @ts-expect-error - Object is possibly 'null'. */}
-                {Object.keys(info).map((key) => (
-                    <div key={key}>
-                        <span>{key}:</span>
-                        <span>{formatMetadata(info[key])}</span>
-                    </div>
-                ))}
+                {info &&
+                    Object.keys(info).map((key) => (
+                        <div key={key}>
+                            <span>{key}:</span>
+                            <span>{formatMetadata(info[key as keyof CommonInfo])}</span>
+                        </div>
+                    ))}
             </div>
             <div>
                 <span>Active transfers:</span>
