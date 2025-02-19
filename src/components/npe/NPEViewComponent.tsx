@@ -160,7 +160,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return 0.15;
         }
         if (selectedTransferList.length === 0) {
-            return 0.45;
+            return 0; // 0.45;
         }
         const isSelected = selectedTransferList.some((t) => t.id === transfer.id);
 
@@ -190,7 +190,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         </div>
                     ))}
                 </div>
-                <hr />
                 <div>
                     <span>Timestamp:</span>
                     <span>{selectedTimestep}</span>
@@ -263,10 +262,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     >
                         {transfers.map((transfer) => (
                             <>
-                                {transfer?.src && (
+                                {transfer.src && (
                                     <div
                                         key={`${transfer.id}-src`}
-                                        className='tensix'
+                                        className='tensix src'
                                         style={{
                                             position: 'relative',
                                             gridColumn: transfer.src[1] + 1,
@@ -274,25 +273,29 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             color: 'yellow',
                                             fontSize: '20px',
                                             opacity: getOriginOpacity(transfer),
-                                            border: '1px solid yellow',
+                                            // border: '1px solid yellow',
                                         }}
                                     />
                                 )}
-                                {transfer.dst.map((dst) => (
-                                    <div
-                                        key={`${transfer.id}-dst-${dst[0]}-${dst[1]}`}
-                                        className='tensix'
-                                        style={{
-                                            position: 'relative',
-                                            gridColumn: dst[1] + 1,
-                                            gridRow: dst[0] + 1,
-                                            color: 'orangered',
-                                            fontSize: '20px',
-                                            opacity: getOriginOpacity(transfer),
-                                            border: '1px solid orangered',
-                                        }}
-                                    />
-                                ))}
+                                {transfer.dst.map((dst) => {
+                                    const classname =
+                                        transfer.src?.toString() === dst.toString() ? 'tensix both' : 'tensix dst';
+                                    return (
+                                        <div
+                                            key={`${transfer.id}-dst-${dst[0]}-${dst[1]}`}
+                                            className={classname}
+                                            style={{
+                                                position: 'relative',
+                                                gridColumn: dst[1] + 1,
+                                                gridRow: dst[0] + 1,
+                                                color: 'orangered',
+                                                fontSize: '20px',
+                                                opacity: getOriginOpacity(transfer),
+                                                // border: '1px solid orangered',
+                                            }}
+                                        />
+                                    );
+                                })}
                             </>
                         ))}
 

@@ -3,8 +3,9 @@
 .npe {
     .metadata {
         display: flex;
+        flex-direction: column;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-start;
         padding: 10px;
         border-bottom: 1px solid $tt-slate;
         position: absolute;
@@ -86,6 +87,33 @@
                 .transfer-render-ctn {
                     inset: -2px;
                 }
+            }
+
+            $highlight-src: #ff0;
+            $highlight-dst: #ff4500;
+
+            &.src {
+                border: 1px solid $highlight-src;
+                inset: 1px;
+            }
+
+            &.dst {
+                border: 1px solid $highlight-dst;
+                inset: 1px;
+            }
+
+            &.both {
+                $dash-size: 10deg;
+
+                inset: 1px;
+                border: 1px solid transparent;
+                border-image: repeating-conic-gradient(
+                        $highlight-src 0deg,
+                        $highlight-src $dash-size,
+                        $highlight-dst $dash-size,
+                        $highlight-dst calc(2 * $dash-size)
+                    )
+                    1;
             }
         }
     }
