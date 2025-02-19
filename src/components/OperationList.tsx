@@ -102,12 +102,22 @@ const OperationList = () => {
         setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
     };
 
+    const operationsWithRange = useMemo(() => {
+        if (fetchedOperations && selectedOperationRange) {
+            return fetchedOperations.filter(
+                (op) => op.id >= selectedOperationRange[0] && op.id <= selectedOperationRange[1],
+            );
+        }
+
+        return fetchedOperations;
+    }, [fetchedOperations, selectedOperationRange]);
+
     useMemo(() => {
-        if (fetchedOperations) {
-            let operations = [...fetchedOperations];
+        if (operationsWithRange) {
+            let operations = [...operationsWithRange];
 
             if (filterQuery) {
-                operations = fetchedOperations?.filter((operation) =>
+                operations = operationsWithRange?.filter((operation) =>
                     getOperationFilterName(operation).toLowerCase().includes(filterQuery.toLowerCase()),
                 );
             }
@@ -134,7 +144,7 @@ const OperationList = () => {
         }
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [fetchedOperations, filterQuery, shouldSortByID, shouldSortDuration, perfData, selectedOperationRange]);
+    }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration, perfData, selectedOperationRange]);
 
     useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;
@@ -251,8 +261,8 @@ const OperationList = () => {
 
                 {!isLoading && (
                     <p className='result-count'>
-                        {fetchedOperations && filterQuery
-                            ? `Showing ${numberOfOperations} of ${fetchedOperations.length} operations`
+                        {operationsWithRange && filterQuery
+                            ? `Showing ${numberOfOperations} of ${operationsWithRange.length} operations`
                             : `Showing ${numberOfOperations} operations`}
                     </p>
                 )}

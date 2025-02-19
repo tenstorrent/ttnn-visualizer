@@ -16,6 +16,8 @@ import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
 import { AllocationDetails, processMemoryAllocations } from '../../functions/processMemoryAllocations';
 import { formatSize, prettyPrintAddress, toReadableShape } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
+import MemoryTag from '../MemoryTag';
+// import { JSX } from 'react/jsx-runtime';
 
 // TODO: this component definitely needs to be broken down into smaller components
 
@@ -29,7 +31,11 @@ const DeviceOperationsFullRender: React.FC<{
 
     const formatDeviceOpParameters = useCallback(
         (node: Node) => {
-            const bufferDetails = (buffer: Node, tensorId?: number) => {
+            const bufferDetails = (buffer?: Node, tensorId?: number, optionalOutput?: JSX.Element | undefined) => {
+                // TODO: this will need grouping of same sized buffers. its impractical to render 32 lines that are the same
+                if (buffer === undefined) {
+                    return null;
+                }
                 const { allocation } = buffer;
                 let tensorSquare = null;
                 const address =
@@ -54,25 +60,38 @@ const DeviceOperationsFullRender: React.FC<{
                     );
                 }
                 return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '5px',
-                            }}
-                        >
+                    <div
+                        className='buffer-details'
+                        key={buffer.id}
+                    >
+                        <span className='address'>
                             {tensorSquare} {address !== undefined && `${prettyPrintAddress(address, 0)}`}
                         </span>
-                        <br />
                         <span> {formatSize(parseInt(buffer.params.size, 10))}</span>
-                        <span>{buffer.params.type}</span>
+                        <span>
+                            <MemoryTag memory={buffer.params.type} />
+                        </span>
+                        {optionalOutput && optionalOutput}
                     </div>
                 );
             };
-            if (node.node_type === NodeType.tensor) {
-                const buffers = node.buffer?.map((buffer) => <>{bufferDetails(buffer, node.params.tensor_id)}</>);
 
+            const createBuffersRender = (n: Node) => {
+                const deviceIds = n.buffer?.filter((b) => b).map((b) => b.params.device_id) || [];
+                if (deviceIds?.length > 1 && n.buffer !== undefined && n.buffer.length > 0) {
+                    const buffer = n.buffer.find((b) => b);
+                    return <>{bufferDetails(buffer, n.params.tensor_id, <strong>x{deviceIds.length}</strong>)}</>;
+                }
+                return n.buffer?.map((buffer, index) => (
+                    <Fragment key={`buffer-details-${node.params.tensor_id} ${index}`}>
+                        {bufferDetails(buffer, node.params.tensor_id)}
+                    </Fragment>
+                ));
+            };
+
+            if (node.node_type === NodeType.tensor) {
+                const buffers = createBuffersRender(node);
+                const layout = node.buffer?.[0]?.params.layout;
                 const tensor = details.tensorList.find((t) => t.id === parseInt(node.params.tensor_id.toString(), 10));
                 const square =
                     (tensor && (
@@ -91,19 +110,20 @@ const DeviceOperationsFullRender: React.FC<{
                 return buffers ? (
                     <Tooltip
                         content={
-                            <>
+                            <div className='arg-tensor-tooltip'>
                                 {buffers}
-                                {producer}
-                            </>
+                                {layout && <span>{layout}</span>}
+                                {producer && <span>{producer}</span>}
+                            </div>
                         }
                         position='top'
                     >
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <span className='standard-flex-layout'>
                             {square} Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
                         </span>
                     </Tooltip>
                 ) : (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span className='standard-flex-layout'>
                         {square} Tensor {node.params.tensor_id} {toReadableShape(node.params.shape)}
                     </span>
                 );
@@ -241,11 +261,11 @@ const DeviceOperationsFullRender: React.FC<{
                             />
                             {/* DEBUGGING */}
                             {/* <span style={{ color: 'yellow' }}>{node.operation?.params.device_id}</span> */}
-                            {opName} (
+                            {opName} <DeviceID deviceId={node.operation?.params.device_id} /> (
                             {node.operation?.inputs.map((arg) => (
                                 <span
                                     className='params'
-                                    key={arg.id}
+                                    key={`${arg.id} ${node.id}`}
                                 >
                                     {/* <span style={{ color: 'yellow' }}> */}
                                     {/*    id: {arg.id} {node.connections.join(',')} */}
@@ -257,7 +277,7 @@ const DeviceOperationsFullRender: React.FC<{
                             {node.operation?.outputs.map((arg) => (
                                 <span
                                     className='params'
-                                    key={arg.id}
+                                    key={`${arg.id} ${node.id}`}
                                 >
                                     {/* <span style={{ color: 'yellow' }}> */}
                                     {/*    id: {arg.id} {node.connections.join(',')} */}
@@ -464,4 +484,8 @@ const DeviceOperationNode: React.FC<
             {children}
         </div>
     );
+};
+
+const DeviceID: React.FC<{ deviceId?: number | string }> = ({ deviceId }) => {
+    return deviceId !== undefined && <span className='device-id'>{deviceId}</span>;
 };

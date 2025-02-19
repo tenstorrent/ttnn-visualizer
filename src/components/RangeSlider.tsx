@@ -55,6 +55,11 @@ function Range() {
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
     const shouldDisableOpRange = isOperationDetails || isPerformanceRoute;
 
+    const resetSliders = () => {
+        setSelectedOperationRange(operationRange);
+        setSelectedPerformanceRange(perfRange);
+    };
+
     useEffect(() => {
         if (operationRange) {
             setOperationRange(operationRange);
@@ -194,11 +199,11 @@ function Range() {
                     )}
 
                     <div className='inputs'>
-                        {perfMin && perfMax && (
+                        {perfRange && (
                             <Tooltip content='Reset range'>
                                 <Button
                                     icon={IconNames.RESET}
-                                    onClick={() => setSelectedPerformanceRange([perfMin, perfMax])}
+                                    onClick={() => (isInSync ? resetSliders() : setSelectedPerformanceRange(perfRange))}
                                     disabled={!isPerformanceRoute}
                                     small
                                 />
@@ -260,11 +265,11 @@ function Range() {
                     </div>
                 )}
 
-                {opMin && opMax && (
+                {operationRange && (
                     <Tooltip content='Reset range'>
                         <Button
                             icon={IconNames.RESET}
-                            onClick={() => setSelectedOperationRange([opMin, opMax])}
+                            onClick={() => (isInSync ? resetSliders() : setSelectedOperationRange(operationRange))}
                             disabled={shouldDisableOpRange}
                             small
                         />

@@ -7,7 +7,7 @@
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import Papa, { ParseResult } from 'papaparse';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
 import axiosInstance from '../libs/axiosInstance';
@@ -27,9 +27,8 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
-import isValidNumber from '../functions/isValidNumber';
 import { getUniqueDeviceIDs, mergeMultideviceRows } from '../functions/perfFunctions';
-import { RowData } from '../definitions/PerfTable';
+import { PerfTableRow, RowData } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import { selectedOperationRangeAtom } from '../store/app';
 
@@ -197,10 +196,18 @@ const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersBy
     return buffers;
 };
 
-export const fetchOperationBuffers = async (operationId: number | null) => {
+export const fetchOperationBuffers = async (operationId: number) => {
     const { data: buffers } = await axiosInstance.get(`/api/operation-buffers/${operationId}`);
 
     return buffers;
+};
+
+export const useOperationBuffers = (operationId: number) => {
+    return useQuery<BuffersByOperationData, AxiosError>({
+        queryKey: ['get-operation-buffers', operationId],
+        queryFn: () => fetchOperationBuffers(operationId),
+        retry: false,
+    });
 };
 
 const fetchReportMeta = async (): Promise<ReportMetaData> => {
@@ -225,6 +232,12 @@ const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, str
             header: true,
         });
     });
+};
+
+const fetchPerformanceDataReport = async (): Promise<PerfTableRow[]> => {
+    const { data } = await axiosInstance.get<PerfTableRow[]>('/api/profiler/perf-results/report');
+
+    return data;
 };
 
 interface MetaData {
@@ -285,25 +298,52 @@ export const useOperationListRange = (): NumberRange | null => {
 
 export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
-    const operation = operations?.filter((_operation) => _operation.id === operationId)[0];
 
-    // TEMP device id handling
-    const deviceId = 0;
+    // Memoize the operation lookup
+    const operation = useMemo(
+        () => operations?.find((_operation) => _operation.id === operationId) || null,
+        [operations, operationId],
+    );
+
+    const deviceId = null;
+
+    // Memoized function for fetching operation details
+    const fetchDetails = useCallback(() => fetchOperationDetails(operationId), [operationId]);
 
     const operationDetails = useQuery<OperationDetailsData>(
         ['get-operation-detail', operationId, deviceId],
-        () => fetchOperationDetails(operationId),
+        fetchDetails,
         {
             retry: 2,
             retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
         },
     );
 
-    // TEMP device id handling
+    const buffersSummary = useMemo(() => {
+        if (!operationDetails.data) {
+            return [];
+        }
+
+        const uniqueBuffers: Map<number, BufferData> = new Map<number, BufferData>();
+
+        operationDetails.data.buffers.forEach((buffer) => {
+            // eslint-disable-next-line camelcase
+            const { address, max_size_per_bank } = buffer;
+
+            if (address) {
+                const existingBuffer = uniqueBuffers.get(address);
+                // eslint-disable-next-line camelcase
+                if (!existingBuffer || max_size_per_bank > existingBuffer.max_size_per_bank) {
+                    uniqueBuffers.set(address, buffer);
+                }
+            }
+        });
+
+        return Array.from(uniqueBuffers.values());
+    }, [operationDetails.data]);
+
     if (operationDetails.data) {
-        operationDetails.data.buffers = operationDetails.data.buffers.filter((buffer) =>
-            isValidNumber(deviceId) ? buffer.device_id === deviceId : true,
-        );
+        operationDetails.data.buffersSummary = buffersSummary;
     }
 
     return {
@@ -584,28 +624,12 @@ export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> 
     return [defaultTensorData];
 };
 
-export const useTensors = (useRange?: boolean, deviceId?: number | null) => {
-    const range = useAtomValue(selectedOperationRangeAtom);
-
-    const response = useQuery<Tensor[], AxiosError>({
+export const useTensors = (deviceId?: number | null) =>
+    useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(deviceId),
         queryKey: ['get-tensors', deviceId],
         retry: false,
     });
-
-    return useMemo(() => {
-        if (response.data && range && useRange) {
-            response.data = response.data.filter(
-                (tensor) =>
-                    tensor.consumers.some((id) => id >= range[0] && id <= range[1]) ||
-                    tensor.producers.some((id) => id >= range[0] && id <= range[1]),
-            );
-        }
-
-        return response;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [range, response.isLoading, useRange]);
-};
 
 export const useDevices = () => {
     return useQuery<DeviceData[], AxiosError>('get-devices', fetchDevices);
@@ -661,6 +685,13 @@ export const usePerformance = () => {
     return useQuery({
         queryFn: () => fetchPerformanceDataRaw(),
         queryKey: 'get-performance-data-raw',
+    });
+};
+
+export const usePerformanceReport = () => {
+    return useQuery({
+        queryFn: () => fetchPerformanceDataReport(),
+        queryKey: 'get-performance-data-report',
     });
 };
 

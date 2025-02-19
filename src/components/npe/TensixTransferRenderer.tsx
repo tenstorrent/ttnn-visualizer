@@ -20,7 +20,14 @@ const TensixTransferRenderer: React.FC<SVGTensixRendererProps> = ({
     const strokeLength = 5;
     const dashMap: Map<NoCID, number> = new Map();
     const dashArray: Map<NoCID, number[]> = new Map();
-    data.forEach((line) => {
+
+    // TODO: find the ACTUAL source of the duplicates and fix it there
+
+    const cleanedData = data.filter((line, index, self) => {
+        return index === self.findIndex((t) => t.nocId === line.nocId && t.color === line.color);
+    });
+
+    cleanedData.forEach((line) => {
         if (!dashMap.has(line.nocId)) {
             dashMap.set(line.nocId, 1);
         } else {
@@ -28,19 +35,28 @@ const TensixTransferRenderer: React.FC<SVGTensixRendererProps> = ({
             dashMap.set(line.nocId, cnt + 1);
         }
     });
+
     dashMap.forEach((cnt, nocId) => {
         dashArray.set(nocId, [strokeLength, (cnt - 1) * strokeLength]);
     });
 
+    const multiplierTracker: { nocId: NoCID; counter: number }[] = [];
     return (
         <svg
             width={width}
             height={height}
             style={style}
-            aria-description={data.map((line) => line.nocId).join(',')}
+            aria-description={cleanedData.map((line) => line.nocId).join(',')}
         >
             <g>
-                {data.map((line, index) => {
+                {cleanedData.map((line, index) => {
+                    const multiplierObj = multiplierTracker.find((m) => m.nocId === line.nocId);
+                    const multiplier = multiplierObj ? multiplierObj.counter : 0;
+                    if (multiplierObj) {
+                        multiplierObj.counter += 1;
+                    } else {
+                        multiplierTracker.push({ nocId: line.nocId, counter: 1 });
+                    }
                     return (
                         <Fragment key={`${index}-${line.x1}-${line.y1}-${line.x2}-${line.y2}`}>
                             <line
@@ -53,7 +69,9 @@ const TensixTransferRenderer: React.FC<SVGTensixRendererProps> = ({
                                 // eslint-disable-next-line react/jsx-props-no-spreading
                                 {...(isMulticolor ? { strokeDasharray: dashArray.get(line.nocId)!.join(',') } : {})}
                                 // eslint-disable-next-line react/jsx-props-no-spreading
-                                {...(isMulticolor ? { strokeDashoffset: index * dashArray.get(line.nocId)![0] } : {})}
+                                {...(isMulticolor
+                                    ? { strokeDashoffset: multiplier * dashArray.get(line.nocId)![0] }
+                                    : {})}
                             />
                             {line.arrow && !isMulticolor && (
                                 <polygon

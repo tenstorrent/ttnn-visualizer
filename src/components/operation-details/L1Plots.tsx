@@ -21,6 +21,8 @@ import {
 } from '../../definitions/PlotConfigurations';
 import { BufferType } from '../../model/BufferType';
 import { FragmentationEntry } from '../../model/APIData';
+import { MemoryLegendGroup } from './MemoryLegendGroup';
+import { useOperationBuffers } from '../../hooks/useAPI';
 
 interface L1PlotsProps {
     operationDetails: OperationDetails;
@@ -55,6 +57,7 @@ function L1Plots({
         memory: l1SmallMemory,
         condensedChart: l1SmallCondensedChart,
     } = operationDetails.memoryData(BufferType.L1_SMALL);
+    const { data: operationBuffers } = useOperationBuffers(operationDetails.id);
 
     const cbZoomStart = operationDetails.deviceOperations
         .map((op) => op.cbList.map((cb) => cb.address))
@@ -87,6 +90,19 @@ function L1Plots({
     const { memorySizeL1 } = operationDetails;
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
+    // TODO: Replace with deviceBuffers
+    const groupedMemoryReport = operationBuffers?.buffers
+        ?.filter((buffer) => buffer.buffer_type === BufferType.L1)
+        .reduce((acc: FragmentationEntry[][], entry: FragmentationEntry) => {
+            const group = acc.find((g) => g[0].address === entry.address);
+            if (group) {
+                group.push(entry);
+            } else {
+                acc.push([entry]);
+            }
+            return acc;
+        }, []) as FragmentationEntry[][];
+
     const memoryReportWithCB: FragmentationEntry[] = [
         ...memoryReport,
         ...operationDetails.deviceOperations
@@ -203,17 +219,29 @@ function L1Plots({
                             colorVariance={chunk.colorVariance}
                         />
                     ))}
+
                 {!showCircularBuffer &&
-                    memoryReport.map((chunk) => (
-                        <MemoryLegendElement
-                            chunk={chunk}
-                            key={chunk.address}
-                            memSize={memorySizeL1}
-                            selectedTensorAddress={selectedAddress}
-                            operationDetails={operationDetails}
-                            onLegendClick={onLegendClick}
-                        />
-                    ))}
+                    groupedMemoryReport?.map((group, groupIndex) =>
+                        group.length === 1 ? (
+                            <MemoryLegendElement
+                                chunk={group[0]}
+                                key={`${group[0].address}-${groupIndex}`}
+                                memSize={memorySizeL1}
+                                selectedTensorAddress={selectedAddress}
+                                operationDetails={operationDetails}
+                                onLegendClick={onLegendClick}
+                            />
+                        ) : (
+                            <MemoryLegendGroup
+                                group={group}
+                                key={`${group[0].address}-${groupIndex}`}
+                                memSize={memorySizeL1}
+                                selectedTensorAddress={selectedAddress}
+                                operationDetails={operationDetails}
+                                onLegendClick={onLegendClick}
+                            />
+                        ),
+                    )}
             </div>
         </>
     );
