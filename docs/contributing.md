@@ -8,8 +8,8 @@
 
 ```shell
 nvm use
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 ### Back end
@@ -35,7 +35,7 @@ pip install -r backend/ttnn_visualizer/requirements.txt
 Starting the server
 
 ```shell
-npm run flask:start
+pnpm run flask:start
 ```
 
 Starting with hot reload:
