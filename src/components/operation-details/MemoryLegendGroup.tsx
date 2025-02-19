@@ -39,17 +39,19 @@ export const MemoryLegendGroup: React.FC<{
                 </div>
             }
         >
-            {group.slice(1).map((chunk: FragmentationEntry, index: number) => (
-                <MemoryLegendElement
-                    chunk={chunk}
-                    key={`${chunk.address}-${index}`}
-                    memSize={memSize}
-                    selectedTensorAddress={selectedTensorAddress}
-                    operationDetails={operationDetails}
-                    onLegendClick={onLegendClick}
-                    isCondensed
-                />
-            ))}
+            <div className='grouped-legend-elements'>
+                {group.slice(1).map((chunk: FragmentationEntry, index: number) => (
+                    <MemoryLegendElement
+                        chunk={chunk}
+                        key={`${chunk.address}-${index}`}
+                        memSize={memSize}
+                        selectedTensorAddress={selectedTensorAddress}
+                        operationDetails={operationDetails}
+                        onLegendClick={onLegendClick}
+                        isCondensed
+                    />
+                ))}
+            </div>
         </Collapsible>
     );
 };

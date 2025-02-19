@@ -8,6 +8,10 @@
     display: flex;
 }
 
+.grouped-legend-elements {
+    margin-top: -3px;
+}
+
 .legend-item {
     display: grid;
     gap: 5px;
@@ -44,13 +48,13 @@
         gap: 15px;
         text-align: left;
 
-        &.extra-info {
-            grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 2fr;
-        }
+        // &.extra-info {
+        //     grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 2fr;
+        // }
 
-        &.shape-info {
-            grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 2fr;
-        }
+        // &.shape-info {
+        //     grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 2fr;
+        // }
 
         &.extra-info.shape-info {
             grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 1.5fr 3fr;
