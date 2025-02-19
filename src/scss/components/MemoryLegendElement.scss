@@ -4,19 +4,10 @@
 
 @use '../definitions/colours' as *;
 
-.legend-element-container {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-
-    .bp5-button.bp5-small {
-        height: auto;
-        min-height: 0;
-    }
-}
-
 .grouped-legend-elements {
-    margin-top: -3px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
 }
 
 .legend-item {
@@ -47,6 +38,15 @@
         background-color: $tt-bg-highlight;
     }
 
+    &.multi-device-buffer {
+        width: 100%;
+        margin-left: 10px;
+    }
+
+    &.is-collapsable {
+        grid-template-columns: 20px 1fr 24px;
+    }
+
     .legend-details {
         display: inline-grid;
         grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 2fr;
@@ -61,6 +61,10 @@
             grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 2fr;
         }
 
+        &.is-group-header {
+            grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 2fr 0.2fr;
+        }
+
         &.extra-info.shape-info {
             grid-template-columns: 0.5fr 0.5fr 0.6fr 4fr 1.5fr 3fr;
         }
@@ -68,6 +72,10 @@
 
     .legend-text {
         font-size: 0.875rem;
+    }
+
+    .collapse-toggle {
+        min-height: 0;
     }
 }
 

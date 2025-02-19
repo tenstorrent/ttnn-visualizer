@@ -4,7 +4,7 @@
 
 import React from 'react';
 import classNames from 'classnames';
-import { Icon, Tooltip } from '@blueprintjs/core';
+import { Button, Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { DeviceOperationLayoutTypes, DeviceOperationTypes, FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
@@ -21,7 +21,10 @@ export const MemoryLegendElement: React.FC<{
     colorVariance?: number | undefined; // color uniqueness for the CB color
     bufferType?: DeviceOperationTypes;
     layout?: DeviceOperationLayoutTypes;
-    isCondensed?: boolean;
+    isMultiDeviceBuffer?: boolean;
+    isGroupHeader?: boolean;
+    isOpen?: boolean;
+    handleOpenToggle?: (isOpen: boolean) => void;
 }> = ({
     // no wrap eslint
     chunk,
@@ -32,7 +35,10 @@ export const MemoryLegendElement: React.FC<{
     colorVariance,
     bufferType,
     layout,
-    isCondensed = false,
+    isMultiDeviceBuffer = false,
+    isGroupHeader = false,
+    isOpen = false,
+    handleOpenToggle,
 }) => {
     const Component = chunk.empty ? 'div' : 'button';
     const emptyChunkLabel = (
@@ -58,6 +64,8 @@ export const MemoryLegendElement: React.FC<{
                 button: !chunk.empty,
                 active: selectedTensorAddress === chunk.address,
                 dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
+                'multi-device-buffer': isMultiDeviceBuffer,
+                'is-collapsable': !isMultiDeviceBuffer && isGroupHeader,
             })}
             // eslint-disable-next-line react/jsx-props-no-spreading
             {...(!chunk.empty
@@ -86,18 +94,19 @@ export const MemoryLegendElement: React.FC<{
                 className={classNames('legend-details', {
                     'extra-info': bufferType || layout,
                     'shape-info': derivedTensor,
+                    'is-group-header': !isMultiDeviceBuffer && isGroupHeader,
                 })}
             >
                 <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize)}</div>
                 <div className='format-numbers monospace keep-left'>({toHex(chunk.address)})</div>
                 <div className='format-numbers monospace'>{formatSize(chunk.size)} </div>
                 <div>
-                    {!isCondensed && !chunk.empty && derivedTensor && (
+                    {!isMultiDeviceBuffer && !chunk.empty && derivedTensor && (
                         <>
                             {derivedTensor.operationIdentifier} : Tensor {derivedTensor.id}
                         </>
                     )}
-                    {!isCondensed && chunk.empty && emptyChunkLabel}
+                    {!isMultiDeviceBuffer && chunk.empty && emptyChunkLabel}
                 </div>
                 {(bufferType || layout) && (
                     <div className='extra-info-slot'>
@@ -107,11 +116,26 @@ export const MemoryLegendElement: React.FC<{
                 )}
                 {derivedTensor && (
                     <div className='shape-info-slot'>
-                        {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)} &nbsp;{' '}
-                        {`Device ${chunk?.device_id ?? derivedTensor.device_id}`}
+                        {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)}{' '}
+                        {isMultiDeviceBuffer && `Device ${chunk?.device_id ?? derivedTensor.device_id}`}
                     </div>
                 )}
+
+                {isGroupHeader && handleOpenToggle && <strong>x32</strong>}
             </div>
+
+            {handleOpenToggle && isGroupHeader && (
+                <Button
+                    className='collapse-toggle'
+                    small
+                    minimal
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenToggle(!isOpen);
+                    }}
+                    rightIcon={isOpen ? IconNames.CARET_UP : IconNames.CARET_DOWN}
+                />
+            )}
         </Component>
     );
 };
