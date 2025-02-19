@@ -85,6 +85,7 @@
             z-index: 1;
             cursor: pointer;
             overflow: hidden;
+            position: relative;
 
             &:hover {
                 transition: border-color 50ms linear;
@@ -127,6 +128,10 @@
 
             $highlight-src: #ff0;
             $highlight-dst: #ff4500;
+
+            .src-dst {
+                position: relative;
+            }
 
             &.src {
                 border: 1px solid $highlight-src;

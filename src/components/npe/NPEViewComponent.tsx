@@ -8,6 +8,7 @@ import 'styles/components/NPEComponent.scss';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Slider } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import classNames from 'classnames';
 import { NPEData, NoCID, NoCTransfer } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import { NODE_SIZE, calculateLinkCongestionColor, getLinkPoints, getRouteColor } from './drawingApi';
@@ -241,30 +242,23 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 {transfer.src && (
                                     <div
                                         key={`${transfer.id}-src`}
-                                        className='tensix src'
+                                        className='tensix src-dst src'
                                         style={{
-                                            position: 'relative',
                                             gridColumn: transfer.src[1] + 1,
                                             gridRow: transfer.src[0] + 1,
-                                            color: 'yellow',
-                                            fontSize: '20px',
                                             opacity: getOriginOpacity(transfer),
                                         }}
                                     />
                                 )}
                                 {transfer.dst.map((dst) => {
-                                    const classname =
-                                        transfer.src?.toString() === dst.toString() ? 'tensix both' : 'tensix dst';
+                                    const classname = transfer.src?.toString() === dst.toString() ? 'both' : 'dst';
                                     return (
                                         <div
                                             key={`${transfer.id}-dst-${dst[0]}-${dst[1]}`}
-                                            className={classname}
+                                            className={classNames('tensix src-dst', classname)}
                                             style={{
-                                                position: 'relative',
                                                 gridColumn: dst[1] + 1,
                                                 gridRow: dst[0] + 1,
-                                                color: 'orangered',
-                                                fontSize: '20px',
                                                 opacity: getOriginOpacity(transfer),
                                             }}
                                         />
@@ -288,7 +282,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 {/* // TENSIX CONGESTION */}
                                 <TensixTransferRenderer
                                     style={{
-                                        ...(selectedTransferList.length !== 0 ? { opacity: 0.15 } : { opacity: 1 }),
+                                        opacity:
+                                            highlightedTransfer !== null || selectedTransferList.length !== 0
+                                                ? 0.15
+                                                : 1,
                                     }}
                                     width={SVG_SIZE}
                                     height={SVG_SIZE}
@@ -318,7 +315,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             : 'tensix no-click'
                                     }
                                     style={{
-                                        position: 'relative',
                                         gridColumn: colIndex + 1,
                                         gridRow: rowIndex + 1,
                                     }}
