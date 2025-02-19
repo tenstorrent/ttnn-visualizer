@@ -90,6 +90,7 @@ function L1Plots({
     const { memorySizeL1 } = operationDetails;
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
+    // TODO: Replace with deviceBuffers
     const groupedMemoryReport = operationBuffers?.buffers
         ?.filter((buffer) => buffer.buffer_type === BufferType.L1)
         .reduce((acc: FragmentationEntry[][], entry: FragmentationEntry) => {

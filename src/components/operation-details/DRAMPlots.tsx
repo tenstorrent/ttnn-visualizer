@@ -20,6 +20,8 @@ import { BufferType } from '../../model/BufferType';
 import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
 import 'styles/components/DRAMPlots.scss';
+import { useOperationBuffers } from '../../hooks/useAPI';
+import { MemoryLegendGroup } from './MemoryLegendGroup';
 
 const DRAM_PADDING_RATIO = 0.9998;
 const SPLIT_THRESHOLD_RATIO = 8;
@@ -46,6 +48,7 @@ function DRAMPlots({
     const { chartData: previousDramData, memory: previousDramMemory } = previousOperationDetails.memoryData(
         BufferType.DRAM,
     );
+    const { data: operationBuffers } = useOperationBuffers(operationDetails.id);
 
     const dramHasntChanged = isEqual(dramMemory, previousDramMemory);
     const dramMemoryReport: FragmentationEntry[] = [...dramMemory].sort((a, b) => a.address - b.address);
@@ -77,6 +80,19 @@ function DRAMPlots({
         dramPlotZoomRangeStart = 0;
         dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
     }
+
+    // TODO: Replace with deviceBuffers
+    const groupedMemoryReport = operationBuffers?.buffers
+        ?.filter((buffer) => buffer.buffer_type === BufferType.DRAM)
+        .reduce((acc: FragmentationEntry[][], entry: FragmentationEntry) => {
+            const group = acc.find((g) => g[0].address === entry.address);
+            if (group) {
+                group.push(entry);
+            } else {
+                acc.push([entry]);
+            }
+            return acc;
+        }, []) as FragmentationEntry[][];
 
     const splitPreviousDramData = useMemo(() => splitData(previousDramData), [previousDramData]);
     const splitDramData = useMemo(() => splitData(dramData), [dramData]);
@@ -217,16 +233,27 @@ function DRAMPlots({
                     'lengthy-legend': dramMemoryReport.length > MAX_LEGEND_LENGTH,
                 })}
             >
-                {dramMemoryReport.map((chunk) => (
-                    <MemoryLegendElement
-                        chunk={chunk}
-                        key={chunk.address}
-                        memSize={DRAM_MEMORY_SIZE}
-                        selectedTensorAddress={selectedAddress}
-                        operationDetails={operationDetails}
-                        onLegendClick={onLegendClick}
-                    />
-                ))}
+                {groupedMemoryReport?.map((group, groupIndex) =>
+                    group.length === 1 ? (
+                        <MemoryLegendElement
+                            chunk={group[0]}
+                            key={`${group[0].address}-${groupIndex}`}
+                            memSize={DRAM_MEMORY_SIZE}
+                            selectedTensorAddress={selectedAddress}
+                            operationDetails={operationDetails}
+                            onLegendClick={onLegendClick}
+                        />
+                    ) : (
+                        <MemoryLegendGroup
+                            group={group}
+                            key={`${group[0].address}-${groupIndex}`}
+                            memSize={DRAM_MEMORY_SIZE}
+                            selectedTensorAddress={selectedAddress}
+                            operationDetails={operationDetails}
+                            onLegendClick={onLegendClick}
+                        />
+                    ),
+                )}
             </div>
         </>
     );

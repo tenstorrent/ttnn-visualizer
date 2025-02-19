@@ -25,6 +25,7 @@ export const MemoryLegendElement: React.FC<{
     isGroupHeader?: boolean;
     isOpen?: boolean;
     handleOpenToggle?: (isOpen: boolean) => void;
+    groupSize?: number;
 }> = ({
     // no wrap eslint
     chunk,
@@ -39,6 +40,7 @@ export const MemoryLegendElement: React.FC<{
     isGroupHeader = false,
     isOpen = false,
     handleOpenToggle,
+    groupSize,
 }) => {
     const Component = chunk.empty ? 'div' : 'button';
     const emptyChunkLabel = (
@@ -114,14 +116,16 @@ export const MemoryLegendElement: React.FC<{
                         {layout && <span className='monospace'>{DeviceOperationLayoutTypes[layout]}</span>}
                     </div>
                 )}
-                {derivedTensor && (
-                    <div className='shape-info-slot'>
-                        {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)} &nbsp;{' '}
-                        {isMultiDeviceBuffer && `Device ${chunk?.device_id ?? derivedTensor.device_id}`}
-                    </div>
-                )}
+                <div className='shape-info-slot'>
+                    {derivedTensor && (
+                        <>
+                            {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)} &nbsp;{' '}
+                            {isMultiDeviceBuffer && `Device ${chunk?.device_id ?? derivedTensor.device_id}`}
+                        </>
+                    )}
+                </div>
 
-                {isGroupHeader && handleOpenToggle && <strong>x32</strong>}
+                {isGroupHeader && handleOpenToggle && <strong>x{groupSize}</strong>}
             </div>
 
             {handleOpenToggle && isGroupHeader && (

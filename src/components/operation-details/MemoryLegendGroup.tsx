@@ -36,6 +36,7 @@ export const MemoryLegendGroup: React.FC<{
                 isGroupHeader
                 isOpen={isOpen}
                 handleOpenToggle={setIsOpen}
+                groupSize={group.length}
             />
 
             <Collapse isOpen={isOpen}>
