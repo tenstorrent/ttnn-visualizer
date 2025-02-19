@@ -1,6 +1,11 @@
 @use '../definitions/colours' as *;
 
 .npe {
+    .split-grid {
+        display: flex;
+        gap: 10px;
+    }
+
     .metadata {
         display: flex;
         flex-direction: column;
@@ -16,6 +21,25 @@
         hr {
             margin-top: 10px;
             margin-bottom: 10px;
+        }
+    }
+
+    .side-data {
+        h3 {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .local-transfer {
+            display: flex;
+            gap: 5px;
+            align-content: center;
+            align-items: center;
+            padding: 5px;
+            margin: 2px;
+            transition: opacity 0.2s;
+            cursor: pointer;
         }
     }
 
@@ -37,6 +61,18 @@
             z-index: -1;
             top: 0;
             left: 0;
+        }
+
+        &.transfers,
+        &.transfer-single {
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: grid;
+        }
+
+        &.transfer-single {
+            z-index: 1;
         }
 
         display: grid;
