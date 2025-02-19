@@ -22,7 +22,12 @@
     &.button {
         font-size: inherit;
 
-        &:focus,
+        &:focus {
+            .legend-details {
+                background-color: $tt-bg-highlight;
+            }
+        }
+
         &:hover {
             .legend-details {
                 background-color: rgba($tt-bg-highlight, 0.5);
@@ -35,7 +40,9 @@
     }
 
     &.active {
-        background-color: $tt-bg-highlight;
+        .legend-details {
+            background-color: $tt-bg-highlight;
+        }
     }
 
     &.multi-device-buffer {
@@ -43,7 +50,7 @@
         margin-left: 10px;
     }
 
-    &.is-collapsable {
+    &.is-collapsible {
         grid-template-columns: 20px 1fr 24px;
     }
 

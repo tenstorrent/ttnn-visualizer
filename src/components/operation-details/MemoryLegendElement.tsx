@@ -65,7 +65,7 @@ export const MemoryLegendElement: React.FC<{
                 active: selectedTensorAddress === chunk.address,
                 dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
                 'multi-device-buffer': isMultiDeviceBuffer,
-                'is-collapsable': !isMultiDeviceBuffer && isGroupHeader,
+                'is-collapsible': !isMultiDeviceBuffer && isGroupHeader,
             })}
             // eslint-disable-next-line react/jsx-props-no-spreading
             {...(!chunk.empty
@@ -116,7 +116,7 @@ export const MemoryLegendElement: React.FC<{
                 )}
                 {derivedTensor && (
                     <div className='shape-info-slot'>
-                        {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)}{' '}
+                        {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)} &nbsp;{' '}
                         {isMultiDeviceBuffer && `Device ${chunk?.device_id ?? derivedTensor.device_id}`}
                     </div>
                 )}
