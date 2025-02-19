@@ -196,10 +196,18 @@ const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersBy
     return buffers;
 };
 
-export const fetchOperationBuffers = async (operationId: number | null) => {
+export const fetchOperationBuffers = async (operationId: number) => {
     const { data: buffers } = await axiosInstance.get(`/api/operation-buffers/${operationId}`);
 
     return buffers;
+};
+
+export const useOperationBuffers = (operationId: number) => {
+    return useQuery<BuffersByOperationData, AxiosError>({
+        queryKey: ['get-operation-buffers', operationId],
+        queryFn: () => fetchOperationBuffers(operationId),
+        retry: false,
+    });
 };
 
 const fetchReportMeta = async (): Promise<ReportMetaData> => {
