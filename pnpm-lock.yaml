@@ -177,6 +177,9 @@ importers:
       lint-staged:
         specifier: ^15.2.10
         version: 15.4.3
+      only-allow:
+        specifier: ^1.2.1
+        version: 1.2.1
       prettier:
         specifier: ^3.3.2
         version: 3.5.1
@@ -3777,6 +3780,10 @@ packages:
     resolution: {integrity: sha512-VXJjc87FScF88uafS3JllDgvAm+c/Slfz06lorj2uAY34rlUu0Nt+v8wreiImcrgAjjIHp1rXpTDlLOGw29WwQ==}
     engines: {node: '>=18'}
 
+  only-allow@1.2.1:
+    resolution: {integrity: sha512-M7CJbmv7UCopc0neRKdzfoGWaVZC+xC1925GitKH9EAqYFzX9//25Q7oX4+jw0tiCCj+t5l6VZh8UPH23NZkMA==}
+    hasBin: true
+
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
     engines: {node: '>= 0.8.0'}
@@ -4994,6 +5001,10 @@ packages:
   which-collection@1.0.2:
     resolution: {integrity: sha512-K4jVyjnBdgvc86Y6BkaLZEN933SwYOuBFkdmBu9ZfkcAbdVbpITnDmjvZ/aQjRXQrv5EPkTnD1s39GiiqbngCw==}
     engines: {node: '>= 0.4'}
+
+  which-pm-runs@1.1.0:
+    resolution: {integrity: sha512-n1brCuqClxfFfq/Rb0ICg9giSZqCS+pLtccdag6C2HyufBrh3fBOiy9nb6ggRMvWOVH5GrdJskj5iGTZNxd7SA==}
+    engines: {node: '>=4'}
 
   which-typed-array@1.1.18:
     resolution: {integrity: sha512-qEcY+KJYlWyLH9vNbsr6/5j59AXk5ni5aakf8ldzBvGde6Iz4sxZGkJyWSAueTG7QhOvNRYb1lDdFmL5Td0QKA==}
@@ -9434,6 +9445,10 @@ snapshots:
     dependencies:
       mimic-function: 5.0.1
 
+  only-allow@1.2.1:
+    dependencies:
+      which-pm-runs: 1.1.0
+
   optionator@0.9.4:
     dependencies:
       deep-is: 0.1.4
@@ -10903,6 +10918,8 @@ snapshots:
       is-set: 2.0.3
       is-weakmap: 2.0.2
       is-weakset: 2.0.4
+
+  which-pm-runs@1.1.0: {}
 
   which-typed-array@1.1.18:
     dependencies:
