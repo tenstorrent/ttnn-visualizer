@@ -4,7 +4,7 @@
 
 import React from 'react';
 import classNames from 'classnames';
-import { Button, Icon, Tooltip } from '@blueprintjs/core';
+import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { DeviceOperationLayoutTypes, DeviceOperationTypes, FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
@@ -23,9 +23,7 @@ export const MemoryLegendElement: React.FC<{
     layout?: DeviceOperationLayoutTypes;
     isMultiDeviceBuffer?: boolean;
     isGroupHeader?: boolean;
-    isOpen?: boolean;
-    handleOpenToggle?: (isOpen: boolean) => void;
-    groupSize?: number;
+    className?: string;
 }> = ({
     // no wrap eslint
     chunk,
@@ -38,9 +36,7 @@ export const MemoryLegendElement: React.FC<{
     layout,
     isMultiDeviceBuffer = false,
     isGroupHeader = false,
-    isOpen = false,
-    handleOpenToggle,
-    groupSize,
+    className,
 }) => {
     const Component = chunk.empty ? 'div' : 'button';
     const emptyChunkLabel = (
@@ -62,13 +58,17 @@ export const MemoryLegendElement: React.FC<{
     return (
         <Component
             key={chunk.address}
-            className={classNames('legend-item', {
-                button: !chunk.empty,
-                active: selectedTensorAddress === chunk.address,
-                dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
-                'multi-device-buffer': isMultiDeviceBuffer,
-                'is-collapsible': !isMultiDeviceBuffer && isGroupHeader,
-            })}
+            className={classNames(
+                'legend-item',
+                {
+                    button: !chunk.empty,
+                    active: selectedTensorAddress === chunk.address,
+                    dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
+                    'multi-device-buffer': isMultiDeviceBuffer,
+                    'is-collapsible': !isMultiDeviceBuffer && isGroupHeader,
+                },
+                className,
+            )}
             // eslint-disable-next-line react/jsx-props-no-spreading
             {...(!chunk.empty
                 ? {
@@ -96,6 +96,7 @@ export const MemoryLegendElement: React.FC<{
                 className={classNames('legend-details', {
                     'extra-info': bufferType || layout,
                     'shape-info': derivedTensor,
+                    'multi-device-info': isMultiDeviceBuffer,
                     'is-group-header': !isMultiDeviceBuffer && isGroupHeader,
                 })}
             >
@@ -124,22 +125,7 @@ export const MemoryLegendElement: React.FC<{
                         </>
                     )}
                 </div>
-
-                {isGroupHeader && handleOpenToggle && <strong>x{groupSize}</strong>}
             </div>
-
-            {handleOpenToggle && isGroupHeader && (
-                <Button
-                    className='collapse-toggle'
-                    small
-                    minimal
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenToggle(!isOpen);
-                    }}
-                    rightIcon={isOpen ? IconNames.CARET_UP : IconNames.CARET_DOWN}
-                />
-            )}
         </Component>
     );
 };

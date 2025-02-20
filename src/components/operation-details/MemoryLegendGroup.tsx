@@ -3,7 +3,8 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import React, { useState } from 'react';
-import { Collapse } from '@blueprintjs/core';
+import { Button, Collapse } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import { FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { MemoryLegendElement } from './MemoryLegendElement';
@@ -27,19 +28,35 @@ export const MemoryLegendGroup: React.FC<{
 
     return (
         <>
-            <MemoryLegendElement
-                chunk={group[0]}
-                memSize={memSize}
-                selectedTensorAddress={selectedTensorAddress}
-                operationDetails={operationDetails}
-                onLegendClick={onLegendClick}
-                isGroupHeader
-                isOpen={isOpen}
-                handleOpenToggle={setIsOpen}
-                groupSize={group.length}
-            />
+            <div className='group-header'>
+                <MemoryLegendElement
+                    chunk={group[0]}
+                    memSize={memSize}
+                    selectedTensorAddress={selectedTensorAddress}
+                    operationDetails={operationDetails}
+                    onLegendClick={onLegendClick}
+                    isGroupHeader
+                    className='group-header-details'
+                />
 
-            <Collapse isOpen={isOpen}>
+                <strong>x{group.length}</strong>
+
+                <Button
+                    className='group-collapse-toggle'
+                    small
+                    minimal
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setIsOpen(!isOpen);
+                    }}
+                    rightIcon={isOpen ? IconNames.CARET_UP : IconNames.CARET_DOWN}
+                />
+            </div>
+
+            <Collapse
+                isOpen={isOpen}
+                keepChildrenMounted
+            >
                 <div className='grouped-legend-elements'>
                     {group.map((chunk: FragmentationEntry, index: number) => (
                         <MemoryLegendElement

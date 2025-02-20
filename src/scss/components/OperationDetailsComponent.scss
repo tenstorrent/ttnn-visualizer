@@ -50,10 +50,11 @@
 
     .legend {
         display: inline-flex;
-        margin-bottom: 20px;
-        margin-top: 20px;
         flex-direction: column;
         row-gap: 1px;
+        margin-bottom: 20px;
+        margin-top: 20px;
+        padding-right: 15px;
 
         &.nested-legend {
             padding-left: 18px;
