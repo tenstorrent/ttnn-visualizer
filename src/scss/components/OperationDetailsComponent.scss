@@ -50,17 +50,17 @@
 
     .legend {
         display: inline-flex;
-        place-content: center space-between;
         margin-bottom: 20px;
+        margin-top: 20px;
         flex-direction: column;
-        row-gap: 3px;
+        row-gap: 1px;
 
         &.nested-legend {
             padding-left: 18px;
         }
 
         &.lengthy-legend {
-            height: 410px;
+            max-height: 410px;
             overflow-y: scroll;
         }
 

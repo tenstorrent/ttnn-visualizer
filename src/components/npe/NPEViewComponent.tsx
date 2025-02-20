@@ -6,13 +6,15 @@
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Icon, Slider } from '@blueprintjs/core';
+import { Button, Slider } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import classNames from 'classnames';
 import { NPEData, NoCID, NoCTransfer } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import { NODE_SIZE, calculateLinkCongestionColor, getLinkPoints, getRouteColor } from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
-import { formatSize } from '../../functions/math';
+import NPEMetadata from './NPEMetadata';
+import ActiveTransferDetails from './ActiveTransferDetails';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -160,7 +162,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return 0.15;
         }
         if (selectedTransferList.length === 0) {
-            return 0.45;
+            return 0; // 0.45;
         }
         const isSelected = selectedTransferList.some((t) => t.id === transfer.id);
 
@@ -171,35 +173,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         return 1;
     };
 
-    const formatMetadata = (value: string | number) => {
-        if (typeof value === 'number') {
-            return value.toFixed(2);
-        }
-        return value;
-    };
-
     return (
         <div className='npe'>
-            <div className='metadata'>
-                <div>
-                    {Object.keys(npeData.common_info).map((key) => (
-                        <div key={key}>
-                            <span>{key}:</span>
-                            {/* @ts-expect-error ts-migrate(2531) */}
-                            <span>{formatMetadata(npeData.common_info[key])}</span>
-                        </div>
-                    ))}
-                </div>
-                <hr />
-                <div>
-                    <span>Timestamp:</span>
-                    <span>{selectedTimestep}</span>
-                </div>
-                <div>
-                    <span>Active transfers:</span>
-                    <span>{transfers.length}</span>
-                </div>
-            </div>
+            <NPEMetadata
+                info={npeData.common_info}
+                numTransfers={transfers.length}
+            />
             <div className='header'>
                 {!isPlaying && (
                     <Button
@@ -223,10 +202,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 />
                 <NPECongestionHeatMap timestepList={npeData.timestep_data} />
             </div>
-            <div
-                className='split-grid'
-                style={{ display: 'flex' }}
-            >
+            <div className='split-grid'>
                 <div className='chip'>
                     <div
                         className='tensix-grid empty'
@@ -254,7 +230,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         )}
                     </div>
                     <div
-                        className='tensix-grid'
+                        className='tensix-grid congestion'
                         style={{
                             display: 'grid',
                             gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
@@ -263,36 +239,31 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     >
                         {transfers.map((transfer) => (
                             <>
-                                {transfer?.src && (
+                                {transfer.src && (
                                     <div
                                         key={`${transfer.id}-src`}
-                                        className='tensix'
+                                        className='tensix src-dst src'
                                         style={{
-                                            position: 'relative',
                                             gridColumn: transfer.src[1] + 1,
                                             gridRow: transfer.src[0] + 1,
-                                            color: 'yellow',
-                                            fontSize: '20px',
                                             opacity: getOriginOpacity(transfer),
-                                            border: '1px solid yellow',
                                         }}
                                     />
                                 )}
-                                {transfer.dst.map((dst) => (
-                                    <div
-                                        key={`${transfer.id}-dst-${dst[0]}-${dst[1]}`}
-                                        className='tensix'
-                                        style={{
-                                            position: 'relative',
-                                            gridColumn: dst[1] + 1,
-                                            gridRow: dst[0] + 1,
-                                            color: 'orangered',
-                                            fontSize: '20px',
-                                            opacity: getOriginOpacity(transfer),
-                                            border: '1px solid orangered',
-                                        }}
-                                    />
-                                ))}
+                                {transfer.dst.map((dst) => {
+                                    const classname = transfer.src?.toString() === dst.toString() ? 'both' : 'dst';
+                                    return (
+                                        <div
+                                            key={`${transfer.id}-dst-${dst[0]}-${dst[1]}`}
+                                            className={classNames('tensix src-dst', classname)}
+                                            style={{
+                                                gridColumn: dst[1] + 1,
+                                                gridRow: dst[0] + 1,
+                                                opacity: getOriginOpacity(transfer),
+                                            }}
+                                        />
+                                    );
+                                })}
                             </>
                         ))}
 
@@ -311,7 +282,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 {/* // TENSIX CONGESTION */}
                                 <TensixTransferRenderer
                                     style={{
-                                        ...(selectedTransferList.length !== 0 ? { opacity: 0.15 } : { opacity: 1 }),
+                                        opacity:
+                                            highlightedTransfer !== null || selectedTransferList.length !== 0
+                                                ? 0.15
+                                                : 1,
                                     }}
                                     width={SVG_SIZE}
                                     height={SVG_SIZE}
@@ -327,10 +301,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     <div
                         className='tensix-grid transfers'
                         style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            display: 'grid',
                             gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
                             gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
                         }}
@@ -345,7 +315,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             : 'tensix no-click'
                                     }
                                     style={{
-                                        position: 'relative',
                                         gridColumn: colIndex + 1,
                                         gridRow: rowIndex + 1,
                                     }}
@@ -370,14 +339,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         <div
                             className='tensix-grid transfer-single'
                             style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                display: 'grid',
                                 gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
                                 gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
-                                // backgroundColor: 'rgba(0, 0, 0, 0.75)',
-                                zIndex: 1,
                             }}
                         >
                             {highlightedTransfer?.route.map((point) => (
@@ -390,15 +353,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                         gridRow: point[0] + 1,
                                     }}
                                 >
-                                    <div
-                                        style={{
-                                            position: 'absolute',
-                                            top: 0,
-                                            left: 0,
-                                            width: '100%',
-                                            height: '100%',
-                                        }}
-                                    >
+                                    <div className='transfer-render-ctn'>
                                         {/* HIGHLIGHTED TRANSFER */}
                                         <TensixTransferRenderer
                                             width={SVG_SIZE}
@@ -412,77 +367,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         </div>
                     )}
                 </div>
-                <div className='side-data'>
-                    {Object.keys(groupedTransfersByNoCID).length !== 0 && (
-                        <>
-                            <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                Active transfers through {selectedNode?.coords.join('-')}
-                                <Button
-                                    minimal
-                                    icon={IconNames.CROSS}
-                                    onClick={() => showActiveTransfers(null)}
-                                />
-                            </h3>
-                            {Object.entries(groupedTransfersByNoCID).map(([nocId, localTransferList]) => (
-                                <div
-                                    key={nocId}
-                                    style={{ marginBottom: '20px' }}
-                                >
-                                    <h4>NOC ID: {nocId}</h4>
-                                    {localTransferList.map((transfer) => (
-                                        <div
-                                            key={transfer.id}
-                                            style={{
-                                                display: 'flex',
-                                                gap: '5px',
-                                                alignContent: 'center',
-                                                alignItems: 'center',
-                                                padding: '5px',
-                                                margin: '5px',
-                                                transition: 'opacity 0.2s',
-                                                cursor: 'pointer',
-                                                opacity:
-                                                    highlightedTransfer == null || highlightedTransfer === transfer
-                                                        ? 1
-                                                        : 0.25,
-                                            }}
-                                            // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
-                                            onMouseOver={() => setHighlightedTransfer(transfer)}
-                                            // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
-                                            onMouseOut={() => setHighlightedTransfer(null)}
-                                        >
-                                            <div
-                                                style={{
-                                                    backgroundColor: getRouteColor(transfer.id),
-                                                    width: '10px',
-                                                    height: '10px',
-                                                }}
-                                            />
-                                            {transfer.id}
-                                            <div>
-                                                <span style={{ border: '1px solid yellow' }}>
-                                                    {transfer.src.join('-')}
-                                                </span>{' '}
-                                                <Icon
-                                                    size={12}
-                                                    icon={IconNames.ArrowRight}
-                                                />{' '}
-                                                <span style={{ border: '1px solid orangered' }}>
-                                                    {transfer.dst.length === 1
-                                                        ? transfer.dst[0].join('-')
-                                                        : `${transfer.dst[0].join('-')} - ${transfer.dst[transfer.dst.length - 1].join('-')}`}
-                                                </span>
-                                            </div>
-                                            <div>{formatSize(transfer.total_bytes)}B</div>
-                                            <div>{transfer.noc_event_type}</div>
-                                            <div>injection rate: {transfer.injection_rate.toFixed(2)}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ))}
-                        </>
-                    )}
-                </div>
+
+                <ActiveTransferDetails
+                    groupedTransfersByNoCID={groupedTransfersByNoCID}
+                    selectedNode={selectedNode}
+                    showActiveTransfers={showActiveTransfers}
+                    highlightedTransfer={highlightedTransfer}
+                    setHighlightedTransfer={setHighlightedTransfer}
+                />
             </div>
         </div>
     );
