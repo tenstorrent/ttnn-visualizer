@@ -20,6 +20,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
            node-version: v22.1.0
+      - run: npm install -g pnpm@latest-10
       - run: pnpm install
       - run: pnpm run build
 
