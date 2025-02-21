@@ -24,7 +24,7 @@ jobs:
 
             - name: Bump version for Node.js (package.json)
               run: |
-                  npm version patch # Or `minor` / `major` depending on your needs
+                  pnpm version patch # Or `minor` / `major` depending on your needs
                   git add package.json
                   cat package.json
               env:
