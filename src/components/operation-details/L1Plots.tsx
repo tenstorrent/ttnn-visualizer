@@ -211,7 +211,7 @@ function L1Plots({
                     memoryReport?.map((chunk, chunkIndex) => {
                         const group = groupedMemoryReport.get(chunk.address);
 
-                        return group ? (
+                        return Array.isArray(group) && group?.length > 1 ? (
                             <MemoryLegendGroup
                                 group={group}
                                 key={`${chunk.address}`}

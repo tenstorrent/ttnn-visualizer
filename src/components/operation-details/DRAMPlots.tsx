@@ -222,10 +222,10 @@ function DRAMPlots({
                 {dramMemoryReport?.map((chunk, chunkIndex) => {
                     const group = groupedMemoryReport.get(chunk.address);
 
-                    return group ? (
+                    return Array.isArray(group) && group?.length > 1 ? (
                         <MemoryLegendGroup
                             group={group}
-                            key={`${group[0].address}-${chunkIndex}`}
+                            key={`${chunk.address}`}
                             memSize={DRAM_MEMORY_SIZE}
                             selectedTensorAddress={selectedAddress}
                             operationDetails={operationDetails}

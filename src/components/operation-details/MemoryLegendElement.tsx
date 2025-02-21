@@ -35,7 +35,6 @@ export const MemoryLegendElement: React.FC<{
     bufferType,
     layout,
     isMultiDeviceBuffer = false,
-    isGroupHeader = false,
     className,
 }) => {
     const Component = chunk.empty ? 'div' : 'button';
@@ -64,8 +63,6 @@ export const MemoryLegendElement: React.FC<{
                     button: !chunk.empty,
                     active: selectedTensorAddress === chunk.address,
                     dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
-                    'multi-device-buffer': isMultiDeviceBuffer,
-                    'is-collapsible': !isMultiDeviceBuffer && isGroupHeader,
                 },
                 className,
             )}
@@ -92,39 +89,30 @@ export const MemoryLegendElement: React.FC<{
                           }),
                 }}
             />
-            <div
-                className={classNames('legend-details', {
-                    'extra-info': bufferType || layout,
-                    'shape-info': derivedTensor,
-                    'multi-device-info': isMultiDeviceBuffer,
-                    'is-group-header': !isMultiDeviceBuffer && isGroupHeader,
-                })}
-            >
-                <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize)}</div>
-                <div className='format-numbers monospace keep-left'>({toHex(chunk.address)})</div>
-                <div className='format-numbers monospace'>{formatSize(chunk.size)} </div>
-                <div>
-                    {!isMultiDeviceBuffer && !chunk.empty && derivedTensor && (
-                        <>
-                            {derivedTensor.operationIdentifier} : Tensor {derivedTensor.id}
-                        </>
-                    )}
-                    {!isMultiDeviceBuffer && chunk.empty && emptyChunkLabel}
-                </div>
-                {(bufferType || layout) && (
-                    <div className='extra-info-slot'>
-                        {bufferType && <span className='monospace'>{DeviceOperationTypes[bufferType]} </span>}
-                        {layout && <span className='monospace'>{DeviceOperationLayoutTypes[layout]}</span>}
-                    </div>
+            <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize)}</div>
+            <div className='format-numbers monospace keep-left'>({toHex(chunk.address)})</div>
+            <div className='format-numbers monospace'>{formatSize(chunk.size)} </div>
+            <div>
+                {!isMultiDeviceBuffer && !chunk.empty && derivedTensor && (
+                    <>
+                        {derivedTensor.operationIdentifier} : Tensor {derivedTensor.id}
+                    </>
                 )}
-                <div className='shape-info-slot'>
-                    {derivedTensor && (
-                        <>
-                            {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)} &nbsp;{' '}
-                            {isMultiDeviceBuffer && `Device ${chunk?.device_id ?? derivedTensor.device_id}`}
-                        </>
-                    )}
+                {!isMultiDeviceBuffer && chunk.empty && emptyChunkLabel}
+            </div>
+            {(bufferType || layout) && (
+                <div className='extra-info-slot'>
+                    {bufferType && <span className='monospace'>{DeviceOperationTypes[bufferType]} </span>}
+                    {layout && <span className='monospace'>{DeviceOperationLayoutTypes[layout]}</span>}
                 </div>
+            )}
+            <div className='shape-info-slot'>
+                {derivedTensor && (
+                    <>
+                        {toReadableShape(derivedTensor.shape)} &nbsp; {toReadableType(derivedTensor.dtype)} &nbsp;{' '}
+                        {isMultiDeviceBuffer && `Device ${chunk?.device_id ?? derivedTensor.device_id}`}
+                    </>
+                )}
             </div>
         </Component>
     );

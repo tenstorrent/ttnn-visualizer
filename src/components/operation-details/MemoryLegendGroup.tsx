@@ -30,26 +30,26 @@ export const MemoryLegendGroup: React.FC<{
         <>
             <div className='group-header'>
                 <MemoryLegendElement
+                    className='details'
                     chunk={group[0]}
                     memSize={memSize}
                     selectedTensorAddress={selectedTensorAddress}
                     operationDetails={operationDetails}
                     onLegendClick={onLegendClick}
                     isGroupHeader
-                    className='group-header-details'
                 />
 
                 <strong>x{group.length}</strong>
 
                 <Button
-                    className='group-collapse-toggle'
-                    small
-                    minimal
+                    className='collapse-toggle'
                     onClick={(e) => {
                         e.stopPropagation();
                         setIsOpen(!isOpen);
                     }}
                     rightIcon={isOpen ? IconNames.CARET_UP : IconNames.CARET_DOWN}
+                    small
+                    minimal
                 />
             </div>
 
