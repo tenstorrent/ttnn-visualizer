@@ -63,6 +63,7 @@ export const MemoryLegendElement: React.FC<{
                     button: !chunk.empty,
                     active: selectedTensorAddress === chunk.address,
                     dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
+                    'extra-info': bufferType || layout,
                 },
                 className,
             )}

@@ -32,6 +32,10 @@
     column-gap: 15px;
     text-align: left;
 
+    &.extra-info {
+        grid-template-columns: 15px 0.2fr 0.2fr 0.2fr 7fr 1fr 3fr;
+    }
+
     &.button {
         &:focus {
             background-color: $tt-bg-highlight;
