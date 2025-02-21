@@ -22,7 +22,6 @@ import {
 import { BufferType } from '../../model/BufferType';
 import { FragmentationEntry } from '../../model/APIData';
 import { MemoryLegendGroup } from './MemoryLegendGroup';
-import getGroupedMemoryReport from '../../functions/getGroupedMemoryReport';
 
 interface L1PlotsProps {
     operationDetails: OperationDetails;
@@ -86,10 +85,10 @@ function L1Plots({
 
     const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
 
-    const { memorySizeL1, deviceBuffers } = operationDetails;
+    const { memorySizeL1, getGroupedMemoryReport } = operationDetails;
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
-    const groupedMemoryReport = getGroupedMemoryReport(deviceBuffers, BufferType.L1);
+    const groupedMemoryReport = getGroupedMemoryReport(BufferType.L1);
 
     const memoryReportWithCB: FragmentationEntry[] = [
         ...memoryReport,

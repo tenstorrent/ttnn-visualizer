@@ -21,7 +21,6 @@ import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
 import 'styles/components/DRAMPlots.scss';
 import { MemoryLegendGroup } from './MemoryLegendGroup';
-import getGroupedMemoryReport from '../../functions/getGroupedMemoryReport';
 
 const DRAM_PADDING_RATIO = 0.9998;
 const SPLIT_THRESHOLD_RATIO = 8;
@@ -57,7 +56,7 @@ function DRAMPlots({
         (chunk) => !dramMemoryReport.find((c) => c.address === chunk.address),
     );
     const dramDeltaObject = operationDetails.getMemoryDelta(dramDelta, reverseDramDelta);
-    const { deviceBuffers } = operationDetails;
+    const { getGroupedMemoryReport } = operationDetails;
 
     let dramPlotZoomRangeStart =
         Math.min(dramMemory[0]?.address || DRAM_MEMORY_SIZE, previousDramMemory[0]?.address || DRAM_MEMORY_SIZE) *
@@ -80,7 +79,7 @@ function DRAMPlots({
         dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
     }
 
-    const groupedMemoryReport = getGroupedMemoryReport(deviceBuffers, BufferType.DRAM);
+    const groupedMemoryReport = getGroupedMemoryReport(BufferType.DRAM);
     const splitPreviousDramData = useMemo(() => splitData(previousDramData), [previousDramData]);
     const splitDramData = useMemo(() => splitData(dramData), [dramData]);
 
