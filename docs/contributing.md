@@ -6,6 +6,8 @@
 
 ### Front end
 
+Currently the project requires Node v20.11. We have a `.nvmrc` file for ease of versioning if you're using a node version manager.
+
 ```shell
 nvm use
 pnpm install
