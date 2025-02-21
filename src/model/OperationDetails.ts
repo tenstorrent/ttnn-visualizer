@@ -196,6 +196,8 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 }
             });
         }
+
+        this.getGroupedMemoryReport = this.getGroupedMemoryReport.bind(this);
     }
 
     private getChartData(memory: Chunk[], overrides?: PlotDataOverrides): Partial<PlotData>[] {
@@ -235,6 +237,27 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 name: tensor?.consumerNames[index],
             })),
         };
+    }
+
+    getGroupedMemoryReport(bufferType: BufferType) {
+        const groupedMap = new Map<number, FragmentationEntry[]>();
+
+        this.deviceBuffers
+            .filter((buffer) => buffer.buffer_type === bufferType)
+            .forEach((buffer) => {
+                const entry: FragmentationEntry = {
+                    ...buffer,
+                    size: buffer.max_size_per_bank,
+                };
+
+                if (groupedMap.has(entry.address)) {
+                    groupedMap.get(entry.address)?.push(entry);
+                } else {
+                    groupedMap.set(entry.address, [entry]);
+                }
+            });
+
+        return groupedMap;
     }
 
     memoryData(bufferType: BufferType = BufferType.L1): {
