@@ -26,8 +26,7 @@ $dark-danger-background-base: $tt-red-accent;
     // $dark-control-checked-background-color: #abc123,
     $pt-dark-icon-color: $tt-white,
     // "intent": (default, hover, active colors)
-    $button-intents:
-        (
+    $button-intents: (
             'primary': (
                 $dark-primary-background-base,
                 color.adjust($dark-primary-background-base, $lightness: -5%),
@@ -64,8 +63,7 @@ $dark-danger-background-base: $tt-red-accent;
     $pt-text-color: $tt-grey-2,
     $dark-navbar-background-color: transparent,
     // Background/Hover/Active/Text colours
-    $tag-intent-colors:
-        (
+    $tag-intent-colors: (
             'primary': (
                 $dark-primary-background-base,
                 color.adjust($dark-primary-background-base, $lightness: -10%),

@@ -29,7 +29,7 @@ const OperationGraph: React.FC<{
     const [isLoading, setIsLoading] = useState(true);
     const [scale, setScale] = useState(1);
 
-    const focusNodeId = operationId !== undefined ? operationId : operationList[0].id ?? 0;
+    const focusNodeId = operationId !== undefined ? operationId : (operationList[0].id ?? 0);
     const [currentOperationId, setCurrentOperationId] = useState<number | null>(operationId ?? 0);
     const currentOpIdRef = useRef<number>(currentOperationId);
 
