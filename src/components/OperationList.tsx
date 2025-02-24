@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
@@ -314,12 +314,13 @@ const OperationList = () => {
                                             keepChildrenMounted={false}
                                             additionalElements={
                                                 <Button
-                                                    title='Buffer view'
-                                                    minimal
-                                                    small
                                                     className='buffer-view'
-                                                    icon={IconNames.SEGMENTED_CONTROL}
                                                     onClick={() => navigate(`${ROUTES.OPERATIONS}/${operation.id}`)}
+                                                    text='Memory details'
+                                                    intent={Intent.PRIMARY}
+                                                    rightIcon={IconNames.SEGMENTED_CONTROL}
+                                                    small
+                                                    outlined
                                                 />
                                             }
                                             isOpen={expandedOperations.includes(operation.id)}
