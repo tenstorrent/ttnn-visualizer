@@ -6,10 +6,12 @@
 
 ### Front end
 
+Currently the project requires Node v20.11. We have a `.nvmrc` file for ease of versioning if you're using a node version manager.
+
 ```shell
 nvm use
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 ### Back end
@@ -35,7 +37,7 @@ pip install -r backend/ttnn_visualizer/requirements.txt
 Starting the server
 
 ```shell
-npm run flask:start
+pnpm run flask:start
 ```
 
 Starting with hot reload:
