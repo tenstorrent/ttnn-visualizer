@@ -5,7 +5,7 @@
 
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { JSX, useEffect, useMemo, useState } from 'react';
 import { Button, Slider } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
@@ -15,6 +15,7 @@ import { NODE_SIZE, calculateLinkCongestionColor, getLinkPoints, getRouteColor }
 import NPECongestionHeatMap from './NPECongestionHeatMap';
 import NPEMetadata from './NPEMetadata';
 import ActiveTransferDetails from './ActiveTransferDetails';
+import { useNodeType } from '../../hooks/useAPI';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -33,6 +34,24 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: number[] } | null>(null);
     const [isPlaying, setIsPlaying] = useState<boolean>(false);
+
+    const { cores, dram, eth, pcie } = useNodeType(npeData.common_info.device_name);
+    const getNodeType = (location: number[]): JSX.Element => {
+        const [y, x] = location;
+        if (cores.some((loc) => loc[0] === y && loc[1] === x)) {
+            return <div className='node-type-label node-type-c'>T</div>;
+        }
+        if (dram.some((loc) => loc[0] === y && loc[1] === x)) {
+            return <div className='node-type-label node-type-d'>d</div>;
+        }
+        if (eth.some((loc) => loc[0] === y && loc[1] === x)) {
+            return <div className='node-type-label node-type-e'>e</div>;
+        }
+        if (pcie.some((loc) => loc[0] === y && loc[1] === x)) {
+            return <div className='node-type-label node-type-p'>p</div>;
+        }
+        return <div className='node-type-label' />;
+    };
 
     useEffect(() => {
         stopAnimation();
@@ -223,9 +242,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                         width: `${tensixSize}px`,
                                         height: `${tensixSize}px`,
                                         border: '1px solid black',
+                                        position: 'relative',
                                     }}
                                     key={`${x}-${y}`}
-                                />
+                                >
+                                    {getNodeType([y, x])}
+                                </div>
                             )),
                         )}
                     </div>

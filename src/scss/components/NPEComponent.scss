@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 @use '../definitions/colours' as *;
 
 .npe {
@@ -178,5 +181,48 @@
                     1;
             }
         }
+    }
+
+    .node-type-d {
+        fill: $c-dram;
+        background-color: $c-dram;
+    }
+
+    .node-type-c {
+        fill: $c-core;
+        background-color: $c-core;
+    }
+
+    .node-type-r {
+        fill: $c-router;
+        background-color: $c-router;
+    }
+
+    .node-type-e {
+        fill: $c-eth;
+        background-color: $c-eth;
+    }
+
+    .node-type-p {
+        fill: $c-pcix;
+        background-color: $c-pcix;
+    }
+
+    .node-type {
+        border-bottom: 2px solid transparent;
+    }
+
+    .node-type-label {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        top: 0;
+        right: 0;
+        color: $tt-grey-2;
+        font-size: 11px;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 }
