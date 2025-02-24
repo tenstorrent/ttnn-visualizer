@@ -16,6 +16,7 @@ import NPECongestionHeatMap from './NPECongestionHeatMap';
 import NPEMetadata from './NPEMetadata';
 import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
+import { DeviceArchicture } from '../../definitions/DeviceArchicture';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -35,7 +36,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: number[] } | null>(null);
     const [isPlaying, setIsPlaying] = useState<boolean>(false);
 
-    const { cores, dram, eth, pcie } = useNodeType(npeData.common_info.device_name);
+    const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
+    useEffect(() => {
+        const handleResize = () => setCanvasWidth(window.innerWidth);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const { cores, dram, eth, pcie } = useNodeType(npeData.common_info.device_name as DeviceArchicture);
     const getNodeType = (location: number[]): JSX.Element => {
         const [y, x] = location;
         if (cores.some((loc) => loc[0] === y && loc[1] === x)) {
@@ -192,6 +200,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         return 1;
     };
 
+    const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - 25;
+
     return (
         <div className='npe'>
             <NPEMetadata
@@ -211,15 +221,20 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         onClick={onPause}
                     />
                 )}
-                <Slider
-                    min={0}
-                    max={npeData.timestep_data.length - 1}
-                    stepSize={1}
-                    labelStepSize={npeData.timestep_data.length > 20 ? npeData.timestep_data.length / 20 : 1}
-                    value={selectedTimestep}
-                    onChange={(value: number) => handleScrubberChange(value)}
+                <div style={{ width: `${switchwidth}px` }}>
+                    <Slider
+                        min={0}
+                        max={npeData.timestep_data.length - 1}
+                        stepSize={1}
+                        labelStepSize={npeData.timestep_data.length > 25 ? npeData.timestep_data.length / 20 : 1}
+                        value={selectedTimestep}
+                        onChange={(value: number) => handleScrubberChange(value)}
+                    />
+                </div>
+                <NPECongestionHeatMap
+                    timestepList={npeData.timestep_data}
+                    canvasWidth={canvasWidth}
                 />
-                <NPECongestionHeatMap timestepList={npeData.timestep_data} />
             </div>
             <div className='split-grid'>
                 <div className='chip'>
