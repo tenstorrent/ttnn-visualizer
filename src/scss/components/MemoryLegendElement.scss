@@ -5,7 +5,7 @@
 @use '../definitions/colours' as *;
 
 .group-header {
-    display: flex;
+    display: inline-flex;
 
     .details {
         flex-grow: 1;
@@ -18,7 +18,7 @@
 }
 
 .grouped-legend-elements {
-    display: flex;
+    display: inline-flex;
     flex-direction: column;
     gap: 2px;
     margin-top: 1px;
