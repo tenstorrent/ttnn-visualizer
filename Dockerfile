@@ -17,7 +17,7 @@ RUN apt-get update \
 USER node
 COPY --chown=node:node ./package.json package-lock.json index.html ./
 
-RUN npm install
+RUN npm install -g pnpm@latest-10
 
 ARG NODE_ENV="production"
 ENV NODE_ENV="${NODE_ENV}" \
@@ -30,7 +30,7 @@ COPY --chown=node:node . .
 # https://vitejs.dev/guide/env-and-mode
 COPY --chown=node:node ./.env* /app/
 
-RUN npm run build
+RUN pnpm run build
 
 CMD ["bash"]
 
