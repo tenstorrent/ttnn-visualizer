@@ -124,7 +124,8 @@
             }
 
             &.empty-tensix {
-                border-color: $tt-slate;
+                border: 1px solid $tt-black;
+                position: relative;
             }
 
             &.no-click {

@@ -11,7 +11,7 @@ import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { PerformanceReport } from '../components/performance/PerfTable';
 import 'styles/components/Performance.scss';
-import { DeviceArchitecture } from '../model/APIData';
+import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import PerfDeviceKernelDurationChart from '../components/performance/PerfDeviceKernelDurationChart';
 import PerfDeviceKernelRuntimeChart from '../components/performance/PerfDeviceKernelRuntimeChart';
 import PerfCoreCountUtilizationChart from '../components/performance/PerfCoreCountUtilizationChart';
@@ -80,6 +80,8 @@ export default function Performance() {
             </div>
         );
     }
+
+    // TODO: get cores coount from device DEvice Architecture hook
 
     const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
     const maxCores = getCoreCount(architecture, data);

@@ -8,6 +8,8 @@
 
 Currently the project requires Node v20.11. We have a `.nvmrc` file for ease of versioning if you're using a node version manager.
 
+We use [pnpm](https://pnpm.io/) as our package manager. Please see their guidelines for [installing pnpm on your machine](https://pnpm.io/installation).
+
 ```shell
 nvm use
 pnpm install
@@ -43,7 +45,7 @@ pnpm run flask:start
 Starting with hot reload:
 
 ``` shell
-npm run flask:start-debug
+pnpm run flask:start-debug
 ```
 
 When both the frontend and backend are running you can access the app on [http://localhost:5173](http://localhost:5173) or whatever **Local** uri is printed in your terminal where you ran `npm run dev`.
