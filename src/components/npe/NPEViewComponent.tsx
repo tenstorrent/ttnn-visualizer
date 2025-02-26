@@ -16,6 +16,7 @@ import NPECongestionHeatMap from './NPECongestionHeatMap';
 import NPEMetadata from './NPEMetadata';
 import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
+import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -35,7 +36,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: number[] } | null>(null);
     const [isPlaying, setIsPlaying] = useState<boolean>(false);
 
-    const { cores, dram, eth, pcie } = useNodeType(npeData.common_info.device_name);
+    const { cores, dram, eth, pcie } = useNodeType(npeData.common_info.device_name as DeviceArchitecture);
     const getNodeType = (location: number[]): JSX.Element => {
         const [y, x] = location;
         if (cores.some((loc) => loc[0] === y && loc[1] === x)) {
@@ -235,14 +236,13 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             Array.from({ length: height }).map((__, y) => (
                                 // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
                                 <div
+                                    className='tensix empty-tensix'
                                     onClick={() => showActiveTransfers(null)}
                                     style={{
                                         gridColumn: x + 1,
                                         gridRow: y + 1,
                                         width: `${tensixSize}px`,
                                         height: `${tensixSize}px`,
-                                        border: '1px solid black',
-                                        position: 'relative',
                                     }}
                                     key={`${x}-${y}`}
                                 >

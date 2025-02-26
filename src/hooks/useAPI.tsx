@@ -33,7 +33,7 @@ import { isDeviceOperation } from '../functions/filterOperations';
 import { selectedOperationRangeAtom } from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
-import { DeviceArchicture } from '../definitions/DeviceArchicture';
+import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -705,17 +705,17 @@ export const useSession = (reportName: string | null, profileName: string | null
         initialData: null,
     });
 };
-export const useArchitecture = (arch: DeviceArchicture) => {
+export const useArchitecture = (arch: DeviceArchitecture) => {
     switch (arch) {
-        case DeviceArchicture.WORMHOLE:
+        case DeviceArchitecture.WORMHOLE:
             return archWormhole;
-        case DeviceArchicture.BLACKHOLE:
+        case DeviceArchitecture.BLACKHOLE:
             return archBlackhole;
         default:
             throw new Error(`Unknown architecture: ${arch}`);
     }
 };
-export const useNodeType = (arch: DeviceArchicture) => {
+export const useNodeType = (arch: DeviceArchitecture) => {
     const architecture = useArchitecture(arch);
     const cores = useMemo(() => {
         return architecture.functional_workers.map((loc) => {
