@@ -56,9 +56,6 @@ importers:
       plotly.js:
         specifier: ^2.33.0
         version: 2.35.3(mapbox-gl@1.13.3)(webpack@5.98.0)
-      pnpn:
-        specifier: ^0.0.1
-        version: 0.0.1
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -3925,9 +3922,6 @@ packages:
 
   plotly.js@2.35.3:
     resolution: {integrity: sha512-7RaC6FxmCUhpD6H4MpD+QLUu3hCn76I11rotRefrh3m1iDvWqGnVqVk9dSaKmRAhFD3vsNsYea0OxnR1rc2IzQ==}
-
-  pnpn@0.0.1:
-    resolution: {integrity: sha512-hY8bh464EAPD9xfjZJUZLpA0phwV56CWXLs7Z6gxm4i8JT89+Vf3vjWW6BfSlNG1+p/vrFaF0bfoo+UaXrQUAA==}
 
   point-in-polygon@1.1.0:
     resolution: {integrity: sha512-3ojrFwjnnw8Q9242TzgXuTD+eKiutbzyslcq1ydfu82Db2y+Ogbmyrkpv0Hgj31qwT3lbS9+QAAO/pIQM35XRw==}
@@ -9635,8 +9629,6 @@ snapshots:
       - mapbox-gl
       - supports-color
       - webpack
-
-  pnpn@0.0.1: {}
 
   point-in-polygon@1.1.0: {}
 
