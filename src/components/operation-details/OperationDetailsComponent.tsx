@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import React, { useState } from 'react';
-import { Button, ButtonGroup, Intent, Position, Switch, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, Intent, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
@@ -233,37 +233,29 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                         {isL1Active && operation && (
                             <>
-                                <h3>
-                                    L1 Memory{' '}
-                                    <Tooltip
-                                        content='Visualize io tensix cores'
-                                        placement={Position.TOP}
-                                    >
-                                        <Button
-                                            title='Visualize io tensix cores'
-                                            icon={IconNames.FLOW_REVIEW}
-                                            intent={Intent.SUCCESS}
-                                            minimal
-                                            small
-                                            onClick={() => {
-                                                setTensixIOVisualisationOpen(true);
-                                            }}
-                                        />
-                                    </Tooltip>
-                                    <Tooltip
-                                        content='Visualize all tensix cores'
-                                        placement={Position.TOP}
-                                    >
-                                        <Button
-                                            icon={IconNames.LAYOUT_GRID}
-                                            intent={Intent.SUCCESS}
-                                            minimal
-                                            small
-                                            onClick={() => {
-                                                setTensixFullVisualisationOpen(true);
-                                            }}
-                                        />
-                                    </Tooltip>
+                                <h3>L1 Memory</h3>
+
+                                <ButtonGroup className='core-view-buttons'>
+                                    <Button
+                                        text='Total allocation per core'
+                                        icon={IconNames.LAYOUT_GRID}
+                                        onClick={() => {
+                                            setTensixFullVisualisationOpen(true);
+                                        }}
+                                        intent={Intent.PRIMARY}
+                                    />
+                                    <Button
+                                        text='Input/Output per core allocation'
+                                        icon={IconNames.FLOW_REVIEW}
+                                        onClick={() => {
+                                            setTensixIOVisualisationOpen(true);
+                                        }}
+                                        intent={Intent.PRIMARY}
+                                        outlined
+                                    />
+                                </ButtonGroup>
+
+                                <>
                                     {tensixIOVisualisationOpen && (
                                         <TensorVisualisationComponent
                                             title={`${operationId} ${operation.name}  (${operation.operationFileIdentifier}) inputs/outputs`}
@@ -287,19 +279,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             tensorByAddress={details.tensorListByAddress}
                                         />
                                     )}
-                                </h3>
 
-                                <L1Plots
-                                    operationDetails={details}
-                                    previousOperationDetails={previousDetails}
-                                    zoomedInViewMainMemory={zoomedInViewMainMemory}
-                                    plotZoomRangeStart={plotZoomRangeStart}
-                                    plotZoomRangeEnd={plotZoomRangeEnd}
-                                    showCircularBuffer={showCircularBuffer}
-                                    showL1Small={showL1Small}
-                                    onBufferClick={onBufferClick}
-                                    onLegendClick={onLegendClick}
-                                />
+                                    <L1Plots
+                                        operationDetails={details}
+                                        previousOperationDetails={previousDetails}
+                                        zoomedInViewMainMemory={zoomedInViewMainMemory}
+                                        plotZoomRangeStart={plotZoomRangeStart}
+                                        plotZoomRangeEnd={plotZoomRangeEnd}
+                                        showCircularBuffer={showCircularBuffer}
+                                        showL1Small={showL1Small}
+                                        onBufferClick={onBufferClick}
+                                        onLegendClick={onLegendClick}
+                                    />
+                                </>
                             </>
                         )}
 
