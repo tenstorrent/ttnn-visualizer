@@ -31,6 +31,9 @@ import { getUniqueDeviceIDs, mergeMultideviceRows } from '../functions/perfFunct
 import { PerfTableRow, RowData } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import { selectedOperationRangeAtom } from '../store/app';
+import archWormhole from '../assets/data/arch-wormhole.json';
+import archBlackhole from '../assets/data/arch-blackhole.json';
+import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -701,4 +704,54 @@ export const useSession = (reportName: string | null, profileName: string | null
         queryKey: ['get-session', reportName, profileName],
         initialData: null,
     });
+};
+export const useArchitecture = (arch: DeviceArchitecture) => {
+    switch (arch) {
+        case DeviceArchitecture.WORMHOLE:
+            return archWormhole;
+        case DeviceArchitecture.BLACKHOLE:
+            return archBlackhole;
+        default:
+            throw new Error(`Unknown architecture: ${arch}`);
+    }
+};
+export const useNodeType = (arch: DeviceArchitecture) => {
+    const architecture = useArchitecture(arch);
+    const cores = useMemo(() => {
+        return architecture.functional_workers.map((loc) => {
+            return loc
+                .split('-')
+                .reverse()
+                .map((l) => parseInt(l, 10));
+        });
+    }, [architecture]);
+
+    const dram = useMemo(() => {
+        return architecture.dram.flat().map((loc) => {
+            return loc
+                .split('-')
+                .reverse()
+                .map((l) => parseInt(l, 10));
+        });
+    }, [architecture]);
+
+    const eth = useMemo(() => {
+        return architecture.eth.flat().map((loc) => {
+            return loc
+                .split('-')
+                .reverse()
+                .map((l) => parseInt(l, 10));
+        });
+    }, [architecture]);
+
+    const pcie = useMemo(() => {
+        return architecture.pcie.map((loc) => {
+            return loc
+                .split('-')
+                .reverse()
+                .map((l) => parseInt(l, 10));
+        });
+    }, [architecture]);
+
+    return { cores, dram, eth, pcie };
 };
