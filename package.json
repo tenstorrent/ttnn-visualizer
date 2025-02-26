@@ -1,12 +1,12 @@
 {
-  "name": "ttnn-visualzer",
+  "name": "ttnn-visualizer",
   "private": true,
-  "version": "0.22.0",
+  "version": "0.23.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "serve": "vite build && FLASK_ENV=production npm run flask:start",
+    "serve": "vite build && FLASK_ENV=production pnpm run flask:start",
     "lint": "eslint . --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
@@ -14,20 +14,27 @@
     "flask:start-debug": "DEBUG=true PYTHONPATH=backend python -m ttnn_visualizer.app",
     "flask:test": "PYTHONPATH=backend pytest backend/ttnn_visualizer/tests",
     "flask:mypy": "PYTHONPATH=backend mypy backend/ttnn_visualizer",
-    "build:wheel": "npm run build && python -m build --wheel",
+    "build:wheel": "pnpm run build && python -m build --wheel",
     "compose:up": "docker-compose up web --build",
     "docker:build:ssh": "docker build docker/SSH --build-arg username=$(logname) -t local-ssh-image",
     "docker:run:ssh": "docker run -dit --rm -p 2222:22 --name local-ssh-server local-ssh-image:latest",
-    "prepare": "husky"
+    "prepare": "husky",
+    "preinstall": "npx only-allow pnpm"
   },
   "dependencies": {
+    "@blueprintjs/colors": "^5.1.7",
     "@blueprintjs/core": "^5.10.3",
+    "@blueprintjs/icons": "^5.18.1",
     "@blueprintjs/select": "^5.1.5",
     "@blueprintjs/table": "^5.2.2",
     "@tanstack/react-virtual": "^3.5.1",
     "@types/tinycolor2": "^1.4.6",
     "axios": "^1.7.2",
+    "css-select": "^5.1.0",
+    "dom-serializer": "^2.0.0",
+    "immutable": "^5.0.3",
     "jotai": "^2.9.1",
+    "mini-svg-data-uri": "^1.4.4",
     "normalize.css": "^8.0.1",
     "papaparse": "^5.4.1",
     "plotly.js": "^2.33.0",
@@ -73,6 +80,7 @@
     "htmlparser2": "^9.1.0",
     "husky": "^9.1.6",
     "lint-staged": "^15.2.10",
+    "only-allow": "^1.2.1",
     "prettier": "^3.3.2",
     "sass": "^1.77.4",
     "stylelint": "^16.6.1",
@@ -96,6 +104,6 @@
       "eslint ./src --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0 --no-ignore"
     ],
     "**/*.scss": "npx stylelint --fix",
-    "**/*.{js,jsx,ts,tsx,css,scss}": "npm run format"
+    "**/*.{js,jsx,ts,tsx,css,scss}": "pnpm run format"
   }
 }
