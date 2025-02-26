@@ -200,8 +200,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         return 1;
     };
 
-    const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - 25;
-
+    const rightMarginOffset = 25;
+    const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - rightMarginOffset;
     return (
         <div className='npe'>
             <NPEMetadata
@@ -221,7 +221,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         onClick={onPause}
                     />
                 )}
-                <div style={{ width: `${switchwidth}px` }}>
+                <div style={{ position: 'relative', width: `${switchwidth}px` }}>
                     <Slider
                         min={0}
                         max={npeData.timestep_data.length - 1}
@@ -229,6 +229,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         labelStepSize={npeData.timestep_data.length > 25 ? npeData.timestep_data.length / 20 : 1}
                         value={selectedTimestep}
                         onChange={(value: number) => handleScrubberChange(value)}
+                    />
+                    <div
+                        className='bp5-slider-progress duplicate'
+                        style={{ width: `${canvasWidth - rightMarginOffset}px` }}
                     />
                 </div>
                 <NPECongestionHeatMap

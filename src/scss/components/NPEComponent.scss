@@ -7,6 +7,17 @@
     $highlight-src: #ff0;
     $highlight-dst: #ff4500;
 
+    .bp5-slider-progress {
+        background-color: $tt-black;
+    }
+
+    .bp5-slider-progress.duplicate {
+        left: 0;
+        bottom: 0;
+        position: absolute;
+        z-index: -1;
+    }
+
     .color-squares {
         width: 10px;
         height: 10px;
