@@ -11,7 +11,7 @@ import { fileTransferProgressAtom } from '../store/app';
 import { FileProgress, FileStatus } from '../model/APIData';
 
 // Define the type for the socket
-export type SocketContextType = Socket | null;
+type SocketContextType = Socket | null;
 
 // Initialize the socket connection (replace with your backend URL)
 const socket = io(`http://localhost:8000?tabId=${getOrCreateTabId()}`);
