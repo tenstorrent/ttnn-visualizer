@@ -5,6 +5,12 @@
 @use '../definitions/colours' as *;
 
 .operation-details-component {
+    .core-view-buttons {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 20px;
+    }
+
     .chart-controls {
         display: flex;
         gap: 10px;

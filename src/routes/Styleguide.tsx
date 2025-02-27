@@ -177,10 +177,16 @@ export default function Styleguide() {
             <h2>Buttons</h2>
 
             <div className='container flex'>
-                <div>
+                <div className='flex flex-column'>
                     <p>Default</p>
 
                     <Button icon={IconNames.ADD}>Your text here</Button>
+                    <Button
+                        icon={IconNames.ADD}
+                        outlined
+                    >
+                        Your text here
+                    </Button>
                     <Button
                         icon={IconNames.ADD}
                         minimal
@@ -189,7 +195,7 @@ export default function Styleguide() {
                     </Button>
                 </div>
 
-                <div>
+                <div className='flex flex-column'>
                     <p>Primary</p>
 
                     <Button
@@ -201,13 +207,20 @@ export default function Styleguide() {
                     <Button
                         icon={IconNames.ADD}
                         intent={Intent.PRIMARY}
+                        outlined
+                    >
+                        Your text here
+                    </Button>
+                    <Button
+                        icon={IconNames.ADD}
+                        intent={Intent.PRIMARY}
                         minimal
                     >
                         Your text here
                     </Button>
                 </div>
 
-                <div>
+                <div className='flex flex-column'>
                     <p>Success</p>
 
                     <Button
@@ -219,13 +232,20 @@ export default function Styleguide() {
                     <Button
                         icon={IconNames.ADD}
                         intent={Intent.SUCCESS}
+                        outlined
+                    >
+                        Your text here
+                    </Button>
+                    <Button
+                        icon={IconNames.ADD}
+                        intent={Intent.SUCCESS}
                         minimal
                     >
                         Your text here
                     </Button>
                 </div>
 
-                <div>
+                <div className='flex flex-column'>
                     <p>Warning</p>
 
                     <Button
@@ -237,18 +257,32 @@ export default function Styleguide() {
                     <Button
                         icon={IconNames.ADD}
                         intent={Intent.WARNING}
+                        outlined
+                    >
+                        Your text here
+                    </Button>
+                    <Button
+                        icon={IconNames.ADD}
+                        intent={Intent.WARNING}
                         minimal
                     >
                         Your text here
                     </Button>
                 </div>
 
-                <div>
+                <div className='flex flex-column'>
                     <p>Danger</p>
 
                     <Button
                         icon={IconNames.ADD}
                         intent={Intent.DANGER}
+                    >
+                        Your text here
+                    </Button>
+                    <Button
+                        icon={IconNames.ADD}
+                        intent={Intent.DANGER}
+                        outlined
                     >
                         Your text here
                     </Button>
