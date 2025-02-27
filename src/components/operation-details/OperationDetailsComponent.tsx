@@ -245,13 +245,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         intent={Intent.PRIMARY}
                                     />
                                     <Button
-                                        text='Input/Output per core allocation'
+                                        text='Input/Output allocation per core'
                                         icon={IconNames.FLOW_REVIEW}
                                         onClick={() => {
                                             setTensixIOVisualisationOpen(true);
                                         }}
                                         intent={Intent.PRIMARY}
-                                        outlined
                                     />
                                 </ButtonGroup>
 
