@@ -169,7 +169,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         text='Tensor allocation by core'
                         icon={tensor.io === 'input' ? IconNames.FLOW_END : IconNames.FLOW_LINEAR}
                         outlined
-                        intent={Intent.SUCCESS}
+                        intent={Intent.PRIMARY}
                         onClick={() => setOverlayOpen(true)}
                     />
                 )}
