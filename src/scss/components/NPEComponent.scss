@@ -9,13 +9,13 @@
 
     .bp5-slider-progress {
         background-color: $tt-black;
-    }
 
-    .bp5-slider-progress.duplicate {
-        left: 0;
-        bottom: 0;
-        position: absolute;
-        z-index: -1;
+        &.duplicate {
+            left: 0;
+            bottom: 0;
+            position: absolute;
+            z-index: -1;
+        }
     }
 
     .color-squares {
