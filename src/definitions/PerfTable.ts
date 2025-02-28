@@ -6,6 +6,8 @@ import { IconName } from '@blueprintjs/core';
 
 export interface PerfTableRow {
     id: string;
+    advice: string[]; // New
+    op?: number; // New
     ORIGINAL_ID?: number; // New
     total_percent: string;
     bound: string;

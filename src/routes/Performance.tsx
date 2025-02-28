@@ -105,7 +105,7 @@ export default function Performance() {
                     icon={IconNames.TH}
                     panel={
                         <>
-                            <PerformanceReport data={stuff} />
+                            <PerformanceReport data={perfData} />
                             <PerformanceReportOld data={data} />
                         </>
                     }
