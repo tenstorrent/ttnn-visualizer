@@ -59,6 +59,9 @@
     }
 
     .side-data {
+        display: inline-flex;
+        flex-direction: column;
+
         h3 {
             display: flex;
             justify-content: space-between;
