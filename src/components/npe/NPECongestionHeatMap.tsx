@@ -5,16 +5,12 @@ import { TimestepData } from '../../model/NPEModel';
 
 interface NPEHeatMapProps {
     timestepList: TimestepData[];
+    canvasWidth: number;
 }
 
-const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList }) => {
+const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasWidth }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
-    useEffect(() => {
-        const handleResize = () => setCanvasWidth(window.innerWidth);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
+
     const canvasHeight = 30;
 
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
@@ -47,7 +43,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList }) => {
         }
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const chunkWidth = canvas.width / congestionMapPerTimestamp.worst.length;
+        const chunkWidth = canvas.width / congestionMapPerTimestamp.worst.length + 1;
         congestionMapPerTimestamp.worst.forEach(({ color }, index) => {
             ctx.fillStyle = color;
             ctx.fillRect(index * chunkWidth, 0, chunkWidth, canvas.height / 3);
