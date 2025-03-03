@@ -592,6 +592,7 @@ class OpsPerformanceReportQueries:
             cls.DEFAULT_NO_ADVICE,
             cls.DEFAULT_TRACING_MODE,
             True,
+            True,
         )
 
         report = []
