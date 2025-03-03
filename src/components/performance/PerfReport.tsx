@@ -81,7 +81,9 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     // const selectedRange = useAtomValue(selectedPerformanceRangeAtom);
     // const opIdsMap = useOptoPerfIdFiltered();
 
+    // TODO: Do this properly
     const processedRows: TableRow[] =
+        // TODO: Filter out host ops in single device mode
         data?.map((op_data) => {
             const val = parseInt(op_data.op_to_op_gap, 10);
 
@@ -91,6 +93,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
             };
         }) || [];
 
+    // TODO: Do this properly
     const getFilteredRows = (): TableRow[] => {
         return processedRows;
 
@@ -187,121 +190,6 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
         </>
     );
 };
-
-// const analyze_op = (row: PerfTableRow, prevRow: PerfTableRow | null): ProcessedRow => {
-//     const op_code_val = row.op_code || '';
-
-//     let dram_speed: Cell = { raw_value: null, unit: 'GB/s' };
-//     let dram_percentage: Cell = { raw_value: null, unit: '%' };
-//     let flops: Cell = { raw_value: null, unit: 'TFLOPs' };
-//     let flops_percentage: Cell = { raw_value: null, unit: '%' };
-//     let math_fidelity_cell: Cell = { raw_value: null };
-//     let output_datatype_cell: Cell = { raw_value: null };
-//     let input_0_datatype_cell: Cell = { raw_value: null };
-//     let input_1_datatype_cell: Cell = { raw_value: null };
-//     const bound: Cell = { raw_value: '' };
-//     let is_dram_sharded_cell: Cell = { raw_value: false };
-//     let in0_block_w: Cell = { raw_value: null };
-//     let out_subblock_h: Cell = { raw_value: null };
-//     let out_subblock_w: Cell = { raw_value: null };
-
-//     if (op_code_val.includes('Matmul')) {
-//         const {
-//             dram_speed_gb_s,
-//             dram_percentage: dram_p,
-//             flops_val,
-//             flops_percentage: f_p,
-//             size,
-//             math_fidelity,
-//             is_dram_sharded,
-//             input_0_datatype,
-//             input_1_datatype,
-//             output_datatype,
-//         } = analyze_matmul(row);
-
-//         dram_speed = { raw_value: dram_speed_gb_s, unit: 'GB/s', decimals: 0 };
-//         dram_percentage = { raw_value: dram_p, unit: '%', decimals: 1 };
-//         flops = { raw_value: flops_val != null ? flops_val / 1e12 : null, unit: 'TFLOPs', decimals: 1 };
-//         flops_percentage = { raw_value: f_p, unit: '%', decimals: 1 };
-//         const shortName = (n: string) => ({ BFLOAT16: 'BF16', BFLOAT8_B: 'BFP8', BFLOAT4_B: 'BFP4' })[n] || n;
-
-//         if (math_fidelity) {
-//             math_fidelity_cell = {
-//                 raw_value:
-//                     `${math_fidelity} ${shortName(input_0_datatype)} x ${shortName(input_1_datatype)} => ${shortName(output_datatype)}`.trim(),
-//             };
-//         }
-
-//         output_datatype_cell = { raw_value: output_datatype };
-//         input_0_datatype_cell = { raw_value: input_0_datatype };
-//         input_1_datatype_cell = { raw_value: input_1_datatype };
-//         is_dram_sharded_cell = { raw_value: is_dram_sharded };
-
-//         const attributes = String(row.ATTRIBUTES || '');
-//         const in0match = attributes.match(/in0_block_w=(\d+)/);
-//         if (in0match) {
-//             in0_block_w = { raw_value: Number(in0match[1]) };
-//         }
-//         const outHmatch = attributes.match(/out_subblock_h=(\d+)/);
-//         if (outHmatch) {
-//             out_subblock_h = { raw_value: Number(outHmatch[1]) };
-//         }
-//         const outWmatch = attributes.match(/out_subblock_w=(\d+)/);
-//         if (outWmatch) {
-//             out_subblock_w = { raw_value: Number(outWmatch[1]) };
-//         }
-
-//         const op_code = `${op_code_val} ${String(size)}`;
-
-//         return {
-//             ID: { raw_value: null },
-//             OP: { raw_value: null },
-//             'Total %': { raw_value: null },
-//             Bound: bound,
-//             'OP Code': { raw_value: op_code },
-//             'Device Time': { raw_value: row.device_time, unit: 'µs', decimals: 0 },
-//             'Op-to-Op Gap': { raw_value: row.op_to_op_gap, unit: 'µs', decimals: 0 },
-//             Cores: { raw_value: row.cores },
-//             DRAM: dram_speed,
-//             'DRAM %': dram_percentage,
-//             FLOPs: flops,
-//             'FLOPs %': flops_percentage,
-//             'Math Fidelity': math_fidelity_cell,
-//             'Output Datatype': output_datatype_cell,
-//             'Input 0 Datatype': input_0_datatype_cell,
-//             'Input 1 Datatype': input_1_datatype_cell,
-//             'DRAM Sharded': is_dram_sharded_cell,
-//             'Input 0 Memory': { raw_value: row.input_0_memory || null },
-//             'Inner Dim Block Size': in0_block_w,
-//             'Output Subblock H': out_subblock_h,
-//             'Output Subblock W': out_subblock_w,
-//         };
-//     }
-
-//     return {
-//         ID: { raw_value: null },
-//         OP: { raw_value: null },
-//         'Total %': { raw_value: null },
-//         Bound: bound,
-//         'OP Code': { raw_value: op_code_val },
-//         'Device Time': { raw_value: row.device_time || null, unit: 'µs', decimals: 0 },
-//         'Op-to-Op Gap': { raw_value: row.op_to_op_gap, unit: 'µs', decimals: 0 },
-//         Cores: { raw_value: row.cores || null },
-//         DRAM: dram_speed,
-//         'DRAM %': dram_percentage,
-//         FLOPs: flops,
-//         'FLOPs %': flops_percentage,
-//         'Math Fidelity': math_fidelity_cell,
-//         'Output Datatype': output_datatype_cell,
-//         'Input 0 Datatype': input_0_datatype_cell,
-//         'Input 1 Datatype': input_1_datatype_cell,
-//         'DRAM Sharded': is_dram_sharded_cell,
-//         'Input 0 Memory': { raw_value: row.input_0_memory || null },
-//         'Inner Dim Block Size': { raw_value: null },
-//         'Output Subblock H': { raw_value: null },
-//         'Output Subblock W': { raw_value: null },
-//     };
-// };
 
 const formatCell = (row: TableRow, header: TableHeader): React.JSX.Element | string => {
     const { key, unit, decimals } = header;
@@ -456,7 +344,7 @@ const getCellColour = (row: TableRow, key: TableKeys): CellColour | '' => {
         return parsedValue > 6.5 ? 'red' : '';
     }
 
-    // Shouldn't get to this point
+    // Shouldn't get to this point but need to return something
     return 'grey';
 };
 
@@ -469,7 +357,7 @@ const calcDispatchOps = (rows: TableRow[]) => {
         });
 
     if (highDispatchOps.length === 0) {
-        return null; // No high dispatch overhead ops, so no advice section
+        return null;
     }
 
     // Compute the max dispatch overhead
