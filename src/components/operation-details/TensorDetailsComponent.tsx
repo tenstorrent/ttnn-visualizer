@@ -132,7 +132,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         </>
                     )}
                 </p>
-
                 {shardSpec ? (
                     <>
                         <p>
@@ -150,7 +149,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         ) : null}
                     </>
                 ) : null}
-
                 {tensor.comparison?.global ? (
                     <>
                         <GoldenTensorComparisonIndicator
@@ -163,14 +161,14 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         />
                     </>
                 ) : null}
-
                 {tensor.buffer_type === BufferType.L1 && (
                     <Button
+                        className='right-icon-small'
                         text='Tensor allocation per core'
-                        icon={tensor.io === 'input' ? IconNames.FLOW_END : IconNames.FLOW_LINEAR}
-                        outlined
+                        icon={IconNames.FLOW_LINEAR}
                         intent={Intent.PRIMARY}
                         onClick={() => setOverlayOpen(true)}
+                        rightIcon={IconNames.OPEN_APPLICATION}
                     />
                 )}
             </div>

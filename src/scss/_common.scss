@@ -182,3 +182,15 @@ $row-background: $tt-grey-2;
         background-color: $tt-teal;
     }
 }
+
+// Assumes the right icon will be the last child of the element (like in the Button component)
+.right-icon-small {
+    > span {
+        &:last-child {
+            > svg {
+                width: 12px;
+                height: 12px;
+            }
+        }
+    }
+}

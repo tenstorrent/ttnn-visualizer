@@ -237,20 +237,24 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
 
                                 <ButtonGroup className='core-view-buttons'>
                                     <Button
-                                        text='Total allocation per core'
+                                        className='right-icon-small'
+                                        text='All allocations per core'
                                         icon={IconNames.LAYOUT_GRID}
                                         onClick={() => {
                                             setTensixFullVisualisationOpen(true);
                                         }}
                                         intent={Intent.PRIMARY}
+                                        rightIcon={IconNames.OPEN_APPLICATION}
                                     />
                                     <Button
-                                        text='Input/Output allocation per core'
+                                        className='right-icon-small'
+                                        text='Input/Output allocations per core'
                                         icon={IconNames.FLOW_REVIEW}
                                         onClick={() => {
                                             setTensixIOVisualisationOpen(true);
                                         }}
                                         intent={Intent.PRIMARY}
+                                        rightIcon={IconNames.OPEN_APPLICATION}
                                     />
                                 </ButtonGroup>
 
