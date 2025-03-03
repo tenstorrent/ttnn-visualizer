@@ -100,12 +100,26 @@ $dark-danger-background-base: $tt-red-accent;
     .bp5-button {
         &.bp5-minimal {
             &.bp5-intent-primary {
-                &:hover {
+                &:hover,
+                &:active {
                     color: $tt-purple-tint-2;
                 }
 
                 &.bp5-active {
                     color: $tt-purple-tint-2;
+                }
+            }
+        }
+
+        &.bp5-outlined {
+            &.bp5-intent-primary {
+                &:hover,
+                &:active {
+                    color: $dark-primary-intent-color;
+                }
+
+                &.bp5-active {
+                    color: $dark-primary-intent-color;
                 }
             }
         }
