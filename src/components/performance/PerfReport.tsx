@@ -10,6 +10,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { evaluate_fidelity } from '../../functions/perfFunctions';
 import { MathFidelity, PerfTableRow } from '../../definitions/PerfTable';
 import { formatSize, toSecondsPretty } from '../../functions/math';
+import 'styles/components/PerfReport.scss';
 
 type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'grey';
 
@@ -132,21 +133,15 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                 checked={hiliteHighDispatch}
             />
 
-            <div
-                className='perf-table'
-                style={{ background: '#222', color: '#fff', padding: '1rem' }}
-            >
-                <h3>Performance report</h3>
-                <table
-                    className='monospace'
-                    style={{ borderCollapse: 'collapse', width: '100%' }}
-                >
+            <div className='perf-report'>
+                <h3 className='title'>Performance report</h3>
+                <table className='perf-table monospace'>
                     <thead>
                         <tr>
                             {visibleHeaders.map((h) => (
                                 <th
                                     key={h.key}
-                                    style={{ textAlign: 'left', borderBottom: '1px solid #555' }}
+                                    className='cell-header'
                                 >
                                     {h.label}
                                 </th>
@@ -161,7 +156,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                                     {visibleHeaders.map((header) => (
                                         <td
                                             key={header.key}
-                                            style={{ borderBottom: '1px solid #333', padding: '0.25rem' }}
+                                            className='cell'
                                         >
                                             {formatCell(row, header)}
                                         </td>
@@ -174,7 +169,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                                             <td colSpan={4} />
                                             <td
                                                 colSpan={visibleHeaders.length - 4}
-                                                style={{ padding: '0.25rem' }}
+                                                className='cell advice'
                                             >
                                                 {advice}
                                             </td>
