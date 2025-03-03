@@ -166,7 +166,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
                 {tensor.buffer_type === BufferType.L1 && (
                     <Button
-                        text='Tensor allocation by core'
+                        text='Tensor allocation per core'
                         icon={tensor.io === 'input' ? IconNames.FLOW_END : IconNames.FLOW_LINEAR}
                         outlined
                         intent={Intent.PRIMARY}
