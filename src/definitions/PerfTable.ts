@@ -14,7 +14,6 @@ export interface PerfTableRow {
     op_code: string;
     device_time: string;
     op_to_op_gap: string;
-    is_slow?: boolean; // New
     cores: string;
     dram: string;
     dram_percent: string;

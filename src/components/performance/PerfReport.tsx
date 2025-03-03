@@ -28,10 +28,6 @@ interface TableHeader {
     decimals?: number;
 }
 
-interface TableRow extends PerfTableRow {
-    high_dispatch: boolean;
-}
-
 const MIN_PERCENTAGE = 0.5;
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
     '(torch)': 'red',
@@ -82,7 +78,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     // const opIdsMap = useOptoPerfIdFiltered();
 
     // TODO: Do this properly
-    const processedRows: TableRow[] =
+    const processedRows: PerfTableRow[] =
         // TODO: Filter out host ops in single device mode
         data?.map((op_data) => {
             const val = parseInt(op_data.op_to_op_gap, 10);
@@ -94,7 +90,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
         }) || [];
 
     // TODO: Do this properly
-    const getFilteredRows = (): TableRow[] => {
+    const getFilteredRows = (): PerfTableRow[] => {
         return processedRows;
 
         // return selectedRange && processedRows.length > 0
@@ -191,7 +187,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     );
 };
 
-const formatCell = (row: TableRow, header: TableHeader): React.JSX.Element | string => {
+const formatCell = (row: PerfTableRow, header: TableHeader): React.JSX.Element | string => {
     const { key, unit, decimals } = header;
     let formatted: string | boolean | string[];
 
@@ -244,7 +240,7 @@ const getCellMarkup = (text: string | string[], color?: string) => {
     return <span>{text}</span>;
 };
 
-const getCellColour = (row: TableRow, key: TableKeys): CellColour | '' => {
+const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '' => {
     const keyValue = row[key];
     const percentage = parseInt(row.total_percent, 10);
 
@@ -348,9 +344,9 @@ const getCellColour = (row: TableRow, key: TableKeys): CellColour | '' => {
     return 'grey';
 };
 
-const calcDispatchOps = (rows: TableRow[]) => {
+const calcDispatchOps = (rows: PerfTableRow[]) => {
     const highDispatchOps = rows
-        .map((op_data: TableRow, index: number): [number, TableRow] => [index + 1, op_data])
+        .map((op_data: PerfTableRow, index: number): [number, PerfTableRow] => [index + 1, op_data])
         .filter(([_, op_data]) => {
             const val = op_data.op_to_op_gap;
             return val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
