@@ -22,7 +22,7 @@ dependencies = [
     "flask-sqlalchemy==3.1.1",
     "PyYAML==6.0.2",
     "python-dotenv==1.0.1",
-    "tt-perf-report==1.0.3"
+    "tt-perf-report==1.0.4"
 ]
 
 classifiers = [
