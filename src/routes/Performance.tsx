@@ -97,7 +97,7 @@ export default function Performance() {
                 selectedTabId={selectedTabId}
                 onChange={setSelectedTabId}
                 renderActiveTabPanelOnly
-                large
+                size='large'
             >
                 <Tab
                     id='tab-1'
