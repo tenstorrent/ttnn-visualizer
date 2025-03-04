@@ -2,12 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-/* eslint camelcase: "off" */
 import React, { FC, Fragment, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { Icon, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { evaluate_fidelity } from '../../functions/perfFunctions';
 import { MathFidelity, PerfTableRow } from '../../definitions/PerfTable';
 import { formatSize, toSecondsPretty } from '../../functions/math';
 import { selectedPerformanceRangeAtom } from '../../store/app';
@@ -81,11 +79,11 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     // TODO: Do this properly
     const processedRows: PerfTableRow[] =
         // TODO: Filter out host ops in single device mode
-        data?.map((op_data) => {
-            const val = parseInt(op_data.op_to_op_gap, 10);
+        data?.map((opData) => {
+            const val = parseInt(opData.op_to_op_gap, 10);
 
             return {
-                ...op_data,
+                ...opData,
                 high_dispatch: !!val && val > 6.5,
             };
         }) || [];
@@ -265,11 +263,11 @@ const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '' => {
     }
 
     if (key === 'dram' || key === 'dram_percent' || key === 'flops' || key === 'flops_percent') {
-        const dram_p = row.dram_percent;
-        const flops_p = row.flops_percent;
+        const dramP = row.dram_percent;
+        const flopsP = row.flops_percent;
 
-        if (dram_p != null && flops_p != null) {
-            if (dram_p > flops_p) {
+        if (dramP != null && flopsP != null) {
+            if (dramP > flopsP) {
                 if (key === 'dram' || key === 'dram_percent') {
                     return 'yellow';
                 }
@@ -311,21 +309,21 @@ const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '' => {
 
     if (key === 'math_fidelity' && typeof keyValue === 'string') {
         const parts = keyValue.split(' ');
-        const math_fidelity = parts[0] as MathFidelity;
-        const input_0_dt = row.input_0_datatype || '';
-        const input_1_dt = row.input_1_datatype || '';
-        const output_dt = row.output_datatype || '';
-        const [fidelity_eval] = evaluate_fidelity(input_0_dt, input_1_dt, output_dt, math_fidelity);
+        const mathFidelity = parts[0] as MathFidelity;
+        const input0Datatype = row.input_0_datatype || '';
+        const input1Datatype = row.input_1_datatype || '';
+        const outputDatatype = row.output_datatype || '';
+        const [fidelityEval] = evaluateFidelity(input0Datatype, input1Datatype, outputDatatype, mathFidelity);
 
-        if (fidelity_eval === 'sufficient') {
+        if (fidelityEval === 'sufficient') {
             return 'green';
         }
 
-        if (fidelity_eval === 'too_high') {
+        if (fidelityEval === 'too_high') {
             return 'red';
         }
 
-        if (fidelity_eval === 'too_low') {
+        if (fidelityEval === 'too_low') {
             return 'cyan';
         }
 
@@ -344,9 +342,9 @@ const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '' => {
 
 const calcDispatchOps = (rows: PerfTableRow[]) => {
     const highDispatchOps = rows
-        .map((op_data: PerfTableRow, index: number): [number, PerfTableRow] => [index + 1, op_data])
-        .filter(([_, op_data]) => {
-            const val = op_data.op_to_op_gap;
+        .map((opData: PerfTableRow, index: number): [number, PerfTableRow] => [index + 1, opData])
+        .filter(([_, opData]) => {
+            const val = opData.op_to_op_gap;
             return val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
         });
 
@@ -355,36 +353,111 @@ const calcDispatchOps = (rows: PerfTableRow[]) => {
     }
 
     // Compute the max dispatch overhead
-    const max_dispatch_overhead = highDispatchOps.reduce((acc, [_, op_data]) => {
-        const val = parseInt(op_data.op_to_op_gap, 10);
+    const maxDispatchOverhead = highDispatchOps.reduce((acc, [_, opData]) => {
+        const val = parseInt(opData.op_to_op_gap, 10);
 
         return acc + (val - 6);
     }, 0);
 
     // Compute total_duration as sum of device times + Op-to-Op Gaps
-    const total_device_time = rows.reduce((acc, r) => {
+    const totalDeviceTime = rows.reduce((acc, r) => {
         const val = parseInt(r.device_time, 10);
 
         return acc + (typeof val === 'number' ? val : 0);
     }, 0);
 
-    const total_dispatch_time = rows.reduce((acc, r) => {
+    const totalDispatchTime = rows.reduce((acc, r) => {
         const val = r.op_to_op_gap;
 
         return acc + (typeof val === 'number' ? val : 0);
     }, 0);
 
-    const total_duration = total_device_time + total_dispatch_time;
-    const percentage_saved = (max_dispatch_overhead / total_duration) * 100;
+    const totalDuration = totalDeviceTime + totalDispatchTime;
+    const percentageSaved = (maxDispatchOverhead / totalDuration) * 100;
 
     return (
         <div>
             <p>
                 Marked ops have &gt; 6µs dispatch latency. Running with tracing could save{' '}
-                {formatSize(Number(max_dispatch_overhead.toFixed(0)))} µs {toSecondsPretty(max_dispatch_overhead)} (
-                {percentage_saved.toFixed(1)}% of overall time).
+                {formatSize(Number(maxDispatchOverhead.toFixed(0)))} µs {toSecondsPretty(maxDispatchOverhead)} (
+                {percentageSaved.toFixed(1)}% of overall time).
             </p>
             <p>Alternatively, try moving runtime args in the kernels to compile-time args.</p>
         </div>
     );
 };
+
+function evaluateFidelity(
+    input0Datatype: string,
+    input1Datatype: string,
+    outputDatatype: string,
+    mathFidelity: MathFidelity | '',
+): [string, string | null] {
+    const mantissaBits: Record<string, number> = {
+        BFLOAT16: 8,
+        BFLOAT8_B: 7,
+        BFLOAT4_B: 3,
+    };
+
+    const in0Bits = mantissaBits[input0Datatype];
+    const in1Bits = mantissaBits[input1Datatype];
+    const outBits = mantissaBits[outputDatatype];
+
+    // I note that we're not using the second part of the returned array, only the first part.
+    if (in0Bits === 8 && outBits >= 7) {
+        if (mathFidelity === 'HiFi4') {
+            return ['sufficient', 'HiFi2 may also work and has 2x the throughput of HiFi4'];
+        }
+
+        if (mathFidelity === 'HiFi2') {
+            return ['too_low', 'If your matmuls are not FLOP-bound use HiFi4 with BF16 activations for full accuracy'];
+        }
+
+        if (mathFidelity === 'LoFi') {
+            return ['too_low', 'Use HiFi2 or HiFi4 with BF16 activations for improved accuracy'];
+        }
+    } else if (in0Bits === 8 && outBits === 3) {
+        if (mathFidelity === 'HiFi4') {
+            return ['too_high', 'HiFi2 is very likely to work for BFP8 output and has 2x the throughput of HiFi4'];
+        }
+
+        if (mathFidelity === 'HiFi2') {
+            return ['sufficient', 'LoFi might also be sufficient with BFP4 output and has almost 2x the throughput'];
+        }
+
+        if (mathFidelity === 'LoFi') {
+            return ['too_low', 'HiFi2 may give better accuracy for large matmuls with many intermediate accumulations'];
+        }
+    } else if (in1Bits >= 7 && outBits >= 7) {
+        if (mathFidelity === 'HiFi4') {
+            return ['too_high', 'HiFi2 is sufficient for BFP8 multiplication and faster'];
+        }
+
+        if (mathFidelity === 'HiFi2') {
+            return ['sufficient', null];
+        }
+
+        if (mathFidelity === 'LoFi') {
+            return ['too_low', 'HiFi2 is recommended for accuracy; LoFi discards low bits of weights'];
+        }
+    } else if (in1Bits >= 7 && outBits === 3) {
+        if (mathFidelity === 'HiFi4') {
+            return ['too_high', 'HiFi2 is sufficient and 2x throughput'];
+        }
+
+        if (mathFidelity === 'HiFi2') {
+            return ['sufficient', 'LoFi might also be sufficient (BFP4 output) and has almost 2x throughput'];
+        }
+
+        if (mathFidelity === 'LoFi') {
+            return ['too_low', 'HiFi2 may give slightly better accuracy for large matmuls'];
+        }
+    } else if (in1Bits === 3) {
+        if (mathFidelity === 'LoFi') {
+            return ['sufficient', null];
+        }
+        return ['too_high', 'LoFi is sufficient with BFP4 weights'];
+    }
+
+    return ['unknown', `Using ${mathFidelity} for ${input0Datatype}/${input1Datatype} => ${outputDatatype}`];
+}

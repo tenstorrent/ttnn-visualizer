@@ -333,7 +333,7 @@ const OperationGraph: React.FC<{
                         Memory Details
                     </Button>
 
-                    <h3>Inputs:</h3>
+                    <h3>Inputs 123:</h3>
                     <div className='tensors'>
                         {operationList
                             .find((op) => op.id === currentOperationId)

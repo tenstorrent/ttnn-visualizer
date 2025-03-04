@@ -4,7 +4,7 @@
 
 import React, { useState } from 'react';
 import classNames from 'classnames';
-import { Button, Icon, Intent, PopoverPosition, Position, Tooltip } from '@blueprintjs/core';
+import { Button, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 
 import { useAtomValue } from 'jotai';
@@ -89,27 +89,10 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         content={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
                         placement={PopoverPosition.TOP}
                     >
-                        <Icon
-                            icon={IconNames.INHERITANCE}
-                            intent={Intent.PRIMARY}
-                        />
+                        <Icon icon={IconNames.INFO_SIGN} />
                     </Tooltip>
                 ) : null}
 
-                {tensor.buffer_type === BufferType.L1 && (
-                    <Tooltip
-                        content={`Visualize tensor ${tensor.id}`}
-                        placement={Position.TOP}
-                    >
-                        <Button
-                            icon={tensor.io === 'input' ? IconNames.FLOW_END : IconNames.FLOW_LINEAR}
-                            minimal
-                            small
-                            intent={Intent.SUCCESS}
-                            onClick={() => setOverlayOpen(true)}
-                        />
-                    </Tooltip>
-                )}
                 {overlayOpen && address !== null && tensor.buffer_type !== null && (
                     <TensorVisualisationComponent
                         title={`${BufferTypeLabel[tensor.buffer_type]} ${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensor.operationIdentifier} Tensor ${tensor.id}`}
@@ -130,8 +113,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                 </p>
                 {tensor.buffer_type !== null && (
                     <p>
-                        Buffer type:
-                        <MemoryTag memory={BufferTypeLabel[tensor.buffer_type]} />
+                        Buffer type: <MemoryTag memory={BufferTypeLabel[tensor.buffer_type]} />
                     </p>
                 )}
                 <p>
@@ -150,7 +132,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         </>
                     )}
                 </p>
-
                 {shardSpec ? (
                     <>
                         <p>
@@ -168,7 +149,6 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         ) : null}
                     </>
                 ) : null}
-
                 {tensor.comparison?.global ? (
                     <>
                         <GoldenTensorComparisonIndicator
@@ -181,6 +161,16 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         />
                     </>
                 ) : null}
+                {tensor.buffer_type === BufferType.L1 && (
+                    <Button
+                        className='right-icon-small'
+                        text='Tensor allocation per core'
+                        icon={IconNames.FLOW_LINEAR}
+                        intent={Intent.PRIMARY}
+                        onClick={() => setOverlayOpen(true)}
+                        rightIcon={IconNames.OPEN_APPLICATION}
+                    />
+                )}
             </div>
         </div>
     );
