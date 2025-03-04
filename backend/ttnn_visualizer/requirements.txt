@@ -16,7 +16,7 @@ wheel
 build
 PyYAML==6.0.2
 python-dotenv==1.0.1
-tt-perf-report==1.0.3
+tt-perf-report==1.0.4
 
 # Dev dependencies
 mypy
