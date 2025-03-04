@@ -24,7 +24,7 @@ const ActiveTransferDetails = ({
                     <h3>
                         Active transfers through {selectedNode?.coords.join('-')}
                         <Button
-                            minimal
+                            variant='minimal'
                             icon={IconNames.CROSS}
                             onClick={() => showActiveTransfers(null)}
                         />

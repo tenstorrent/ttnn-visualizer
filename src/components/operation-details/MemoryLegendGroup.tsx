@@ -47,9 +47,9 @@ export const MemoryLegendGroup: React.FC<{
                         e.stopPropagation();
                         setIsOpen(!isOpen);
                     }}
-                    rightIcon={isOpen ? IconNames.CARET_UP : IconNames.CARET_DOWN}
-                    small
-                    minimal
+                    endIcon={isOpen ? IconNames.CARET_UP : IconNames.CARET_DOWN}
+                    size='small'
+                    variant='minimal'
                 />
             </div>
 

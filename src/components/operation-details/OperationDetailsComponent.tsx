@@ -244,7 +244,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             setTensixFullVisualisationOpen(true);
                                         }}
                                         intent={Intent.PRIMARY}
-                                        rightIcon={IconNames.OPEN_APPLICATION}
+                                        endIcon={IconNames.OPEN_APPLICATION}
                                     />
                                     <Button
                                         className='right-icon-small'
@@ -254,7 +254,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                             setTensixIOVisualisationOpen(true);
                                         }}
                                         intent={Intent.PRIMARY}
-                                        rightIcon={IconNames.OPEN_APPLICATION}
+                                        endIcon={IconNames.OPEN_APPLICATION}
                                     />
                                 </ButtonGroup>
 

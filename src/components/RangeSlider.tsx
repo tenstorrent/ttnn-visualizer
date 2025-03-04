@@ -160,7 +160,7 @@ function Range() {
                                 }}
                                 fill={false}
                                 disabled={!isPerformanceRoute}
-                                small
+                                size='small'
                             />
                             <InputGroup
                                 value={selectedPerformanceRange[1].toString()}
@@ -173,7 +173,7 @@ function Range() {
                                 }}
                                 fill={false}
                                 disabled={!isPerformanceRoute}
-                                small
+                                size='small'
                             />
                         </div>
                     </div>
@@ -205,7 +205,7 @@ function Range() {
                                     icon={IconNames.RESET}
                                     onClick={() => (isInSync ? resetSliders() : setSelectedPerformanceRange(perfRange))}
                                     disabled={!isPerformanceRoute}
-                                    small
+                                    size='small'
                                 />
                             </Tooltip>
                         )}
@@ -228,7 +228,7 @@ function Range() {
                                 }}
                                 fill={false}
                                 disabled={shouldDisableOpRange}
-                                small
+                                size='small'
                             />
                             <InputGroup
                                 value={selectedOperationRange[1].toString()}
@@ -241,7 +241,7 @@ function Range() {
                                 }}
                                 fill={false}
                                 disabled={shouldDisableOpRange}
-                                small
+                                size='small'
                             />
                         </div>
                     </div>
@@ -271,7 +271,7 @@ function Range() {
                             icon={IconNames.RESET}
                             onClick={() => (isInSync ? resetSliders() : setSelectedOperationRange(operationRange))}
                             disabled={shouldDisableOpRange}
-                            small
+                            size='small'
                         />
                     </Tooltip>
                 )}

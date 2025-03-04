@@ -183,13 +183,13 @@ export default function Styleguide() {
                     <Button icon={IconNames.ADD}>Your text here</Button>
                     <Button
                         icon={IconNames.ADD}
-                        outlined
+                        variant='outlined'
                     >
                         Your text here
                     </Button>
                     <Button
                         icon={IconNames.ADD}
-                        minimal
+                        variant='minimal'
                     >
                         Your text here
                     </Button>
@@ -207,14 +207,14 @@ export default function Styleguide() {
                     <Button
                         icon={IconNames.ADD}
                         intent={Intent.PRIMARY}
-                        outlined
+                        variant='outlined'
                     >
                         Your text here
                     </Button>
                     <Button
                         icon={IconNames.ADD}
                         intent={Intent.PRIMARY}
-                        minimal
+                        variant='minimal'
                     >
                         Your text here
                     </Button>
@@ -232,14 +232,14 @@ export default function Styleguide() {
                     <Button
                         icon={IconNames.ADD}
                         intent={Intent.SUCCESS}
-                        outlined
+                        variant='outlined'
                     >
                         Your text here
                     </Button>
                     <Button
                         icon={IconNames.ADD}
                         intent={Intent.SUCCESS}
-                        minimal
+                        variant='minimal'
                     >
                         Your text here
                     </Button>
@@ -257,14 +257,14 @@ export default function Styleguide() {
                     <Button
                         icon={IconNames.ADD}
                         intent={Intent.WARNING}
-                        outlined
+                        variant='outlined'
                     >
                         Your text here
                     </Button>
                     <Button
                         icon={IconNames.ADD}
                         intent={Intent.WARNING}
-                        minimal
+                        variant='minimal'
                     >
                         Your text here
                     </Button>
@@ -282,14 +282,14 @@ export default function Styleguide() {
                     <Button
                         icon={IconNames.ADD}
                         intent={Intent.DANGER}
-                        outlined
+                        variant='outlined'
                     >
                         Your text here
                     </Button>
                     <Button
                         icon={IconNames.ADD}
                         intent={Intent.DANGER}
-                        minimal
+                        variant='minimal'
                     >
                         Your text here
                     </Button>
@@ -301,26 +301,26 @@ export default function Styleguide() {
                 <ButtonGroup>
                     <Button
                         icon={IconNames.ArrowLeft}
-                        outlined
+                        variant='outlined'
                     />
 
                     <Button
                         icon={IconNames.LIST}
-                        outlined
+                        variant='outlined'
                     />
 
                     <Button
-                        rightIcon={IconNames.ArrowRight}
-                        outlined
+                        endIcon={IconNames.ArrowRight}
+                        variant='outlined'
                     />
                 </ButtonGroup>
 
-                <ButtonGroup minimal>
+                <ButtonGroup variant='minimal'>
                     <Tooltip
                         content='Expand all'
                         placement={PopoverPosition.TOP}
                     >
-                        <Button rightIcon={IconNames.ExpandAll} />
+                        <Button endIcon={IconNames.ExpandAll} />
                     </Tooltip>
 
                     <Tooltip
@@ -447,31 +447,31 @@ export default function Styleguide() {
             <div className='container flex'>
                 <Tag
                     intent={Intent.NONE}
-                    large
+                    size='large'
                 >
                     None
                 </Tag>
                 <Tag
                     intent={Intent.PRIMARY}
-                    large
+                    size='large'
                 >
                     Primary
                 </Tag>
                 <Tag
                     intent={Intent.WARNING}
-                    large
+                    size='large'
                 >
                     Warning
                 </Tag>
                 <Tag
                     intent={Intent.SUCCESS}
-                    large
+                    size='large'
                 >
                     Success
                 </Tag>
                 <Tag
                     intent={Intent.DANGER}
-                    large
+                    size='large'
                 >
                     Danger
                 </Tag>

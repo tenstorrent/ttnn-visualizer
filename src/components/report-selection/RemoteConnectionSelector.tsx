@@ -56,7 +56,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
             >
                 <Button
                     icon={offline ? IconNames.BAN_CIRCLE : IconNames.CLOUD}
-                    rightIcon={IconNames.CARET_DOWN}
+                    endIcon={IconNames.CARET_DOWN}
                     disabled={disabled}
                     text={formatConnectionString(selectedConnection)}
                 />
