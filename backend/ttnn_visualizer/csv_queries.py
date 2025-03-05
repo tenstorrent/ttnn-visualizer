@@ -567,6 +567,7 @@ class OpsPerformanceReportQueries:
         "output_subblock_h",
         "output_subblock_w",
         "advice",
+        "raw_op_code"
     ]
 
     DEFAULT_SIGNPOST = None
@@ -590,6 +591,8 @@ class OpsPerformanceReportQueries:
             csv_output_file,
             cls.DEFAULT_NO_ADVICE,
             cls.DEFAULT_TRACING_MODE,
+            True,
+            True,
         )
 
         report = []

@@ -6,10 +6,10 @@ import { Helmet } from 'react-helmet-async';
 import { useEffect, useMemo, useState } from 'react';
 import { Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useDeviceLog, usePerformance } from '../hooks/useAPI';
+import { useDeviceLog, usePerformance, usePerformanceReport } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { PerformanceReport } from '../components/performance/PerfTable';
+import { PerformanceReport } from '../components/performance/PerfReport';
 import 'styles/components/Performance.scss';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import PerfDeviceKernelDurationChart from '../components/performance/PerfDeviceKernelDurationChart';
@@ -24,16 +24,17 @@ import { MARKER_COLOURS, Marker, RowData } from '../definitions/PerfTable';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
 
 export default function Performance() {
-    const { data: perfData, isLoading: isLoadingPerformance } = usePerformance();
+    const { data: perfDataOld, isLoading: isLoadingPerformance } = usePerformance();
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
+    const { data: perfData } = usePerformanceReport();
 
     // TODO: Typing here is still a little weird
     const data = useMemo(
         () =>
-            (perfData?.data ? (perfData.data as Partial<RowData>[]) : []).filter(
+            (perfDataOld?.data ? (perfDataOld.data as Partial<RowData>[]) : []).filter(
                 (row) => row['OP TYPE'] === 'tt_dnn_device',
             ),
-        [perfData?.data],
+        [perfDataOld?.data],
     ) as RowData[];
 
     const opCodeOptions = useMemo(
@@ -81,8 +82,6 @@ export default function Performance() {
         );
     }
 
-    // TODO: get cores coount from device DEvice Architecture hook
-
     const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
     const maxCores = getCoreCount(architecture, data);
 
@@ -103,7 +102,7 @@ export default function Performance() {
                     id='tab-1'
                     title='Table'
                     icon={IconNames.TH}
-                    panel={<PerformanceReport data={data} />}
+                    panel={<PerformanceReport data={perfData} />}
                 />
 
                 <Tab

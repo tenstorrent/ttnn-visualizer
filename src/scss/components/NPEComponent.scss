@@ -7,7 +7,30 @@
     $highlight-src: #ff0;
     $highlight-dst: #ff4500;
 
-    .color-squares {
+    .npe-controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+
+        .bp5-switch {
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+    }
+
+    .bp5-slider-progress {
+        background-color: $tt-black;
+
+        &.duplicate {
+            left: 0;
+            bottom: 0;
+            position: absolute;
+            z-index: -1;
+        }
+    }
+
+    .color-square {
+        display: inline-block;
         width: 10px;
         height: 10px;
     }
@@ -36,6 +59,9 @@
     }
 
     .side-data {
+        display: inline-flex;
+        flex-direction: column;
+
         h3 {
             display: flex;
             justify-content: space-between;
@@ -48,10 +74,25 @@
 
         .local-transfer-ctn {
             margin-bottom: 20px;
+            display: inline-flex;
+            flex-flow: column nowrap;
+
+            h4 {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+
+                .color-square {
+                    width: 11px;
+                    height: 11px;
+                    border: 1px solid $tt-grey-5;
+                }
+            }
         }
 
         .local-transfer {
-            display: flex;
+            display: inline-flex;
+            flex-direction: row;
             gap: 5px;
             align-content: center;
             align-items: center;
