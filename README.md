@@ -23,7 +23,7 @@ A tool for visualizing the Tenstorrent Neural Network model (TT-NN)
 
 ## Quick Start
 
-TTNN-Visualizer can be installed from PyPI:
+TT-NN Visualizer can be installed from PyPI:
 
 `pip install ttnn-visualizer`
 
@@ -32,7 +32,7 @@ After installation run `ttnn-visualizer` to start the application.
 It is recommended to do this within a virtual environment. The minimum Python version is 3.12.
 
 Please see the [getting started](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/getting-started.md) guide
-for further information on getting up and running with TTNN-Visualizer.
+for further information on getting up and running with TT-NN Visualizer.
 
 ## Features
 
