@@ -12,7 +12,7 @@ import { formatSize, toSecondsPretty } from '../../functions/math';
 import { selectedPerformanceRangeAtom } from '../../store/app';
 import 'styles/components/PerfReport.scss';
 
-type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'grey';
+type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'orange' | 'grey';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -40,6 +40,7 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
     NlpCreateHeadsDeviceOperation: 'blue',
     NLPConcatHeadsDecodeDeviceOperation: 'blue',
     UpdateCache: 'blue',
+    OptimizedConvNew: 'orange',
 };
 
 const TABLE_HEADERS: TableHeader[] = [
