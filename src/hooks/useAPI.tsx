@@ -560,15 +560,13 @@ export const useOptoPerfIdFiltered = () => {
 };
 
 export const usePerformanceRange = (): NumberRange | null => {
-    const response = useNormalizedPerformance();
+    const { data: perfData } = usePerformanceReport();
 
     return useMemo(
         () =>
-            response?.length
-                ? ([response[0].ORIGINAL_ID, response[response.length - 1].ORIGINAL_ID] as NumberRange)
-                : null,
+            perfData?.length ? [parseInt(perfData[0].id, 10), parseInt(perfData[perfData.length - 1].id, 10)] : null,
 
-        [response],
+        [perfData],
     );
 };
 
@@ -692,10 +690,23 @@ export const usePerformance = () => {
 };
 
 export const usePerformanceReport = () => {
-    return useQuery({
+    const response = useQuery({
         queryFn: () => fetchPerformanceDataReport(),
         queryKey: 'get-performance-data-report',
     });
+
+    return useMemo(() => {
+        if (response.data) {
+            const df: PerfTableRow[] = response.data
+                .slice()
+                .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
+
+            response.data = df;
+        }
+
+        return response;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [response.isLoading]);
 };
 
 export const useSession = (reportName: string | null, profileName: string | null) => {

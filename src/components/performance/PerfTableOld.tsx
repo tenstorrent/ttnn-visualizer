@@ -264,7 +264,7 @@ interface PerformanceReportProps {
     minPercentage?: number;
 }
 
-export const PerformanceReport: FC<PerformanceReportProps> = ({ data, minPercentage = 0.5 }) => {
+export const PerformanceReportOld: FC<PerformanceReportProps> = ({ data, minPercentage = 0.5 }) => {
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
