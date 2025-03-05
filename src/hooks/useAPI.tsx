@@ -697,25 +697,10 @@ export const usePerformanceReport = () => {
 
     return useMemo(() => {
         if (response.data) {
-            let df: PerfTableRow[] = response.data
+            const df: PerfTableRow[] = response.data
                 .slice()
                 .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
 
-            df = df.map((r, index) => ({
-                ...r,
-                ORIGINAL_ID: index + 2,
-            }));
-
-            // if (df.length > 0 && 'HOST START TS' in df[0]) {
-            //     response.data = df.sort((a, b) => Number(a['HOST START TS'] || 0) - Number(b['HOST START TS'] || 0));
-            // }
-
-            // const uniqueDeviceIDs = getUniqueDeviceIDs(df);
-
-            // if (uniqueDeviceIDs.length > 1) {
-            //     df = mergeMultideviceRows(df);
-            // }
-            // });
             response.data = df;
         }
 
