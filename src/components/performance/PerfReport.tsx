@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import React, { FC, Fragment, useState } from 'react';
+import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
 import { Icon, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -50,7 +51,7 @@ const TABLE_HEADERS: TableHeader[] = [
     { label: 'Device Time', key: 'device_time', unit: 'µs', decimals: 0 },
     { label: 'Op-to-Op Gap', key: 'op_to_op_gap', colour: 'red', unit: 'µs', decimals: 0 },
     { label: 'Cores', key: 'cores', colour: 'green' },
-    { label: 'DRAM', key: 'dram', colour: 'yellow' },
+    { label: 'DRAM', key: 'dram', colour: 'yellow', unit: 'GB/s' },
     { label: 'DRAM %', key: 'dram_percent', colour: 'yellow', unit: '%' },
     { label: 'FLOPs', key: 'flops', unit: 'TFLOPs' },
     { label: 'FLOPs %', key: 'flops_percent', unit: '%' },
@@ -151,25 +152,26 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                                     {visibleHeaders.map((header) => (
                                         <td
                                             key={header.key}
-                                            className='cell'
+                                            className={classNames('cell', {
+                                                'align-right': header.key === 'math_fidelity',
+                                            })}
                                         >
                                             {formatCell(row, header)}
                                         </td>
                                     ))}
                                 </tr>
-                                {provideMatmulAdvice &&
-                                    row.op_code.includes('Matmul') &&
-                                    row?.advice.map((advice, j) => (
-                                        <tr key={`advice-${j}`}>
-                                            <td colSpan={4} />
-                                            <td
-                                                colSpan={visibleHeaders.length - 4}
-                                                className='cell advice'
-                                            >
-                                                {advice}
-                                            </td>
-                                        </tr>
-                                    ))}
+                                {provideMatmulAdvice && row.op_code.includes('Matmul') && (
+                                    <tr>
+                                        <td
+                                            colSpan={visibleHeaders.length}
+                                            className='cell advice'
+                                        >
+                                            <ul>
+                                                {row?.advice.map((advice, j) => <li key={`advice-${j}`}>{advice}</li>)}
+                                            </ul>
+                                        </td>
+                                    </tr>
+                                )}
                             </Fragment>
                         ))}
                     </tbody>
@@ -283,12 +285,14 @@ const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '' => {
         return 'white';
     }
 
-    if (key === 'cores') {
-        if (keyValue != null && typeof keyValue === 'number') {
-            if (keyValue < 10) {
+    if (key === 'cores' && keyValue != null) {
+        const cores = (typeof keyValue === 'string' ? parseInt(keyValue, 10) : keyValue) as number;
+
+        if (cores != null) {
+            if (cores < 10) {
                 return 'red';
             }
-            if (keyValue === 64) {
+            if (cores === 64) {
                 return 'green';
             }
         } else {
