@@ -63,6 +63,9 @@ export const getRouteColor = (transferId: number): string => {
     }
     return routeColorMap.get(transferId) || '#ffffff';
 };
+export const resetRouteColors = (): void => {
+    routeColorMap.clear();
+};
 
 export const getLinkPoints = (nocId: NoCID, color?: string): LinkPoints => {
     let x1: number = 0;
