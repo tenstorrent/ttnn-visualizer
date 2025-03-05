@@ -21,6 +21,19 @@ A tool for visualizing the Tenstorrent Neural Network model (TT-NN)
 
 </div>
 
+## Quick Start
+
+TT-NN Visualizer can be installed from PyPI:
+
+`pip install ttnn-visualizer`
+
+After installation run `ttnn-visualizer` to start the application.
+
+It is recommended to do this within a virtual environment. The minimum Python version is 3.12.
+
+Please see the [getting started](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/getting-started.md) guide
+for further information on getting up and running with TT-NN Visualizer.
+
 ## Features
 
 For the latest updates and features, please see [releases](https://github.com/tenstorrent/ttnn-visualizer/releases).
@@ -72,10 +85,6 @@ https://github.com/user-attachments/assets/d00a2629-0bd1-4ee1-bb12-bd796d85221d
 | NPE |  |
 |-----------------------------------------------|------------------------------------------|
 | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/1f4441c6-9d9e-4834-9e71-edec1955243c" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/7159992e-7691-41cf-a152-8bc6a3606ade" /> |
-
-## Getting started
-
-How to [get started](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/getting-started.md) with TT-NN Visualizer.
 
 ## Remote Querying
 
