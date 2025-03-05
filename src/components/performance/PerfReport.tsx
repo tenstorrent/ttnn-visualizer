@@ -3,11 +3,12 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import React, { FC, Fragment, useState } from 'react';
-import '../../scss/components/PerfTable.scss';
+import { useAtomValue } from 'jotai';
 import { Icon, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { MathFidelity, PerfTableRow } from '../../definitions/PerfTable';
 import { formatSize, toSecondsPretty } from '../../functions/math';
+import { selectedPerformanceRangeAtom } from '../../store/app';
 import 'styles/components/PerfReport.scss';
 
 type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'grey';
@@ -72,7 +73,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
-    // const selectedRange = useAtomValue(selectedPerformanceRangeAtom);
+    const selectedRange = useAtomValue(selectedPerformanceRangeAtom);
     // const opIdsMap = useOptoPerfIdFiltered();
 
     // TODO: Do this properly
@@ -87,17 +88,14 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
             };
         }) || [];
 
-    // TODO: Do this properly
     const getFilteredRows = (): PerfTableRow[] => {
-        return processedRows;
+        return selectedRange && processedRows.length > 0
+            ? processedRows.filter((row) => {
+                  const rowId = parseInt(row?.id, 10);
 
-        // return selectedRange && processedRows.length > 0
-        //     ? processedRows.filter((row) => {
-        //           const rowId = parseInt(row?.id, 10);
-
-        //           return rowId >= selectedRange[0] && rowId <= selectedRange[1];
-        //       })
-        //     : processedRows;
+                  return rowId >= selectedRange[0] && rowId <= selectedRange[1];
+              })
+            : processedRows;
     };
 
     const visibleHeaders = (

@@ -10,7 +10,6 @@ import { useDeviceLog, usePerformance, usePerformanceReport } from '../hooks/use
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { PerformanceReport } from '../components/performance/PerfReport';
-import { PerformanceReportOld } from '../components/performance/PerfTableOld';
 import 'styles/components/Performance.scss';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import PerfDeviceKernelDurationChart from '../components/performance/PerfDeviceKernelDurationChart';
@@ -103,12 +102,7 @@ export default function Performance() {
                     id='tab-1'
                     title='Table'
                     icon={IconNames.TH}
-                    panel={
-                        <>
-                            <PerformanceReport data={perfData} />
-                            <PerformanceReportOld data={data} />
-                        </>
-                    }
+                    panel={<PerformanceReport data={perfData} />}
                 />
 
                 <Tab
