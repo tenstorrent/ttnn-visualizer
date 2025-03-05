@@ -566,7 +566,7 @@ export const useOptoPerfIdFiltered = () => {
             opMapping.map(({ id, perfData }) => {
                 return {
                     opId: id,
-                    perfId: perfData?.ORIGINAL_ID,
+                    perfId: perfData?.id,
                 };
             }),
         [opMapping],

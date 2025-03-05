@@ -11,6 +11,7 @@ import { MathFidelity, PerfTableRow } from '../../definitions/PerfTable';
 import { formatSize, toSecondsPretty } from '../../functions/math';
 import { selectedPerformanceRangeAtom } from '../../store/app';
 import 'styles/components/PerfReport.scss';
+import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
 
 type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'grey';
 
@@ -75,20 +76,21 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
     const selectedRange = useAtomValue(selectedPerformanceRangeAtom);
-    // const opIdsMap = useOptoPerfIdFiltered();
+    const opIdsMap = useOptoPerfIdFiltered();
 
     const processedRows: PerfTableRow[] = useMemo(() => {
         return (
             data?.map((opData) => {
                 const val = parseInt(opData.op_to_op_gap, 10);
-
+                const op = opIdsMap.find((opMap) => opMap.perfId === opData.id)?.opId;
                 return {
                     ...opData,
                     high_dispatch: !!val && val > 6.5,
+                    op,
                 };
             }) || []
         );
-    }, [data]);
+    }, [data, opIdsMap]);
 
     const getFilteredRows: PerfTableRow[] = useMemo(() => {
         return selectedRange && processedRows.length > 0
