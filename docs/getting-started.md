@@ -79,7 +79,7 @@ https://github.com/pyenv/pyenv
 If you have `pipx` installed on your system, it can be used to simplify the above steps:
 
 ```bash
-pipx install ttnn-visualizer
+pipx install --include-deps ttnn-visualizer
 ttnn-visualizer
 ```
 
