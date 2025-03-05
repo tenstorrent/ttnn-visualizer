@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import React, { FC, Fragment, useState } from 'react';
+import React, { FC, Fragment, useMemo, useState } from 'react';
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
 import { Icon, Switch, Tooltip } from '@blueprintjs/core';
@@ -45,7 +45,7 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
 const TABLE_HEADERS: TableHeader[] = [
     { label: 'ID', key: 'id' },
     { label: 'OP', key: 'op' },
-    { label: 'Total %', key: 'total_percent', unit: '%' },
+    { label: 'Total %', key: 'total_percent', unit: '%', decimals: 1 },
     { label: 'Bound', key: 'bound', colour: 'yellow' },
     { label: 'OP Code', key: 'op_code', colour: 'blue' },
     { label: 'Device Time', key: 'device_time', unit: 'µs', decimals: 0 },
@@ -77,19 +77,20 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     const selectedRange = useAtomValue(selectedPerformanceRangeAtom);
     // const opIdsMap = useOptoPerfIdFiltered();
 
-    // TODO: Do this properly
-    const processedRows: PerfTableRow[] =
-        // TODO: Filter out host ops in single device mode
-        data?.map((opData) => {
-            const val = parseInt(opData.op_to_op_gap, 10);
+    const processedRows: PerfTableRow[] = useMemo(() => {
+        return (
+            data?.map((opData) => {
+                const val = parseInt(opData.op_to_op_gap, 10);
 
-            return {
-                ...opData,
-                high_dispatch: !!val && val > 6.5,
-            };
-        }) || [];
+                return {
+                    ...opData,
+                    high_dispatch: !!val && val > 6.5,
+                };
+            }) || []
+        );
+    }, [data]);
 
-    const getFilteredRows = (): PerfTableRow[] => {
+    const getFilteredRows: PerfTableRow[] = useMemo(() => {
         return selectedRange && processedRows.length > 0
             ? processedRows.filter((row) => {
                   const rowId = parseInt(row?.id, 10);
@@ -97,7 +98,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                   return rowId >= selectedRange[0] && rowId <= selectedRange[1];
               })
             : processedRows;
-    };
+    }, [processedRows, selectedRange]);
 
     const visibleHeaders = (
         hiliteHighDispatch
@@ -146,7 +147,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                     </thead>
 
                     <tbody>
-                        {getFilteredRows().map((row, i) => (
+                        {getFilteredRows.map((row, i) => (
                             <Fragment key={i}>
                                 <tr key={i}>
                                     {visibleHeaders.map((header) => (
@@ -180,7 +181,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
 
             <hr />
 
-            {hiliteHighDispatch && calcDispatchOps(processedRows)}
+            {hiliteHighDispatch && calcHighDispatchOps(processedRows)}
         </>
     );
 };
@@ -203,7 +204,7 @@ const formatCell = (row: PerfTableRow, header: TableHeader): React.JSX.Element |
     let value = row[key];
 
     if (NUMBER_KEYS_TO_PARSE.includes(key) && value) {
-        value = typeof value === 'string' ? parseInt(value, 10) : value;
+        value = typeof value === 'string' ? parseFloat(value) : value;
     }
 
     if (value == null || value === '') {
@@ -240,7 +241,7 @@ const getCellMarkup = (text: string | string[], color?: string) => {
 
 const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '' => {
     const keyValue = row[key];
-    const percentage = parseInt(row.total_percent, 10);
+    const percentage = parseFloat(row.total_percent);
 
     if (percentage != null && percentage < MIN_PERCENTAGE) {
         return 'grey';
@@ -292,6 +293,7 @@ const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '' => {
             if (cores < 10) {
                 return 'red';
             }
+
             if (cores === 64) {
                 return 'green';
             }
@@ -344,7 +346,7 @@ const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '' => {
     return 'grey';
 };
 
-const calcDispatchOps = (rows: PerfTableRow[]) => {
+const calcHighDispatchOps = (rows: PerfTableRow[]) => {
     const highDispatchOps = rows
         .map((opData: PerfTableRow, index: number): [number, PerfTableRow] => [index + 1, opData])
         .filter(([_, opData]) => {
