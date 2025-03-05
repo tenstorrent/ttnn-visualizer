@@ -338,16 +338,10 @@ const OperationList = () => {
                                                             (perf) =>
                                                                 perf.perfData && (
                                                                     <p key={perf.id + perf.operationName}>
-                                                                        <strong>{perf.perfData?.['OP CODE']}</strong>{' '}
-                                                                        Device time:{' '}
+                                                                        <strong>{perf.perfData?.op_code}</strong> Device
+                                                                        time:{' '}
                                                                         {formatSize(
-                                                                            Number(
-                                                                                perf.perfData?.[
-                                                                                    'DEVICE KERNEL DURATION [ns]'
-                                                                                ],
-                                                                            ) / 1000,
-
-                                                                            0,
+                                                                            parseFloat(perf.perfData?.device_time),
                                                                         )}{' '}
                                                                         µs
                                                                     </p>
