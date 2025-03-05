@@ -12,6 +12,7 @@ export interface PerfTableRow {
     total_percent: string;
     bound: string;
     op_code: string;
+    raw_op_code: string;
     device_time: string;
     op_to_op_gap: string;
     cores: string;
