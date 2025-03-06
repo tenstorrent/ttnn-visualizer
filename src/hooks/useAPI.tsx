@@ -466,7 +466,7 @@ export interface DeviceOperationMapping {
     name: string;
     id: number;
     operationName: string;
-    perfData?: RowData;
+    perfData?: PerfTableRow;
 }
 
 export const useNormalizedPerformance = (): RowData[] => {
@@ -500,14 +500,27 @@ export const useNormalizedPerformance = (): RowData[] => {
     }, [response.isLoading]);
 };
 
+const useProxyPerformanceReport = (): PerfTableRow[] => {
+    const response = usePerformanceReport();
+
+    return useMemo(() => {
+        if (!response.data) {
+            return [];
+        }
+        return response.data;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [response.isLoading]);
+};
+
 export const useGetDeviceOperationListPerf = () => {
     const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
-    const data = useNormalizedPerformance();
+    // const data = useNormalizedPerformance();
+    const data = useProxyPerformanceReport();
 
     return useMemo(() => {
         const isValid = deviceOperations.every((deviceOperation, index) => {
             const perfData = data[index];
-            if (perfData && perfData['OP CODE'] === deviceOperation.name) {
+            if (perfData && perfData.raw_op_code === deviceOperation.name) {
                 deviceOperation.perfData = perfData;
                 return true;
             }
@@ -518,29 +531,30 @@ export const useGetDeviceOperationListPerf = () => {
 };
 
 /**
+ * keeping temporarily
  * @description op id to perf id mapping with all Op ids including missing perf ids and host ids
  */
-export const useOptoPerfIdAll = () => {
-    const { data: operations } = useOperationsList();
-    const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
-    const data = useNormalizedPerformance();
-
-    return useMemo(() => {
-        const ids = deviceOperations.map((deviceOperation, index) => {
-            const perfData = data[index];
-            return perfData && perfData['OP CODE'] === deviceOperation.name
-                ? { opId: deviceOperation.id, perfId: perfData.ORIGINAL_ID }
-                : { opId: deviceOperation.id, perfId: -1 };
-        });
-
-        return (
-            operations?.map((operation) => {
-                const op = ids.find((id) => id.opId === operation.id);
-                return op || { opId: operation.id, perfId: -1 };
-            }) || []
-        );
-    }, [data, deviceOperations, operations]);
-};
+// export const useOptoPerfIdAll = () => {
+//     const { data: operations } = useOperationsList();
+//     const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
+//     const data = useNormalizedPerformance();
+//
+//     return useMemo(() => {
+//         const ids = deviceOperations.map((deviceOperation, index) => {
+//             const perfData = data[index];
+//             return perfData && perfData['OP CODE'] === deviceOperation.name
+//                 ? { opId: deviceOperation.id, perfId: perfData.ORIGINAL_ID }
+//                 : { opId: deviceOperation.id, perfId: -1 };
+//         });
+//
+//         return (
+//             operations?.map((operation) => {
+//                 const op = ids.find((id) => id.opId === operation.id);
+//                 return op || { opId: operation.id, perfId: -1 };
+//             }) || []
+//         );
+//     }, [data, deviceOperations, operations]);
+// };
 
 /**
  * @description op id to perf id mapping only for existing perf ids
@@ -552,7 +566,7 @@ export const useOptoPerfIdFiltered = () => {
             opMapping.map(({ id, perfData }) => {
                 return {
                     opId: id,
-                    perfId: perfData?.ORIGINAL_ID,
+                    perfId: perfData?.id,
                 };
             }),
         [opMapping],
@@ -560,15 +574,13 @@ export const useOptoPerfIdFiltered = () => {
 };
 
 export const usePerformanceRange = (): NumberRange | null => {
-    const response = useNormalizedPerformance();
+    const { data: perfData } = usePerformanceReport();
 
     return useMemo(
         () =>
-            response?.length
-                ? ([response[0].ORIGINAL_ID, response[response.length - 1].ORIGINAL_ID] as NumberRange)
-                : null,
+            perfData?.length ? [parseInt(perfData[0].id, 10), parseInt(perfData[perfData.length - 1].id, 10)] : null,
 
-        [response],
+        [perfData],
     );
 };
 
@@ -692,10 +704,23 @@ export const usePerformance = () => {
 };
 
 export const usePerformanceReport = () => {
-    return useQuery({
+    const response = useQuery({
         queryFn: () => fetchPerformanceDataReport(),
         queryKey: 'get-performance-data-report',
     });
+
+    return useMemo(() => {
+        if (response.data) {
+            const df: PerfTableRow[] = response.data
+                .slice()
+                .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
+
+            response.data = df;
+        }
+
+        return response;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [response.isLoading]);
 };
 
 export const useSession = (reportName: string | null, profileName: string | null) => {

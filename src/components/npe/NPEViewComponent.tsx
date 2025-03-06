@@ -6,12 +6,12 @@
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import React, { JSX, useEffect, useMemo, useState } from 'react';
-import { Button, Slider } from '@blueprintjs/core';
+import { Button, ButtonGroup, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { NPEData, NoCID, NoCTransfer } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
-import { NODE_SIZE, calculateLinkCongestionColor, getLinkPoints, getRouteColor } from './drawingApi';
+import { NODE_SIZE, calculateLinkCongestionColor, getLinkPoints, getRouteColor, resetRouteColors } from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
 import NPEMetadata from './NPEMetadata';
 import ActiveTransferDetails from './ActiveTransferDetails';
@@ -39,6 +39,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: number[] } | null>(null);
     const [isPlaying, setIsPlaying] = useState<boolean>(false);
 
+    const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
+
     const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
     useEffect(() => {
         const handleResize = () => setCanvasWidth(window.innerWidth);
@@ -63,6 +65,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         }
         return <div className='node-type-label' />;
     };
+
+    useEffect(() => {
+        resetRouteColors();
+        if (isShowingAllTransfers) {
+            showAllTransfers();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedTimestep, isShowingAllTransfers]);
 
     useEffect(() => {
         stopAnimation();
@@ -154,6 +164,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedTransferList([]);
     };
     const showActiveTransfers = (route: [number, number, NoCID, number] | null, index?: number) => {
+        hideAllTransfers();
         if (route === null) {
             setSelectedTransferList([]);
             setSelectedNode(null);
@@ -184,7 +195,25 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedTransferList(activeTransfers as NoCTransfer[]);
     };
 
+    const hideAllTransfers = () => {
+        setIsShowingAllTransfers(false);
+        setSelectedTransferList([]);
+    };
+
+    const showAllTransfers = () => {
+        setIsShowingAllTransfers(true);
+        setSelectedNode(null);
+
+        const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
+            .map((transferId) => npeData.noc_transfers.find((tr) => tr.id === transferId))
+            .filter((transfer): transfer is NoCTransfer => transfer !== undefined);
+        setSelectedTransferList(activeTransfers as NoCTransfer[]);
+    };
+
     const getOriginOpacity = (transfer: NoCTransfer): number => {
+        if (isShowingAllTransfers) {
+            return 0;
+        }
         if (highlightedTransfer !== null && highlightedTransfer.id === transfer.id) {
             return 1;
         }
@@ -211,18 +240,25 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 numTransfers={transfers.length}
             />
             <div className='header'>
-                {!isPlaying && (
-                    <Button
-                        icon={IconNames.Play}
-                        onClick={onPlay}
+                <ButtonGroup className='npe-controls'>
+                    {!isPlaying && (
+                        <Button
+                            icon={IconNames.Play}
+                            onClick={onPlay}
+                        />
+                    )}
+                    {isPlaying && (
+                        <Button
+                            icon={IconNames.Pause}
+                            onClick={onPause}
+                        />
+                    )}
+                    <Switch
+                        label='Show all active transfers'
+                        checked={isShowingAllTransfers}
+                        onChange={() => (isShowingAllTransfers ? hideAllTransfers() : showAllTransfers())}
                     />
-                )}
-                {isPlaying && (
-                    <Button
-                        icon={IconNames.Pause}
-                        onClick={onPause}
-                    />
-                )}
+                </ButtonGroup>
                 <div style={{ position: 'relative', width: `${switchwidth}px` }}>
                     <Slider
                         min={0}
@@ -415,6 +451,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 <ActiveTransferDetails
                     groupedTransfersByNoCID={groupedTransfersByNoCID}
                     selectedNode={selectedNode}
+                    congestionData={links?.link_demand.filter(
+                        (route) => route[0] === selectedNode?.coords[0] && route[1] === selectedNode?.coords[1],
+                    )}
                     showActiveTransfers={showActiveTransfers}
                     highlightedTransfer={highlightedTransfer}
                     setHighlightedTransfer={setHighlightedTransfer}

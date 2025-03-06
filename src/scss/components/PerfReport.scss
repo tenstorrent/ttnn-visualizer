@@ -1,0 +1,70 @@
+.perf-report {
+    background: #222;
+    color: #fff;
+    padding: 1rem;
+
+    .perf-table {
+        border-collapse: collapse;
+        width: 100%;
+    }
+
+    .title {
+        margin-top: 0;
+    }
+
+    .cell-header {
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid #555;
+        padding-left: 5px;
+    }
+
+    .cell {
+        border-bottom: 1px solid #333;
+        padding: 0.25rem;
+
+        &.align-right {
+            text-align: right;
+        }
+
+        &.advice {
+            border-bottom: none;
+        }
+    }
+
+    .grey {
+        color: #888;
+    }
+
+    .red {
+        color: #f00;
+    }
+
+    .green {
+        color: #0f0;
+    }
+
+    .yellow {
+        color: #ff0;
+    }
+
+    .blue {
+        color: #3ca4ff;
+    }
+
+    .orange {
+        color: #ff8c00;
+    }
+
+    .magenta {
+        color: #f0f;
+    }
+
+    .cyan {
+        color: #0ff;
+    }
+
+    .white {
+        color: #fff;
+    }
+}

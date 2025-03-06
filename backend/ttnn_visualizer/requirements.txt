@@ -1,3 +1,4 @@
+Flask==3.1.0
 gunicorn~=22.0.0
 uvicorn==0.30.1
 paramiko~=3.4.0
@@ -11,12 +12,12 @@ flask-sqlalchemy
 flask-socketio
 gevent==24.10.2
 flask-session
-pandas
+pandas==2.2.3
 wheel
 build
 PyYAML==6.0.2
 python-dotenv==1.0.1
-tt-perf-report==1.0.4
+tt-perf-report==1.0.6
 
 # Dev dependencies
 mypy
