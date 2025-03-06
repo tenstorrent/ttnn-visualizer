@@ -24,6 +24,7 @@ import 'styles/routes/Styleguide.scss';
 import LoadingSpinner from '../components/LoadingSpinner';
 import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
+import MemoryTag from '../components/MemoryTag';
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -62,9 +63,8 @@ export default function Styleguide() {
             <h5>Heading H5</h5> */}
 
             <div className='container'>
-                <p>
-                    <strong>Paragraph</strong>
-                </p>
+                <h3>Paragraph</h3>
+
                 <p>
                     Lorem ipsum dolor sit amet <em>consectetur adipisicing</em> elit. Error laborum atque suscipit.
                     Officiis fugit necessitatibus libero <strong>perspiciatis sequi </strong>accusantium earum{' '}
@@ -72,18 +72,16 @@ export default function Styleguide() {
                     molestiae eveniet.
                 </p>
 
-                <p>
-                    <strong>Monospace</strong>
-                </p>
+                <h3>Monospace</h3>
+
                 <p className='monospace'>
                     Lorem ipsum dolor sit, amet consectetur adipisicing elit. Magni nemo velit molestias quae temporibus
                     sint in at consectetur voluptatem obcaecati, saepe, ratione, reprehenderit perferendis quas
                     explicabo error repellendus deserunt? Optio!
                 </p>
 
-                <p>
-                    <strong>Horizontal ruler</strong>
-                </p>
+                <h3>Horizontal ruler</h3>
+
                 <hr />
             </div>
 
@@ -297,7 +295,8 @@ export default function Styleguide() {
             </div>
 
             <div className='container'>
-                <p>Icons</p>
+                <h3>Icons</h3>
+
                 <ButtonGroup>
                     <Button
                         icon={IconNames.ArrowLeft}
@@ -353,7 +352,7 @@ export default function Styleguide() {
                 </ButtonGroup>
             </div>
 
-            <h3>Form elements</h3>
+            <h2>Form elements</h2>
 
             <FormGroup
                 {...FORM_GROUP}
@@ -440,9 +439,9 @@ export default function Styleguide() {
                 />
             </FormGroup>
 
-            <h3>Components</h3>
+            <h2>Components</h2>
 
-            <p>Tags</p>
+            <h3>Tags</h3>
 
             <div className='container flex'>
                 <Tag
@@ -475,9 +474,13 @@ export default function Styleguide() {
                 >
                     Danger
                 </Tag>
+
+                <MemoryTag memory='L1' />
+
+                <MemoryTag memory='DRAM' />
             </div>
 
-            <p>Progress bar</p>
+            <h3>Progress bar</h3>
 
             <div className='container short-width'>
                 <ProgressBar
@@ -516,8 +519,8 @@ export default function Styleguide() {
                 />
             </div> */}
 
-            <div className='container'>
-                <p>Connection message</p>
+            <div className='container flex flex-column'>
+                <h3>Connection message</h3>
 
                 <ConnectionTestMessage
                     status={ConnectionTestStates.IDLE}
@@ -538,7 +541,7 @@ export default function Styleguide() {
             </div>
 
             <div className='container'>
-                <p>Loading spinner</p>
+                <h3>Loading spinner</h3>
 
                 <LoadingSpinner />
             </div>
