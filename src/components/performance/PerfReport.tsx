@@ -46,7 +46,6 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
 
 const TABLE_HEADERS: TableHeader[] = [
     { label: 'ID', key: 'id' },
-    { label: 'OP', key: 'op' },
     { label: 'Total %', key: 'total_percent', unit: '%', decimals: 1 },
     { label: 'Bound', key: 'bound', colour: 'yellow' },
     { label: 'OP Code', key: 'op_code', colour: 'blue' },
@@ -97,17 +96,18 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
         return selectedRange && processedRows.length > 0
             ? processedRows.filter((row) => {
                   const rowId = parseInt(row?.id, 10);
-
                   return rowId >= selectedRange[0] && rowId <= selectedRange[1];
               })
             : processedRows;
     }, [processedRows, selectedRange]);
 
-    const visibleHeaders = (
-        hiliteHighDispatch
-            ? [...TABLE_HEADERS.slice(0, 5), { label: 'Slow', key: 'high_dispatch' }, ...TABLE_HEADERS.slice(5)]
-            : TABLE_HEADERS
-    ) as TableHeader[];
+    const visibleHeaders = [
+        ...TABLE_HEADERS.slice(0, 1),
+        opIdsMap.length > 0 ? { label: 'OP', key: 'op' } : {},
+        ...TABLE_HEADERS.slice(1, 5),
+        hiliteHighDispatch ? { label: 'Slow', key: 'high_dispatch' } : {},
+        ...TABLE_HEADERS.slice(5),
+    ] as TableHeader[];
 
     return (
         <>
