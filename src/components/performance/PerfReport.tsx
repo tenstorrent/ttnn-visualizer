@@ -7,11 +7,14 @@ import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
 import { Icon, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { Link } from 'react-router-dom';
 import { MathFidelity, PerfTableRow } from '../../definitions/PerfTable';
 import { formatSize, toSecondsPretty } from '../../functions/math';
 import { selectedPerformanceRangeAtom } from '../../store/app';
 import 'styles/components/PerfReport.scss';
-import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
+import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
+import ROUTES from '../../definitions/Routes';
+import { OperationDescription } from '../../model/APIData';
 
 type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'orange' | 'grey';
 
@@ -77,6 +80,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
     const selectedRange = useAtomValue(selectedPerformanceRangeAtom);
     const opIdsMap = useOptoPerfIdFiltered();
+    const { data: operations } = useOperationsList();
 
     const processedRows: PerfTableRow[] = useMemo(() => {
         return (
@@ -103,9 +107,9 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, 1),
-        opIdsMap.length > 0 ? { label: 'OP', key: 'op' } : {},
+        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: 'op' }] : []),
         ...TABLE_HEADERS.slice(1, 5),
-        hiliteHighDispatch ? { label: 'Slow', key: 'high_dispatch' } : {},
+        ...(hiliteHighDispatch ? [{ label: 'Slow', key: 'high_dispatch' }] : []),
         ...TABLE_HEADERS.slice(5),
     ] as TableHeader[];
 
@@ -150,34 +154,37 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                     </thead>
 
                     <tbody>
-                        {getFilteredRows.map((row, i) => (
-                            <Fragment key={i}>
-                                <tr key={i}>
-                                    {visibleHeaders.map((header) => (
-                                        <td
-                                            key={header.key}
-                                            className={classNames('cell', {
-                                                'align-right': header.key === 'math_fidelity',
-                                            })}
-                                        >
-                                            {formatCell(row, header)}
-                                        </td>
-                                    ))}
-                                </tr>
-                                {provideMatmulAdvice && row.op_code.includes('Matmul') && (
-                                    <tr>
-                                        <td
-                                            colSpan={visibleHeaders.length}
-                                            className='cell advice'
-                                        >
-                                            <ul>
-                                                {row?.advice.map((advice, j) => <li key={`advice-${j}`}>{advice}</li>)}
-                                            </ul>
-                                        </td>
+                        {operations &&
+                            getFilteredRows.map((row, i) => (
+                                <Fragment key={i}>
+                                    <tr key={i}>
+                                        {visibleHeaders.map((header) => (
+                                            <td
+                                                key={header.key}
+                                                className={classNames('cell', {
+                                                    'align-right': header.key === 'math_fidelity',
+                                                })}
+                                            >
+                                                {formatCell(row, header, operations)}
+                                            </td>
+                                        ))}
                                     </tr>
-                                )}
-                            </Fragment>
-                        ))}
+                                    {provideMatmulAdvice && row.op_code.includes('Matmul') && (
+                                        <tr>
+                                            <td
+                                                colSpan={visibleHeaders.length}
+                                                className='cell advice'
+                                            >
+                                                <ul>
+                                                    {row?.advice.map((advice, j) => (
+                                                        <li key={`advice-${j}`}>{advice}</li>
+                                                    ))}
+                                                </ul>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </Fragment>
+                            ))}
                     </tbody>
                 </table>
             </div>
@@ -189,9 +196,14 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     );
 };
 
-const formatCell = (row: PerfTableRow, header: TableHeader): React.JSX.Element | string => {
+const formatCell = (
+    row: PerfTableRow,
+    header: TableHeader,
+    operations: OperationDescription[],
+): React.JSX.Element | string => {
     const { key, unit, decimals } = header;
     let formatted: string | boolean | string[];
+    let value = row[key];
 
     if (key === 'high_dispatch') {
         return (
@@ -204,7 +216,20 @@ const formatCell = (row: PerfTableRow, header: TableHeader): React.JSX.Element |
         );
     }
 
-    let value = row[key];
+    if (key === 'op') {
+        return (
+            <Tooltip
+                content={
+                    <div className='op-tooltip'>
+                        {value} {getOperationDetails(operations, value as number)}
+                    </div>
+                }
+                usePortal={false}
+            >
+                <Link to={`${ROUTES.OPERATIONS}/${value}`}>{value}</Link>
+            </Tooltip>
+        );
+    }
 
     if (NUMBER_KEYS_TO_PARSE.includes(key) && value) {
         value = typeof value === 'string' ? parseFloat(value) : value;
@@ -308,10 +333,7 @@ const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '' => {
     }
 
     if (key === 'op_code') {
-        const match =
-            keyValue && typeof keyValue === 'string'
-                ? Object.keys(OPERATION_COLOURS).find((opCodeKey) => keyValue.includes(opCodeKey))
-                : false;
+        const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.raw_op_code.includes(opCodeKey));
 
         return match ? OPERATION_COLOURS[match] : 'white';
     }
@@ -469,4 +491,10 @@ function evaluateFidelity(
     }
 
     return ['unknown', `Using ${mathFidelity} for ${input0Datatype}/${input1Datatype} => ${outputDatatype}`];
+}
+
+function getOperationDetails(operations: OperationDescription[], id: number) {
+    const matchingOp = operations?.find((op) => op.id === id);
+
+    return matchingOp ? `${matchingOp.name} (${matchingOp.operationFileIdentifier})` : '';
 }
