@@ -36,7 +36,7 @@ function SearchField({
                     searchQuery ? (
                         <Button
                             disabled={disabled}
-                            minimal
+                            variant='minimal'
                             onClick={() => {
                                 onQueryChanged('');
                             }}

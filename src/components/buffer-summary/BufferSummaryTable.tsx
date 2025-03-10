@@ -208,7 +208,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                 {definition?.filterable && (
                     <div className='column-filter'>
                         <InputGroup
-                            small
+                            size='small'
                             asyncControl
                             onChange={(e) => updateColumnFilter(key, e.target.value)}
                             placeholder='Filter...'

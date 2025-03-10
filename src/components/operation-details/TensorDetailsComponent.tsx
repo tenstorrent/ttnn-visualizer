@@ -168,7 +168,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         icon={IconNames.FLOW_LINEAR}
                         intent={Intent.PRIMARY}
                         onClick={() => setOverlayOpen(true)}
-                        rightIcon={IconNames.OPEN_APPLICATION}
+                        endIcon={IconNames.OPEN_APPLICATION}
                     />
                 )}
             </div>
