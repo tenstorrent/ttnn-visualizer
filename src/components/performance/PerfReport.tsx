@@ -105,13 +105,13 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
             : processedRows;
     }, [processedRows, selectedRange]);
 
-    const visibleHeaders = [
-        ...TABLE_HEADERS.slice(0, 1),
-        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: 'op' }] : []),
-        ...TABLE_HEADERS.slice(1, 5),
-        ...(hiliteHighDispatch ? [{ label: 'Slow', key: 'high_dispatch' }] : []),
-        ...TABLE_HEADERS.slice(5),
-    ] as TableHeader[];
+    const column1 = TABLE_HEADERS[0];
+    const column2 = opIdsMap.length > 0 ? [{ label: 'OP', key: 'op' }] : [];
+    const columns3to6 = TABLE_HEADERS.slice(1, 5);
+    const column7 = hiliteHighDispatch ? [{ label: 'Slow', key: 'high_dispatch' }] : [];
+    const columns8toEnd = TABLE_HEADERS.slice(5);
+
+    const visibleHeaders = [column1, ...column2, ...columns3to6, ...column7, ...columns8toEnd] as TableHeader[];
 
     return (
         <>
