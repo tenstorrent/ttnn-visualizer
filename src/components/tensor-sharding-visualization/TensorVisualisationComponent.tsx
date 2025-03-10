@@ -73,7 +73,9 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                 canOutsideClickClose
                 portalClassName='tensor-visualisation-overlay'
             >
-                <LoadingSpinner />
+                <Card className='tensor-visualisation is-spinner'>
+                    <LoadingSpinner />
+                </Card>
             </Overlay2>
         );
     }

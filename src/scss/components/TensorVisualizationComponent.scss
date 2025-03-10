@@ -15,6 +15,10 @@
     .tensor-visualisation {
         background-color: $tt-grey-4;
 
+        &.is-loading {
+            padding: 0;
+        }
+
         .title {
             display: flex;
             justify-content: space-between;
