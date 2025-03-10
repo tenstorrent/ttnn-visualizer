@@ -4,19 +4,6 @@
 
 @use 'styles/definitions/colours' as *;
 
-.tensor-visualisation-loader {
-    .loading-spinner {
-        display: inline-flex;
-        width: auto;
-        height: 15px;
-        zoom: 0.5;
-
-        div {
-            top: 0;
-        }
-    }
-}
-
 .tensor-visualisation-overlay {
     .bp5-overlay {
         display: flex;
