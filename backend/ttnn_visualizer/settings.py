@@ -37,7 +37,7 @@ class DefaultConfig(object):
 
     # SQL Alchemy Settings
     SQLALCHEMY_DATABASE_URI = (
-        f"sqlite:///{os.path.join(APPLICATION_DIR, f"ttnn_{VERSION}.db")}"
+        f"sqlite:///{os.path.join(APPLICATION_DIR, f'ttnn_{VERSION}.db')}"
     )
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_size": 10,  # Adjust pool size as needed (default is 5)
