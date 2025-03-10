@@ -29,7 +29,7 @@ TT-NN Visualizer can be installed from PyPI:
 
 After installation run `ttnn-visualizer` to start the application.
 
-It is recommended to do this within a virtual environment. The minimum Python version is 3.12.
+It is recommended to do this within a virtual environment. The minimum Python version is 3.10.
 
 Please see the [getting started](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/getting-started.md) guide
 for further information on getting up and running with TT-NN Visualizer.
