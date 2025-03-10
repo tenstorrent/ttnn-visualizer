@@ -62,6 +62,9 @@ const TABLE_HEADERS: TableHeader[] = [
     { label: 'Math Fidelity', key: 'math_fidelity', colour: 'cyan' },
 ];
 
+const OP_ID_INSERTION_POINT = 1;
+const HIGH_DISPATCH_INSERTION_POINT = 5;
+
 const NUMBER_KEYS_TO_PARSE = [
     'device_time',
     'op_to_op_gap',
@@ -105,13 +108,13 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
             : processedRows;
     }, [processedRows, selectedRange]);
 
-    const column1 = TABLE_HEADERS[0];
-    const column2 = opIdsMap.length > 0 ? [{ label: 'OP', key: 'op' }] : [];
-    const columns3to6 = TABLE_HEADERS.slice(1, 5);
-    const column7 = hiliteHighDispatch ? [{ label: 'Slow', key: 'high_dispatch' }] : [];
-    const columns8toEnd = TABLE_HEADERS.slice(5);
-
-    const visibleHeaders = [column1, ...column2, ...columns3to6, ...column7, ...columns8toEnd] as TableHeader[];
+    const visibleHeaders = [
+        ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
+        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: 'op' }] : [{}]),
+        ...TABLE_HEADERS.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
+        ...(hiliteHighDispatch ? [{ label: 'Slow', key: 'high_dispatch' }] : [{}]),
+        ...TABLE_HEADERS.slice(HIGH_DISPATCH_INSERTION_POINT),
+    ] as TableHeader[];
 
     return (
         <>
@@ -154,37 +157,34 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                     </thead>
 
                     <tbody>
-                        {operations &&
-                            getFilteredRows.map((row, i) => (
-                                <Fragment key={i}>
-                                    <tr key={i}>
-                                        {visibleHeaders.map((header) => (
-                                            <td
-                                                key={header.key}
-                                                className={classNames('cell', {
-                                                    'align-right': header.key === 'math_fidelity',
-                                                })}
-                                            >
-                                                {formatCell(row, header, operations)}
-                                            </td>
-                                        ))}
+                        {getFilteredRows.map((row, i) => (
+                            <Fragment key={i}>
+                                <tr key={i}>
+                                    {visibleHeaders.map((header) => (
+                                        <td
+                                            key={header.key}
+                                            className={classNames('cell', {
+                                                'align-right': header.key === 'math_fidelity',
+                                            })}
+                                        >
+                                            {formatCell(row, header, operations)}
+                                        </td>
+                                    ))}
+                                </tr>
+                                {provideMatmulAdvice && row.op_code.includes('Matmul') && (
+                                    <tr>
+                                        <td
+                                            colSpan={visibleHeaders.length}
+                                            className='cell advice'
+                                        >
+                                            <ul>
+                                                {row?.advice.map((advice, j) => <li key={`advice-${j}`}>{advice}</li>)}
+                                            </ul>
+                                        </td>
                                     </tr>
-                                    {provideMatmulAdvice && row.op_code.includes('Matmul') && (
-                                        <tr>
-                                            <td
-                                                colSpan={visibleHeaders.length}
-                                                className='cell advice'
-                                            >
-                                                <ul>
-                                                    {row?.advice.map((advice, j) => (
-                                                        <li key={`advice-${j}`}>{advice}</li>
-                                                    ))}
-                                                </ul>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </Fragment>
-                            ))}
+                                )}
+                            </Fragment>
+                        ))}
                     </tbody>
                 </table>
             </div>
@@ -199,7 +199,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
 const formatCell = (
     row: PerfTableRow,
     header: TableHeader,
-    operations: OperationDescription[],
+    operations?: OperationDescription[],
 ): React.JSX.Element | string => {
     const { key, unit, decimals } = header;
     let formatted: string | boolean | string[];
@@ -216,7 +216,7 @@ const formatCell = (
         );
     }
 
-    if (key === 'op') {
+    if (key === 'op' && operations) {
         return (
             <Tooltip
                 content={
