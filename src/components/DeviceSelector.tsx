@@ -45,7 +45,7 @@ function DeviceSelector() {
             <Button
                 text={isValidNumber(selectedDevice) ? `Device ${selectedDevice}` : 'Select device...'}
                 icon={isValidNumber(selectedDevice) ? IconNames.SMALL_SQUARE : null}
-                outlined
+                variant='outlined'
             />
         </Select>
     ) : null;
