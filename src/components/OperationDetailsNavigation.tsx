@@ -61,7 +61,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                     <Button
                         icon={IconNames.Graph}
                         onClick={() => navigate(`${ROUTES.GRAPHTREE}/${operationId}`)}
-                        outlined
+                        variant='outlined'
                         className='graph-button'
                     />
                 </Tooltip>
@@ -74,7 +74,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                         icon={IconNames.ArrowLeft}
                         disabled={!previousOperation}
                         onClick={navigateToPreviousOperation}
-                        outlined
+                        variant='outlined'
                     />
                 </Tooltip>
 
@@ -91,7 +91,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                                 },
                             })
                         }
-                        outlined
+                        variant='outlined'
                     />
                 </Tooltip>
 
@@ -101,10 +101,10 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                     disabled={!nextOperation}
                 >
                     <Button
-                        rightIcon={IconNames.ArrowRight}
+                        endIcon={IconNames.ArrowRight}
                         disabled={!nextOperation}
                         onClick={navigateToNextOperation}
-                        outlined
+                        variant='outlined'
                     />
                 </Tooltip>
 

@@ -161,7 +161,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                     >
                         <Button
                             type='button'
-                            minimal
+                            variant='minimal'
                             intent={Intent.PRIMARY}
                             onClick={handleToggleStackTrace}
                             className={classNames({
@@ -177,7 +177,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                     >
                         <Button
                             type='button'
-                            minimal
+                            variant='minimal'
                             intent={Intent.SUCCESS}
                             onClick={handleReadRemoteFile}
                             icon={IconNames.DOCUMENT_OPEN}

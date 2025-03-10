@@ -223,8 +223,8 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     <h3 className='title'>
                         <Button
                             icon={IconNames.CROSS}
-                            minimal
-                            small
+                            variant='minimal'
+                            size='small'
                             onClick={onClose}
                         />
                     </h3>

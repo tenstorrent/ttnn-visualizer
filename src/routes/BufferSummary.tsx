@@ -74,7 +74,7 @@ function BufferSummary() {
                     intent={Intent.PRIMARY}
                     href={`${ROUTES.BUFFERS}#${SECTION_IDS.PLOT}`}
                     icon={IconNames.HORIZONTAL_BAR_CHART}
-                    outlined={activeSection !== SECTION_IDS.PLOT}
+                    variant={activeSection !== SECTION_IDS.PLOT ? 'outlined' : undefined}
                 >
                     Plot view
                 </AnchorButton>
@@ -83,7 +83,7 @@ function BufferSummary() {
                     intent={Intent.PRIMARY}
                     href={`${ROUTES.BUFFERS}#${SECTION_IDS.TABLE}`}
                     icon={IconNames.TH}
-                    outlined={activeSection !== SECTION_IDS.TABLE}
+                    variant={activeSection !== SECTION_IDS.TABLE ? 'outlined' : undefined}
                 >
                     Table view
                 </AnchorButton>
@@ -101,7 +101,7 @@ function BufferSummary() {
                 id='performance-tabs'
                 selectedTabId={selectedTabId}
                 onChange={(id: TAB_IDS) => setSelectedTabId(id)}
-                large
+                size='large'
                 renderActiveTabPanelOnly
             >
                 <Tab
