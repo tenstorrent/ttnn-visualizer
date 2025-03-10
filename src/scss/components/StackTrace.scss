@@ -28,16 +28,14 @@
     .stack-trace-buttons {
         display: flex;
         flex-direction: column;
+        gap: 5px;
+        align-items: flex-end;
 
         &.is-sticky {
             position: sticky;
             top: 0;
             right: 0;
         }
-    }
-
-    .rotate-180 {
-        transform: rotate(180deg);
     }
 
     .ttnn-line {

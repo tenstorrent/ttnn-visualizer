@@ -6,7 +6,7 @@ import hljs from 'highlight.js/lib/core';
 import python from 'highlight.js/lib/languages/python';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import 'highlight.js/styles/a11y-dark.css';
-import { Button, ButtonGroup, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useAtom, useAtomValue } from 'jotai';
@@ -154,38 +154,28 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                     'is-sticky': isFullStackTrace,
                 })}
             >
-                <ButtonGroup>
-                    <Tooltip
-                        content={isFullStackTrace ? 'Collapse stack trace' : 'Expand stack trace'}
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            type='button'
-                            variant='minimal'
-                            intent={Intent.PRIMARY}
-                            onClick={handleToggleStackTrace}
-                            className={classNames({
-                                'rotate-180': isFullStackTrace,
-                            })}
-                            icon={isFullStackTrace ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
-                        />
-                    </Tooltip>
+                <Button
+                    variant='minimal'
+                    intent={Intent.PRIMARY}
+                    onClick={handleToggleStackTrace}
+                    text={isFullStackTrace ? 'Collapse' : 'Expand'}
+                    endIcon={isFullStackTrace ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
+                />
 
-                    <Tooltip
-                        content={isRemote ? 'View external source file' : 'Cannot view local source file'}
-                        placement={PopoverPosition.TOP}
-                    >
-                        <Button
-                            type='button'
-                            variant='minimal'
-                            intent={Intent.SUCCESS}
-                            onClick={handleReadRemoteFile}
-                            icon={IconNames.DOCUMENT_OPEN}
-                            disabled={isFetchingFile || !persistentState.selectedConnection || !isRemote}
-                            loading={isFetchingFile}
-                        />
-                    </Tooltip>
-                </ButtonGroup>
+                <Tooltip
+                    content={isRemote ? 'View external source file' : 'Cannot view local source file'}
+                    placement={PopoverPosition.TOP}
+                >
+                    <Button
+                        variant='minimal'
+                        intent={Intent.SUCCESS}
+                        onClick={handleReadRemoteFile}
+                        endIcon={IconNames.DOCUMENT_OPEN}
+                        text='Source'
+                        disabled={isFetchingFile || !persistentState.selectedConnection || !isRemote}
+                        loading={isFetchingFile}
+                    />
+                </Tooltip>
             </div>
 
             <Overlay
