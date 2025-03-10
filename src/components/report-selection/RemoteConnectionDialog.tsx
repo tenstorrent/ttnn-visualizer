@@ -240,7 +240,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
             </DialogBody>
 
             <DialogFooter
-                variant='minimal'
+                minimal
                 actions={
                     <Button
                         text={buttonLabel}
