@@ -21,6 +21,7 @@ from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.file_uploads import (
     extract_report_name,
+    extract_npe_name,
     save_uploaded_files,
     validate_files,
 )
@@ -456,7 +457,6 @@ def create_report_files():
         status=ConnectionTestStates.OK, message="Success."
     ).model_dump()
 
-
 @api.route("/local/upload/profile", methods=["POST"])
 def create_profile_files():
     files = request.files.getlist("files")
@@ -506,6 +506,33 @@ def create_profile_files():
         status=ConnectionTestStates.OK, message="Success."
     ).model_dump()
 
+
+@api.route("/local/upload/npe", methods=["POST"])
+def create_npe_files():
+    files = request.files.getlist("files")
+    report_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
+
+    for file in files:
+        if not file.filename.endswith(".json"):
+            return StatusMessage(
+                status=ConnectionTestStates.FAILED,
+                message="NPE requires a valid JSON file.",
+            ).model_dump()
+
+    npe_name = extract_npe_name(files)
+    target_directory = report_directory / "npe"
+    target_directory.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"Writing npe file to {target_directory} / npe")
+
+    save_uploaded_files(files, target_directory, npe_name)
+
+    tab_id = request.args.get("tabId")
+    update_tab_session(tab_id=tab_id, npe_name=npe_name, clear_remote=True)
+
+    return StatusMessage(
+        status=ConnectionTestStates.OK, message="Success."
+    ).model_dump()
 
 @api.route("/remote/folder", methods=["POST"])
 def get_remote_folders():

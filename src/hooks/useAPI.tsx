@@ -723,10 +723,10 @@ export const usePerformanceReport = () => {
     }, [response.isLoading]);
 };
 
-export const useSession = (reportName: string | null, profileName: string | null) => {
+export const useSession = (reportName: string | null, profileName: string | null, npeName: string | null) => {
     return useQuery({
         queryFn: () => fetchTabSession(),
-        queryKey: ['get-session', reportName, profileName],
+        queryKey: ['get-session', reportName, profileName, npeName],
         initialData: null,
     });
 };

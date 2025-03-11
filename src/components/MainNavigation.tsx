@@ -8,12 +8,13 @@ import { useNavigate } from 'react-router';
 import { useAtomValue } from 'jotai';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/MainNavigation.scss';
-import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
+import { activeNpeAtom, activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 
 function MainNavigation() {
     const navigate = useNavigate();
     const activeReport = useAtomValue(activeReportAtom);
     const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
+    const activeNpe = useAtomValue(activeNpeAtom);
 
     const handleNavigate = (path: string) => {
         navigate(path);
@@ -21,6 +22,7 @@ function MainNavigation() {
 
     const hasActiveReport = !!activeReport;
     const hasActiveProfile = !!activePerformanceTrace;
+    const hasActiveNpe = !!activeNpe;
 
     return (
         <Navbar className='navbar'>
@@ -89,11 +91,13 @@ function MainNavigation() {
                     size='large'
                     className='performance-button'
                 />
+
                 <Button
                     text='NPE'
                     onClick={() => handleNavigate(ROUTES.NPE)}
                     active={window.location.pathname === ROUTES.NPE}
                     icon={IconNames.Random}
+                    disabled={!hasActiveNpe}
                     variant='minimal'
                     size='large'
                     className='npe-button'

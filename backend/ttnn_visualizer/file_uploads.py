@@ -43,6 +43,13 @@ def extract_report_name(files):
     unsplit_report_name = str(files[0].filename)
     return unsplit_report_name.split("/")[0]
 
+def extract_npe_name(files):
+    if not files:
+        return None
+
+    file_path = Path(files[0].filename)
+    return file_path.stem
+
 
 def save_uploaded_files(
     files,

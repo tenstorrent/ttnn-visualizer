@@ -74,7 +74,7 @@ export interface OperationDetailsData extends Operation {
 }
 
 export interface TabSession {
-    active_report?: { profile_name?: string; report_name?: string };
+    active_report?: { profile_name?: string; report_name?: string; npe_name?: string };
     remote_connection?: RemoteConnection;
     remote_folder?: RemoteFolder;
 }

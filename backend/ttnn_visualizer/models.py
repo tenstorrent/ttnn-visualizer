@@ -182,6 +182,7 @@ class StatusMessage(SerializeableModel):
 class ActiveReport(SerializeableModel):
     report_name: Optional[str] = None
     profile_name: Optional[str] = None
+    npe_name: Optional[str] = None
 
 
 class RemoteReportFolder(SerializeableModel):

@@ -11,6 +11,7 @@ import { DEFAULT_DEVICE_ID } from '../definitions/Devices';
 export const reportLocationAtom = atom<'local' | 'remote' | null>(null);
 export const activeReportAtom = atom<string | null>(null);
 export const activePerformanceTraceAtom = atom<string | null>(null);
+export const activeNpeAtom = atom<string | null>(null);
 export const showHexAtom = atomWithStorage<boolean>('showHex', false);
 
 export const isFullStackTraceAtom = atom(false);
