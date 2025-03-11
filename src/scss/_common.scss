@@ -4,9 +4,10 @@
 
 @use 'sass:color';
 @use './definitions/colours' as *;
+@use './definitions/variables' as variables;
 
 .monospace {
-    font-family: monospace;
+    font-family: variables.$monospace-font;
 }
 
 .em {

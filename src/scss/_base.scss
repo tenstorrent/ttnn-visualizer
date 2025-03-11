@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 @use 'definitions/colours' as *;
+@use 'definitions/variables' as variables;
 
 :root {
     color-scheme: light dark;
@@ -24,7 +26,7 @@
 
 body {
     margin: 0;
-    font-family: 'Arial Nova', Arial, sans-serif;
+    font-family: variables.$base-font;
     height: 100vh;
     color: $tt-white;
     background-color: $tt-background;
