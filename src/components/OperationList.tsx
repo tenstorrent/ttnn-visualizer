@@ -356,10 +356,6 @@ const OperationList = () => {
                                                         onCollapseTensor={virtualizer.scrollToIndex}
                                                     />
                                                 )}
-
-                                                {/* {operation?.device_operations && (
-                                                    <DeviceOperations deviceOperations={operation.device_operations} />
-                                                )} */}
                                             </div>
                                         </Collapsible>
                                     </li>

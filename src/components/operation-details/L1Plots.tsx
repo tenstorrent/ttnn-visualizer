@@ -13,6 +13,7 @@ import { OperationDetails } from '../../model/OperationDetails';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import { selectedAddressAtom } from '../../store/app';
 import {
+    BufferRenderConfiguration,
     CBRenderConfiguration,
     L1RenderConfiguration,
     L1SmallRenderConfiguration,
@@ -49,7 +50,15 @@ function L1Plots({
     onLegendClick,
 }: L1PlotsProps) {
     const selectedAddress = useAtomValue(selectedAddressAtom);
-    const { chartData, memory, fragmentation, cbChartData, cbChartDataByOperation } = operationDetails.memoryData();
+    const {
+        chartData,
+        memory,
+        fragmentation,
+        cbChartData,
+        cbChartDataByOperation,
+        bufferMemory,
+        bufferChartDataByOperation,
+    } = operationDetails.memoryData();
     const { chartData: previousChartData } = previousOperationDetails.memoryData();
     const {
         chartData: l1SmallChartData,
@@ -106,6 +115,12 @@ function L1Plots({
             .flat(),
     ].sort((a, b) => a.address - b.address);
 
+    const bufferZoomRangeStart = Math.min(...bufferMemory.map((chunk) => chunk.address));
+    const bufferZoomRangeEnd = Math.max(...bufferMemory.map((chunk) => chunk.address + chunk.size));
+
+    const zoomRangeStart = Math.min(plotZoomRangeStart, bufferZoomRangeStart);
+    const zoomRangeEnd = Math.max(plotZoomRangeEnd, bufferZoomRangeEnd);
+
     return (
         <>
             <MemoryPlotRenderer
@@ -113,7 +128,7 @@ function L1Plots({
                 className={classNames('l1-memory-renderer', {
                     'empty-plot': previousChartData.length === 0,
                 })}
-                plotZoomRange={[plotZoomRangeStart - MEMORY_PADDING_L1, plotZoomRangeEnd + MEMORY_PADDING_L1]}
+                plotZoomRange={[zoomRangeStart - MEMORY_PADDING_L1, zoomRangeEnd + MEMORY_PADDING_L1]}
                 chartDataList={[previousChartData]}
                 isZoomedIn={zoomedInViewMainMemory}
                 memorySize={memorySizeL1}
@@ -126,12 +141,44 @@ function L1Plots({
                     'empty-plot': chartData.length === 0 && cbChartDataByOperation.size === 0,
                 })}
                 isZoomedIn={zoomedInViewMainMemory}
-                plotZoomRange={[plotZoomRangeStart - MEMORY_PADDING_L1, plotZoomRangeEnd + MEMORY_PADDING_L1]}
-                chartDataList={[cbChartData, chartData, l1SmallMemory.length > 0 ? l1SmallCondensedChart : []]}
+                plotZoomRange={[zoomRangeStart - MEMORY_PADDING_L1, zoomRangeEnd + MEMORY_PADDING_L1]}
+                chartDataList={[
+                    cbChartData,
+                    // bufferChartData,
+                    chartData,
+                    l1SmallMemory.length > 0 ? l1SmallCondensedChart : [],
+                ]}
                 memorySize={memorySizeL1}
                 onBufferClick={onBufferClick}
                 configuration={L1RenderConfiguration}
             />
+            <h3>L1 Operation Buffers</h3>
+            <br />
+            {[...bufferChartDataByOperation.entries()].map(([{ name: deviceOperationName }, plotData], index) => (
+                <Fragment key={`${deviceOperationName}-${index}`}>
+                    <h5 className='buffers-plot-title'>
+                        <Icon
+                            className='operation-icon'
+                            size={13}
+                            intent={Intent.SUCCESS}
+                            icon={IconNames.CUBE_ADD}
+                        />{' '}
+                        <span>{deviceOperationName}</span>
+                    </h5>
+                    <MemoryPlotRenderer
+                        title=''
+                        className={classNames('l1-memory-renderer interm-buffers', {
+                            // 'empty-plot': plotData.length === 0,
+                        })}
+                        chartDataList={[plotData]}
+                        plotZoomRange={[zoomRangeStart - MEMORY_PADDING_L1, zoomRangeEnd + MEMORY_PADDING_L1]}
+                        isZoomedIn={zoomedInViewMainMemory}
+                        memorySize={memorySizeL1}
+                        configuration={BufferRenderConfiguration}
+                        onBufferClick={onBufferClick}
+                    />
+                </Fragment>
+            ))}
 
             {showL1Small && (
                 <MemoryPlotRenderer

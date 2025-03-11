@@ -49,6 +49,18 @@ export const CBRenderConfiguration: PlotConfiguration = {
     title: '',
 };
 
+// this is needed to render tooltips with tensor information, 80 is too small
+export const BufferRenderConfiguration: PlotConfiguration = {
+    height: 82,
+    margin: {
+        l: 5,
+        r: 5,
+        b: 30,
+        t: 25,
+    },
+    title: '',
+};
+
 export const MAX_LEGEND_LENGTH = 20;
 
 export const BufferSummaryAxisConfiguration: PlotConfiguration = {

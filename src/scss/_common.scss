@@ -113,6 +113,10 @@ $row-background: $tt-grey-2;
     --toastify-toast-bd-radius: 2px;
 }
 
+.buffers-plot-title {
+    margin-top: -18px;
+}
+
 // Shared memory plots styles used in Operation Details
 .dram-memory-renderer,
 .l1-memory-renderer {
@@ -133,6 +137,11 @@ $row-background: $tt-grey-2;
     }
 
     &.circular-buffers {
+        margin-bottom: 5px;
+    }
+
+    &.interm-buffers {
+        margin-top: -40px;
         margin-bottom: 5px;
     }
 

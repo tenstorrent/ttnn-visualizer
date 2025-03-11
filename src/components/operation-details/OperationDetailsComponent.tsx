@@ -322,7 +322,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             onTensorClick={onTensorClick}
                         />
 
-                        {details.device_operations && details.deviceOperations.length > 0 && (
+                        {details.device_operations && (
                             <>
                                 <h3>Device operations</h3>
                                 <Button
