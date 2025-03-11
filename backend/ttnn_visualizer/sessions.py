@@ -6,7 +6,7 @@ from logging import getLogger
 
 from flask import request
 
-from ttnn_visualizer.utils import get_report_path, get_profiler_path
+from ttnn_visualizer.utils import get_report_path, get_profiler_path, get_npe_path
 from ttnn_visualizer.models import (
     TabSessionTable,
 )
@@ -30,6 +30,7 @@ def update_existing_tab_session(
     clear_remote,
 ):
     active_report = session_data.active_report or {}
+
 
     if report_name:
         active_report["report_name"] = report_name
@@ -92,18 +93,18 @@ def update_paths(
             remote_connection=remote_connection,
         )
 
-    # if active_report.get("npe_name"):
-    #     session_data.report_path = get_report_path(
-    #         active_report=active_report,
-    #         current_app=current_app,
-    #         remote_connection=remote_connection,
-    #     )
+    if active_report.get("npe_name"):
+        session_data.npe_path = get_npe_path(
+            npe_name=active_report["npe_name"],
+            current_app=current_app
+        )
 
 
 def create_new_tab_session(
     tab_id,
     report_name,
     profile_name,
+    npe_name,
     remote_connection,
     remote_folder,
     remote_profile_folder,
@@ -114,6 +115,8 @@ def create_new_tab_session(
         active_report["report_name"] = report_name
     if profile_name:
         active_report["profile_name"] = profile_name
+    if npe_name:
+        active_report["npe_name"] = npe_name
 
     if clear_remote:
         remote_connection = None

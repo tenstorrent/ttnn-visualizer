@@ -523,8 +523,6 @@ def create_npe_files():
     target_directory = report_directory / "npe"
     target_directory.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f"Writing npe file to {target_directory} / npe")
-
     save_uploaded_files(files, target_directory, npe_name)
 
     tab_id = request.args.get("tabId")
@@ -819,3 +817,19 @@ def health_check():
 def get_tab_session(session: TabSession):
     # Used to gate UI functions if no report is active
     return session.model_dump()
+
+@api.route("/npe", methods=["GET"])
+@with_session
+@timer
+def get_npe_data(session: TabSession):
+    if not session.npe_path:
+        logger.error("NPE path is not set in the session.")
+        return Response(status=HTTPStatus.NOT_FOUND)
+    else:
+        npe_file = Path(session.npe_path) / session.active_report["npe_name"]
+        if not npe_file.exists():
+            logger.error(f"NPE file does not exist: {npe_file}")
+            return Response(status=HTTPStatus.NOT_FOUND)
+        with open(npe_file, "r") as file:
+            npe_data = json.load(file)
+        return jsonify(npe_data)
