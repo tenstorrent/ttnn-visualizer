@@ -50,7 +50,12 @@ const ListItem: React.FC<ListItemProps> = ({
 
             {children}
 
-            {tags?.map((tag) => <MemoryTag memory={tag.htmlTitle} />)}
+            {tags?.map((tag, index) => (
+                <MemoryTag
+                    memory={tag.htmlTitle}
+                    key={index}
+                />
+            ))}
         </div>
     );
 };

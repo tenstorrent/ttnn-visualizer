@@ -1,7 +1,17 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
+@use '../definitions/variables' as *;
+
 .perf-report {
     background: #222;
     color: #fff;
     padding: 1rem;
+
+    .op-tooltip {
+        font-family: $base-font;
+    }
 
     .perf-table {
         border-collapse: collapse;

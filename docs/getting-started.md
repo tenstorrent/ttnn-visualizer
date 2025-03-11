@@ -59,13 +59,13 @@ TTNN-Visualizer can be installed from PyPI:
 
 After installation run `ttnn-visualizer` to start the application.
 
-It is recommended to do this within a virtual environment. The minimum Python version is 3.12. Pyenv can be used
+It is recommended to do this within a virtual environment. The minimum supported version of Python is 3.10. Pyenv can be used
 to ensure the application runs with a supported version of Python:
 
 ```bash
 mkdir ttnn-visualizer
 cd ttnn-visualizer
-pyenv local 3.12 # Optional step if using pyenv to manage versions
+pyenv local 3.10 # Optional step if using pyenv to manage versions
 python -m venv .env
 source .env/bin/activate
 pip install ttnn-visualizer
@@ -89,7 +89,7 @@ https://pipx.pypa.io/stable/installation/
 
 ## Installing as a Python Wheel
 
-The application is designed to run on user local system and has python requirement of `3.12.3`.
+The application is designed to run on the user's local system, with a minimum supported Python version of `3.10`.
 
 Download the wheel file from the [releases page](https://github.com/tenstorrent/ttnn-visualizer/releases) and install
 using `pip install release_name.whl`.

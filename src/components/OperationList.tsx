@@ -185,14 +185,14 @@ const OperationList = () => {
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
 
-                <ButtonGroup minimal>
+                <ButtonGroup variant='minimal'>
                     <Tooltip
                         content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={() => handleExpandAllToggle()}
-                            rightIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
+                            endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
                         />
                     </Tooltip>
 
@@ -211,7 +211,7 @@ const OperationList = () => {
                                     ? IconNames.SortAlphabeticalDesc
                                     : IconNames.SortAlphabetical
                             }
-                            outlined={isSortingModeActive(shouldSortByID)}
+                            variant={isSortingModeActive(shouldSortByID) ? 'outlined' : undefined}
                         />
                     </Tooltip>
 
@@ -230,7 +230,7 @@ const OperationList = () => {
                                     ? IconNames.SortNumericalDesc
                                     : IconNames.SortNumerical
                             }
-                            outlined={isSortingModeActive(shouldSortDuration)}
+                            variant={isSortingModeActive(shouldSortDuration) ? 'outlined' : undefined}
                         />
                     </Tooltip>
 
@@ -318,9 +318,9 @@ const OperationList = () => {
                                                     onClick={() => navigate(`${ROUTES.OPERATIONS}/${operation.id}`)}
                                                     text='Memory details'
                                                     intent={Intent.PRIMARY}
-                                                    rightIcon={IconNames.SEGMENTED_CONTROL}
-                                                    small
-                                                    outlined
+                                                    endIcon={IconNames.SEGMENTED_CONTROL}
+                                                    size='small'
+                                                    variant='outlined'
                                                 />
                                             }
                                             isOpen={expandedOperations.includes(operation.id)}

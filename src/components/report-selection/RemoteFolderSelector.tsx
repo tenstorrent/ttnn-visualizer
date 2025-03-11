@@ -160,7 +160,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
             >
                 <Button
                     icon={icon as IconName}
-                    rightIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
+                    endIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={loading || remoteFolderList?.length === 0}
                     text={remoteFolder ? formatRemoteFolderName(remoteFolder, type, remoteConnection) : fallbackLabel}
                 />

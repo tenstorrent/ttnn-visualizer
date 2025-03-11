@@ -118,8 +118,8 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                         {title}
                         <Button
                             icon={IconNames.CROSS}
-                            minimal
-                            small
+                            variant='minimal'
+                            size='small'
                             onClick={onClose}
                         />
                     </h3>
@@ -189,8 +189,8 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                         <div className='tensix-details-header'>
                             <Button
                                 icon={IconNames.CROSS}
-                                minimal
-                                small
+                                variant='minimal'
+                                size='small'
                                 onClick={() => {
                                     setSelectedTensix(null);
                                 }}

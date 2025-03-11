@@ -42,15 +42,15 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
             <div className='collapsible-controls'>
                 {children && (
                     <Button
-                        small
-                        minimal
+                        size='small'
+                        variant='minimal'
                         onClick={() => {
                             if (onExpandToggle) {
                                 onExpandToggle();
                             }
                             setIsOpenState(!isOpenState);
                         }}
-                        rightIcon={icon}
+                        endIcon={icon}
                     >
                         {label}
                     </Button>
