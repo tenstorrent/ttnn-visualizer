@@ -6,3 +6,8 @@ export enum SECTION_IDS {
     PLOT = 'plot',
     TABLE = 'table',
 }
+
+export enum TAB_IDS {
+    L1 = 'L1',
+    DRAM = 'DRAM',
+}

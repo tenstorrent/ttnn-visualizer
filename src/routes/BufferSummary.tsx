@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { AnchorButton, ButtonGroup, Intent, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { useAtom } from 'jotai';
 import { BuffersByOperationData, useBuffers, useOperationsList } from '../hooks/useAPI';
 import useBufferFocus from '../hooks/useBufferFocus';
 import { BufferType } from '../model/BufferType';
@@ -15,18 +16,14 @@ import ROUTES from '../definitions/Routes';
 import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
 import LoadingSpinner from '../components/LoadingSpinner';
 import 'styles/components/BufferSummary.scss';
-import { SECTION_IDS } from '../definitions/BufferSummary';
-
-enum TAB_IDS {
-    L1 = 'L1',
-    DRAM = 'DRAM',
-}
+import { SECTION_IDS, TAB_IDS } from '../definitions/BufferSummary';
+import { selectedBufferSummaryTabAtom } from '../store/app';
 
 function BufferSummary() {
     const plotRef = useRef<HTMLHeadingElement>(null);
     const tableRef = useRef<HTMLHeadingElement>(null);
     const [activeSection, setActiveSection] = useState<SECTION_IDS>(SECTION_IDS.PLOT);
-    const [selectedTabId, setSelectedTabId] = useState<TAB_IDS>(TAB_IDS.L1);
+    const [selectedTabId, setSelectedTabId] = useAtom(selectedBufferSummaryTabAtom);
     const { data: buffersByOperation } = useBuffers(BufferType.L1, true);
     const { data: dramBuffersByOperation } = useBuffers(BufferType.DRAM, true);
     const { data: operationsList } = useOperationsList();
