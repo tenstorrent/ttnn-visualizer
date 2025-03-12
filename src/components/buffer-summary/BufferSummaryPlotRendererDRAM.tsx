@@ -17,7 +17,7 @@ import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/Routes';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
-import { renderMemoryLayoutAtom, showHexAtom } from '../../store/app';
+import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
 
@@ -55,7 +55,7 @@ function BufferSummaryPlotRendererDRAM({
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
-    const [isZoomedIn, setIsZoomedIn] = useState(false);
+    const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
     const scrollElementRef = useRef(null);
 
     const numberOfOperations = useMemo(
