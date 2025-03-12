@@ -87,6 +87,15 @@ For help with setting up `pipx`, see:
 
 https://pipx.pypa.io/stable/installation/
 
+When installing `ttnn-visualizer` in a virtual environment, ensure that it is not installed with the system Python
+also. Having the package installed at the system level and in a virtual environment at the same time can lead to an
+issue where files are imported from the system package when running in the virtual environment, causing version
+mismatches.
+
+If you run into any issue with an unexpected TTNN Visualizer version appearing in the browser, different from the
+package version installed in your virtual env, ensure you have uninstalled the system package by running
+`pip uninstall ttnn-visualizer` outside of the virtual env.
+
 ## Installing as a Python Wheel
 
 The application is designed to run on the user's local system, with a minimum supported Python version of `3.10`.
