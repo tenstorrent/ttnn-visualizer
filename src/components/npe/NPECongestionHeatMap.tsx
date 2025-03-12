@@ -135,7 +135,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                     hoverCloseDelay={0}
                     isOpen
                     usePortal
-                    minimal
+                    variant='minimal'
                     modifiers={{
                         offset: {
                             enabled: true,

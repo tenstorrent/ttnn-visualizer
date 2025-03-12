@@ -243,9 +243,11 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         onClick={() => {
                                             setTensixFullVisualisationOpen(true);
                                         }}
+                                        disabled={tensixFullVisualisationOpen}
                                         intent={Intent.PRIMARY}
-                                        rightIcon={IconNames.OPEN_APPLICATION}
+                                        endIcon={IconNames.OPEN_APPLICATION}
                                     />
+
                                     <Button
                                         className='right-icon-small'
                                         text='Input/Output allocations per core'
@@ -253,8 +255,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                         onClick={() => {
                                             setTensixIOVisualisationOpen(true);
                                         }}
+                                        disabled={tensixIOVisualisationOpen}
                                         intent={Intent.PRIMARY}
-                                        rightIcon={IconNames.OPEN_APPLICATION}
+                                        endIcon={IconNames.OPEN_APPLICATION}
                                     />
                                 </ButtonGroup>
 

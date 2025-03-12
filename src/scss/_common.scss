@@ -4,9 +4,10 @@
 
 @use 'sass:color';
 @use './definitions/colours' as *;
+@use './definitions/variables' as variables;
 
 .monospace {
-    font-family: monospace;
+    font-family: variables.$monospace-font;
 }
 
 .em {
@@ -184,11 +185,11 @@ $row-background: $tt-grey-2;
 
 .bp5-tag {
     &.tag-l1 {
-        background-color: $tt-purple;
+        background-color: $tt-yellow-accent;
     }
 
-    .tag-dram {
-        background-color: $tt-teal;
+    &.tag-dram {
+        background-color: $tt-teal-shade;
     }
 }
 

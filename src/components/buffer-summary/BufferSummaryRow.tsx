@@ -162,7 +162,7 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
                     hoverCloseDelay={0}
                     isOpen
                     usePortal
-                    minimal
+                    variant='minimal'
                     modifiers={{
                         offset: {
                             enabled: true,
