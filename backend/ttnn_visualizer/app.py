@@ -2,6 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import argparse
 import logging
 import os
 import subprocess
@@ -20,6 +21,8 @@ from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from ttnn_visualizer.exceptions import DatabaseFileNotFoundException
+from ttnn_visualizer.extensions import db
+from ttnn_visualizer.sessions import create_tab_session_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
 
 logger = logging.getLogger(__name__)
@@ -135,9 +138,10 @@ def middleware(app: flask.Flask):
     return None
 
 
-def open_browser(host, port, protocol="http"):
-
-    url = f"{protocol}://{host}:{port}"
+def open_browser(host, port, tab_id=None):
+    url = f"http://{host}:{port}"
+    if tab_id:
+        url = f"{url}?tabId={tab_id}"
 
     print(f"Launching browser with url: {url}")
     try:
@@ -149,6 +153,13 @@ def open_browser(host, port, protocol="http"):
         print(f"Could not open the default browser: {e}")
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="A tool for visualizing the Tenstorrent Neural Network model (TT-NN)")
+    parser.add_argument("--report-path", type=str, help="Specify a report path", default=None)
+    parser.add_argument("--profiler-path", help="Specify a profiler path", default=None)
+    return parser.parse_args()
+
+
 def main():
 
     run_command = sys.argv[0].split("/")
@@ -156,6 +167,17 @@ def main():
         os.environ.setdefault("FLASK_ENV", "production")
 
     config = cast(DefaultConfig, Config())
+    args = parse_args()
+    tab_id = None
+
+    if args.report_path or args.profiler_path:
+        app = create_app()
+        app.app_context().push()
+        session = create_tab_session_from_local_paths(
+            report_path=args.report_path,
+            profiler_path=args.profiler_path,
+        )
+        tab_id = session.tab_id
 
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
@@ -182,7 +204,7 @@ def main():
         flask_env = os.getenv("FLASK_ENV", "development")
         port = config.PORT if flask_env == "production" else config.DEV_SERVER_PORT
         host = config.HOST if flask_env == "production" else config.DEV_SERVER_HOST
-        threading.Timer(2, open_browser, [host, port]).start()
+        threading.Timer(2, open_browser, [host, port, tab_id]).start()
     try:
         subprocess.run(gunicorn_args)
     except KeyboardInterrupt:

@@ -2,6 +2,9 @@
 #
 # SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import json
+import random
+import string
 from logging import getLogger
 
 from flask import request
@@ -16,7 +19,6 @@ logger = getLogger(__name__)
 
 from flask import jsonify, current_app
 from sqlalchemy.exc import SQLAlchemyError
-import json
 
 
 def update_existing_tab_session(
@@ -243,3 +245,22 @@ def init_sessions(app):
     """
     app.before_request(get_tab_session)
     app.logger.info("Sessions middleware initialized.")
+
+
+def create_random_tab_id():
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
+
+
+def create_tab_session_from_local_paths(report_path, profiler_path):
+    session_data = TabSessionTable(
+        tab_id=create_random_tab_id(),
+        active_report={},
+        report_path=report_path,
+        profiler_path=profiler_path,
+        remote_connection=None,
+        remote_folder=None,
+        remote_profile_folder=None,
+    )
+    db.session.add(session_data)
+    db.session.commit()
+    return session_data
