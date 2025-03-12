@@ -398,7 +398,6 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
                         name: op.name,
                         index: op.id,
                     },
-                    // this.getChartData(op.bufferList, { colorVariance: op.id }),
                     this.getChartData(op.bufferList),
                 );
             }
