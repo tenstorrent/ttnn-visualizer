@@ -3,11 +3,12 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { PlotData } from 'plotly.js';
-import { formatSize, toHex } from '../functions/math';
+import { formatSize, getCoresInRange, toHex } from '../functions/math';
 import {
     BufferData,
     Chunk,
     DeviceOperation,
+    DeviceOperationTypes,
     FragmentationEntry,
     Node,
     NodeType,
@@ -149,6 +150,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                                 address: parseInt(node.params.address, 10),
                                 size: parseInt(node.params.size, 10),
                                 core_range_set: node.params.core_range_set,
+                                num_cores: getCoresInRange(node.params.core_range_set),
                                 colorVariance: deviceOp.id,
                             });
                         }
@@ -167,13 +169,15 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                             .find((op) => op.name === deviceOpNode.params.name);
 
                         if (deviceOp) {
-                            deviceOp.bufferList.push({
-                                address: parseInt(node.params.address, 10),
-                                size: parseInt(node.params.size, 10),
-                                layout: node.params.layout,
-                                type: node.params.type,
-                                tensorId: this.getTensorForAddress(parseInt(node.params.address, 10))?.id,
-                            });
+                            if (node.params.type === DeviceOperationTypes.L1) {
+                                deviceOp.bufferList.push({
+                                    address: parseInt(node.params.address, 10),
+                                    size: parseInt(node.params.size, 10) / parseInt(node.params.num_cores, 10),
+                                    layout: node.params.layout,
+                                    type: node.params.type,
+                                    // tensorId: this.getTensorForAddress(parseInt(node.params.address, 10))?.id,
+                                });
+                            }
                         }
                     }
                 }
@@ -394,7 +398,7 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
                         name: op.name,
                         index: op.id,
                     },
-                    this.getChartData(op.bufferList, { colorVariance: op.id }),
+                    this.getChartData(op.bufferList),
                 );
             }
         });

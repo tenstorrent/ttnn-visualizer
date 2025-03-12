@@ -74,7 +74,9 @@ export function processMemoryAllocations(graph: Node[]): {
         }
 
         if (node.node_type === NodeType.buffer_allocate && node.params.type === DeviceOperationTypes.L1) {
-            totalBuffer += parseInt(node.params.size, 10);
+            // const numCores = parseInt(node.params.num_cores, 10) || 1;
+
+            totalBuffer += parseInt(node.params.size, 10); // / numCores;
         }
 
         if (node.node_type === NodeType.function_end) {
@@ -82,8 +84,12 @@ export function processMemoryAllocations(graph: Node[]): {
         }
 
         if (node.node_type === NodeType.buffer_deallocate) {
+            // TODO: we need to connect buffer allocation to this to get num_cores and account for it, otherwise this is highly incorrect
             const connectionIndex = node.connections ? node.connections[0] : -1;
             if (connectionIndex >= 0 && graph[connectionIndex].params.type === 'L1') {
+                // const numCores = parseInt(graph[connectionIndex].params.num_cores, 10) || 1;
+                // console.log(numCores, graph[connectionIndex].params.num_cores);
+                // totalBuffer -= parseInt(graph[connectionIndex].params.size, 10) / numCores;
                 totalBuffer -= parseInt(graph[connectionIndex].params.size, 10);
             }
         }

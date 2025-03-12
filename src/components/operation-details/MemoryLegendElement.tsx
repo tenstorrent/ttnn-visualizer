@@ -24,6 +24,7 @@ export const MemoryLegendElement: React.FC<{
     isMultiDeviceBuffer?: boolean;
     isGroupHeader?: boolean;
     className?: string;
+    numCores?: number;
 }> = ({
     // no wrap eslint
     chunk,
@@ -36,6 +37,7 @@ export const MemoryLegendElement: React.FC<{
     layout,
     isMultiDeviceBuffer = false,
     className,
+    numCores,
 }) => {
     const Component = chunk.empty ? 'div' : 'button';
     const emptyChunkLabel = (
@@ -53,7 +55,7 @@ export const MemoryLegendElement: React.FC<{
     );
 
     const derivedTensor = operationDetails.getTensorForAddress(chunk.address);
-
+    const numCoresLabel = numCores && numCores > 1 ? ` x ${numCores}` : '';
     return (
         <Component
             key={chunk.address}
@@ -92,7 +94,10 @@ export const MemoryLegendElement: React.FC<{
             />
             <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize)}</div>
             <div className='format-numbers monospace keep-left'>({toHex(chunk.address)})</div>
-            <div className='format-numbers monospace'>{formatSize(chunk.size)} </div>
+            <div className='format-numbers monospace nowrap'>
+                {formatSize(chunk.size)}
+                {numCoresLabel}
+            </div>
             <div>
                 {!isMultiDeviceBuffer && !chunk.empty && derivedTensor && (
                     <>
