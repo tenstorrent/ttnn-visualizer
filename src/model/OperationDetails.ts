@@ -42,7 +42,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     tensorListByAddress: Map<number, Tensor> = new Map();
 
-    private tensorListById: Map<number, Tensor> = new Map();
+    public tensorListById: Map<number, Tensor> = new Map();
 
     private operations: OperationDescription[] = [];
 
