@@ -17,7 +17,6 @@ import { AllocationDetails, processMemoryAllocations } from '../../functions/pro
 import { formatSize, getCoresInRange, prettyPrintAddress, toReadableShape } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
-// import { JSX } from 'react/jsx-runtime';
 
 // TODO: this component definitely needs to be broken down into smaller components
 

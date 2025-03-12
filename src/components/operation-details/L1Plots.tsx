@@ -142,12 +142,7 @@ function L1Plots({
                 })}
                 isZoomedIn={zoomedInViewMainMemory}
                 plotZoomRange={[zoomRangeStart - MEMORY_PADDING_L1, zoomRangeEnd + MEMORY_PADDING_L1]}
-                chartDataList={[
-                    cbChartData,
-                    // bufferChartData,
-                    chartData,
-                    l1SmallMemory.length > 0 ? l1SmallCondensedChart : [],
-                ]}
+                chartDataList={[cbChartData, chartData, l1SmallMemory.length > 0 ? l1SmallCondensedChart : []]}
                 memorySize={memorySizeL1}
                 onBufferClick={onBufferClick}
                 configuration={L1RenderConfiguration}
@@ -167,9 +162,7 @@ function L1Plots({
                     </h5>
                     <MemoryPlotRenderer
                         title=''
-                        className={classNames('l1-memory-renderer interm-buffers', {
-                            // 'empty-plot': plotData.length === 0,
-                        })}
+                        className='l1-memory-renderer interm-buffers'
                         chartDataList={[plotData]}
                         plotZoomRange={[zoomRangeStart - MEMORY_PADDING_L1, zoomRangeEnd + MEMORY_PADDING_L1]}
                         isZoomedIn={zoomedInViewMainMemory}
