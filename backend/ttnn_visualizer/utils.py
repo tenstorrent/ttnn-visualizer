@@ -110,8 +110,7 @@ def get_npe_path(npe_name, current_app):
     local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
     base_dir = local_dir
 
-    npe_dir = base_dir / "npe"
-    npe_path = npe_dir / npe_name
+    npe_path = base_dir / "npe"
 
     return str(npe_path)
 

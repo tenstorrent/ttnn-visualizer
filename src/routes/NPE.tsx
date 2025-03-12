@@ -1,20 +1,22 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 
+import { useAtomValue } from 'jotai';
 import NPEFileLoader from '../components/npe/NPEFileLoader';
-import { NPEData } from '../model/NPEModel';
 import NPEView from '../components/npe/NPEViewComponent';
+import { useNpe } from '../hooks/useAPI';
+import { activeNpeAtom } from '../store/app';
 
 const NPE: React.FC = () => {
-    const [npeData, setNpeData] = React.useState<NPEData | null>(null);
-    const onFileLoaded = (data: unknown) => {
-        setNpeData(data as NPEData);
-    };
+    const npeFileName = useAtomValue(activeNpeAtom);
+    const { data: npeData } = useNpe(npeFileName);
 
     return (
         <>
             <Helmet title='NPE' />
-            <NPEFileLoader onFileLoad={onFileLoaded} />
+
+            <NPEFileLoader />
+
             {npeData && <NPEView npeData={npeData} />}
         </>
     );

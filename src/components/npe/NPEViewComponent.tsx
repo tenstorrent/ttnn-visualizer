@@ -22,12 +22,12 @@ interface NPEViewProps {
     npeData: NPEData;
 }
 
-const LABEL_STEP_TRESHOLD = 25;
+const LABEL_STEP_THRESHOLD = 25;
 const RIGHT_MARGIN_OFFSET_PX = 25;
+const TENSIX_SIZE: number = NODE_SIZE; // * 0.75;
+const SVG_SIZE = TENSIX_SIZE;
 
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
-    const tensixSize: number = NODE_SIZE; // * 0.75;
-    const SVG_SIZE = tensixSize;
     const width = npeData.common_info.num_cols;
     const height = npeData.common_info.num_rows;
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
@@ -265,7 +265,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         max={npeData.timestep_data.length - 1}
                         stepSize={1}
                         labelStepSize={
-                            npeData.timestep_data.length > LABEL_STEP_TRESHOLD ? npeData.timestep_data.length / 20 : 1
+                            npeData.timestep_data.length > LABEL_STEP_THRESHOLD ? npeData.timestep_data.length / 20 : 1
                         }
                         value={selectedTimestep}
                         onChange={(value: number) => handleScrubberChange(value)}
@@ -286,8 +286,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         className='tensix-grid empty'
                         style={{
                             display: 'grid',
-                            gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
-                            gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
+                            gridTemplateColumns: `repeat(${width || 0}, ${TENSIX_SIZE}px)`,
+                            gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                         }}
                     >
                         {Array.from({ length: width }).map((_, x) =>
@@ -299,8 +299,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     style={{
                                         gridColumn: x + 1,
                                         gridRow: y + 1,
-                                        width: `${tensixSize}px`,
-                                        height: `${tensixSize}px`,
+                                        width: `${TENSIX_SIZE}px`,
+                                        height: `${TENSIX_SIZE}px`,
                                     }}
                                     key={`${x}-${y}`}
                                 >
@@ -313,8 +313,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         className='tensix-grid congestion'
                         style={{
                             display: 'grid',
-                            gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
-                            gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
+                            gridTemplateColumns: `repeat(${width || 0}, ${TENSIX_SIZE}px)`,
+                            gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                         }}
                     >
                         {transfers.map((transfer) => (
@@ -381,8 +381,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     <div
                         className='tensix-grid transfers'
                         style={{
-                            gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
-                            gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
+                            gridTemplateColumns: `repeat(${width || 0}, ${TENSIX_SIZE}px)`,
+                            gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                         }}
                     >
                         {transferListSelectionRendering.map((row, rowIndex) =>
@@ -419,8 +419,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         <div
                             className='tensix-grid transfer-single'
                             style={{
-                                gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
-                                gridTemplateRows: `repeat(${height || 0}, ${tensixSize}px)`,
+                                gridTemplateColumns: `repeat(${width || 0}, ${TENSIX_SIZE}px)`,
+                                gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                             }}
                         >
                             {highlightedTransfer?.route.map((point) => (
