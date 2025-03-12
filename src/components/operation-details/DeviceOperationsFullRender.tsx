@@ -17,7 +17,7 @@ import { AllocationDetails, processMemoryAllocations } from '../../functions/pro
 import { formatSize, getCoresInRange, prettyPrintAddress, toReadableShape } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
-// import { JSX } from 'react/jsx-runtime';
+import { useGetTensorSizesById } from '../../hooks/useAPI';
 
 // TODO: this component definitely needs to be broken down into smaller components
 
@@ -27,7 +27,11 @@ const DeviceOperationsFullRender: React.FC<{
     onLegendClick: (address: number, tensorId?: number) => void;
 }> = ({ deviceOperations, details, onLegendClick }) => {
     const selectedAddress = useAtomValue(selectedAddressAtom);
-    const { memoryAllocationList } = processMemoryAllocations(deviceOperations);
+
+    const inputIds = details.inputs.map((tensor) => tensor?.id);
+    const inputs = useGetTensorSizesById(inputIds);
+    const { memoryAllocationList, peakMemoryLoad } = processMemoryAllocations(deviceOperations, inputs);
+
     const formatDeviceOpParameters = useCallback(
         (node: Node) => {
             const bufferDetails = (buffer?: Node, tensorId?: number, optionalOutput?: JSX.Element | undefined) => {
@@ -235,18 +239,17 @@ const DeviceOperationsFullRender: React.FC<{
                 const memoryDetails: AllocationDetails | undefined = memoryAllocationList.find(
                     (data) => data.id === node.id,
                 );
-                const memoryInfo = memoryDetails
-                    ? undefined
-                    : // <span
-                      //     className={classNames('memory-info monospace', {
-                      //         peak: memoryDetails.total_memory === peakMemoryLoad,
-                      //     })}
-                      // >
-                      //     <span className='format-numbers'>{formatSize(memoryDetails.total_cb)}</span>
-                      //     <span className='format-numbers'>{formatSize(memoryDetails.total_buffer)}</span>
-                      //     <span className='format-numbers'>{formatSize(memoryDetails.total_memory)}</span>
-                      // </span>
-                      undefined;
+                const memoryInfo = memoryDetails ? (
+                    <span
+                        className={classNames('memory-info monospace', {
+                            peak: memoryDetails.total_memory === peakMemoryLoad,
+                        })}
+                    >
+                        <span className='format-numbers'>{formatSize(memoryDetails.total_cb)}</span>
+                        <span className='format-numbers'>{formatSize(memoryDetails.total_buffer)}</span>
+                        <span className='format-numbers'>{formatSize(memoryDetails.total_memory)}</span>
+                    </span>
+                ) : undefined;
                 if (nodeType === NodeType.function_start) {
                     deviceOpList.push(node);
                     stack.push([]);
@@ -448,6 +451,7 @@ const DeviceOperationsFullRender: React.FC<{
             formatDeviceOpParameters,
             memoryAllocationList,
             onLegendClick,
+            peakMemoryLoad,
             preprocessConnections,
             selectedAddress,
         ],
@@ -455,23 +459,23 @@ const DeviceOperationsFullRender: React.FC<{
 
     return (
         <div className='device-operations-full-render-wrap'>
-            {/* <h3 className='peak-load monospace'> */}
-            {/*    Peak L1 memory load: <span className='format-numbers'>{formatSize(peakMemoryLoad)}</span> */}
-            {/* </h3> */}
+            <h3 className='peak-load monospace'>
+                Peak L1 memory load per bank: <span className='format-numbers'>{formatSize(peakMemoryLoad)}</span>
+            </h3>
             <div className='device-operations-full-render'>
-                {/* <span className='memory-info monospace '> */}
-                {/*    <span className='format-numbers'>CBs</span> */}
-                {/*    <span className='format-numbers'>Buffers</span> */}
-                {/*    <span className='format-numbers'>Total</span> */}
-                {/* </span> */}
+                <span className='memory-info monospace '>
+                    <span className='format-numbers'>CBs</span>
+                    <span className='format-numbers'>Buffers</span>
+                    <span className='format-numbers'>Total</span>
+                </span>
                 {renderOperations(deviceOperations)}
             </div>
             {/* we are rendering peak load twice if there are more than 20 device operations ei a lot of them */}
-            {/* {deviceOperations.length > 20 && ( */}
-            {/*    <h3 className='peak-load monospace'> */}
-            {/*        Peak L1 memory load: <span className='format-numbers'>{formatSize(peakMemoryLoad)}</span> */}
-            {/*    </h3> */}
-            {/* )} */}
+            {deviceOperations.length > 20 && (
+                <h3 className='peak-load monospace'>
+                    Peak L1 memory load per bank: <span className='format-numbers'>{formatSize(peakMemoryLoad)}</span>
+                </h3>
+            )}
         </div>
     );
 };

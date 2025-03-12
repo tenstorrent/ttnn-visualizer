@@ -740,6 +740,23 @@ export const useArchitecture = (arch: DeviceArchitecture) => {
             throw new Error(`Unknown architecture: ${arch}`);
     }
 };
+
+export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; size: number }[] => {
+    const { data: tensors } = useTensors();
+    const buffersByOperation = useBuffers(BufferType.L1, false);
+    return tensorIdList
+        .map((tensorId) => {
+            const tensor = tensors?.find((t) => t.id === tensorId);
+            if (tensor) {
+                const opid = tensor?.producers[0];
+                const buffers = buffersByOperation.data?.find((b) => b.id === opid);
+                const buffer = buffers?.buffers.find((b) => b.address === tensor.address);
+                return { id: tensor.id, size: buffer?.size || null };
+            }
+            return null;
+        })
+        .filter((item) => item !== null) as { id: number; size: number }[];
+};
 export const useNodeType = (arch: DeviceArchitecture) => {
     const architecture = useArchitecture(arch);
     const cores = useMemo(() => {
