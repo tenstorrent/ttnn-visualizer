@@ -12,12 +12,12 @@
         height: 100vh;
     }
 
+    .loading-container {
+        background-color: transparent;
+    }
+
     .tensor-visualisation {
         background-color: $tt-grey-4;
-
-        &.is-loading {
-            padding: 0;
-        }
 
         .title {
             display: flex;
