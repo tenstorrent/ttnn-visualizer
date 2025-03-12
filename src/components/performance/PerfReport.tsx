@@ -7,11 +7,14 @@ import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
 import { Icon, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { Link } from 'react-router-dom';
 import { MathFidelity, PerfTableRow } from '../../definitions/PerfTable';
 import { formatSize, toSecondsPretty } from '../../functions/math';
 import { selectedPerformanceRangeAtom } from '../../store/app';
 import 'styles/components/PerfReport.scss';
-import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
+import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
+import ROUTES from '../../definitions/Routes';
+import { OperationDescription } from '../../model/APIData';
 
 type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'orange' | 'grey';
 
@@ -46,7 +49,6 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
 
 const TABLE_HEADERS: TableHeader[] = [
     { label: 'ID', key: 'id' },
-    { label: 'OP', key: 'op' },
     { label: 'Total %', key: 'total_percent', unit: '%', decimals: 1 },
     { label: 'Bound', key: 'bound', colour: 'yellow' },
     { label: 'OP Code', key: 'op_code', colour: 'blue' },
@@ -59,6 +61,9 @@ const TABLE_HEADERS: TableHeader[] = [
     { label: 'FLOPs %', key: 'flops_percent', unit: '%' },
     { label: 'Math Fidelity', key: 'math_fidelity', colour: 'cyan' },
 ];
+
+const OP_ID_INSERTION_POINT = 1;
+const HIGH_DISPATCH_INSERTION_POINT = 5;
 
 const NUMBER_KEYS_TO_PARSE = [
     'device_time',
@@ -78,6 +83,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
     const selectedRange = useAtomValue(selectedPerformanceRangeAtom);
     const opIdsMap = useOptoPerfIdFiltered();
+    const { data: operations } = useOperationsList();
 
     const processedRows: PerfTableRow[] = useMemo(() => {
         return (
@@ -97,17 +103,18 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
         return selectedRange && processedRows.length > 0
             ? processedRows.filter((row) => {
                   const rowId = parseInt(row?.id, 10);
-
                   return rowId >= selectedRange[0] && rowId <= selectedRange[1];
               })
             : processedRows;
     }, [processedRows, selectedRange]);
 
-    const visibleHeaders = (
-        hiliteHighDispatch
-            ? [...TABLE_HEADERS.slice(0, 5), { label: 'Slow', key: 'high_dispatch' }, ...TABLE_HEADERS.slice(5)]
-            : TABLE_HEADERS
-    ) as TableHeader[];
+    const visibleHeaders = [
+        ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
+        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: 'op' }] : [{}]),
+        ...TABLE_HEADERS.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
+        ...(hiliteHighDispatch ? [{ label: 'Slow', key: 'high_dispatch' }] : [{}]),
+        ...TABLE_HEADERS.slice(HIGH_DISPATCH_INSERTION_POINT),
+    ] as TableHeader[];
 
     return (
         <>
@@ -160,7 +167,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                                                 'align-right': header.key === 'math_fidelity',
                                             })}
                                         >
-                                            {formatCell(row, header)}
+                                            {formatCell(row, header, operations)}
                                         </td>
                                     ))}
                                 </tr>
@@ -189,9 +196,14 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     );
 };
 
-const formatCell = (row: PerfTableRow, header: TableHeader): React.JSX.Element | string => {
+const formatCell = (
+    row: PerfTableRow,
+    header: TableHeader,
+    operations?: OperationDescription[],
+): React.JSX.Element | string => {
     const { key, unit, decimals } = header;
     let formatted: string | boolean | string[];
+    let value = row[key];
 
     if (key === 'high_dispatch') {
         return (
@@ -204,7 +216,20 @@ const formatCell = (row: PerfTableRow, header: TableHeader): React.JSX.Element |
         );
     }
 
-    let value = row[key];
+    if (key === 'op' && operations) {
+        return (
+            <Tooltip
+                content={
+                    <div className='op-tooltip'>
+                        {value} {getOperationDetails(operations, value as number)}
+                    </div>
+                }
+                usePortal={false}
+            >
+                <Link to={`${ROUTES.OPERATIONS}/${value}`}>{value}</Link>
+            </Tooltip>
+        );
+    }
 
     if (NUMBER_KEYS_TO_PARSE.includes(key) && value) {
         value = typeof value === 'string' ? parseFloat(value) : value;
@@ -308,10 +333,7 @@ const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '' => {
     }
 
     if (key === 'op_code') {
-        const match =
-            keyValue && typeof keyValue === 'string'
-                ? Object.keys(OPERATION_COLOURS).find((opCodeKey) => keyValue.includes(opCodeKey))
-                : false;
+        const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.raw_op_code.includes(opCodeKey));
 
         return match ? OPERATION_COLOURS[match] : 'white';
     }
@@ -469,4 +491,10 @@ function evaluateFidelity(
     }
 
     return ['unknown', `Using ${mathFidelity} for ${input0Datatype}/${input1Datatype} => ${outputDatatype}`];
+}
+
+function getOperationDetails(operations: OperationDescription[], id: number) {
+    const matchingOp = operations?.find((op) => op.id === id);
+
+    return matchingOp ? `${matchingOp.name} (${matchingOp.operationFileIdentifier})` : '';
 }

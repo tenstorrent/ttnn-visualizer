@@ -171,17 +171,17 @@ const TensorList = () => {
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
 
-                <ButtonGroup minimal>
+                <ButtonGroup variant='minimal'>
                     <Tooltip
                         content='Toggle high consumer tensors'
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={() => setShowHighConsumerTensors(!showHighConsumerTensors)}
-                            rightIcon={IconNames.ISSUE}
+                            endIcon={IconNames.ISSUE}
                             disabled={!tensorsWithRange?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
                             intent={Intent.DANGER}
-                            outlined={showHighConsumerTensors}
+                            variant={showHighConsumerTensors ? 'outlined' : undefined}
                         >
                             {filteredTensorList?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS).length}
                         </Button>
@@ -193,7 +193,7 @@ const TensorList = () => {
                     >
                         <Button
                             onClick={() => handleExpandAllToggle()}
-                            rightIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
+                            endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
                         />
                     </Tooltip>
 

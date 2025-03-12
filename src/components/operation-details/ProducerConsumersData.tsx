@@ -50,9 +50,9 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
                     <Button
                         onClick={() => setIsCollapsed(!isCollapsed)}
                         className='close-button'
-                        rightIcon={isCollapsed ? IconNames.CARET_DOWN : IconNames.CARET_UP}
-                        minimal
-                        small
+                        endIcon={isCollapsed ? IconNames.CARET_DOWN : IconNames.CARET_UP}
+                        variant='minimal'
+                        size='small'
                     />
                 </div>
 

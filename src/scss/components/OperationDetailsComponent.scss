@@ -113,6 +113,7 @@
         display: flex;
         flex-wrap: wrap;
         gap: 20px;
+        overflow-x: hidden;
     }
 
     .no-buffer-type-selected {

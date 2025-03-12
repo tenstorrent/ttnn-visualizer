@@ -94,3 +94,22 @@ export const toReadableShape = (input: string) => {
 export const toReadableType = (input: string) => {
     return input.replace(/^DataType\./, '');
 };
+
+/**
+ @description Count the number of cores in a range string
+ @param {string} rangeString - The range string to parse {[(x=0,y=0) - (x=7,y=7)]}
+ @returns {number} The number of cores
+ */
+export const getCoresInRange = (rangeString: string): number => {
+    const regex = /\(x=(\d+),y=(\d+)\)/g;
+    const matches = [...rangeString.matchAll(regex)];
+
+    if (matches.length !== 2) {
+        return 0;
+    }
+
+    const [x1, y1] = matches[0].slice(1).map(Number);
+    const [x2, y2] = matches[1].slice(1).map(Number);
+
+    return (x2 - x1 + 1) * (y2 - y1 + 1);
+};

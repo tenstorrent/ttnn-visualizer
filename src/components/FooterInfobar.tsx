@@ -124,7 +124,7 @@ function FooterInfobar() {
                             icon={sliderIsOpen ? IconNames.CARET_DOWN : IconNames.CARET_UP}
                             onClick={() => setSliderIsOpen(!sliderIsOpen)}
                             disabled={isOperationDetails}
-                            small
+                            size='small'
                         >
                             Range
                         </Button>
