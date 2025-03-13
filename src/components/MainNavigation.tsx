@@ -89,6 +89,7 @@ function MainNavigation() {
                     size='large'
                     className='performance-button'
                 />
+
                 <Button
                     text='NPE'
                     onClick={() => handleNavigate(ROUTES.NPE)}

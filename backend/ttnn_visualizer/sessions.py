@@ -6,7 +6,7 @@ from logging import getLogger
 
 from flask import request
 
-from ttnn_visualizer.utils import get_report_path, get_profiler_path
+from ttnn_visualizer.utils import get_report_path, get_profiler_path, get_npe_path
 from ttnn_visualizer.models import (
     TabSessionTable,
 )
@@ -23,6 +23,7 @@ def update_existing_tab_session(
     session_data,
     report_name,
     profile_name,
+    npe_name,
     remote_connection,
     remote_folder,
     remote_profile_folder,
@@ -34,6 +35,8 @@ def update_existing_tab_session(
         active_report["report_name"] = report_name
     if profile_name:
         active_report["profile_name"] = profile_name
+    if npe_name:
+        active_report["npe_name"] = npe_name
 
     session_data.active_report = active_report
 
@@ -48,7 +51,7 @@ def update_existing_tab_session(
         clear_remote_data(session_data)
 
     update_paths(
-        session_data, active_report, remote_connection, report_name, profile_name
+        session_data, active_report, remote_connection
     )
 
 
@@ -73,7 +76,7 @@ def commit_and_log_session(session_data, tab_id):
 
 
 def update_paths(
-    session_data, active_report, remote_connection, report_name, profile_name
+    session_data, active_report, remote_connection
 ):
     if active_report.get("profile_name"):
         session_data.profiler_path = get_profiler_path(
@@ -89,11 +92,18 @@ def update_paths(
             remote_connection=remote_connection,
         )
 
+    if active_report.get("npe_name"):
+        session_data.npe_path = get_npe_path(
+            npe_name=active_report["npe_name"],
+            current_app=current_app
+        )
+
 
 def create_new_tab_session(
     tab_id,
     report_name,
     profile_name,
+    npe_name,
     remote_connection,
     remote_folder,
     remote_profile_folder,
@@ -104,6 +114,8 @@ def create_new_tab_session(
         active_report["report_name"] = report_name
     if profile_name:
         active_report["profile_name"] = profile_name
+    if npe_name:
+        active_report["npe_name"] = npe_name
 
     if clear_remote:
         remote_connection = None
@@ -134,6 +146,7 @@ def update_tab_session(
     tab_id,
     report_name=None,
     profile_name=None,
+    npe_name=None,
     remote_connection=None,
     remote_folder=None,
     remote_profile_folder=None,
@@ -147,6 +160,7 @@ def update_tab_session(
                 session_data,
                 report_name,
                 profile_name,
+                npe_name,
                 remote_connection,
                 remote_folder,
                 remote_profile_folder,
@@ -157,6 +171,7 @@ def update_tab_session(
                 tab_id,
                 report_name,
                 profile_name,
+                npe_name,
                 remote_connection,
                 remote_folder,
                 remote_profile_folder,
@@ -175,6 +190,7 @@ def get_or_create_tab_session(
     tab_id,
     report_name=None,
     profile_name=None,
+    npe_name=None,
     remote_connection=None,
     remote_folder=None,
 ):
@@ -198,11 +214,12 @@ def get_or_create_tab_session(
             db.session.commit()
 
         # Update the session if any new data is provided
-        if report_name or profile_name or remote_connection or remote_folder:
+        if report_name or profile_name or npe_name or remote_connection or remote_folder:
             update_tab_session(
                 tab_id=tab_id,
                 report_name=report_name,
                 profile_name=profile_name,
+                npe_name=npe_name,
                 remote_connection=remote_connection,
                 remote_folder=remote_folder,
             )
