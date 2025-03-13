@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAtom } from 'jotai';
-import { Icon, IconName, Intent } from '@blueprintjs/core';
+import { FileInput, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import useLocalConnection from '../../hooks/useLocal';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
@@ -56,17 +56,10 @@ const NPEFileLoader: React.FC = () => {
 
     return (
         <div className='npe-file-loader'>
-            <label
-                className='bp5-file-input'
-                htmlFor='local-upload'
-            >
-                <input
-                    id='local-upload'
-                    type='file'
-                    onChange={handleFileChange}
-                />
-                <span className='bp5-file-upload-input'>{npeFileName ?? 'Select NPE...'}</span>
-            </label>
+            <FileInput
+                text={npeFileName ?? 'Choose file...'}
+                onInputChange={handleFileChange}
+            />
 
             {/* Move these classes to a more generic definition as they are shared with the local/remote upload interface */}
             <div className={`verify-connection-item status-${ConnectionTestStates[uploadStatus]}`}>

@@ -16,6 +16,8 @@ const NPE: React.FC = () => {
         <>
             <Helmet title='NPE' />
 
+            <h1 className='page-title'>NOC performance estimator</h1>
+
             <NPEFileLoader />
 
             {/* eslint-disable-next-line no-nested-ternary */}

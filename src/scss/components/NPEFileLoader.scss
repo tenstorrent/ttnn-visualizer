@@ -1,9 +1,15 @@
 .npe-file-loader {
     display: flex;
+    flex-direction: column;
     gap: 5px;
-    align-items: center;
+    align-items: flex-start;
+
+    .form-header {
+        font-weight: 700;
+        margin: 0;
+    }
 
     .verify-connection-item {
-        margin-bottom: 0;
+        margin-top: 5px;
     }
 }
