@@ -17,7 +17,7 @@ import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/Routes';
 import isValidNumber from '../../functions/isValidNumber';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
-import { renderMemoryLayoutAtom, selectedDeviceAtom, showHexAtom } from '../../store/app';
+import { renderMemoryLayoutAtom, selectedDeviceAtom, showBufferSummaryZoomedAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
@@ -36,7 +36,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const deviceId = useAtomValue(selectedDeviceAtom) || 0;
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
-    const [isZoomedIn, setIsZoomedIn] = useState(false);
+    const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const scrollElementRef = useRef(null);
     const { data: operations } = useOperationsList();

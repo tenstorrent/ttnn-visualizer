@@ -2,16 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import {
-    Button,
-    ButtonGroup,
-    Checkbox,
-    Dialog,
-    DialogBody,
-    DialogFooter,
-    FormGroup,
-    InputGroup,
-} from '@blueprintjs/core';
+import { Button, ButtonGroup, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup } from '@blueprintjs/core';
 import { FC, useState } from 'react';
 import 'styles/components/RemoteConnectionDialog.scss';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
@@ -183,13 +174,14 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                     />
                 </FormGroup>
 
-                <FormGroup>
+                {/* TODO: Disabled for now until we have a solution for out of date sqlite versions */}
+                {/* <FormGroup>
                     <Checkbox
                         checked={connection.useRemoteQuerying}
                         label='Use Remote Querying'
                         onChange={(e) => setConnection({ ...connection, useRemoteQuerying: e.target.checked })}
                     />
-                </FormGroup>
+                </FormGroup> */}
                 {connection.useRemoteQuerying && (
                     <fieldset className='remote-querying-fieldset'>
                         <legend>Remote Querying Configuration</legend>

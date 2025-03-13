@@ -30,8 +30,8 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.HOME)}
                     active={hasMatchingPath(ROUTES.HOME)}
                     icon={IconNames.HOME}
-                    minimal
-                    large
+                    variant='minimal'
+                    size='large'
                     className='home-button'
                 />
 
@@ -41,8 +41,8 @@ function MainNavigation() {
                     active={hasMatchingPath(ROUTES.OPERATIONS)}
                     icon={IconNames.CUBE}
                     disabled={!hasActiveReport}
-                    minimal
-                    large
+                    variant='minimal'
+                    size='large'
                     className='operations-button'
                 />
 
@@ -52,8 +52,8 @@ function MainNavigation() {
                     active={hasMatchingPath(ROUTES.TENSORS)}
                     icon={IconNames.FLOW_LINEAR}
                     disabled={!hasActiveReport}
-                    minimal
-                    large
+                    variant='minimal'
+                    size='large'
                     className='tensors-button'
                 />
 
@@ -63,8 +63,8 @@ function MainNavigation() {
                     active={window.location.pathname === ROUTES.BUFFERS}
                     icon={IconNames.SMALL_SQUARE}
                     disabled={!hasActiveReport}
-                    minimal
-                    large
+                    variant='minimal'
+                    size='large'
                     className='buffers-button'
                 />
 
@@ -74,8 +74,8 @@ function MainNavigation() {
                     active={window.location.pathname === ROUTES.GRAPHTREE}
                     icon={IconNames.GRAPH}
                     disabled={!hasActiveReport}
-                    minimal
-                    large
+                    variant='minimal'
+                    size='large'
                     className='graph-button'
                 />
 
@@ -85,17 +85,18 @@ function MainNavigation() {
                     active={window.location.pathname === ROUTES.PERFORMANCE}
                     icon={IconNames.LIGHTNING}
                     disabled={!hasActiveProfile}
-                    minimal
-                    large
+                    variant='minimal'
+                    size='large'
                     className='performance-button'
                 />
+
                 <Button
                     text='NPE'
                     onClick={() => handleNavigate(ROUTES.NPE)}
                     active={window.location.pathname === ROUTES.NPE}
                     icon={IconNames.Random}
-                    minimal
-                    large
+                    variant='minimal'
+                    size='large'
                     className='npe-button'
                 >
                     <small>beta</small>

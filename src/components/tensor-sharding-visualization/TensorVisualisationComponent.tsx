@@ -10,13 +10,13 @@ import classNames from 'classnames';
 import { BufferType } from '../../model/BufferType';
 import { useBufferPages, useDevices } from '../../hooks/useAPI';
 import '../../scss/components/TensorVisualizationComponent.scss';
-import LoadingSpinner from '../LoadingSpinner';
 import { BufferPage, Tensor } from '../../model/APIData';
 import SVGBufferRenderer from './SVGBufferRenderer';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import getChartData, { pageDataToChunkArray } from '../../functions/getChartData';
 import { L1RenderConfiguration } from '../../definitions/PlotConfigurations';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
+import LoadingSpinner from '../LoadingSpinner';
 
 export interface TensorVisualisationComponentProps {
     title: string;
@@ -62,9 +62,21 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
 
     if (!data || !devices) {
         return (
-            <span className='tensor-visualisation-loader'>
-                <LoadingSpinner />
-            </span>
+            <Overlay2
+                isOpen={isOpen}
+                enforceFocus
+                hasBackdrop
+                usePortal
+                canEscapeKeyClose
+                transitionDuration={0}
+                onClose={onClose}
+                canOutsideClickClose
+                portalClassName='tensor-visualisation-overlay'
+            >
+                <Card className='loading-container'>
+                    <LoadingSpinner />
+                </Card>
+            </Overlay2>
         );
     }
 
@@ -118,8 +130,8 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                         {title}
                         <Button
                             icon={IconNames.CROSS}
-                            minimal
-                            small
+                            variant='minimal'
+                            size='small'
                             onClick={onClose}
                         />
                     </h3>
@@ -189,8 +201,8 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                         <div className='tensix-details-header'>
                             <Button
                                 icon={IconNames.CROSS}
-                                minimal
-                                small
+                                variant='minimal'
+                                size='small'
                                 onClick={() => {
                                     setSelectedTensix(null);
                                 }}

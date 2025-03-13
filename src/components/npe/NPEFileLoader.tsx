@@ -1,54 +1,81 @@
 import React, { useState } from 'react';
+import { useAtom } from 'jotai';
+import { FileInput, Icon, IconName, Intent } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import useLocalConnection from '../../hooks/useLocal';
+import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
+import { activeNpeAtom } from '../../store/app';
+import createToastNotification from '../../functions/createToastNotification';
+import 'styles/components/NPEFileLoader.scss';
 
-interface NPEFileLoaderProps {
-    onFileLoad: (data: unknown) => void;
-}
+const ICON_MAP: Record<ConnectionTestStates, IconName> = {
+    [ConnectionTestStates.IDLE]: IconNames.DOT,
+    [ConnectionTestStates.PROGRESS]: IconNames.DOT,
+    [ConnectionTestStates.FAILED]: IconNames.CROSS,
+    [ConnectionTestStates.OK]: IconNames.TICK,
+};
 
-const NPEFileLoader: React.FC<NPEFileLoaderProps> = ({ onFileLoad }) => {
-    const [, setFileName] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
+const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
+    [ConnectionTestStates.IDLE]: Intent.NONE,
+    [ConnectionTestStates.PROGRESS]: Intent.WARNING,
+    [ConnectionTestStates.FAILED]: Intent.DANGER,
+    [ConnectionTestStates.OK]: Intent.SUCCESS,
+};
 
-    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        setError(null);
-        const file = event.target.files?.[0];
-        if (!file) {
+const NPEFileLoader: React.FC = () => {
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const { uploadNpeFile } = useLocalConnection();
+    const [npeFileName, setActiveNpe] = useAtom(activeNpeAtom);
+    const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
+
+    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        setErrorMessage('Uploading...');
+        setUploadStatus(ConnectionTestStates.PROGRESS);
+
+        if (!event.target.files) {
             return;
         }
 
-        setFileName(file.name);
-        const reader = new FileReader();
+        const file = event.target.files?.[0];
+        const response = await uploadNpeFile(event.target.files);
 
-        reader.onload = (e) => {
-            try {
-                const result = e.target?.result as string;
-                const parsedData = JSON.parse(result);
-                setError(null);
-                onFileLoad(parsedData);
-            } catch (err) {
-                setError('Invalid JSON file. Please upload a valid JSON.');
-            }
-        };
-
-        reader.onerror = () => setError('Error reading file.');
-        reader.readAsText(file);
+        if (response.status !== 200) {
+            setUploadStatus(ConnectionTestStates.FAILED);
+            setErrorMessage(response?.data?.message);
+        } else if (response?.data?.status !== ConnectionTestStates.OK) {
+            setUploadStatus(ConnectionTestStates.FAILED);
+            setErrorMessage(response?.data?.message);
+        } else {
+            const fileName = file.name;
+            setActiveNpe(fileName);
+            createToastNotification('Active NPE', fileName);
+            setUploadStatus(ConnectionTestStates.OK);
+            setErrorMessage(`${fileName} uploaded successfully`);
+        }
     };
 
     return (
-        <div style={{ maxWidth: 'auto', margin: '0', padding: 0 }}>
-            <input
-                type='file'
-                id='file-upload'
-                accept='.json'
-                onChange={handleFileChange}
-                style={{
-                    display: 'block',
-                    padding: '0',
-                    borderRadius: '4px',
-                    width: '100%',
-                    cursor: 'pointer',
-                }}
+        <div className='npe-file-loader'>
+            <FileInput
+                text={npeFileName ?? 'Choose file...'}
+                onInputChange={handleFileChange}
             />
-            {error && <p style={{ color: 'red', marginTop: 10 }}>{error}</p>}
+
+            {/* Move these classes to a more generic definition as they are shared with the local/remote upload interface */}
+            <div className={`verify-connection-item status-${ConnectionTestStates[uploadStatus]}`}>
+                {uploadStatus ? (
+                    <>
+                        <Icon
+                            className='connection-status-icon'
+                            icon={ICON_MAP[uploadStatus]}
+                            size={20}
+                            intent={INTENT_MAP[uploadStatus]}
+                        />
+
+                        <span className='connection-status-text'>{errorMessage}</span>
+                    </>
+                ) : null}
+            </div>
         </div>
     );
 };

@@ -34,6 +34,7 @@ import { selectedOperationRangeAtom } from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
+import { NPEData } from '../model/NPEModel';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -298,6 +299,18 @@ export const useOperationListRange = (): NumberRange | null => {
         [response.isLoading],
     );
 };
+
+export const fetchNpe = async () => {
+    const response = await axiosInstance.get<NPEData>('/api/npe');
+    return response?.data;
+};
+
+export const useNpe = (fileName: string | null) =>
+    useQuery<NPEData, AxiosError>({
+        queryFn: () => fetchNpe(),
+        queryKey: ['fetch-npe', fileName],
+        retry: false,
+    });
 
 export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
@@ -723,10 +736,10 @@ export const usePerformanceReport = () => {
     }, [response.isLoading]);
 };
 
-export const useSession = (reportName: string | null, profileName: string | null) => {
+export const useSession = (reportName: string | null, profileName: string | null, npeName: string | null) => {
     return useQuery({
         queryFn: () => fetchTabSession(),
-        queryKey: ['get-session', reportName, profileName],
+        queryKey: ['get-session', reportName, profileName, npeName],
         initialData: null,
     });
 };
@@ -739,6 +752,23 @@ export const useArchitecture = (arch: DeviceArchitecture) => {
         default:
             throw new Error(`Unknown architecture: ${arch}`);
     }
+};
+
+export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; size: number }[] => {
+    const { data: tensors } = useTensors();
+    const buffersByOperation = useBuffers(BufferType.L1, false);
+    return tensorIdList
+        .map((tensorId) => {
+            const tensor = tensors?.find((t) => t.id === tensorId);
+            if (tensor) {
+                const opid = tensor?.producers[0];
+                const buffers = buffersByOperation.data?.find((b) => b.id === opid);
+                const buffer = buffers?.buffers.find((b) => b.address === tensor.address);
+                return { id: tensor.id, size: buffer?.size || null };
+            }
+            return null;
+        })
+        .filter((item) => item !== null) as { id: number; size: number }[];
 };
 export const useNodeType = (arch: DeviceArchitecture) => {
     const architecture = useArchitecture(arch);

@@ -104,8 +104,8 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
             clearFocusedBuffer();
             return;
         }
-        setSelectedTensor(tensor?.id === selectedTensor ? null : (tensor?.id ?? null));
-        setSelectedAddress(tensor?.address === selectedTensor ? null : (tensor?.address ?? buffer.address));
+        setSelectedTensor(tensor?.id === selectedTensor ? null : tensor?.id ?? null);
+        setSelectedAddress(tensor?.address === selectedTensor ? null : tensor?.address ?? buffer.address);
         createToast(tensor?.address ?? buffer.address, tensor?.id);
     };
 
@@ -162,7 +162,7 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
                     hoverCloseDelay={0}
                     isOpen
                     usePortal
-                    minimal
+                    variant='minimal'
                     modifiers={{
                         offset: {
                             enabled: true,

@@ -294,8 +294,9 @@ class DeviceLogProfilerQueries:
         is_remote = self.session.remote_connection
         use_remote_querying = False
 
-        if is_remote:
-            use_remote_querying = self.session.remote_connection.useRemoteQuerying
+        # Disabled until we resolve the issue with sqlite versions
+        # if is_remote:
+        #     use_remote_querying = self.session.remote_connection.useRemoteQuerying
 
         # Determine if this is a local or remote operation
         if is_remote and use_remote_querying:

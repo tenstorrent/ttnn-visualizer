@@ -14,10 +14,10 @@ import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
 import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
 import { AllocationDetails, processMemoryAllocations } from '../../functions/processMemoryAllocations';
-import { formatSize, prettyPrintAddress, toReadableShape } from '../../functions/math';
+import { formatSize, getCoresInRange, prettyPrintAddress, toReadableShape } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
-// import { JSX } from 'react/jsx-runtime';
+import { useGetTensorSizesById } from '../../hooks/useAPI';
 
 // TODO: this component definitely needs to be broken down into smaller components
 
@@ -27,7 +27,10 @@ const DeviceOperationsFullRender: React.FC<{
     onLegendClick: (address: number, tensorId?: number) => void;
 }> = ({ deviceOperations, details, onLegendClick }) => {
     const selectedAddress = useAtomValue(selectedAddressAtom);
-    const { memoryAllocationList, peakMemoryLoad } = processMemoryAllocations(deviceOperations);
+
+    const inputIds = details.inputs.map((tensor) => tensor?.id);
+    const inputs = useGetTensorSizesById(inputIds);
+    const { memoryAllocationList, peakMemoryLoad } = processMemoryAllocations(deviceOperations, inputs);
 
     const formatDeviceOpParameters = useCallback(
         (node: Node) => {
@@ -192,6 +195,9 @@ const DeviceOperationsFullRender: React.FC<{
                         // n.allocation.push(op);
                     }
                 });
+            } else if (op.node_type === NodeType.circular_buffer_allocate) {
+                const numCores = getCoresInRange(op.params.core_range_set);
+                op.params.num_cores = numCores.toString();
             } else if (op.node_type !== NodeType.function_end && op.node_type !== NodeType.capture_start) {
                 // inputs reversed
                 const connectedNodes = getConnectedNodes(op);
@@ -323,6 +329,8 @@ const DeviceOperationsFullRender: React.FC<{
 
                     if (nodeType === NodeType.buffer_allocate) {
                         const buffer = node.params;
+                        const numCores = parseInt(buffer.num_cores, 10) || 1;
+                        const bufferSize = parseInt(buffer.size, 10) / numCores;
                         operationContent = (
                             <DeviceOperationNode
                                 _node={node}
@@ -330,19 +338,23 @@ const DeviceOperationsFullRender: React.FC<{
                                 key={index}
                                 title='Buffer allocate'
                             >
-                                <MemoryLegendElement
-                                    chunk={{
-                                        address: parseInt(buffer.address, 10),
-                                        size: parseInt(buffer.size, 10),
-                                    }}
-                                    key={buffer.address}
-                                    memSize={details.l1_sizes[0]}
-                                    selectedTensorAddress={selectedAddress}
-                                    operationDetails={details}
-                                    onLegendClick={onLegendClick}
-                                    bufferType={buffer.type}
-                                    layout={buffer.layout}
-                                />
+                                <>
+                                    {/* {buffer.type === DeviceOperationTypes.L1 && <pre>{JSON.stringify(buffer)}</pre>} */}
+                                    <MemoryLegendElement
+                                        chunk={{
+                                            address: parseInt(buffer.address, 10),
+                                            size: bufferSize,
+                                        }}
+                                        numCores={numCores}
+                                        key={buffer.address}
+                                        memSize={details.l1_sizes[0]}
+                                        selectedTensorAddress={selectedAddress}
+                                        operationDetails={details}
+                                        onLegendClick={onLegendClick}
+                                        bufferType={buffer.type}
+                                        layout={buffer.layout}
+                                    />
+                                </>
                             </DeviceOperationNode>
                         );
                         // KEEPING
@@ -358,12 +370,16 @@ const DeviceOperationsFullRender: React.FC<{
                         //     );
                     } else if (nodeType === NodeType.buffer_deallocate) {
                         const buffer = node.params;
+
+                        const size = parseInt(buffer.size, 10);
+                        const cores = parseInt(buffer.num_cores, 10) || 1;
+                        const bufferSize = size / cores;
                         operationContent = (
                             <DeviceOperationNode
                                 _node={node}
                                 memoryInfo={(buffer.type === DeviceOperationTypes.L1 && memoryInfo) || undefined}
                                 key={index}
-                                title={`Buffer deallocate ${formatSize(parseInt(operations[node.connections[0]].params.size, 10))} ${buffer.type}`}
+                                title={`Buffer deallocate ${formatSize(bufferSize)} ${buffer.type} x ${cores}`}
                             />
                         );
                     } else if (nodeType === NodeType.circular_buffer_deallocate_all) {
@@ -391,6 +407,7 @@ const DeviceOperationsFullRender: React.FC<{
                         //     );
                     } else if (nodeType === NodeType.circular_buffer_allocate) {
                         const cb = node.params;
+                        const numCores = parseInt(cb.num_cores, 10) || 1;
                         operationContent = (
                             <Fragment key={`${cb.address}-${index}`}>
                                 {!consecutiveCBsOutput && (
@@ -400,6 +417,7 @@ const DeviceOperationsFullRender: React.FC<{
                                     </>
                                 )}
                                 <MemoryLegendElement
+                                    numCores={numCores}
                                     chunk={{ address: parseInt(cb.address, 10), size: parseInt(cb.size, 10) }}
                                     memSize={details.l1_sizes[0]} // TODO: fix to device specific value
                                     selectedTensorAddress={selectedAddress}
@@ -442,7 +460,7 @@ const DeviceOperationsFullRender: React.FC<{
     return (
         <div className='device-operations-full-render-wrap'>
             <h3 className='peak-load monospace'>
-                Peak L1 memory load: <span className='format-numbers'>{formatSize(peakMemoryLoad)}</span>
+                Peak L1 memory load per bank: <span className='format-numbers'>{formatSize(peakMemoryLoad)}</span>
             </h3>
             <div className='device-operations-full-render'>
                 <span className='memory-info monospace '>
@@ -452,9 +470,10 @@ const DeviceOperationsFullRender: React.FC<{
                 </span>
                 {renderOperations(deviceOperations)}
             </div>
+            {/* we are rendering peak load twice if there are more than 20 device operations ei a lot of them */}
             {deviceOperations.length > 20 && (
                 <h3 className='peak-load monospace'>
-                    Peak L1 memory load: <span className='format-numbers'>{formatSize(peakMemoryLoad)}</span>
+                    Peak L1 memory load per bank: <span className='format-numbers'>{formatSize(peakMemoryLoad)}</span>
                 </h3>
             )}
         </div>

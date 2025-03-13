@@ -29,7 +29,7 @@ const OperationGraph: React.FC<{
     const [isLoading, setIsLoading] = useState(true);
     const [scale, setScale] = useState(1);
 
-    const focusNodeId = operationId !== undefined ? operationId : (operationList[0].id ?? 0);
+    const focusNodeId = operationId !== undefined ? operationId : operationList[0].id ?? 0;
     const [currentOperationId, setCurrentOperationId] = useState<number | null>(operationId ?? 0);
     const currentOpIdRef = useRef<number>(currentOperationId);
 
@@ -274,7 +274,7 @@ const OperationGraph: React.FC<{
                             icon={IconNames.ArrowLeft}
                             onClick={() => focusOnNode(getPreviousOperationId(currentOperationId) || 0)}
                             disabled={!getPreviousOperationId(currentOperationId) || isLoading}
-                            outlined
+                            variant='outlined'
                         />
                     </Tooltip>
                     <Tooltip
@@ -283,7 +283,7 @@ const OperationGraph: React.FC<{
                         content={`Center on operation ${focusedNode}`}
                     >
                         <Button
-                            outlined
+                            variant='outlined'
                             onClick={() => focusOnNode(focusedNode)}
                             disabled={isLoading}
                         >
@@ -299,7 +299,7 @@ const OperationGraph: React.FC<{
                             icon={IconNames.ArrowRight}
                             onClick={() => focusOnNode(getNextOperationId(currentOperationId) || 0)}
                             disabled={!getNextOperationId(currentOperationId) || isLoading}
-                            outlined
+                            variant='outlined'
                         />
                     </Tooltip>
                 </div>
@@ -326,7 +326,7 @@ const OperationGraph: React.FC<{
                     </h2>
                     <Button
                         className='navigate-button'
-                        rightIcon={IconNames.SEGMENTED_CONTROL}
+                        endIcon={IconNames.SEGMENTED_CONTROL}
                         intent={Intent.PRIMARY}
                         onClick={() => navigate(`/operations/${currentOperationId}`)}
                     >

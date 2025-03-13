@@ -74,7 +74,7 @@ export interface OperationDetailsData extends Operation {
 }
 
 export interface TabSession {
-    active_report?: { profile_name?: string; report_name?: string };
+    active_report?: { profile_name?: string; report_name?: string; npe_name?: string };
     remote_connection?: RemoteConnection;
     remote_folder?: RemoteFolder;
 }
@@ -217,7 +217,10 @@ interface DeviceOperationParams {
     layout: DeviceOperationLayoutTypes;
     size: string;
     type: DeviceOperationTypes;
+    /** only for CBs */
     core_range_set: string;
+    /** only for buffers */
+    num_cores: string;
     device_id?: number | string;
     derived_device_id?: number[];
 }
@@ -246,6 +249,7 @@ export interface DeviceOperation {
 }
 
 export interface CircularBuffer extends Chunk {
+    num_cores: number;
     core_range_set: string;
     colorVariance?: number | undefined;
 }
