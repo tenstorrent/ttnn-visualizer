@@ -20,7 +20,7 @@ from flask_cors import CORS
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from ttnn_visualizer.exceptions import DatabaseFileNotFoundException
+from ttnn_visualizer.exceptions import DatabaseFileNotFoundException, InvalidProfilerPath, InvalidReportPath
 from ttnn_visualizer.sessions import create_tab_session_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
 
@@ -172,10 +172,16 @@ def main():
     if args.report_path or args.profiler_path:
         app = create_app()
         app.app_context().push()
-        session = create_tab_session_from_local_paths(
-            report_path=args.report_path,
-            profiler_path=args.profiler_path,
-        )
+        try:
+            session = create_tab_session_from_local_paths(
+                report_path=args.report_path,
+                profiler_path=args.profiler_path,
+            )
+        except InvalidReportPath:
+            sys.exit("Invalid report path")
+        except InvalidProfilerPath:
+            sys.exit("Invalid profiler path")
+
         tab_id = session.tab_id
 
     # Check if DEBUG environment variable is set

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from flask import request
 
+from ttnn_visualizer.exceptions import InvalidReportPath, InvalidProfilerPath
 from ttnn_visualizer.utils import get_report_path, get_profiler_path
 from ttnn_visualizer.models import (
     TabSessionTable,
@@ -255,6 +256,13 @@ def create_random_tab_id():
 def create_tab_session_from_local_paths(report_path, profiler_path):
     _report_path = Path(report_path)
     _profiler_path = Path(profiler_path)
+
+    if not _report_path.exists():
+        raise InvalidReportPath()
+
+    if not _profiler_path.exists():
+        raise InvalidProfilerPath()
+
     report_name = _report_path.parts[-2] if len(_report_path.parts) > 2 else ""
     profile_name = _profiler_path.parts[-1] if len(_profiler_path.parts) > 2 else ""
     session_data = TabSessionTable(
