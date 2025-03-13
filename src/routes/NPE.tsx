@@ -21,7 +21,15 @@ const NPE: React.FC = () => {
             <NPEFileLoader />
 
             {/* eslint-disable-next-line no-nested-ternary */}
-            {npeData ? isValidNpeData(npeData) ? <NPEView npeData={npeData} /> : 'Invalid NPE data' : ''}
+            {npeData ? (
+                isValidNpeData(npeData) ? (
+                    <NPEView npeData={npeData} />
+                ) : (
+                    'Invalid NPE data'
+                )
+            ) : (
+                <p>No NPE file is currently uploaded for analysis.</p>
+            )}
         </>
     );
 };
