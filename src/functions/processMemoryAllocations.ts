@@ -40,7 +40,7 @@ export function processMemoryAllocations(
                          * we dont have core data here, this is an allocation from another op. we need to get the size per bank from the input tensor data
                          */
                         // eslint-disable-next-line no-loop-func
-                        new Set([...input.connections]).forEach((id) => {
+                        new Set(input.connections).forEach((id) => {
                             const tensor = graph[id];
                             if (tensor.node_type === NodeType.tensor) {
                                 const size = inputs.find(
