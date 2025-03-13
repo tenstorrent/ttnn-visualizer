@@ -27,8 +27,7 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
-import { getUniqueDeviceIDs, mergeMultideviceRows } from '../functions/perfFunctions';
-import { PerfTableRow, RowData } from '../definitions/PerfTable';
+import { PerfTableRow } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import { selectedOperationRangeAtom } from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
@@ -469,37 +468,6 @@ export interface DeviceOperationMapping {
     perfData?: PerfTableRow;
 }
 
-export const useNormalizedPerformance = (): RowData[] => {
-    const response = usePerformance();
-
-    return useMemo(() => {
-        if (!response?.data?.data || response?.data.data.length === 0) {
-            return [];
-        }
-        // @ts-expect-error this should be just fine
-        let df: RowData[] = (response.data.data.slice() as RowData[]).filter(
-            (r) => !r['OP CODE']?.includes('(torch)') && !(r['OP CODE'] === ''),
-        );
-
-        df.forEach((r, index) => {
-            r.ORIGINAL_ID = index + 2;
-        });
-
-        if (df.length > 0 && 'HOST START TS' in df[0]) {
-            df = df.sort((a, b) => Number(a['HOST START TS'] || 0) - Number(b['HOST START TS'] || 0));
-        }
-
-        const uniqueDeviceIDs = getUniqueDeviceIDs(df);
-
-        if (uniqueDeviceIDs.length > 1) {
-            df = mergeMultideviceRows(df);
-        }
-
-        return df;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.isLoading]);
-};
-
 const useProxyPerformanceReport = (): PerfTableRow[] => {
     const response = usePerformanceReport();
 
@@ -514,7 +482,6 @@ const useProxyPerformanceReport = (): PerfTableRow[] => {
 
 export const useGetDeviceOperationListPerf = () => {
     const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
-    // const data = useNormalizedPerformance();
     const data = useProxyPerformanceReport();
 
     return useMemo(() => {
@@ -529,32 +496,6 @@ export const useGetDeviceOperationListPerf = () => {
         return isValid ? deviceOperations : [];
     }, [data, deviceOperations]);
 };
-
-/**
- * keeping temporarily
- * @description op id to perf id mapping with all Op ids including missing perf ids and host ids
- */
-// export const useOptoPerfIdAll = () => {
-//     const { data: operations } = useOperationsList();
-//     const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
-//     const data = useNormalizedPerformance();
-//
-//     return useMemo(() => {
-//         const ids = deviceOperations.map((deviceOperation, index) => {
-//             const perfData = data[index];
-//             return perfData && perfData['OP CODE'] === deviceOperation.name
-//                 ? { opId: deviceOperation.id, perfId: perfData.ORIGINAL_ID }
-//                 : { opId: deviceOperation.id, perfId: -1 };
-//         });
-//
-//         return (
-//             operations?.map((operation) => {
-//                 const op = ids.find((id) => id.opId === operation.id);
-//                 return op || { opId: operation.id, perfId: -1 };
-//             }) || []
-//         );
-//     }, [data, deviceOperations, operations]);
-// };
 
 /**
  * @description op id to perf id mapping only for existing perf ids
