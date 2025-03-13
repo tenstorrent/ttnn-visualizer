@@ -50,7 +50,7 @@ const NPEFileLoader: React.FC = () => {
             setActiveNpe(fileName);
             createToastNotification('Active NPE', fileName);
             setUploadStatus(ConnectionTestStates.OK);
-            setErrorMessage(`${fileName} uploaded successfully.`);
+            setErrorMessage(`${fileName} uploaded successfully`);
         }
     };
 
@@ -68,18 +68,21 @@ const NPEFileLoader: React.FC = () => {
                 <span className='bp5-file-upload-input'>{npeFileName ?? 'Select NPE...'}</span>
             </label>
 
-            {uploadStatus ? (
-                <div className={`verify-connection-item status-${ConnectionTestStates[uploadStatus]}`}>
-                    <Icon
-                        className='connection-status-icon'
-                        icon={ICON_MAP[uploadStatus]}
-                        size={20}
-                        intent={INTENT_MAP[uploadStatus]}
-                    />
+            {/* Move these classes to a more generic definition as they are shared with the local/remote upload interface */}
+            <div className={`verify-connection-item status-${ConnectionTestStates[uploadStatus]}`}>
+                {uploadStatus ? (
+                    <>
+                        <Icon
+                            className='connection-status-icon'
+                            icon={ICON_MAP[uploadStatus]}
+                            size={20}
+                            intent={INTENT_MAP[uploadStatus]}
+                        />
 
-                    <span className='connection-status-text'>{errorMessage}</span>
-                </div>
-            ) : null}
+                        <span className='connection-status-text'>{errorMessage}</span>
+                    </>
+                ) : null}
+            </div>
         </div>
     );
 };

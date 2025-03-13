@@ -516,7 +516,7 @@ def create_npe_files():
         if not file.filename.endswith(".json"):
             return StatusMessage(
                 status=ConnectionTestStates.FAILED,
-                message="NPE requires a valid JSON file.",
+                message="NPE requires a valid JSON file",
             ).model_dump()
 
     npe_name = extract_npe_name(files)
@@ -529,7 +529,7 @@ def create_npe_files():
     update_tab_session(tab_id=tab_id, npe_name=npe_name, clear_remote=True)
 
     return StatusMessage(
-        status=ConnectionTestStates.OK, message="Success."
+        status=ConnectionTestStates.OK, message="Success"
     ).model_dump()
 
 @api.route("/remote/folder", methods=["POST"])

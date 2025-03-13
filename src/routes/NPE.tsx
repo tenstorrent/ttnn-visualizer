@@ -6,6 +6,7 @@ import NPEFileLoader from '../components/npe/NPEFileLoader';
 import NPEView from '../components/npe/NPEViewComponent';
 import { useNpe } from '../hooks/useAPI';
 import { activeNpeAtom } from '../store/app';
+import { NPEData } from '../model/NPEModel';
 
 const NPE: React.FC = () => {
     const npeFileName = useAtomValue(activeNpeAtom);
@@ -17,9 +18,22 @@ const NPE: React.FC = () => {
 
             <NPEFileLoader />
 
-            {npeData && <NPEView npeData={npeData} />}
+            {/* eslint-disable-next-line no-nested-ternary */}
+            {npeData ? isValidNpeData(npeData) ? <NPEView npeData={npeData} /> : 'Invalid NPE data' : ''}
         </>
     );
+};
+
+// This should be done server side
+const isValidNpeData = (data: NPEData): boolean => {
+    const requiredKeys: (keyof NPEData)[] = ['common_info', 'noc_transfers', 'timestep_data'];
+    const hasAllKeys = requiredKeys.every((key) => key in data);
+
+    if (!hasAllKeys) {
+        return false;
+    }
+
+    return true;
 };
 
 export default NPE;
