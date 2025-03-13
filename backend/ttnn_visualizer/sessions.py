@@ -6,6 +6,7 @@ import json
 import random
 import string
 from logging import getLogger
+from pathlib import Path
 
 from flask import request
 
@@ -252,9 +253,16 @@ def create_random_tab_id():
 
 
 def create_tab_session_from_local_paths(report_path, profiler_path):
+    _report_path = Path(report_path)
+    _profiler_path = Path(profiler_path)
+    report_name = _report_path.parts[-2] if len(_report_path.parts) > 2 else ""
+    profile_name = _profiler_path.parts[-1] if len(_profiler_path.parts) > 2 else ""
     session_data = TabSessionTable(
         tab_id=create_random_tab_id(),
-        active_report={},
+        active_report={
+            "report_name": report_name,
+            "profile_name": profile_name,
+        },
         report_path=report_path,
         profiler_path=profiler_path,
         remote_connection=None,

@@ -21,7 +21,6 @@ from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from ttnn_visualizer.exceptions import DatabaseFileNotFoundException
-from ttnn_visualizer.extensions import db
 from ttnn_visualizer.sessions import create_tab_session_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
 
