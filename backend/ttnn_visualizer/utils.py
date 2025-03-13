@@ -108,9 +108,8 @@ def get_report_path(active_report, current_app, remote_connection=None):
 
 def get_npe_path(npe_name, current_app):
     local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
-    base_dir = local_dir
 
-    npe_path = base_dir / "npe"
+    npe_path = local_dir / "npe"
 
     return str(npe_path)
 

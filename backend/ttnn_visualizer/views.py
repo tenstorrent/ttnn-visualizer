@@ -825,11 +825,11 @@ def get_npe_data(session: TabSession):
     if not session.npe_path:
         logger.error("NPE path is not set in the session.")
         return Response(status=HTTPStatus.NOT_FOUND)
-    else:
-        npe_file = Path(f"{session.npe_path}/{session.active_report.npe_name}.json")
-        if not npe_file.exists():
-            logger.error(f"NPE file does not exist: {npe_file}")
-            return Response(status=HTTPStatus.NOT_FOUND)
-        with open(npe_file, "r") as file:
-            npe_data = json.load(file)
-        return jsonify(npe_data)
+
+    npe_file = Path(f"{session.npe_path}/{session.active_report.npe_name}.json")
+    if not npe_file.exists():
+        logger.error(f"NPE file does not exist: {npe_file}")
+        return Response(status=HTTPStatus.NOT_FOUND)
+    with open(npe_file, "r") as file:
+        npe_data = json.load(file)
+    return jsonify(npe_data)

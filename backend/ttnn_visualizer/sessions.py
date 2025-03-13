@@ -31,7 +31,6 @@ def update_existing_tab_session(
 ):
     active_report = session_data.active_report or {}
 
-
     if report_name:
         active_report["report_name"] = report_name
     if profile_name:
