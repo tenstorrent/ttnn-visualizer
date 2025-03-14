@@ -6,7 +6,7 @@ TT-NN Visualizer requires data generated from TT-NN to analyze.
 
 Follow instructions for setting up [TT-Metalium](https://github.com/tenstorrent/tt-metal) and [TT-NN](https://github.com/tenstorrent/tt-metal/blob/main/ttnn/README.md).
 
-Sample PyTest config:
+You may want to use this sample PyTest config when generating your data:
 
 ``` bash
 export TTNN_CONFIG_OVERRIDES='{
@@ -20,7 +20,7 @@ export TTNN_CONFIG_OVERRIDES='{
 }'
 ```
 
-To run a test with custom input data, you can use the following command:
+To run a test with custom input data, you can use the following command with suitable values for `input-path`:
 
 ``` bash
 pytest --disable-warnings --input-path="path/to/input.json" path/to/test_file.py::test_function[param]
@@ -36,7 +36,7 @@ The final output should be a folder including at least a `config.json` and a `db
 
 TT-NN Visualizer supports the reading of TT-Metalium performance traces. The expected output should be a folder container at least `profile_log_device.csv` and another csv with the performance results.
 
-Consult the TT-Metalium documentation on [how to generate a performance trace](https://github.com/tenstorrent/tt-metal/tree/main/models/perf#generating-performance-traces).
+Consult the TT-Metalium documentation on [how to generate a performance trace](https://github.com/tenstorrent/tt-perf-report?tab=readme-ov-file#generating-performance-traces).
 
 <img width="916" alt="Screenshot 2024-12-13 at 12 29 44 PM" src="https://github.com/user-attachments/assets/8209f500-7913-41dc-8952-c1307e7720c3" />
 
@@ -48,7 +48,7 @@ To generate this data for your model, refer to the [tt-npe documentation](https:
 
 ## Installing from PyPI
 
-TTNN-Visualizer can be installed from PyPI:
+TT-NN Visualizer can be installed from PyPI:
 
 `pip install ttnn-visualizer`
 
