@@ -9,7 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useDeviceLog, usePerformance, usePerformanceReport } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { PerformanceReport } from '../components/performance/PerfReport';
+import PerformanceReport from '../components/performance/PerfReport';
 import 'styles/components/Performance.scss';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import PerfDeviceKernelDurationChart from '../components/performance/PerfDeviceKernelDurationChart';
