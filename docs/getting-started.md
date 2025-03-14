@@ -6,7 +6,7 @@ TT-NN Visualizer requires data generated from TT-NN to analyze.
 
 Follow instructions for setting up [TT-Metalium](https://github.com/tenstorrent/tt-metal) and [TT-NN](https://github.com/tenstorrent/tt-metal/blob/main/ttnn/README.md).
 
-You may want to use this sample PyTest config when generating your data:
+Recommended PyTest config when generating your data:
 
 ``` bash
 export TTNN_CONFIG_OVERRIDES='{
@@ -34,7 +34,7 @@ The final output should be a folder including at least a `config.json` and a `db
 
 ### Performance traces
 
-TT-NN Visualizer supports the reading of TT-Metalium performance traces. The expected output should be a folder container at least `profile_log_device.csv` and another csv with the performance results.
+TT-NN Visualizer supports the reading of TT-Metalium performance traces. The expected output should be a folder containing `profile_log_device.csv`, another csv with the performance results, e.g. `ops_perf_results_2024_12_11_11_09_16.csv`, and a `tracy_profile_log_host.tracy` file.
 
 Consult the TT-Metalium documentation on [how to generate a performance trace](https://github.com/tenstorrent/tt-perf-report?tab=readme-ov-file#generating-performance-traces).
 
