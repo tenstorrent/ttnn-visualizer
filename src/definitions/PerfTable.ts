@@ -2,7 +2,15 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { IconName } from '@blueprintjs/core';
+export type TableKeys = Partial<keyof PerfTableRow>;
+
+export interface TableHeader {
+    label: string;
+    key: TableKeys;
+    colour?: string;
+    unit?: string;
+    decimals?: number;
+}
 
 export interface PerfTableRow {
     id: string;
@@ -31,16 +39,6 @@ export interface PerfTableRow {
     output_subblock_h: string;
     output_subblock_w: string;
     high_dispatch?: boolean;
-}
-
-export interface Cell {
-    raw_value: string | number | null | undefined | boolean;
-    icon?: IconName;
-    iconColor?: string;
-    tooltip?: string;
-    unit?: string;
-    decimals?: number;
-    color?: string;
 }
 
 export interface RowData {
@@ -76,10 +74,6 @@ export interface RowData {
     'PM IDEAL [ns]'?: string;
 
     ORIGINAL_ID?: number;
-}
-
-export interface ProcessedRow {
-    [key: string]: Cell;
 }
 
 export type MathFidelity = 'HiFi4' | 'HiFi2' | 'LoFi';
