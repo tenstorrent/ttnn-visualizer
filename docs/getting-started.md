@@ -54,8 +54,7 @@ TTNN-Visualizer can be installed from PyPI:
 
 After installation run `ttnn-visualizer` to start the application.
 
-It is recommended to do this within a virtual environment. The minimum supported version of Python is 3.10. Pyenv can be used
-to ensure the application runs with a supported version of Python:
+It is recommended to do this within a virtual environment. The minimum supported version of Python is **3.10**. Pyenv can be used to ensure the application runs with a supported version of Python:
 
 ```bash
 mkdir ttnn-visualizer
@@ -102,6 +101,26 @@ using `pip install release_name.whl`.
 
 After installation run `ttnn-visualizer` to start the application. If the app does not open automatically in your browser you can navigate to `http://localhost:8000`.
 
-### Docker
+## Loading data
 
-The application can also be alternatively installed and run via [Docker](./docker.md).
+Data can be loaded from your local machine or remotely via ssh.
+
+### Local
+
+--- Image here ---
+
+For both profiler and performance data, TT-NN Visualizer expects the relevant files to be in their own directories. Ensure that the directory you select contains the necessary files for the input type you are working with.
+
+Please note that currently NPE data can only be loaded locally on the NPE screen.
+
+### Remote
+
+--- Image here ---
+
+Loading data remotely requires you to have SSH access to the relevant machine. You will have to specify paths on the remote machine to look for the profiler and performance data.
+
+-- Image here ---
+
+You can have multiple sets of profiler data on the remote paths, but they must be separated into their own folders.
+
+The default behaviour is to sync the files to your local machine, but you may also enable [remote querying](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/remote-querying.md) which queries the files directly on the remote machine.
