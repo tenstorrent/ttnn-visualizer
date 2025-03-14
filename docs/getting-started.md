@@ -107,7 +107,7 @@ Data can be loaded from your local machine or remotely via ssh.
 
 ### Local
 
---- Image here ---
+<img width="595" alt="Screenshot 2025-03-14 at 1 32 23 PM" src="https://github.com/user-attachments/assets/8fce6283-689b-4389-b8c5-4f77a76ae8e9" />
 
 For both profiler and performance data, TT-NN Visualizer expects the relevant files to be in their own directories. Ensure that the directory you select contains the necessary files for the input type you are working with.
 
@@ -115,11 +115,11 @@ Please note that currently NPE data can only be loaded locally on the NPE screen
 
 ### Remote
 
---- Image here ---
+<img width="595" alt="Screenshot 2025-03-14 at 1 32 32 PM" src="https://github.com/user-attachments/assets/366ae8cd-ee5a-4dfe-a7f0-3229df003c6f" />
 
 Loading data remotely requires you to have SSH access to the relevant machine. You will have to specify paths on the remote machine to look for the profiler and performance data.
 
--- Image here ---
+<img width="615" alt="Screenshot 2025-03-14 at 1 44 07 PM" src="https://github.com/user-attachments/assets/973ef716-8b7f-4986-919d-c904a56aa4dc" />
 
 You can have multiple sets of profiler data on the remote paths, but they must be separated into their own folders.
 
