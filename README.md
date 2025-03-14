@@ -29,7 +29,7 @@ TT-NN Visualizer can be installed from PyPI:
 
 After installation run `ttnn-visualizer` to start the application.
 
-It is recommended to do this within a virtual environment. The minimum Python version is 3.10.
+It is recommended to do this within a virtual environment. The minimum Python version is **3.10**.
 
 Please see the [getting started](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/getting-started.md) guide for further information on getting up and running with TT-NN Visualizer.
 
@@ -86,10 +86,6 @@ https://github.com/user-attachments/assets/d00a2629-0bd1-4ee1-bb12-bd796d85221d
 | NPE |  |
 |-----------------------------------------------|------------------------------------------|
 | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/1f4441c6-9d9e-4834-9e71-edec1955243c" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/7159992e-7691-41cf-a152-8bc6a3606ade" /> |
-
-## Remote Querying
-
-Use [remote querying](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/remote-querying.md) instead of syncing the report data to your local file system.
 
 ## Sample reports
 

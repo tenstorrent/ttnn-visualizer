@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-TTNN-Visualizer requires a preexisting report to analyze.
+TT-NN Visualizer requires data generated from TT-NN to analyze.
 
 Follow instructions for setting up [TT-Metalium](https://github.com/tenstorrent/tt-metal) and [TT-NN](https://github.com/tenstorrent/tt-metal/blob/main/ttnn/README.md).
 
@@ -26,7 +26,7 @@ To run a test with custom input data, you can use the following command:
 pytest --disable-warnings --input-path="path/to/input.json" path/to/test_file.py::test_function[param]
 ```
 
-For more information please refer to [TT-Metalium](https://docs.tenstorrent.com/tt-metalium/latest/get_started/get_started.html), [TT-NN](https://docs.tenstorrent.com/ttnn/latest/ttnn/get_started.html) and [TT-NN models](https://docs.tenstorrent.com/tt-metal/latest/ttnn/tt_metal_models/get_started.html#running-an-example-model) documentation.
+For more information on generating data please refer to [TT-Metalium](https://docs.tenstorrent.com/tt-metalium/latest/get_started/get_started.html), [TT-NN](https://docs.tenstorrent.com/ttnn/latest/ttnn/get_started.html) and [TT-NN models](https://docs.tenstorrent.com/tt-metal/latest/ttnn/tt_metal_models/get_started.html#running-an-example-model) documentation.
 
 The final output should be a folder including at least a `config.json` and a `db.sqlite` file.
 
@@ -66,36 +66,22 @@ pip install ttnn-visualizer
 ttnn-visualizer
 ```
 
-For pyenv installation instructions, see:
+See [pyenv](https://github.com/pyenv/pyenv) for installation instructions.
 
-https://github.com/pyenv/pyenv
+### pipx
 
-If you have `pipx` installed on your system, it can be used to simplify the above steps:
+If you have `pipx` installed on your system, it can be used to simplify the above steps.
 
 ```bash
 pipx install --include-deps ttnn-visualizer
 ttnn-visualizer
 ```
 
-For help with setting up `pipx`, see:
+See [pipx installation](https://pipx.pypa.io/stable/installation/) for further help with setting up `pipx`.
 
-https://pipx.pypa.io/stable/installation/
+When installing `ttnn-visualizer` in a virtual environment, ensure that it is not also installed with the system Python. Having the package installed at the system level and in a virtual environment at the same time can lead to version mismatches.
 
-When installing `ttnn-visualizer` in a virtual environment, ensure that it is not installed with the system Python
-also. Having the package installed at the system level and in a virtual environment at the same time can lead to an
-issue where files are imported from the system package when running in the virtual environment, causing version
-mismatches.
-
-If you run into any issue with an unexpected TT-NN Visualizer version appearing in the browser, different from the
-package version installed in your virtual env, ensure you have uninstalled the system package by running
-`pip uninstall ttnn-visualizer` outside of the virtual env.
-
-## Installing as a Python Wheel
-
-The application is designed to run on the user's local system, with a minimum supported Python version of `3.10`.
-
-Download the wheel file from the [releases page](https://github.com/tenstorrent/ttnn-visualizer/releases) and install
-using `pip install release_name.whl`.
+If you run into any issue with an unexpected TT-NN Visualizer version appearing in the browser ensure you have uninstalled the system package by running `pip uninstall ttnn-visualizer` outside of the virtual env.
 
 ## Running the application
 
