@@ -12,7 +12,7 @@ import { TAB_IDS } from '../definitions/BufferSummary';
 export const reportLocationAtom = atom<'local' | 'remote' | null>(null);
 export const activeReportAtom = atom<string | null>(null);
 export const activePerformanceTraceAtom = atom<string | null>(null);
-export const activeNpeAtom = atom<string | null>(null);
+export const activeNpeOpTraceAtom = atom<string | null>(null);
 export const showHexAtom = atomWithStorage<boolean>('showHex', false);
 export const selectedBufferSummaryTabAtom = atomWithStorage<TAB_IDS>('selectedBufferSummaryTab', TAB_IDS.L1);
 export const showBufferSummaryZoomedAtom = atomWithStorage<boolean>('showBufferSummary', false);

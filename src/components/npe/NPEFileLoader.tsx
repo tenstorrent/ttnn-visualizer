@@ -4,7 +4,7 @@ import { FileInput, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import useLocalConnection from '../../hooks/useLocal';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { activeNpeAtom } from '../../store/app';
+import { activeNpeOpTraceAtom } from '../../store/app';
 import createToastNotification from '../../functions/createToastNotification';
 import 'styles/components/NPEFileLoader.scss';
 
@@ -25,7 +25,7 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 const NPEFileLoader: React.FC = () => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const { uploadNpeFile } = useLocalConnection();
-    const [npeFileName, setActiveNpe] = useAtom(activeNpeAtom);
+    const [npeFileName, setActiveNpe] = useAtom(activeNpeOpTraceAtom);
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
