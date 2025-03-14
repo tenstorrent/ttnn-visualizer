@@ -5,11 +5,11 @@ import { useAtomValue } from 'jotai';
 import NPEFileLoader from '../components/npe/NPEFileLoader';
 import NPEView from '../components/npe/NPEViewComponent';
 import { useNpe } from '../hooks/useAPI';
-import { activeNpeAtom } from '../store/app';
+import { activeNpeOpTraceAtom } from '../store/app';
 import { NPEData } from '../model/NPEModel';
 
 const NPE: React.FC = () => {
-    const npeFileName = useAtomValue(activeNpeAtom);
+    const npeFileName = useAtomValue(activeNpeOpTraceAtom);
     const { data: npeData } = useNpe(npeFileName);
 
     return (
@@ -28,7 +28,13 @@ const NPE: React.FC = () => {
                     'Invalid NPE data'
                 )
             ) : (
-                <p>No NPE file is currently uploaded for analysis.</p>
+                <>
+                    <p>Please upload a NPE file for analysis.</p>
+                    <p>
+                        See <a href='https://github.com/tenstorrent/tt-npe'>tt-npe</a> for details on how to generate
+                        NPE files.
+                    </p>
+                </>
             )}
         </>
     );

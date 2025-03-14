@@ -300,14 +300,14 @@ export const useOperationListRange = (): NumberRange | null => {
     );
 };
 
-export const fetchNpe = async () => {
+export const fetchNpeOpTrace = async () => {
     const response = await axiosInstance.get<NPEData>('/api/npe');
     return response?.data;
 };
 
 export const useNpe = (fileName: string | null) =>
     useQuery<NPEData, AxiosError>({
-        queryFn: () => fetchNpe(),
+        queryFn: () => fetchNpeOpTrace(),
         queryKey: ['fetch-npe', fileName],
         retry: false,
     });
