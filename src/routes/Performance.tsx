@@ -20,7 +20,7 @@ import PerfKernelDurationUtilizationChart from '../components/performance/PerfKe
 import PerfOperationTypesChart from '../components/performance/PerfOperationTypesChart';
 import PerfOpCountVsRuntimeChart from '../components/performance/PerfOpCountVsRuntimeChart';
 import getCoreCount from '../functions/getCoreCount';
-import { MARKER_COLOURS, Marker, RowData } from '../definitions/PerfTable';
+import { MARKER_COLOURS, Marker, PerfTableRow, RowData } from '../definitions/PerfTable';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
 
 export default function Performance() {
@@ -55,6 +55,7 @@ export default function Performance() {
     const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-1');
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>(opCodeOptions);
     const [filteredData, setFilteredData] = useState<RowData[]>([]);
+    const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
 
     useClearSelectedBuffer();
 
@@ -73,6 +74,18 @@ export default function Performance() {
                 .sort((a, b) => (a['OP CODE'] ?? '').localeCompare(b['OP CODE'] ?? '')),
         );
     }, [selectedOpCodes, data]);
+
+    useEffect(() => {
+        setFilteredPerfData(
+            perfData
+                ?.filter((row) =>
+                    selectedOpCodes.length
+                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
+                        : false,
+                )
+                .sort((a, b) => (a.raw_op_code ?? '').localeCompare(b.raw_op_code ?? '')) || [],
+        );
+    }, [selectedOpCodes, perfData]);
 
     if (isLoadingPerformance || isLoadingDeviceLog) {
         return (
@@ -127,16 +140,16 @@ export default function Performance() {
 
                                 <div className='charts'>
                                     <PerfOpCountVsRuntimeChart
-                                        data={filteredData}
+                                        data={filteredPerfData}
                                         selectedOpCodes={selectedOpCodes}
                                     />
 
                                     <PerfDeviceKernelRuntimeChart
-                                        data={filteredData}
+                                        data={filteredPerfData}
                                         maxCores={maxCores}
                                     />
 
-                                    <PerfDeviceKernelDurationChart data={filteredData} />
+                                    <PerfDeviceKernelDurationChart data={filteredPerfData} />
 
                                     <PerfCoreCountUtilizationChart
                                         data={filteredData}
@@ -154,7 +167,7 @@ export default function Performance() {
                                     />
 
                                     <PerfOperationTypesChart
-                                        data={data}
+                                        data={perfData}
                                         opCodes={opCodeOptions}
                                     />
                                 </div>
