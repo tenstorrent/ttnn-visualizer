@@ -306,7 +306,7 @@ const DeviceOperationsFullRender: React.FC<{
                             />
                             {/* DEBUGGING */}
                             {/* <span style={{ color: 'yellow' }}>{node.operation?.params.device_id}</span> */}
-                            {opName} <DeviceID deviceId={node.operation?.params.device_id} /> (
+                            {opName} <DeviceID _deviceId={node.operation?.params.device_id} /> (
                             {node.operation?.inputs.map((arg) => (
                                 <span
                                     className='params'
