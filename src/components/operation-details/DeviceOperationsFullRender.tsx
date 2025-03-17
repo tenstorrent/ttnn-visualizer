@@ -165,6 +165,7 @@ const DeviceOperationsFullRender: React.FC<{
                 getConnectedNodes(op).forEach((n) => {
                     if (n.node_type === NodeType.function_end) {
                         n.operation = op;
+                        n.params.device_id = op.params.device_id;
                     }
                 });
             } else if (op.node_type === NodeType.buffer) {
@@ -227,14 +228,52 @@ const DeviceOperationsFullRender: React.FC<{
         return operations;
     }, []);
 
+    const mergeDevices = (operations: Node[]) => {
+        const multiDeviceOps: Node[] = [];
+        const operationsByDevice: Map<string | number | undefined, Node[]> = new Map();
+        let currentDeviceId: string | number | undefined;
+        const deviceIdList = new Set<number>();
+        operations.forEach((op) => {
+            if (op.node_type === NodeType.function_start) {
+                const deviceId = Number(op.params.device_id);
+                currentDeviceId = deviceId;
+                if (op.params.device_id !== undefined) {
+                    deviceIdList.add(deviceId);
+                    if (!operationsByDevice.has(deviceId)) {
+                        operationsByDevice.set(deviceId, []);
+                    }
+                    operationsByDevice.get(deviceId)?.push(op);
+                } else {
+                    multiDeviceOps.push(op);
+                }
+            } else if (currentDeviceId !== undefined) {
+                if (op.params.device_id === undefined) {
+                    multiDeviceOps.push(op);
+                } else {
+                    operationsByDevice.get(currentDeviceId)?.push(op);
+                }
+            } else {
+                multiDeviceOps.push(op);
+            }
+        });
+
+        const firstDevice = Math.min(...deviceIdList);
+
+        const result: Node[] = [...multiDeviceOps, ...(operationsByDevice.get(firstDevice) || [])];
+        result.sort((a, b) => a.id - b.id);
+        return result;
+    };
+
     const renderOperations = useCallback(
         (ops: Node[]) => {
             const deviceOpList: Node[] = [];
             const operations = preprocessConnections(ops);
+
+            const mergedOperations = mergeDevices(operations);
             const stack: JSX.Element[][] = [];
             const output: JSX.Element[] = [];
             let consecutiveCBsOutput: boolean = false;
-            operations.forEach((node, index) => {
+            mergedOperations.forEach((node, index) => {
                 const nodeType = node.node_type;
                 const memoryDetails: AllocationDetails | undefined = memoryAllocationList.find(
                     (data) => data.id === node.id,
@@ -505,6 +544,8 @@ const DeviceOperationNode: React.FC<
     );
 };
 
-const DeviceID: React.FC<{ deviceId?: number | string }> = ({ deviceId }) => {
-    return deviceId !== undefined && <span className='device-id'>{deviceId}</span>;
+const DeviceID: React.FC<{ _deviceId?: number | string }> = ({ _deviceId }) => {
+    return null;
+    // PLO, debugging code
+    // return _deviceId !== undefined && <span className='device-id'>{_deviceId}</span>;
 };
