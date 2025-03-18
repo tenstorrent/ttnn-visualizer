@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 @use '../definitions/variables' as *;
+@use '../mixins/perfReportColours' as perf;
 
 .perf-report {
     background: #222;
@@ -42,39 +43,5 @@
         }
     }
 
-    .grey {
-        color: #888;
-    }
-
-    .red {
-        color: #f00;
-    }
-
-    .green {
-        color: #0f0;
-    }
-
-    .yellow {
-        color: #ff0;
-    }
-
-    .blue {
-        color: #3ca4ff;
-    }
-
-    .orange {
-        color: #ff8c00;
-    }
-
-    .magenta {
-        color: #f0f;
-    }
-
-    .cyan {
-        color: #0ff;
-    }
-
-    .white {
-        color: #fff;
-    }
+    @include perf.perf-report-colours;
 }

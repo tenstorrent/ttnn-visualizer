@@ -158,21 +158,7 @@ export const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '
     }
 
     if (key === 'cores' && keyValue != null) {
-        const cores = (typeof keyValue === 'string' ? parseInt(keyValue, 10) : keyValue) as number;
-
-        if (cores != null) {
-            if (cores < 10) {
-                return 'red';
-            }
-
-            if (cores === 64) {
-                return 'green';
-            }
-        } else {
-            return '';
-        }
-
-        return 'white';
+        return getCoreColour(keyValue);
     }
 
     if (key === 'op_code') {
@@ -205,13 +191,35 @@ export const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '
     }
 
     if (key === 'op_to_op_gap' && typeof keyValue === 'string') {
-        const parsedValue = keyValue ? parseInt(keyValue, 10) : 0;
-
-        return parsedValue > 6.5 ? 'red' : '';
+        return getOpToOpGapColour(keyValue);
     }
 
     // Shouldn't get to this point but need to return something
     return 'grey';
+};
+
+export const getCoreColour = (value: string | string[] | boolean | number): CellColour | '' => {
+    const cores = (typeof value === 'string' ? parseInt(value, 10) : value) as number;
+
+    if (cores != null) {
+        if (cores < 10) {
+            return 'red';
+        }
+
+        if (cores === 64) {
+            return 'green';
+        }
+    } else {
+        return '';
+    }
+
+    return 'white';
+};
+
+export const getOpToOpGapColour = (value: string): CellColour | '' => {
+    const parsedValue = parseFloat(value) || 0;
+
+    return parsedValue > 6.5 ? 'red' : '';
 };
 
 export const calcHighDispatchOps = (rows: PerfTableRow[]) => {

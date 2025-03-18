@@ -1,8 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
-//
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
-
-.perf-table {
+@mixin perf-report-colours {
     .grey {
         color: #888;
     }
@@ -20,7 +16,11 @@
     }
 
     .blue {
-        color: #00f;
+        color: #3ca4ff;
+    }
+
+    .orange {
+        color: #ff8c00;
     }
 
     .magenta {
