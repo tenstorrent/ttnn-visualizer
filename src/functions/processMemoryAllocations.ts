@@ -32,33 +32,62 @@ export function processMemoryAllocations(
         const node = graph[i];
         i += 1;
         if (node.node_type === NodeType.function_start) {
-            if (curOp.length === 0) {
-                while (i < graph.length) {
-                    const input = graph[i];
-                    if (input.node_type === NodeType.buffer && input.params.type === DeviceOperationTypes.L1) {
-                        /**
-                         * we dont have core data here, this is an allocation from another op. we need to get the size per bank from the input tensor data
-                         */
-                        // eslint-disable-next-line no-loop-func
-                        new Set(input.connections).forEach((id) => {
-                            const tensor = graph[id];
-                            if (tensor.node_type === NodeType.tensor) {
-                                const size = inputs.find(
-                                    (x) => x.id === parseInt(String(tensor.params.tensor_id), 10),
-                                )?.size;
-                                if (size) {
-                                    totalBuffer += size;
-                                }
-                            }
-                        });
-                        i += 1;
-                    } else if (graph[i].node_type === NodeType.tensor) {
-                        i += 1;
-                    } else {
-                        break;
+            if (node.inputs.length > 0) {
+                // eslint-disable-next-line no-loop-func
+                node.inputs.forEach((tensor) => {
+                    const size = inputs.find((x) => x.id === parseInt(String(tensor.params.tensor_id), 10))?.size;
+                    if (size !== null && size !== undefined) {
+                        totalBuffer += size;
                     }
-                }
+                    //                 const tensor = graph[id];
+                    //                 if (tensor.node_type === NodeType.tensor) {
+                    //                     console.log('tensor', tensor.params.tensor_id);
+                    //
+                    //                     const size = inputs.find(
+                    //                         (x) => x.id === parseInt(String(tensor.params.tensor_id), 10),
+                    //                     )?.size;
+                    //                     console.log('found size', size);
+                    //                     if (size !== null && size !== undefined) {
+                    //                         totalBuffer += size;
+                    //                     }
+                    //                 }
+                    //             });
+                });
             }
+            // if (curOp.length === 0) {
+            //     if(node.inputs.length > 0) {
+            //
+            //     }
+            //     while (i < graph.length) {
+            //         const input = graph[i];
+            //         if (input.node_type === NodeType.buffer && input.params.type === DeviceOperationTypes.L1) {
+            //             console.log(input);
+            //             /**
+            //              * we dont have core data here, this is an allocation from another op. we need to get the size per bank from the input tensor data
+            //              */
+            //             // eslint-disable-next-line no-loop-func
+            //             new Set(input.connections).forEach((id) => {
+            //                 const tensor = graph[id];
+            //                 if (tensor.node_type === NodeType.tensor) {
+            //                     console.log('tensor', tensor.params.tensor_id);
+            //
+            //                     const size = inputs.find(
+            //                         (x) => x.id === parseInt(String(tensor.params.tensor_id), 10),
+            //                     )?.size;
+            //                     console.log('found size', size);
+            //                     if (size !== null && size !== undefined) {
+            //                         totalBuffer += size;
+            //                     }
+            //                 }
+            //             });
+            //             i += 1;
+            //         } else if (graph[i].node_type === NodeType.tensor) {
+            //             i += 1;
+            //         } else {
+            //             break;
+            //         }
+            //     }
+            // }
 
             const { name } = node.params;
             curOp.push({ name, id: node.id, deviceId: node.params.device_id });
