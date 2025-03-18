@@ -17,21 +17,21 @@ import ROUTES from '../definitions/Routes';
 import 'styles/components/RangeSlider.scss';
 import {
     useGetDeviceOperationListPerf,
-    useNormalizedPerformance,
     useOperationListRange,
     useOperationsList,
     useOptoPerfIdFiltered,
     usePerformanceRange,
+    usePerformanceReport,
 } from '../hooks/useAPI';
 import { OperationDescription } from '../model/APIData';
-import { RowData } from '../definitions/PerfTable';
+import { PerfTableRow } from '../definitions/PerfTable';
 import LoadingSpinner from './LoadingSpinner';
 
 const RANGE_STEP = 25;
 
 function Range() {
     const { data: operations } = useOperationsList();
-    const perfData = useNormalizedPerformance();
+    const { data: perfData } = usePerformanceReport();
     const location = useLocation();
     const listPerf = useGetDeviceOperationListPerf();
     const isInSync = listPerf?.length > 0;
@@ -293,10 +293,10 @@ const getOperationLabel = (selectedId: number, operations?: OperationDescription
         : selectedId.toString();
 };
 
-const getPerformanceLabel = (selectedId: number, data?: RowData[], isTooltip?: boolean): string => {
-    const matchingRow = data?.find((r) => r.ORIGINAL_ID === selectedId);
+const getPerformanceLabel = (selectedId: number, data?: PerfTableRow[], isTooltip?: boolean): string => {
+    const matchingRow = data?.find((r) => parseInt(r.id, 10) === selectedId);
 
-    return matchingRow && isTooltip ? `${matchingRow.ORIGINAL_ID}\xA0${matchingRow['OP CODE']}` : selectedId.toString();
+    return matchingRow && isTooltip ? `${matchingRow.id}\xA0${matchingRow.raw_op_code}` : selectedId.toString();
 };
 
 export default Range;

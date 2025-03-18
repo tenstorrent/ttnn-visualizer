@@ -726,7 +726,8 @@ export const usePerformanceReport = () => {
         if (response.data) {
             const df: PerfTableRow[] = response.data
                 .slice()
-                .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
+                .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''))
+                .sort((a, b) => parseInt(a.id, 10) - parseInt(b.id, 10)); // tt-perf-report doesn't sort by ID but we need to
 
             response.data = df;
         }
