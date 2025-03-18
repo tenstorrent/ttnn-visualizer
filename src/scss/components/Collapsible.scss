@@ -2,7 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-@use 'styles/definitions/colours' as *;
+@use '../definitions/colours' as *;
+@use '../mixins/perfReportColours' as perf;
 
 .collapsible-component {
     .collapsible-label-wrap,
@@ -48,5 +49,14 @@
         padding-top: 16px;
         padding-bottom: 16px;
         padding-left: 38px;
+    }
+
+    .perf-data {
+        display: grid;
+        grid-template-columns: repeat(2, max-content);
+        gap: 5px;
+        margin-bottom: 10px;
+
+        @include perf.perf-report-colours;
     }
 }
