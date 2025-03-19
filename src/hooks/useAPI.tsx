@@ -33,6 +33,7 @@ import { selectedOperationRangeAtom } from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
+import { NPEData } from '../model/NPEModel';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -220,8 +221,12 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
 
 const fetchDevices = async () => {
     const { data: meta } = await axiosInstance.get<DeviceData[]>('/api/devices');
-
-    return meta;
+    if (meta.length === 0) {
+        // TODO: make this an in app message
+        // eslint-disable-next-line no-console
+        console.error(' Data integrity warning: No device information provided.');
+    }
+    return [...new Map(meta.map((device) => [device.device_id, device])).values()];
 };
 
 const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, string>>> => {
@@ -297,6 +302,18 @@ export const useOperationListRange = (): NumberRange | null => {
         [response.isLoading],
     );
 };
+
+export const fetchNpeOpTrace = async () => {
+    const response = await axiosInstance.get<NPEData>('/api/npe');
+    return response?.data;
+};
+
+export const useNpe = (fileName: string | null) =>
+    useQuery<NPEData, AxiosError>({
+        queryFn: () => fetchNpeOpTrace(),
+        queryKey: ['fetch-npe', fileName],
+        retry: false,
+    });
 
 export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
@@ -519,8 +536,12 @@ export const usePerformanceRange = (): NumberRange | null => {
 
     return useMemo(
         () =>
-            perfData?.length ? [parseInt(perfData[0].id, 10), parseInt(perfData[perfData.length - 1].id, 10)] : null,
-
+            perfData?.length
+                ? [
+                      Math.min(...perfData.map((data) => parseInt(data.id, 10))),
+                      Math.max(...perfData.map((data) => parseInt(data.id, 10))),
+                  ]
+                : null,
         [perfData],
     );
 };
@@ -664,10 +685,10 @@ export const usePerformanceReport = () => {
     }, [response.isLoading]);
 };
 
-export const useSession = (reportName: string | null, profileName: string | null) => {
+export const useSession = (reportName: string | null, profileName: string | null, npeName: string | null) => {
     return useQuery({
         queryFn: () => fetchTabSession(),
-        queryKey: ['get-session', reportName, profileName],
+        queryKey: ['get-session', reportName, profileName, npeName],
         initialData: null,
     });
 };

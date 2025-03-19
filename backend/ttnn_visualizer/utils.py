@@ -106,6 +106,12 @@ def get_report_path(active_report, current_app, remote_connection=None):
     else:
         return ""
 
+def get_npe_path(npe_name, current_app):
+    local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+
+    npe_path = local_dir / "npe"
+
+    return str(npe_path)
 
 def read_last_synced_file(directory: str) -> Optional[int]:
     """Reads the '.last-synced' file in the specified directory and returns the timestamp as an integer, or None if not found."""

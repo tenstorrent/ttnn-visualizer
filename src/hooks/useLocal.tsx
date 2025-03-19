@@ -170,12 +170,52 @@ const useLocalConnection = () => {
             });
     };
 
+    const uploadNpeFile = async (files: FileList) => {
+        const store = getDefaultStore();
+        const formData = new FormData();
+
+        Array.from(files).forEach((f) => {
+            formData.append('files', f);
+        });
+
+        return axiosInstance
+            .post(`${import.meta.env.VITE_API_ROOT}/local/upload/npe`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+                onUploadProgress: (event: AxiosProgressEvent) => {
+                    if (event && event.total !== null && event.total !== undefined) {
+                        const progress = Math.round((event.loaded * 100) / event.total);
+                        store.set(fileTransferProgressAtom, {
+                            percentOfCurrent: progress,
+                            currentFileName: '', // No filename for batch uploads; customize if needed
+                            finishedFiles: 0, // Update dynamically for partial uploads if necessary
+                            numberOfFiles: files.length,
+                            status: FileStatus.UPLOADING,
+                        });
+                    }
+                },
+            })
+
+            .catch((error) => error)
+            .finally(() => {
+                store.set(fileTransferProgressAtom, {
+                    percentOfCurrent: 0,
+                    currentFileName: '',
+                    finishedFiles: 0,
+                    numberOfFiles: files.length,
+                    status: FileStatus.INACTIVE,
+                });
+            });
+    };
+
     return {
         getUploadedFolderName,
         checkRequiredReportFiles,
         checkRequiredProfilerFiles,
         uploadLocalFolder,
         uploadLocalPerformanceFolder,
+        uploadNpeFile,
         filterReportFiles,
     };
 };

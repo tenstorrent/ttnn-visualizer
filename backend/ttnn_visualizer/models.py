@@ -182,6 +182,7 @@ class StatusMessage(SerializeableModel):
 class ActiveReport(SerializeableModel):
     report_name: Optional[str] = None
     profile_name: Optional[str] = None
+    npe_name: Optional[str] = None
 
 
 class RemoteReportFolder(SerializeableModel):
@@ -195,6 +196,7 @@ class TabSession(BaseModel):
     tab_id: str
     report_path: Optional[str] = None
     profiler_path: Optional[str] = None
+    npe_path: Optional[str] = None
     active_report: Optional[ActiveReport] = None
     remote_connection: Optional[RemoteConnection] = None
     remote_folder: Optional[RemoteReportFolder] = None
@@ -208,6 +210,7 @@ class TabSessionTable(db.Model):
     tab_id = Column(String, unique=True, nullable=False)
     report_path = Column(String)
     profiler_path = Column(String, nullable=True)
+    npe_path = Column(String, nullable=True)
     active_report = db.Column(MutableDict.as_mutable(JSON), nullable=False, default={})
     remote_connection = Column(JSON, nullable=True)
     remote_folder = Column(JSON, nullable=True)
@@ -219,13 +222,15 @@ class TabSessionTable(db.Model):
         active_report,
         remote_connection=None,
         remote_folder=None,
+        remote_profile_folder=None,
         report_path=None,
         profiler_path=None,
-        remote_profile_folder=None,
+        npe_path=None,
     ):
         self.tab_id = tab_id
         self.active_report = active_report
         self.report_path = report_path
+        self.npe_path = npe_path
         self.remote_connection = remote_connection
         self.remote_folder = remote_folder
         self.profiler_path = profiler_path
@@ -241,6 +246,7 @@ class TabSessionTable(db.Model):
             "remote_profile_folder": self.remote_profile_folder,
             "report_path": self.report_path,
             "profiler_path": self.profiler_path,
+            "npe_path": self.npe_path
         }
 
     def to_pydantic(self) -> TabSession:
@@ -249,6 +255,9 @@ class TabSessionTable(db.Model):
             report_path=str(self.report_path) if self.report_path is not None else None,
             profiler_path=(
                 str(self.profiler_path) if self.profiler_path is not None else None
+            ),
+            npe_path=(
+                str(self.npe_path) if self.npe_path is not None else None
             ),
             active_report=(
                 (ActiveReport(**self.active_report) if self.active_report else None)
