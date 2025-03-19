@@ -595,8 +595,12 @@ export const usePerformanceRange = (): NumberRange | null => {
 
     return useMemo(
         () =>
-            perfData?.length ? [parseInt(perfData[0].id, 10), parseInt(perfData[perfData.length - 1].id, 10)] : null,
-
+            perfData?.length
+                ? [
+                      Math.min(...perfData.map((data) => parseInt(data.id, 10))),
+                      Math.max(...perfData.map((data) => parseInt(data.id, 10))),
+                  ]
+                : null,
         [perfData],
     );
 };
