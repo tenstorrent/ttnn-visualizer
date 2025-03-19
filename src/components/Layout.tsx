@@ -9,7 +9,7 @@ import { useAtom } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
 import { useEffect } from 'react';
-import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
+import { activeNpeOpTraceAtom, activePerformanceTraceAtom, activeReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
 import { useSession } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
@@ -27,14 +27,16 @@ function Layout() {
     const appVersion = import.meta.env.APP_VERSION;
     const [activeReport, setActiveReport] = useAtom(activeReportAtom);
     const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceTraceAtom);
-    const { data: session } = useSession(activeReport, activePerformanceTrace);
+    const [activeNpe, setActiveNpe] = useAtom(activeNpeOpTraceAtom);
+    const { data: session } = useSession(activeReport, activePerformanceTrace, activeNpe);
 
     useEffect(() => {
         if (session?.active_report) {
             setActiveReport(session.active_report?.report_name ?? null);
             setActivePerformanceTrace(session.active_report?.profile_name ?? null);
+            setActiveNpe(session.active_report?.npe_name ?? null);
         }
-    }, [session, setActiveReport, setActivePerformanceTrace]);
+    }, [session, setActiveReport, setActivePerformanceTrace, setActiveNpe]);
 
     return (
         <div className={Classes.DARK}>

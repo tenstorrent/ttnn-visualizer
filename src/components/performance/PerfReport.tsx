@@ -15,8 +15,7 @@ import 'styles/components/PerfReport.scss';
 import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
 import ROUTES from '../../definitions/Routes';
 import { OperationDescription } from '../../model/APIData';
-
-type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'orange' | 'grey';
+import { CellColour } from '../../functions/perfFunctions';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -110,9 +109,9 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
-        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: 'op' }] : [{}]),
+        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: 'op' }] : []),
         ...TABLE_HEADERS.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
-        ...(hiliteHighDispatch ? [{ label: 'Slow', key: 'high_dispatch' }] : [{}]),
+        ...(hiliteHighDispatch ? [{ label: 'Slow', key: 'high_dispatch' }] : []),
         ...TABLE_HEADERS.slice(HIGH_DISPATCH_INSERTION_POINT),
     ] as TableHeader[];
 
@@ -159,7 +158,7 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                     <tbody>
                         {getFilteredRows.map((row, i) => (
                             <Fragment key={i}>
-                                <tr key={i}>
+                                <tr>
                                     {visibleHeaders.map((header) => (
                                         <td
                                             key={header.key}

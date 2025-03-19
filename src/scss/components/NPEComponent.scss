@@ -4,6 +4,8 @@
 @use '../definitions/colours' as *;
 
 .npe {
+    position: relative;
+
     $highlight-src: #ff0;
     $highlight-dst: #ff4500;
 
@@ -49,7 +51,7 @@
         border-bottom: 1px solid $tt-slate;
         position: absolute;
         right: 0;
-        top: 220px;
+        top: 110px;
         gap: 5px;
 
         hr {
