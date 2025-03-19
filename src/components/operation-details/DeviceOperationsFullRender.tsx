@@ -142,9 +142,6 @@ const DeviceOperationsFullRender: React.FC<{
     const renderOperations = useCallback(
         (ops: Node[]) => {
             const deviceOpList: Node[] = [];
-            // const operations = preprocessConnections(ops);
-
-            // const mergedOperations = mergeDevices(operations);
             const stack: JSX.Element[][] = [];
             const output: JSX.Element[] = [];
             let consecutiveCBsOutput: boolean = false;
@@ -170,7 +167,6 @@ const DeviceOperationsFullRender: React.FC<{
                 } else if (nodeType === NodeType.function_end) {
                     const innerContent = stack.pop();
                     const opName = node.params.name;
-                    // const mem = operationMemoryDetails.pop();
                     const label = (
                         <h4>
                             <Icon

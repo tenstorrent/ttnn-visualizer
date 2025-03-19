@@ -63,6 +63,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.stack_trace = data.stack_trace;
         this.operations = operations;
         this.raw_device_operations = data.device_operations;
+        // DEBUG
         // this.device_operations = this.preprocessConnections(data.device_operations); // // this.mergeDevices(this.preprocessConnections(data.device_operations));
         this.device_operations = this.mergeDevices(this.preprocessConnections(data.device_operations));
         this.options = options || { renderPattern: false };
@@ -593,7 +594,6 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
 
     // eslint-disable-next-line class-methods-use-this
     private mergeDevices(operations: Node[]) {
-        // console.group('mergeDevices', this.id);
         const multiDeviceOps: Node[] = [];
         const operationsByDevice: Map<string | number | undefined, Node[]> = new Map();
         let currentDeviceId: string | number | undefined;
@@ -636,7 +636,7 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
 
         const firstDevice = Math.min(...deviceIdList);
 
-        const result: Node[] = [...multiDeviceOps, ...(operationsByDevice.get(firstDevice) || [])]; // .filter(
+        const result: Node[] = [...multiDeviceOps, ...(operationsByDevice.get(firstDevice) || [])];
         result.sort((a, b) => a.id - b.id);
         return result;
     }
