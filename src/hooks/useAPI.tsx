@@ -222,7 +222,11 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
 
 const fetchDevices = async () => {
     const { data: meta } = await axiosInstance.get<DeviceData[]>('/api/devices');
-
+    if (meta.length === 0) {
+        // TODO: make this an in app message
+        // eslint-disable-next-line no-console
+        console.error(' Data integrity warning: No device information provided.');
+    }
     return [...new Map(meta.map((device) => [device.device_id, device])).values()];
 };
 

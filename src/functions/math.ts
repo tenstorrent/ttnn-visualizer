@@ -27,7 +27,7 @@ export const prettyPrintAddress = (address: number | null, memorySize: number): 
         return 'NULL';
     }
 
-    return address.toString().padStart(memorySize.toString().length, '0');
+    return address.toString().padStart(memorySize?.toString().length, '0');
 };
 
 type Primitive = string | number | boolean | null | undefined;
