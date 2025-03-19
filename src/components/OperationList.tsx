@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -20,6 +20,7 @@ import { expandedOperationsAtom, selectedOperationRangeAtom, shouldCollapseAllOp
 import { OperationDescription } from '../model/APIData';
 import ListItem from './ListItem';
 import { formatSize } from '../functions/math';
+import { getCoreColour, getOpToOpGapColour } from '../functions/perfFunctions';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -329,7 +330,7 @@ const OperationList = () => {
                                                 <p className='monospace'>
                                                     Python execution time: {formatSize(operation.duration)} s
                                                 </p>
-                                                <p className='monospace'>
+                                                <div className='perf-data'>
                                                     {perfData
                                                         ?.filter(
                                                             (perf: DeviceOperationMapping) => perf.id === operation.id,
@@ -337,17 +338,66 @@ const OperationList = () => {
                                                         .map(
                                                             (perf) =>
                                                                 perf.perfData && (
-                                                                    <p key={perf.id + perf.operationName}>
-                                                                        <strong>{perf.perfData?.op_code}</strong> Device
-                                                                        time:{' '}
-                                                                        {formatSize(
-                                                                            parseFloat(perf.perfData?.device_time),
-                                                                        )}{' '}
-                                                                        µs
-                                                                    </p>
+                                                                    <Fragment key={perf.id + perf.operationName}>
+                                                                        <strong>{perf.perfData?.raw_op_code}</strong>
+                                                                        <div>
+                                                                            <span
+                                                                                className={classNames(
+                                                                                    'monospace',
+                                                                                    getCoreColour(perf.perfData?.cores),
+                                                                                )}
+                                                                            >
+                                                                                {parseInt(perf.perfData?.cores, 10)}{' '}
+                                                                                core
+                                                                                {parseInt(perf.perfData?.cores, 10) >
+                                                                                    1 && 's'}
+                                                                            </span>
+                                                                            , execution time{' '}
+                                                                            <span className='monospace'>
+                                                                                {formatSize(
+                                                                                    parseFloat(
+                                                                                        perf.perfData?.device_time,
+                                                                                    ),
+                                                                                )}{' '}
+                                                                                µs
+                                                                            </span>{' '}
+                                                                            <span className='monospace'>
+                                                                                (
+                                                                                {formatSize(
+                                                                                    parseFloat(
+                                                                                        perf.perfData?.total_percent,
+                                                                                    ),
+                                                                                )}{' '}
+                                                                                %)
+                                                                            </span>
+                                                                            {perf.perfData?.op_to_op_gap && (
+                                                                                <>
+                                                                                    ,{' '}
+                                                                                    <span
+                                                                                        className={classNames(
+                                                                                            'monospace',
+                                                                                            getOpToOpGapColour(
+                                                                                                perf.perfData
+                                                                                                    .op_to_op_gap,
+                                                                                            ),
+                                                                                        )}
+                                                                                    >
+                                                                                        {formatSize(
+                                                                                            parseFloat(
+                                                                                                perf.perfData
+                                                                                                    .op_to_op_gap,
+                                                                                            ),
+                                                                                        )}{' '}
+                                                                                        µs
+                                                                                    </span>{' '}
+                                                                                    op-to-op gap.
+                                                                                </>
+                                                                            )}
+                                                                        </div>
+                                                                    </Fragment>
                                                                 ),
                                                         )}
-                                                </p>
+                                                </div>
 
                                                 {operation.arguments && (
                                                     <OperationArguments
