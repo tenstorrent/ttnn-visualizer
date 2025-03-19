@@ -15,8 +15,7 @@ import 'styles/components/PerfReport.scss';
 import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
 import ROUTES from '../../definitions/Routes';
 import { OperationDescription } from '../../model/APIData';
-
-type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'orange' | 'grey';
+import { CellColour } from '../../functions/perfFunctions';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];

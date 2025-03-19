@@ -8,6 +8,8 @@ import { Icon, Tooltip } from '@blueprintjs/core';
 import { formatSize } from './math';
 import { Cell, MathFidelity, ProcessedRow, RowData } from '../definitions/PerfTable';
 
+export type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'orange' | 'grey';
+
 const colored = (text: string, color?: string) => {
     if (!text) {
         return text;
@@ -266,4 +268,28 @@ export const getUniqueDeviceIDs = (rows: RowData[]): number[] => {
         }
     }
     return [...ids];
+};
+
+export const getCoreColour = (value: string | string[] | boolean | number): CellColour | '' => {
+    const cores = (typeof value === 'string' ? parseInt(value, 10) : value) as number;
+
+    if (cores != null) {
+        if (cores < 10) {
+            return 'red';
+        }
+
+        if (cores === 64) {
+            return 'green';
+        }
+    } else {
+        return '';
+    }
+
+    return 'white';
+};
+
+export const getOpToOpGapColour = (value: string): CellColour | '' => {
+    const parsedValue = parseFloat(value) || 0;
+
+    return parsedValue > 6.5 ? 'red' : '';
 };
