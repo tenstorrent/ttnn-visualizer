@@ -63,7 +63,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.stack_trace = data.stack_trace;
         this.operations = operations;
         this.raw_device_operations = data.device_operations;
-        this.device_operations = data.device_operations; // this.mergeDevices(this.preprocessConnections(data.device_operations));
+        // this.device_operations = this.preprocessConnections(data.device_operations); // // this.mergeDevices(this.preprocessConnections(data.device_operations));
         this.device_operations = this.mergeDevices(this.preprocessConnections(data.device_operations));
         this.options = options || { renderPattern: false };
 
@@ -593,25 +593,15 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
 
     // eslint-disable-next-line class-methods-use-this
     private mergeDevices(operations: Node[]) {
-        console.group('mergeDevices', this.id);
+        // console.group('mergeDevices', this.id);
         const multiDeviceOps: Node[] = [];
         const operationsByDevice: Map<string | number | undefined, Node[]> = new Map();
         let currentDeviceId: string | number | undefined;
-        // const deviceIdList = new Set<number>();
         operations.forEach((op) => {
-            if (this.id === 17) {
-                if (op.params.device_id === undefined) {
-                    // console.log(op.node_type);
-                    // console.log(op);
-                } else {
-                    console.log(op);
-                }
-            }
             if (op.node_type === NodeType.function_start) {
                 const deviceId = Number(op.params.device_id);
                 currentDeviceId = deviceId;
                 if (op.params.device_id !== undefined) {
-                    // deviceIdList.add(deviceId);
                     if (!operationsByDevice.has(deviceId)) {
                         operationsByDevice.set(deviceId, []);
                     }
@@ -626,17 +616,15 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
                     operationsByDevice.get(currentDeviceId)?.push(op);
                 }
             } else if (currentDeviceId === undefined && op.params.device_id !== undefined) {
-                // console.log('!!!');
-                // console.log(op);
                 const deviceId = Number(op.params.device_id);
-                // currentDeviceId = deviceId;
-
-                // deviceIdList.add(deviceId);
 
                 if (!operationsByDevice.has(deviceId)) {
                     operationsByDevice.set(deviceId, []);
                 }
-                operationsByDevice.get(deviceId)?.push(op);
+                // PLO
+                // galaxy
+                // http://localhost:5173/operations/17
+                // operationsByDevice.get(deviceId)?.push(op);
             } else {
                 multiDeviceOps.push(op);
             }
@@ -648,15 +636,8 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
 
         const firstDevice = Math.min(...deviceIdList);
 
-        console.log(deviceIdList);
-        console.log(operationsByDevice);
-        // console.log();
-
         const result: Node[] = [...multiDeviceOps, ...(operationsByDevice.get(firstDevice) || [])]; // .filter(
-        // (op) => op === undefined,
-        // );
         result.sort((a, b) => a.id - b.id);
-        console.groupEnd();
         return result;
     }
 

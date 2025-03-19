@@ -32,13 +32,14 @@ export function processMemoryAllocations(
         const node = graph[i];
         i += 1;
         if (node.node_type === NodeType.function_start) {
-            if (node.inputs.length > 0) {
+            if (node.inputs?.length > 0) {
                 // eslint-disable-next-line no-loop-func
                 node.inputs.forEach((tensor) => {
                     const size = inputs.find((x) => x.id === parseInt(String(tensor.params.tensor_id), 10))?.size;
                     if (size !== null && size !== undefined) {
                         totalBuffer += size;
                     }
+                    // this is the 'original' math, shoudl stay for a bit
                     //                 const tensor = graph[id];
                     //                 if (tensor.node_type === NodeType.tensor) {
                     //                     console.log('tensor', tensor.params.tensor_id);
@@ -54,61 +55,12 @@ export function processMemoryAllocations(
                     //             });
                 });
             }
-            // if (curOp.length === 0) {
-            //     if(node.inputs.length > 0) {
-            //
-            //     }
-            //     while (i < graph.length) {
-            //         const input = graph[i];
-            //         if (input.node_type === NodeType.buffer && input.params.type === DeviceOperationTypes.L1) {
-            //             console.log(input);
-            //             /**
-            //              * we dont have core data here, this is an allocation from another op. we need to get the size per bank from the input tensor data
-            //              */
-            //             // eslint-disable-next-line no-loop-func
-            //             new Set(input.connections).forEach((id) => {
-            //                 const tensor = graph[id];
-            //                 if (tensor.node_type === NodeType.tensor) {
-            //                     console.log('tensor', tensor.params.tensor_id);
-            //
-            //                     const size = inputs.find(
-            //                         (x) => x.id === parseInt(String(tensor.params.tensor_id), 10),
-            //                     )?.size;
-            //                     console.log('found size', size);
-            //                     if (size !== null && size !== undefined) {
-            //                         totalBuffer += size;
-            //                     }
-            //                 }
-            //             });
-            //             i += 1;
-            //         } else if (graph[i].node_type === NodeType.tensor) {
-            //             i += 1;
-            //         } else {
-            //             break;
-            //         }
-            //     }
-            // }
 
             const { name } = node.params;
             curOp.push({ name, id: node.id, deviceId: node.params.device_id });
         }
 
         if (node.params.device_id !== undefined && curOp.length > 1) {
-            // TODO: this may or may not work correctly, and might not be the best approach, to investigate later
-            // const update = curOp[curOp.length - 1];
-            // const mutable = memoryAllocationList.find((x) => x.id === update.id);
-            // if (mutable) {
-            //     mutable.deviceId = node.params.device_id;
-            // }
-            //
-            // console.log(
-            //     'depth', curOp.length,
-            //     `setting device id ${node.params.device_id} by`,
-            //     node.node_type,
-            //     'for',
-            //     curOp[curOp.length - 1].name,
-            // );
-
             curOp[curOp.length - 1].deviceId = node.params.device_id;
         }
 
@@ -123,11 +75,6 @@ export function processMemoryAllocations(
         if (node.node_type === NodeType.buffer_allocate && node.params.type === DeviceOperationTypes.L1) {
             const numCores = parseInt(node.params.num_cores, 10) || 1;
             const totalSize = parseInt(node.params.size, 10);
-            // if (totalSize > 1117952) {
-            // console.log('********');
-            // console.log(node);
-            // console.log(totalSize, numCores);
-            // }
             totalBuffer += totalSize / numCores;
         }
 
@@ -137,7 +84,8 @@ export function processMemoryAllocations(
 
         if (node.node_type === NodeType.buffer_deallocate) {
             const connectionIndex = node.connections ? node.connections[0] : -1;
-            if (connectionIndex >= 0 && graph[connectionIndex].params.type === 'L1') {
+            const connectedNode = graph[connectionIndex];
+            if (connectionIndex >= 0 && connectedNode && connectedNode.params.type === 'L1') {
                 const numCores = parseInt(node.params.num_cores, 10) || 1;
                 const size = parseInt(node.params.size, 10) / numCores;
                 totalBuffer -= size;
