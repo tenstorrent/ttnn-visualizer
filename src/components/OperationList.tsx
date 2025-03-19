@@ -347,9 +347,10 @@ const OperationList = () => {
                                                                                     getCoreColour(perf.perfData?.cores),
                                                                                 )}
                                                                             >
-                                                                                {parseFloat(perf.perfData?.cores)} core
-                                                                                {parseFloat(perf.perfData?.cores) > 1 &&
-                                                                                    's'}
+                                                                                {parseInt(perf.perfData?.cores, 10)}{' '}
+                                                                                core
+                                                                                {parseInt(perf.perfData?.cores, 10) >
+                                                                                    1 && 's'}
                                                                             </span>
                                                                             , execution time{' '}
                                                                             <span className='monospace'>
