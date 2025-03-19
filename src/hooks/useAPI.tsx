@@ -223,7 +223,7 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
 const fetchDevices = async () => {
     const { data: meta } = await axiosInstance.get<DeviceData[]>('/api/devices');
 
-    return meta;
+    return [...new Map(meta.map((device) => [device.device_id, device])).values()];
 };
 
 const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, string>>> => {
