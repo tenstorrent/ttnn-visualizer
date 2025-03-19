@@ -591,8 +591,12 @@ export const usePerformanceRange = (): NumberRange | null => {
 
     return useMemo(
         () =>
-            perfData?.length ? [parseInt(perfData[0].id, 10), parseInt(perfData[perfData.length - 1].id, 10)] : null,
-
+            perfData?.length
+                ? [
+                      Math.min(...perfData.map((data) => parseInt(data.id, 10))),
+                      Math.max(...perfData.map((data) => parseInt(data.id, 10))),
+                  ]
+                : null,
         [perfData],
     );
 };
@@ -726,8 +730,7 @@ export const usePerformanceReport = () => {
         if (response.data) {
             const df: PerfTableRow[] = response.data
                 .slice()
-                .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''))
-                .sort((a, b) => parseInt(a.id, 10) - parseInt(b.id, 10)); // tt-perf-report doesn't sort by ID but we need to
+                .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
 
             response.data = df;
         }
