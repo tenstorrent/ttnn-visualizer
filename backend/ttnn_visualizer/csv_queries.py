@@ -571,6 +571,10 @@ class OpsPerformanceReportQueries:
         "raw_op_code"
     ]
 
+    PASSTHROUGH_COLUMNS = {
+        "pm_ideal_ns": "PM IDEAL [ns]",
+    }
+
     DEFAULT_SIGNPOST = None
     DEFAULT_IGNORE_SIGNPOSTS = None
     DEFAULT_MIN_PERCENTAGE = 0.5
@@ -596,6 +600,12 @@ class OpsPerformanceReportQueries:
             True,
         )
 
+        ops_perf_results = []
+        ops_perf_results_reader = csv.DictReader(StringIO(raw_csv))
+
+        for row in ops_perf_results_reader:
+            ops_perf_results.append(row)
+
         report = []
 
         try:
@@ -610,6 +620,9 @@ class OpsPerformanceReportQueries:
                         processed_row["advice"] = processed_row["advice"].split(" • ")
                     else:
                         processed_row["advice"] = []
+
+                    for key, value in cls.PASSTHROUGH_COLUMNS.items():
+                        processed_row[key] = ops_perf_results[int(row[0])][value]
                     report.append(processed_row)
         except csv.Error as e:
             raise DataFormatError() from e

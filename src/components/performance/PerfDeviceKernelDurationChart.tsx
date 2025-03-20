@@ -4,20 +4,20 @@
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { RowData } from '../../definitions/PerfTable';
+import { PerfTableRow } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 
 interface PerfDeviceKernelDurationChartProps {
-    data?: RowData[];
+    data?: PerfTableRow[];
 }
 
-function PerfDeviceKernelDurationChart({ data }: PerfDeviceKernelDurationChartProps) {
+function PerfDeviceKernelDurationChart({ data = [] }: PerfDeviceKernelDurationChartProps) {
     const chartData = useMemo(
         () =>
             ({
-                x: data?.map((row) => row['CORE COUNT']),
-                y: data?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
+                x: data?.map((row) => row.cores),
+                y: data?.map((row) => row.device_time),
                 mode: 'markers',
                 type: 'scatter',
                 name: '',
