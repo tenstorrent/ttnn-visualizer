@@ -622,7 +622,10 @@ class OpsPerformanceReportQueries:
                         processed_row["advice"] = []
 
                     for key, value in cls.PASSTHROUGH_COLUMNS.items():
-                        processed_row[key] = ops_perf_results[int(row[0])][value]
+                        op_id = int(row[0])
+                        idx = op_id - 2 # IDs in result column one correspond to row numbers in ops perf results csv
+                        processed_row[key] = ops_perf_results[idx][value]
+
                     report.append(processed_row)
         except csv.Error as e:
             raise DataFormatError() from e
