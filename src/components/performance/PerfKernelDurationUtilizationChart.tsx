@@ -4,13 +4,13 @@
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { RowData } from '../../definitions/PerfTable';
+import { PerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 
 interface PerfKernelDurationUtilizationChartProps {
-    data: RowData[];
+    data: PerfTableRow[];
     maxCores: number;
 }
 
@@ -18,7 +18,7 @@ function PerfKernelDurationUtilizationChart({ data, maxCores }: PerfKernelDurati
     const chartData = useMemo(
         () =>
             ({
-                x: data?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
+                x: data?.map((row) => row.device_time),
                 y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
                 mode: 'markers',
                 type: 'scatter',

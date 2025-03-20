@@ -4,13 +4,13 @@
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { RowData } from '../../definitions/PerfTable';
+import { PerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 
 interface PerfOperationKernelUtilizationChartProps {
-    data?: RowData[];
+    data?: PerfTableRow[];
     maxCores: number;
 }
 
@@ -19,7 +19,7 @@ function PerfOperationKernelUtilizationChart({ data, maxCores }: PerfOperationKe
         () =>
             ({
                 x: data?.map((_row, index) => index + 1),
-                y: data?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
+                y: data?.map((row) => row.device_time),
                 type: 'bar',
                 hovertemplate: `Operation: %{x}<br />Duration: %{y} ns`,
                 name: '',
