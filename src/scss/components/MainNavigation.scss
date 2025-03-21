@@ -38,8 +38,8 @@
     }
 
     .bp5-button {
-        &.home-button {
-            @include button-styles($tt-home, $tt-home-active, 'home');
+        &.reports-button {
+            @include button-styles($tt-reports, $tt-reports-active, 'document-open');
         }
 
         &.operations-button {
