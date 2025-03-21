@@ -14,6 +14,7 @@ import MainNavigation from './MainNavigation';
 import { useSession } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
 import FooterInfobar from './FooterInfobar';
+import Logo from './Logo';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -24,7 +25,6 @@ const BounceIn = cssTransition({
 });
 
 function Layout() {
-    const appVersion = import.meta.env.APP_VERSION;
     const [activeReport, setActiveReport] = useAtom(activeReportAtom);
     const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceTraceAtom);
     const [activeNpe, setActiveNpe] = useAtom(activeNpeOpTraceAtom);
@@ -53,8 +53,7 @@ function Layout() {
                         href={ROUTES.HOME}
                         className='title'
                     >
-                        <h1>TT-NN Visualizer</h1>
-                        <sup className='version'>v{appVersion}</sup>
+                        <Logo />
                     </a>
                     <MainNavigation />
                 </nav>
