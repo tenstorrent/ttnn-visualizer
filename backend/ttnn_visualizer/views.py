@@ -814,7 +814,7 @@ def health_check():
 
 @api.route("/session", methods=["GET"])
 @with_session
-def get_tab_session(session: TabSession):
+def get_instance(session: TabSession):
     # Used to gate UI functions if no report is active
     return session.model_dump()
 

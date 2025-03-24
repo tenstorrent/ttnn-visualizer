@@ -239,20 +239,20 @@ def get_or_create_tab_session(
         return None
 
 
-def get_tab_session():
+def get_instance():
     """
     Middleware to retrieve or create a tab session based on the instance_id.
     """
     instance_id = request.args.get("instanceId", None)
 
-    current_app.logger.info(f"get_tab_session: Received instance_id: {instance_id}")
+    current_app.logger.info(f"get_instance: Received instance_id: {instance_id}")
     if not instance_id:
-        current_app.logger.error("get_tab_session: No instance_id found")
+        current_app.logger.error("get_instance: No instance_id found")
         return jsonify({"error": "instanceId is required"}), 400
 
     active_report = get_or_create_tab_session(instance_id)
     current_app.logger.info(
-        f"get_tab_session: Session retrieved: {active_report.active_report}"
+        f"get_instance: Session retrieved: {active_report.active_report}"
     )
 
     return jsonify({"active_report": active_report.active_report}), 200
@@ -262,7 +262,7 @@ def init_sessions(app):
     """
     Initializes session middleware and hooks it into Flask.
     """
-    app.before_request(get_tab_session)
+    app.before_request(get_instance)
     app.logger.info("Sessions middleware initialized.")
 
 
