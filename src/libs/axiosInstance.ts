@@ -9,23 +9,23 @@ const axiosInstance = axios.create({
     baseURL: '/', // Your API base URL
 });
 
-export const getOrCreateTabId = () => {
-    let tabId = sessionStorage.getItem('tab_id');
-    if (!tabId) {
-        tabId = Math.random().toString(36).substring(2, 15);
-        sessionStorage.setItem('tab_id', tabId);
+export const getOrCreateInstanceId = () => {
+    let instanceId = sessionStorage.getItem('instanceId');
+    if (!instanceId) {
+        instanceId = Math.random().toString(36).substring(2, 15);
+        sessionStorage.setItem('instanceId', instanceId);
     }
-    return tabId;
+    return instanceId;
 };
 
 axiosInstance.interceptors.request.use(
     (config) => {
-        const tabId = getOrCreateTabId();
-        if (tabId) {
+        const instanceId = getOrCreateInstanceId();
+        if (instanceId) {
             // Add the tabId to the query params
             config.params = {
                 ...config.params,
-                tabId,
+                instanceId,
             };
         }
         return config;
