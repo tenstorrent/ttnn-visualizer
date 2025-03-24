@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualizer",
   "private": true,
-  "version": "0.25.0",
+  "version": "0.26.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,9 +15,6 @@
     "flask:test": "PYTHONPATH=backend pytest backend/ttnn_visualizer/tests",
     "flask:mypy": "PYTHONPATH=backend mypy backend/ttnn_visualizer",
     "build:wheel": "pnpm run build && python -m build --wheel",
-    "compose:up": "docker-compose up web --build",
-    "docker:build:ssh": "docker build docker/SSH --build-arg username=$(logname) -t local-ssh-image",
-    "docker:run:ssh": "docker run -dit --rm -p 2222:22 --name local-ssh-server local-ssh-image:latest",
     "prepare": "husky",
     "preinstall": "npx only-allow pnpm"
   },

@@ -5,13 +5,13 @@
 import Plot from 'react-plotly.js';
 import { Layout, PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { Marker, RowData } from '../../definitions/PerfTable';
+import { Marker, PerfTableRow } from '../../definitions/PerfTable';
 import 'styles/components/PerformanceOperationTypesChart.scss';
 import { PerfChartConfig } from '../../definitions/PlotConfigurations';
 
 interface PerfOperationTypesChartProps {
-    data: RowData[];
     opCodes: Marker[];
+    data?: PerfTableRow[];
 }
 
 const LAYOUT: Partial<Layout> = {
@@ -26,16 +26,16 @@ const LAYOUT: Partial<Layout> = {
     showlegend: false,
 };
 
-function PerfOperationTypesChart({ data, opCodes }: PerfOperationTypesChartProps) {
+function PerfOperationTypesChart({ data = [], opCodes }: PerfOperationTypesChartProps) {
     const filteredOpCodes = useMemo(
-        () => [...new Set(data?.filter((row) => row['OP CODE'] !== undefined).map((row) => row['OP CODE']))],
+        () => [...new Set(data?.filter((row) => row.raw_op_code !== undefined).map((row) => row.raw_op_code))],
         [data],
     );
 
     const chartData = useMemo(
         () =>
             ({
-                values: filteredOpCodes.map((opCode) => data.filter((row) => row['OP CODE'] === opCode).length),
+                values: filteredOpCodes.map((opCode) => data.filter((row) => row.raw_op_code === opCode).length),
                 labels: [...filteredOpCodes],
                 type: 'pie',
                 textinfo: 'percent',

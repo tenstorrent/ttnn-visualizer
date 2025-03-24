@@ -14,7 +14,7 @@ import { OperationDetails } from '../../model/OperationDetails';
 import { selectedAddressAtom } from '../../store/app';
 import Collapsible, { COLLAPSIBLE_EMPTY_CLASS } from '../Collapsible';
 import { AllocationDetails, processMemoryAllocations } from '../../functions/processMemoryAllocations';
-import { formatSize, getCoresInRange, prettyPrintAddress, toReadableShape } from '../../functions/math';
+import { formatSize, prettyPrintAddress, toReadableShape } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
 import { useGetTensorSizesById } from '../../hooks/useAPI';
@@ -138,103 +138,14 @@ const DeviceOperationsFullRender: React.FC<{
         },
         [details],
     );
-    const preprocessConnections = useCallback((ops: Node[]) => {
-        const captureStart = ops.find((op) => op.node_type === NodeType.capture_start);
-        const operations: Node[] = ops.map((op) => ({ ...op, inputs: [], outputs: [] }));
-        const getConnectedNodes = (node: Node): Node[] => {
-            return node.connections
-                .map((connection) => {
-                    return operations.find((connectedNode) => connectedNode.id === connection);
-                })
-                .filter((n) => n) as Node[];
-        };
-        operations.forEach((op) => {
-            if (op.node_type === NodeType.function_start) {
-                // outputs
-                op.outputs = getConnectedNodes(op).flatMap((node) => {
-                    if (node?.node_type === NodeType.function_end) {
-                        return getConnectedNodes(node).filter(
-                            (out) =>
-                                out?.node_type !== NodeType.capture_end && out?.node_type !== NodeType.function_start,
-                        );
-                    }
-                    return [];
-                });
-
-                // connect end to start
-                getConnectedNodes(op).forEach((n) => {
-                    if (n.node_type === NodeType.function_end) {
-                        n.operation = op;
-                    }
-                });
-            } else if (op.node_type === NodeType.buffer) {
-                const connectedNodes = getConnectedNodes(op);
-                connectedNodes.forEach((n) => {
-                    if (n.node_type === NodeType.tensor) {
-                        n.params.device_id = op.params.device_id;
-                        if (!n.buffer) {
-                            n.buffer = [];
-                        }
-                        const deviceId = (op.params.device_id as number) || 0;
-                        n.buffer[deviceId] = op;
-                    }
-                });
-            } else if (op.node_type === NodeType.buffer_allocate) {
-                const connectedNodes = getConnectedNodes(op);
-                connectedNodes.forEach((n) => {
-                    if (n.node_type === NodeType.buffer) {
-                        const deviceId = (op.params.device_id as number) || 0;
-                        const bufferDeviceId = (n.params.device_id as number) || 0;
-                        if (deviceId === bufferDeviceId) {
-                            n.allocation = op;
-                        }
-                        // n.params.device_id = op.params.device_id;
-                        // if (!n.allocation) {
-                        //     n.allocation = [];
-                        // }
-                        // n.allocation.push(op);
-                    }
-                });
-            } else if (op.node_type === NodeType.circular_buffer_allocate) {
-                const numCores = getCoresInRange(op.params.core_range_set);
-                op.params.num_cores = numCores.toString();
-            } else if (op.node_type !== NodeType.function_end && op.node_type !== NodeType.capture_start) {
-                // inputs reversed
-                const connectedNodes = getConnectedNodes(op);
-                connectedNodes.forEach((n) => {
-                    if (n.node_type === NodeType.function_start) {
-                        n.inputs.push(op);
-                    }
-                });
-            }
-        });
-        operations
-            .filter((op) => op.node_type === NodeType.function_start)
-            .filter((op) => !captureStart?.connections.includes(op.id))
-            .forEach((op) => {
-                op.outputs.forEach((n) => {
-                    if (n.node_type === NodeType.tensor) {
-                        if (n.params.device_id !== undefined) {
-                            // KEEPING in case device id arrays confirmed
-                            // op.params.derived_device_id = [
-                            //     ...new Set(op.params.derived_device_id || [n.params.device_id]),
-                            // ];
-                            op.params.device_id = n.params.device_id;
-                        }
-                    }
-                });
-            });
-        return operations;
-    }, []);
 
     const renderOperations = useCallback(
         (ops: Node[]) => {
             const deviceOpList: Node[] = [];
-            const operations = preprocessConnections(ops);
             const stack: JSX.Element[][] = [];
             const output: JSX.Element[] = [];
             let consecutiveCBsOutput: boolean = false;
-            operations.forEach((node, index) => {
+            ops.forEach((node, index) => {
                 const nodeType = node.node_type;
                 const memoryDetails: AllocationDetails | undefined = memoryAllocationList.find(
                     (data) => data.id === node.id,
@@ -256,7 +167,6 @@ const DeviceOperationsFullRender: React.FC<{
                 } else if (nodeType === NodeType.function_end) {
                     const innerContent = stack.pop();
                     const opName = node.params.name;
-                    // const mem = operationMemoryDetails.pop();
                     const label = (
                         <h4>
                             <Icon
@@ -267,7 +177,7 @@ const DeviceOperationsFullRender: React.FC<{
                             />
                             {/* DEBUGGING */}
                             {/* <span style={{ color: 'yellow' }}>{node.operation?.params.device_id}</span> */}
-                            {opName} <DeviceID deviceId={node.operation?.params.device_id} /> (
+                            {opName} <DeviceID _deviceId={node.operation?.params.device_id} /> (
                             {node.operation?.inputs.map((arg) => (
                                 <span
                                     className='params'
@@ -446,15 +356,7 @@ const DeviceOperationsFullRender: React.FC<{
 
             return output;
         },
-        [
-            details,
-            formatDeviceOpParameters,
-            memoryAllocationList,
-            onLegendClick,
-            peakMemoryLoad,
-            preprocessConnections,
-            selectedAddress,
-        ],
+        [details, formatDeviceOpParameters, memoryAllocationList, onLegendClick, peakMemoryLoad, selectedAddress],
     );
 
     return (
@@ -505,6 +407,8 @@ const DeviceOperationNode: React.FC<
     );
 };
 
-const DeviceID: React.FC<{ deviceId?: number | string }> = ({ deviceId }) => {
-    return deviceId !== undefined && <span className='device-id'>{deviceId}</span>;
+const DeviceID: React.FC<{ _deviceId?: number | string }> = ({ _deviceId }) => {
+    return null;
+    // PLO, debugging code
+    // return _deviceId !== undefined && <span className='device-id'>{_deviceId}</span>;
 };

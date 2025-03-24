@@ -6,10 +6,10 @@ import { Helmet } from 'react-helmet-async';
 import { useEffect, useMemo, useState } from 'react';
 import { Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useDeviceLog, usePerformance, usePerformanceReport } from '../hooks/useAPI';
+import { useDeviceLog, usePerformanceReport } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { PerformanceReport } from '../components/performance/PerfReport';
+import PerformanceReport from '../components/performance/PerfReport';
 import 'styles/components/Performance.scss';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import PerfDeviceKernelDurationChart from '../components/performance/PerfDeviceKernelDurationChart';
@@ -20,28 +20,18 @@ import PerfKernelDurationUtilizationChart from '../components/performance/PerfKe
 import PerfOperationTypesChart from '../components/performance/PerfOperationTypesChart';
 import PerfOpCountVsRuntimeChart from '../components/performance/PerfOpCountVsRuntimeChart';
 import getCoreCount from '../functions/getCoreCount';
-import { MARKER_COLOURS, Marker, RowData } from '../definitions/PerfTable';
+import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
 
 export default function Performance() {
-    const { data: perfDataOld, isLoading: isLoadingPerformance } = usePerformance();
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
-    const { data: perfData } = usePerformanceReport();
-
-    // TODO: Typing here is still a little weird
-    const data = useMemo(
-        () =>
-            (perfDataOld?.data ? (perfDataOld.data as Partial<RowData>[]) : []).filter(
-                (row) => row['OP TYPE'] === 'tt_dnn_device',
-            ),
-        [perfDataOld?.data],
-    ) as RowData[];
+    const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport();
 
     const opCodeOptions = useMemo(
         () =>
             [
                 ...new Set(
-                    data.map((row) => row['OP CODE']).filter((opCode): opCode is string => opCode !== undefined),
+                    perfData?.map((row) => row.raw_op_code).filter((opCode): opCode is string => opCode !== undefined),
                 ).values(),
             ]
                 .sort()
@@ -49,12 +39,12 @@ export default function Performance() {
                     opCode,
                     colour: MARKER_COLOURS[index],
                 })),
-        [data],
+        [perfData],
     );
 
     const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-1');
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>(opCodeOptions);
-    const [filteredData, setFilteredData] = useState<RowData[]>([]);
+    const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
 
     useClearSelectedBuffer();
 
@@ -63,16 +53,16 @@ export default function Performance() {
     }, [opCodeOptions]);
 
     useEffect(() => {
-        setFilteredData(
-            data
-                .filter((row) =>
+        setFilteredPerfData(
+            perfData
+                ?.filter((row) =>
                     selectedOpCodes.length
-                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row['OP CODE'] ?? '')
+                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
                         : false,
                 )
-                .sort((a, b) => (a['OP CODE'] ?? '').localeCompare(b['OP CODE'] ?? '')),
+                .sort((a, b) => (a.raw_op_code ?? '').localeCompare(b.raw_op_code ?? '')) || [],
         );
-    }, [selectedOpCodes, data]);
+    }, [selectedOpCodes, perfData]);
 
     if (isLoadingPerformance || isLoadingDeviceLog) {
         return (
@@ -83,7 +73,7 @@ export default function Performance() {
     }
 
     const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
-    const maxCores = getCoreCount(architecture, data);
+    const maxCores = perfData ? getCoreCount(architecture, perfData) : 0;
 
     return (
         <div className='performance'>
@@ -127,34 +117,34 @@ export default function Performance() {
 
                                 <div className='charts'>
                                     <PerfOpCountVsRuntimeChart
-                                        data={filteredData}
+                                        data={filteredPerfData}
                                         selectedOpCodes={selectedOpCodes}
                                     />
 
                                     <PerfDeviceKernelRuntimeChart
-                                        data={filteredData}
+                                        data={filteredPerfData}
                                         maxCores={maxCores}
                                     />
 
-                                    <PerfDeviceKernelDurationChart data={filteredData} />
+                                    <PerfDeviceKernelDurationChart data={filteredPerfData} />
 
                                     <PerfCoreCountUtilizationChart
-                                        data={filteredData}
+                                        data={filteredPerfData}
                                         maxCores={maxCores}
                                     />
 
                                     <PerfOperationKernelUtilizationChart
-                                        data={filteredData}
+                                        data={filteredPerfData}
                                         maxCores={maxCores}
                                     />
 
                                     <PerfKernelDurationUtilizationChart
-                                        data={filteredData}
+                                        data={filteredPerfData}
                                         maxCores={maxCores}
                                     />
 
                                     <PerfOperationTypesChart
-                                        data={data}
+                                        data={filteredPerfData}
                                         opCodes={opCodeOptions}
                                     />
                                 </div>

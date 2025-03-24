@@ -1,12 +1,12 @@
 # Contributing
 
-**NOTE:** If you're just looking to run the app, [using the wheel](https://github.com/tenstorrent/ttnn-visualizer/blob/dev/docs/getting-started.md) is recommended as it is very simple to install and run.
+**NOTE:** If you're just looking to run the app, [installing via PyPI](https://github.com/tenstorrent/ttnn-visualizer/blob/dev/docs/getting-started.md#installing-from-pypi) is highly recommended.
 
 ## Running the app from source
 
 ### Front end
 
-Currently the project requires Node v20.11. We have a `.nvmrc` file for ease of versioning if you're using a node version manager.
+Currently the project requires **Node 20.11**. We have a `.nvmrc` file for ease of versioning if you're using a node version manager.
 
 We use [pnpm](https://pnpm.io/) as our package manager. Please see their guidelines for [installing pnpm on your machine](https://pnpm.io/installation).
 
@@ -48,7 +48,7 @@ Starting with hot reload:
 pnpm run flask:start-debug
 ```
 
-When both the frontend and backend are running you can access the app on [http://localhost:5173](http://localhost:5173) or whatever **Local** uri is printed in your terminal where you ran `npm run dev`.
+When both the frontend and backend are running you can access the app on [http://localhost:5173](http://localhost:5173) or whatever local URI is printed in your terminal where you ran `pnpm run dev`.
 
 ### Environment
 
@@ -88,11 +88,3 @@ With the virtualenv activated run:
 ```shell
 pip install --upgrade setuptools
 ```
-
-## Docker
-
-To run the application you can simply run `docker-compose up web`. To rebuild add the build flag, `docker-compose up web --build`.
-
-To use the [provided SSH container](./docker/SSH/README.md) with the compose configuration you can substitute `web` in the above commands for `ssh`. To run the container in the background use `docker-compose up ssh -d`
-
-To connect to this container through the remote connection manager you use the name of the service (`ssh`) as the 'host' and the default SSH port 22.

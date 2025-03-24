@@ -38,6 +38,8 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     tensorList: Tensor[];
 
+    raw_device_operations: Node[] = [];
+
     device_operations: Node[] = [];
 
     tensorListByAddress: Map<number, Tensor> = new Map();
@@ -60,7 +62,10 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.l1_sizes = data.l1_sizes;
         this.stack_trace = data.stack_trace;
         this.operations = operations;
-        this.device_operations = data.device_operations;
+        this.raw_device_operations = data.device_operations;
+        // DEBUG
+        // this.device_operations = this.preprocessConnections(data.device_operations); // // this.mergeDevices(this.preprocessConnections(data.device_operations));
+        this.device_operations = this.mergeDevices(this.preprocessConnections(data.device_operations));
         this.options = options || { renderPattern: false };
 
         this.inputs.forEach((tensor) => {
@@ -494,6 +499,146 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
             address: mem[0].address || 0,
             size: rangeEnd - mem[0].address,
         };
+    }
+
+    // eslint-disable-next-line class-methods-use-this
+    private preprocessConnections(ops: Node[]) {
+        const captureStart = ops.find((op) => op.node_type === NodeType.capture_start);
+        const operations: Node[] = ops.map((op) => ({ ...op, inputs: [], outputs: [] }));
+        const getConnectedNodes = (node: Node): Node[] => {
+            return node.connections
+                .map((connection) => {
+                    return operations.find((connectedNode) => connectedNode.id === connection);
+                })
+                .filter((n) => n) as Node[];
+        };
+        operations.forEach((op) => {
+            if (op.node_type === NodeType.function_start) {
+                // outputs
+                op.outputs = getConnectedNodes(op).flatMap((node) => {
+                    if (node?.node_type === NodeType.function_end) {
+                        return getConnectedNodes(node).filter(
+                            (out) =>
+                                out?.node_type !== NodeType.capture_end && out?.node_type !== NodeType.function_start,
+                        );
+                    }
+                    return [];
+                });
+
+                // connect end to start
+                getConnectedNodes(op).forEach((n) => {
+                    if (n.node_type === NodeType.function_end) {
+                        n.operation = op;
+                        n.params.device_id = op.params.device_id;
+                    }
+                });
+            } else if (op.node_type === NodeType.buffer) {
+                const connectedNodes = getConnectedNodes(op);
+                connectedNodes.forEach((n) => {
+                    if (n.node_type === NodeType.tensor) {
+                        n.params.device_id = op.params.device_id;
+                        if (!n.buffer) {
+                            n.buffer = [];
+                        }
+                        const deviceId = (op.params.device_id as number) || 0;
+                        n.buffer[deviceId] = op;
+                    }
+                });
+            } else if (op.node_type === NodeType.buffer_allocate) {
+                const connectedNodes = getConnectedNodes(op);
+                connectedNodes.forEach((n) => {
+                    if (n.node_type === NodeType.buffer) {
+                        const deviceId = (op.params.device_id as number) || 0;
+                        const bufferDeviceId = (n.params.device_id as number) || 0;
+                        if (deviceId === bufferDeviceId) {
+                            n.allocation = op;
+                        }
+                        // n.params.device_id = op.params.device_id;
+                        // if (!n.allocation) {
+                        //     n.allocation = [];
+                        // }
+                        // n.allocation.push(op);
+                    }
+                });
+            } else if (op.node_type === NodeType.circular_buffer_allocate) {
+                const numCores = getCoresInRange(op.params.core_range_set);
+                op.params.num_cores = numCores.toString();
+            } else if (op.node_type !== NodeType.function_end && op.node_type !== NodeType.capture_start) {
+                // inputs reversed
+                const connectedNodes = getConnectedNodes(op);
+                connectedNodes.forEach((n) => {
+                    if (n.node_type === NodeType.function_start) {
+                        n.inputs.push(op);
+                    }
+                });
+            }
+        });
+        operations
+            .filter((op) => op.node_type === NodeType.function_start)
+            .filter((op) => !captureStart?.connections.includes(op.id))
+            .forEach((op) => {
+                op.outputs.forEach((n) => {
+                    if (n.node_type === NodeType.tensor) {
+                        if (n.params.device_id !== undefined) {
+                            // KEEPING in case device id arrays confirmed
+                            // op.params.derived_device_id = [
+                            //     ...new Set(op.params.derived_device_id || [n.params.device_id]),
+                            // ];
+                            op.params.device_id = n.params.device_id;
+                        }
+                    }
+                });
+            });
+        return operations;
+    }
+
+    // eslint-disable-next-line class-methods-use-this
+    private mergeDevices(operations: Node[]) {
+        const multiDeviceOps: Node[] = [];
+        const operationsByDevice: Map<string | number | undefined, Node[]> = new Map();
+        let currentDeviceId: string | number | undefined;
+        operations.forEach((op) => {
+            if (op.node_type === NodeType.function_start) {
+                const deviceId = Number(op.params.device_id);
+                currentDeviceId = deviceId;
+                if (op.params.device_id !== undefined) {
+                    if (!operationsByDevice.has(deviceId)) {
+                        operationsByDevice.set(deviceId, []);
+                    }
+                    operationsByDevice.get(deviceId)?.push(op);
+                } else {
+                    multiDeviceOps.push(op);
+                }
+            } else if (currentDeviceId !== undefined) {
+                if (op.params.device_id === undefined) {
+                    multiDeviceOps.push(op);
+                } else {
+                    operationsByDevice.get(currentDeviceId)?.push(op);
+                }
+            } else if (currentDeviceId === undefined && op.params.device_id !== undefined) {
+                const deviceId = Number(op.params.device_id);
+
+                if (!operationsByDevice.has(deviceId)) {
+                    operationsByDevice.set(deviceId, []);
+                }
+                // PLO
+                // galaxy
+                // http://localhost:5173/operations/17
+                // operationsByDevice.get(deviceId)?.push(op);
+            } else {
+                multiDeviceOps.push(op);
+            }
+        });
+
+        const deviceIdList = [...operationsByDevice.keys()]
+            .filter((el) => el !== undefined && el !== null)
+            .map((el) => Number(el));
+
+        const firstDevice = Math.min(...deviceIdList);
+
+        const result: Node[] = [...multiDeviceOps, ...(operationsByDevice.get(firstDevice) || [])];
+        result.sort((a, b) => a.id - b.id);
+        return result;
     }
 
     // eslint-disable-next-line class-methods-use-this

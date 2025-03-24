@@ -47,7 +47,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
         [buffersByOperation],
     );
 
-    const getMemorySize = () => (!isLoadingDevices && devices ? devices[deviceId].worker_l1_size : 0);
+    const getMemorySize = () => (!isLoadingDevices && devices ? devices[deviceId]?.worker_l1_size : 0);
 
     // TODO: Multi device support
     const memorySize = useMemo(getMemorySize, [deviceId, devices, isLoadingDevices]);

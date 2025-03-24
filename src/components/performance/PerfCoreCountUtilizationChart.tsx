@@ -4,13 +4,13 @@
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { RowData } from '../../definitions/PerfTable';
+import { PerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 
 interface PerfCoreCountUtilizationChartProps {
-    data?: RowData[];
+    data?: PerfTableRow[];
     maxCores: number;
 }
 
@@ -19,7 +19,7 @@ function PerfCoreCountUtilizationChart({ data, maxCores }: PerfCoreCountUtilizat
         () =>
             ({
                 x: data?.map((_row, index) => index + 1),
-                y: data?.map((row) => row['CORE COUNT']),
+                y: data?.map((row) => row.cores),
                 type: 'bar',
                 hovertemplate: `Operation: %{x}<br />Cores: %{y}`,
                 name: '',

@@ -18,6 +18,7 @@ interface CollapsibleProps {
     contentClassName?: string;
     keepChildrenMounted?: boolean;
     onExpandToggle?: () => void;
+    isDisabled?: boolean;
 }
 
 const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
@@ -30,6 +31,7 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
     keepChildrenMounted = true,
     onExpandToggle,
     children,
+    isDisabled = false,
 }) => {
     const [isOpenState, setIsOpenState] = React.useState(isOpen);
     useEffect(() => {
@@ -44,12 +46,16 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
                     <Button
                         size='small'
                         variant='minimal'
-                        onClick={() => {
-                            if (onExpandToggle) {
-                                onExpandToggle();
-                            }
-                            setIsOpenState(!isOpenState);
-                        }}
+                        onClick={
+                            !isDisabled
+                                ? () => {
+                                      if (onExpandToggle) {
+                                          onExpandToggle();
+                                      }
+                                      setIsOpenState(!isOpenState);
+                                  }
+                                : undefined
+                        }
                         endIcon={icon}
                     >
                         {label}

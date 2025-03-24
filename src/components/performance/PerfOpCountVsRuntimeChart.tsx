@@ -4,18 +4,18 @@
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { MARKER_COLOURS, Marker, RowData } from '../../definitions/PerfTable';
+import { MARKER_COLOURS, Marker, PerfTableRow } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 
 interface PerfOpCountVsRuntimeChartProps {
-    data: RowData[];
     selectedOpCodes: Marker[];
+    data?: PerfTableRow[];
 }
 
-function PerfOpCountVsRuntimeChart({ data, selectedOpCodes }: PerfOpCountVsRuntimeChartProps) {
+function PerfOpCountVsRuntimeChart({ selectedOpCodes, data = [] }: PerfOpCountVsRuntimeChartProps) {
     const opCodes = useMemo(
-        () => [...new Set(data?.filter((row) => row['OP CODE'] !== undefined).map((row) => row['OP CODE']))],
+        () => [...new Set(data?.filter((row) => row.raw_op_code !== undefined).map((row) => row.raw_op_code))],
         [data],
     );
     const totalRuntime = useMemo(() => data.reduce(getRuntimeLength, 0), [data]);
@@ -26,7 +26,7 @@ function PerfOpCountVsRuntimeChart({ data, selectedOpCodes }: PerfOpCountVsRunti
                 (opCode) =>
                     ({
                         x: ['Op Count'],
-                        y: [data.filter((row) => row['OP CODE'] === opCode).length / data.length],
+                        y: [data.filter((row) => row.raw_op_code === opCode).length / data.length],
                         type: 'bar',
                         name: '',
                         hovertemplate: `${opCode}<br />%{y:.1%}`,
@@ -44,7 +44,9 @@ function PerfOpCountVsRuntimeChart({ data, selectedOpCodes }: PerfOpCountVsRunti
                 (opCode, index) =>
                     ({
                         x: ['Runtime %'],
-                        y: [data.filter((row) => row['OP CODE'] === opCode).reduce(getRuntimeLength, 0) / totalRuntime],
+                        y: [
+                            data.filter((row) => row.raw_op_code === opCode).reduce(getRuntimeLength, 0) / totalRuntime,
+                        ],
                         type: 'bar',
                         name: '',
                         hovertemplate: `${opCode}<br />%{y:.1%}`,
@@ -79,7 +81,7 @@ function PerfOpCountVsRuntimeChart({ data, selectedOpCodes }: PerfOpCountVsRunti
     );
 }
 
-const getRuntimeLength = (sum: number, row: RowData) =>
-    sum + (row['DEVICE KERNEL DURATION [ns]'] ? parseInt(row['DEVICE KERNEL DURATION [ns]'], 10) : 0);
+const getRuntimeLength = (sum: number, row: PerfTableRow) =>
+    sum + (row.device_time ? parseInt(row.device_time, 10) : 0);
 
 export default PerfOpCountVsRuntimeChart;
