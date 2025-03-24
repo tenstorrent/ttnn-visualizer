@@ -29,7 +29,7 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     RemoteConnection,
     StatusMessage,
-    TabSession,
+    Instance,
 )
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path, check_sqlite_path
@@ -43,7 +43,7 @@ from ttnn_visualizer.serializers import (
     serialize_devices,
 )
 from ttnn_visualizer.sessions import (
-    update_tab_session,
+    update_instance,
 )
 from ttnn_visualizer.sftp_operations import (
     sync_remote_folders,
@@ -176,7 +176,7 @@ def operation_detail(operation_id, session):
 )
 @with_session
 @timer
-def operation_history(session: TabSession):
+def operation_history(session: Instance):
     operation_history_filename = "operation_history.json"
     if session.remote_connection and session.remote_connection.useRemoteQuerying:
         if not session.remote_folder:
@@ -203,7 +203,7 @@ def operation_history(session: TabSession):
 @api.route("/config")
 @with_session
 @timer
-def get_config(session: TabSession):
+def get_config(session: Instance):
     if session.remote_connection and session.remote_connection.useRemoteQuerying:
         if not session.remote_folder:
             return {}
@@ -225,7 +225,7 @@ def get_config(session: TabSession):
 @api.route("/tensors", methods=["GET"])
 @with_session
 @timer
-def tensors_list(session: TabSession):
+def tensors_list(session: Instance):
     with DatabaseQueries(session) as db:
         device_id = request.args.get("device_id", None)
         tensors = list(db.query_tensors(filters={"device_id": device_id}))
@@ -240,7 +240,7 @@ def tensors_list(session: TabSession):
 @api.route("/buffer", methods=["GET"])
 @with_session
 @timer
-def buffer_detail(session: TabSession):
+def buffer_detail(session: Instance):
     address = request.args.get("address")
     operation_id = request.args.get("operation_id")
 
@@ -262,7 +262,7 @@ def buffer_detail(session: TabSession):
 @api.route("/buffer-pages", methods=["GET"])
 @with_session
 @timer
-def buffer_pages(session: TabSession):
+def buffer_pages(session: Instance):
     address = request.args.get("address")
     operation_id = request.args.get("operation_id")
     buffer_type = request.args.get("buffer_type", "")
@@ -297,7 +297,7 @@ def buffer_pages(session: TabSession):
 @api.route("/tensors/<tensor_id>", methods=["GET"])
 @with_session
 @timer
-def tensor_detail(tensor_id, session: TabSession):
+def tensor_detail(tensor_id, session: Instance):
     with DatabaseQueries(session) as db:
         tensors = list(db.query_tensors(filters={"tensor_id": tensor_id}))
         if not tensors:
@@ -308,7 +308,7 @@ def tensor_detail(tensor_id, session: TabSession):
 
 @api.route("/operation-buffers", methods=["GET"])
 @with_session
-def get_operations_buffers(session: TabSession):
+def get_operations_buffers(session: Instance):
     buffer_type = request.args.get("buffer_type", "")
     device_id = request.args.get("device_id", None)
     if buffer_type and str.isdigit(buffer_type):
@@ -328,7 +328,7 @@ def get_operations_buffers(session: TabSession):
 
 @api.route("/operation-buffers/<operation_id>", methods=["GET"])
 @with_session
-def get_operation_buffers(operation_id, session: TabSession):
+def get_operation_buffers(operation_id, session: Instance):
     buffer_type = request.args.get("buffer_type", "")
     device_id = request.args.get("device_id", None)
     if buffer_type and str.isdigit(buffer_type):
@@ -357,7 +357,7 @@ def get_operation_buffers(operation_id, session: TabSession):
 
 @api.route("/profiler/device-log", methods=["GET"])
 @with_session
-def get_profiler_data(session: TabSession):
+def get_profiler_data(session: Instance):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     with DeviceLogProfilerQueries(session) as csv:
@@ -367,7 +367,7 @@ def get_profiler_data(session: TabSession):
 
 @api.route("/profiler/perf-results", methods=["GET"])
 @with_session
-def get_profiler_performance_data(session: TabSession):
+def get_profiler_performance_data(session: Instance):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     with OpsPerformanceQueries(session) as csv:
@@ -378,7 +378,7 @@ def get_profiler_performance_data(session: TabSession):
 
 @api.route("/profiler/perf-results/raw", methods=["GET"])
 @with_session
-def get_profiler_perf_results_data_raw(session: TabSession):
+def get_profiler_perf_results_data_raw(session: Instance):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     content = OpsPerformanceQueries.get_raw_csv(session)
@@ -391,7 +391,7 @@ def get_profiler_perf_results_data_raw(session: TabSession):
 
 @api.route("/profiler/perf-results/report", methods=["GET"])
 @with_session
-def get_profiler_perf_results_report(session: TabSession):
+def get_profiler_perf_results_report(session: Instance):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
 
@@ -405,7 +405,7 @@ def get_profiler_perf_results_report(session: TabSession):
 
 @api.route("/profiler/device-log/raw", methods=["GET"])
 @with_session
-def get_profiler_data_raw(session: TabSession):
+def get_profiler_data_raw(session: Instance):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     content = DeviceLogProfilerQueries.get_raw_csv(session)
@@ -418,7 +418,7 @@ def get_profiler_data_raw(session: TabSession):
 
 @api.route("/profiler/device-log/zone/<zone>", methods=["GET"])
 @with_session
-def get_zone_statistics(zone, session: TabSession):
+def get_zone_statistics(zone, session: Instance):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     with DeviceLogProfilerQueries(session) as csv:
@@ -428,7 +428,7 @@ def get_zone_statistics(zone, session: TabSession):
 
 @api.route("/devices", methods=["GET"])
 @with_session
-def get_devices(session: TabSession):
+def get_devices(session: Instance):
     with DatabaseQueries(session) as db:
         devices = list(db.query_devices())
         return serialize_devices(devices)
@@ -451,7 +451,7 @@ def create_report_files():
     save_uploaded_files(files, report_directory, report_name)
 
     instance_id = request.args.get("instanceId")
-    update_tab_session(instance_id=instance_id, report_name=report_name, clear_remote=True)
+    update_instance(instance_id=instance_id, report_name=report_name, clear_remote=True)
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
@@ -498,7 +498,7 @@ def create_profile_files():
         str(report_directory),
     )
 
-    update_tab_session(
+    update_instance(
         instance_id=instance_id, profile_name=profiler_folder_name, clear_remote=True
     )
 
@@ -526,7 +526,7 @@ def create_npe_files():
     save_uploaded_files(files, target_directory, npe_name)
 
     instance_id = request.args.get("instanceId")
-    update_tab_session(instance_id=instance_id, npe_name=npe_name, clear_remote=True)
+    update_instance(instance_id=instance_id, npe_name=npe_name, clear_remote=True)
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success"
@@ -595,7 +595,7 @@ import yaml
 
 @api.route("/cluster_desc", methods=["GET"])
 @with_session
-def get_cluster_description_file(session: TabSession):
+def get_cluster_description_file(session: Instance):
     if not session.remote_connection:
         return jsonify({"error": "Remote connection not found"}), 404
 
@@ -795,7 +795,7 @@ def use_remote_folder():
     instance_id = request.args.get("instanceId")
     current_app.logger.info(f"Setting active report for {instance_id} - {remote_path}")
 
-    update_tab_session(
+    update_instance(
         instance_id=instance_id,
         report_name=report_folder,
         profile_name=profile_name,
@@ -814,14 +814,14 @@ def health_check():
 
 @api.route("/session", methods=["GET"])
 @with_session
-def get_instance(session: TabSession):
+def get_instance(session: Instance):
     # Used to gate UI functions if no report is active
     return session.model_dump()
 
 @api.route("/npe", methods=["GET"])
 @with_session
 @timer
-def get_npe_data(session: TabSession):
+def get_npe_data(session: Instance):
     if not session.npe_path:
         logger.error("NPE path is not set in the session.")
         return Response(status=HTTPStatus.NOT_FOUND)

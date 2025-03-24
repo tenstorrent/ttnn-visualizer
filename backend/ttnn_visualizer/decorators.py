@@ -19,7 +19,7 @@ from ttnn_visualizer.exceptions import (
     NoProjectsException,
     RemoteSqliteException,
 )
-from ttnn_visualizer.sessions import get_or_create_tab_session
+from ttnn_visualizer.sessions import get_or_create_instance
 
 
 def with_session(func):
@@ -33,7 +33,7 @@ def with_session(func):
             current_app.logger.error("No instanceId present on request, returning 404")
             abort(404)
 
-        session_query_data = get_or_create_tab_session(instance_id=instance_id)
+        session_query_data = get_or_create_instance(instance_id=instance_id)
         session = session_query_data.to_pydantic()
 
         if not session.active_report:

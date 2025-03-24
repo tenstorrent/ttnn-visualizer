@@ -21,7 +21,7 @@ from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from ttnn_visualizer.exceptions import DatabaseFileNotFoundException, InvalidProfilerPath, InvalidReportPath
-from ttnn_visualizer.sessions import create_tab_session_from_local_paths
+from ttnn_visualizer.sessions import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
 
 logger = logging.getLogger(__name__)
@@ -173,7 +173,7 @@ def main():
         app = create_app()
         app.app_context().push()
         try:
-            session = create_tab_session_from_local_paths(
+            session = create_instance_from_local_paths(
                 report_path=args.report_path,
                 profiler_path=args.profiler_path,
             )

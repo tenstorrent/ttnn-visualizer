@@ -192,7 +192,7 @@ class RemoteReportFolder(SerializeableModel):
     lastSynced: Optional[int] = None
 
 
-class TabSession(BaseModel):
+class Instance(BaseModel):
     instance_id: str
     report_path: Optional[str] = None
     profiler_path: Optional[str] = None
@@ -203,8 +203,8 @@ class TabSession(BaseModel):
     remote_profile_folder: Optional[RemoteReportFolder] = None
 
 
-class TabSessionTable(db.Model):
-    __tablename__ = "tab_sessions"
+class InstanceTable(db.Model):
+    __tablename__ = "instances"
 
     id = Column(Integer, primary_key=True)
     instance_id = Column(String, unique=True, nullable=False)
@@ -249,8 +249,8 @@ class TabSessionTable(db.Model):
             "npe_path": self.npe_path
         }
 
-    def to_pydantic(self) -> TabSession:
-        return TabSession(
+    def to_pydantic(self) -> Instance:
+        return Instance(
             instance_id=str(self.instance_id),
             report_path=str(self.report_path) if self.report_path is not None else None,
             profiler_path=(
