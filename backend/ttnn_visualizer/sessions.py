@@ -70,12 +70,12 @@ def handle_sqlalchemy_error(error):
     db.session.rollback()
 
 
-def commit_and_log_session(session_data, tab_id):
+def commit_and_log_session(session_data, instance_id):
     db.session.commit()
 
-    session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
+    session_data = TabSessionTable.query.filter_by(instance_id=instance_id).first()
     current_app.logger.info(
-        f"Session data for tab {tab_id}: {json.dumps(session_data.to_dict(), indent=4)}"
+        f"Session data for instance {instance_id}: {json.dumps(session_data.to_dict(), indent=4)}"
     )
 
 
@@ -104,7 +104,7 @@ def update_paths(
 
 
 def create_new_tab_session(
-    tab_id,
+    instance_id,
     report_name,
     profile_name,
     npe_name,
@@ -127,7 +127,7 @@ def create_new_tab_session(
         remote_profile_folder = None
 
     session_data = TabSessionTable(
-        tab_id=tab_id,
+        instance_id=instance_id,
         active_report=active_report,
         report_path=get_report_path(
             active_report,
@@ -147,7 +147,7 @@ def create_new_tab_session(
 
 
 def update_tab_session(
-    tab_id,
+    instance_id,
     report_name=None,
     profile_name=None,
     npe_name=None,
@@ -157,7 +157,7 @@ def update_tab_session(
     clear_remote=False,
 ):
     try:
-        session_data = get_or_create_tab_session(tab_id)
+        session_data = get_or_create_tab_session(instance_id)
 
         if session_data:
             update_existing_tab_session(
@@ -172,7 +172,7 @@ def update_tab_session(
             )
         else:
             session_data = create_new_tab_session(
-                tab_id,
+                instance_id,
                 report_name,
                 profile_name,
                 npe_name,
@@ -182,7 +182,7 @@ def update_tab_session(
                 clear_remote,
             )
 
-        commit_and_log_session(session_data, tab_id)
+        commit_and_log_session(session_data, instance_id)
         return jsonify({"message": "Tab session updated successfully"}), 200
 
     except SQLAlchemyError as e:
@@ -191,7 +191,7 @@ def update_tab_session(
 
 
 def get_or_create_tab_session(
-    tab_id,
+    instance_id,
     report_name=None,
     profile_name=None,
     npe_name=None,
@@ -204,12 +204,12 @@ def get_or_create_tab_session(
     """
     try:
         # Query the database for the tab session
-        session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
+        session_data = TabSessionTable.query.filter_by(instance_id=instance_id).first()
 
         # If session doesn't exist, initialize it
         if not session_data:
             session_data = TabSessionTable(
-                tab_id=tab_id,
+                instance_id=instance_id,
                 active_report={},
                 remote_connection=None,
                 remote_folder=None,
@@ -220,7 +220,7 @@ def get_or_create_tab_session(
         # Update the session if any new data is provided
         if report_name or profile_name or npe_name or remote_connection or remote_folder:
             update_tab_session(
-                tab_id=tab_id,
+                instance_id=instance_id,
                 report_name=report_name,
                 profile_name=profile_name,
                 npe_name=npe_name,
@@ -229,7 +229,7 @@ def get_or_create_tab_session(
             )
 
         # Query again to get the updated session data
-        session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
+        session_data = TabSessionTable.query.filter_by(instance_id=instance_id).first()
 
         return session_data
 
@@ -241,16 +241,16 @@ def get_or_create_tab_session(
 
 def get_tab_session():
     """
-    Middleware to retrieve or create a tab session based on the tab_id.
+    Middleware to retrieve or create a tab session based on the instance_id.
     """
-    tab_id = request.args.get("tabId", None)
+    instance_id = request.args.get("instanceId", None)
 
-    current_app.logger.info(f"get_tab_session: Received tab_id: {tab_id}")
-    if not tab_id:
-        current_app.logger.error("get_tab_session: No tab_id found")
-        return jsonify({"error": "tabId is required"}), 400
+    current_app.logger.info(f"get_tab_session: Received instance_id: {instance_id}")
+    if not instance_id:
+        current_app.logger.error("get_tab_session: No instance_id found")
+        return jsonify({"error": "instanceId is required"}), 400
 
-    active_report = get_or_create_tab_session(tab_id)
+    active_report = get_or_create_tab_session(instance_id)
     current_app.logger.info(
         f"get_tab_session: Session retrieved: {active_report.active_report}"
     )
@@ -266,7 +266,7 @@ def init_sessions(app):
     app.logger.info("Sessions middleware initialized.")
 
 
-def create_random_tab_id():
+def create_random_instance_id():
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
 
 
@@ -283,7 +283,7 @@ def create_tab_session_from_local_paths(report_path, profiler_path):
     report_name = _report_path.parts[-2] if len(_report_path.parts) > 2 else ""
     profile_name = _profiler_path.parts[-1] if len(_profiler_path.parts) > 2 else ""
     session_data = TabSessionTable(
-        tab_id=create_random_tab_id(),
+        instance_id=create_random_instance_id(),
         active_report={
             "report_name": report_name,
             "profile_name": profile_name,

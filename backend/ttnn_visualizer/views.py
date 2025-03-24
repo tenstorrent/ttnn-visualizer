@@ -450,8 +450,8 @@ def create_report_files():
 
     save_uploaded_files(files, report_directory, report_name)
 
-    tab_id = request.args.get("tabId")
-    update_tab_session(tab_id=tab_id, report_name=report_name, clear_remote=True)
+    instance_id = request.args.get("instanceId")
+    update_tab_session(instance_id=instance_id, report_name=report_name, clear_remote=True)
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
@@ -461,7 +461,7 @@ def create_report_files():
 def create_profile_files():
     files = request.files.getlist("files")
     report_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
-    tab_id = request.args.get("tabId")
+    instance_id = request.args.get("instanceId")
 
     if not validate_files(
         files,
@@ -499,7 +499,7 @@ def create_profile_files():
     )
 
     update_tab_session(
-        tab_id=tab_id, profile_name=profiler_folder_name, clear_remote=True
+        instance_id=instance_id, profile_name=profiler_folder_name, clear_remote=True
     )
 
     return StatusMessage(
@@ -525,8 +525,8 @@ def create_npe_files():
 
     save_uploaded_files(files, target_directory, npe_name)
 
-    tab_id = request.args.get("tabId")
-    update_tab_session(tab_id=tab_id, npe_name=npe_name, clear_remote=True)
+    instance_id = request.args.get("instanceId")
+    update_tab_session(instance_id=instance_id, npe_name=npe_name, clear_remote=True)
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success"
@@ -695,7 +695,7 @@ def sync_remote_folder():
 
     folder = request_body.get("folder")
     profile = request_body.get("profile", None)
-    tab_id = request.args.get("tabId", None)
+    instance_id = request.args.get("instanceId", None)
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
     )
@@ -708,7 +708,7 @@ def sync_remote_folder():
                 remote_dir,
                 profile=profile_folder,
                 exclude_patterns=[r"/tensors(/|$)"],
-                sid=tab_id,
+                sid=instance_id,
             )
 
             profile_folder.lastSynced = int(time.time())
@@ -726,7 +726,7 @@ def sync_remote_folder():
             remote_folder.remotePath,
             remote_dir,
             exclude_patterns=[r"/tensors(/|$)"],
-            sid=tab_id,
+            sid=instance_id,
         )
 
         remote_folder.lastSynced = int(time.time())
@@ -792,11 +792,11 @@ def use_remote_folder():
 
     remote_path = f"{Path(report_data_directory).name}/{connection.host}/{connection_directory.name}"
 
-    tab_id = request.args.get("tabId")
-    current_app.logger.info(f"Setting active report for {tab_id} - {remote_path}")
+    instance_id = request.args.get("instanceId")
+    current_app.logger.info(f"Setting active report for {instance_id} - {remote_path}")
 
     update_tab_session(
-        tab_id=tab_id,
+        instance_id=instance_id,
         report_name=report_folder,
         profile_name=profile_name,
         remote_connection=connection,

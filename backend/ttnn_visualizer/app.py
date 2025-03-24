@@ -182,7 +182,7 @@ def main():
         except InvalidProfilerPath:
             sys.exit("Invalid profiler path")
 
-        instance_id = session.tab_id
+        instance_id = session.instance_id
 
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
