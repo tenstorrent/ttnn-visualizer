@@ -27,7 +27,7 @@ axiosInstance.interceptors.request.use(
     (config) => {
         const instanceId = getOrCreateInstanceId();
         if (instanceId) {
-            // Add the tabId to the query params
+            // Add the instanceId to the query params
             config.params = {
                 ...config.params,
                 instanceId,
