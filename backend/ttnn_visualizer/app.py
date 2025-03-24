@@ -137,10 +137,10 @@ def middleware(app: flask.Flask):
     return None
 
 
-def open_browser(host, port, tab_id=None):
+def open_browser(host, port, instance_id=None):
     url = f"http://{host}:{port}"
-    if tab_id:
-        url = f"{url}?tabId={tab_id}"
+    if instance_id:
+        url = f"{url}?instanceId={instance_id}"
 
     print(f"Launching browser with url: {url}")
     try:
@@ -167,7 +167,7 @@ def main():
 
     config = cast(DefaultConfig, Config())
     args = parse_args()
-    tab_id = None
+    instance_id = None
 
     if args.report_path or args.profiler_path:
         app = create_app()
@@ -182,7 +182,7 @@ def main():
         except InvalidProfilerPath:
             sys.exit("Invalid profiler path")
 
-        tab_id = session.tab_id
+        instance_id = session.tab_id
 
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
@@ -209,7 +209,7 @@ def main():
         flask_env = os.getenv("FLASK_ENV", "development")
         port = config.PORT if flask_env == "production" else config.DEV_SERVER_PORT
         host = config.HOST if flask_env == "production" else config.DEV_SERVER_HOST
-        threading.Timer(2, open_browser, [host, port, tab_id]).start()
+        threading.Timer(2, open_browser, [host, port, instance_id]).start()
     try:
         subprocess.run(gunicorn_args)
     except KeyboardInterrupt:
