@@ -147,8 +147,13 @@ function L1Plots({
                 onBufferClick={onBufferClick}
                 configuration={L1RenderConfiguration}
             />
-            <h3>L1 Operation Buffers</h3>
-            <br />
+            {[...bufferChartDataByOperation.entries()].length > 0 && (
+                <>
+                    <h3>Device Operations</h3>
+                    <br />
+                </>
+            )}
+
             {[...bufferChartDataByOperation.entries()].map(([{ name: deviceOperationName }, plotData], index) => (
                 <Fragment key={`${deviceOperationName}-${index}`}>
                     <h5 className='buffers-plot-title'>

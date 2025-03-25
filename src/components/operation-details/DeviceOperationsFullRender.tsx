@@ -18,6 +18,7 @@ import { formatSize, prettyPrintAddress, toReadableShape } from '../../functions
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
 import { useGetTensorSizesById } from '../../hooks/useAPI';
+import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 
 // TODO: this component definitely needs to be broken down into smaller components
 
@@ -257,7 +258,7 @@ const DeviceOperationsFullRender: React.FC<{
                                         }}
                                         numCores={numCores}
                                         key={buffer.address}
-                                        memSize={details.l1_sizes[0]}
+                                        memSize={details.l1_sizes[0] || L1_DEFAULT_MEMORY_SIZE}
                                         selectedTensorAddress={selectedAddress}
                                         operationDetails={details}
                                         onLegendClick={onLegendClick}
@@ -329,7 +330,7 @@ const DeviceOperationsFullRender: React.FC<{
                                 <MemoryLegendElement
                                     numCores={numCores}
                                     chunk={{ address: parseInt(cb.address, 10), size: parseInt(cb.size, 10) }}
-                                    memSize={details.l1_sizes[0]} // TODO: fix to device specific value
+                                    memSize={details.l1_sizes[0] || L1_DEFAULT_MEMORY_SIZE} // TODO: fix to device specific value
                                     selectedTensorAddress={selectedAddress}
                                     operationDetails={details}
                                     onLegendClick={onLegendClick}
