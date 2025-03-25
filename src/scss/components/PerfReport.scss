@@ -9,6 +9,13 @@
     background: #222;
     color: #fff;
     padding: 1rem;
+    min-width: 1240px;
+
+    .table-header {
+        display: flex;
+        width: 100%;
+        justify-content: space-between;
+    }
 
     .op-tooltip {
         font-family: $base-font;
@@ -23,24 +30,43 @@
         margin-top: 0;
     }
 
+    .header-aside {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .result-count {
+        margin-bottom: 0;
+    }
+
     .cell-header {
         text-align: left;
+        vertical-align: initial;
         border-bottom: 1px solid #555;
 
         .header-label {
-            flex-grow: 1;
-            flex-shrink: 0;
+            font-weight: 400;
+            white-space: nowrap;
+            display: block;
+
+            &.no-button {
+                height: 22px;
+            }
         }
 
         .bp5-button {
             background-color: transparent;
             width: 100%;
+            padding-left: 2px;
+            padding-right: 2px;
         }
 
         .bp5-button-text {
             display: flex;
-            flex-wrap: wrap;
             flex-grow: 1;
+            justify-content: space-between;
         }
     }
 

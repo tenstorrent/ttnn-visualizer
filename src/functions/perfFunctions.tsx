@@ -10,6 +10,7 @@ import { MathFidelity, PerfTableRow, TableHeader, TableKeys } from '../definitio
 import { OperationDescription } from '../model/APIData';
 import { formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
+import HighlightedText from '../components/HighlightedText';
 
 type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'orange' | 'grey';
 
@@ -43,6 +44,7 @@ export const formatCell = (
     row: PerfTableRow,
     header: TableHeader,
     operations?: OperationDescription[],
+    highlight?: string | null,
 ): React.JSX.Element | string => {
     const { key, unit, decimals } = header;
     let formatted: string | boolean | string[];
@@ -95,16 +97,26 @@ export const formatCell = (
         formatted += ` ${unit}`;
     }
 
-    return getCellMarkup(formatted, getCellColour(row, key));
+    return getCellMarkup(formatted, getCellColour(row, key), highlight);
 };
 
-export const getCellMarkup = (text: string | string[], color?: string) => {
+export const getCellMarkup = (text: string | string[], colour?: string, highlight?: string | null) => {
     if (!text) {
-        return text;
+        return '';
     }
 
-    if (color) {
-        return <span className={color}> {text}</span>;
+    if (highlight) {
+        return (
+            <HighlightedText
+                className={colour}
+                text={text}
+                filter={highlight || ''}
+            />
+        );
+    }
+
+    if (colour) {
+        return <span className={colour}>{text}</span>;
     }
 
     return <span>{text}</span>;

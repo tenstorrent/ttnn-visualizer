@@ -5,9 +5,9 @@
 import { FC, Fragment, useMemo, useState } from 'react';
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
-import { Button, Icon, Switch } from '@blueprintjs/core';
+import { Button, ButtonVariant, Icon, InputGroup, Intent, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { PerfTableRow, TableHeader } from '../../definitions/PerfTable';
+import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
 import { selectedPerformanceRangeAtom } from '../../store/app';
 import 'styles/components/PerfReport.scss';
 import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
@@ -42,19 +42,34 @@ interface TypedPerfTableRow
     flops_percent: number;
 }
 
+enum COLUMN_HEADERS {
+    id = 'id',
+    total_percent = 'total_percent',
+    bound = 'bound',
+    op_code = 'op_code',
+    device_time = 'device_time',
+    op_to_op_gap = 'op_to_op_gap',
+    cores = 'cores',
+    dram = 'dram',
+    dram_percent = 'dram_percent',
+    flops = 'flops',
+    flops_percent = 'flops_percent',
+    math_fidelity = 'math_fidelity',
+}
+
 const TABLE_HEADERS: TableHeader[] = [
-    { label: 'ID', key: 'id', sortable: true },
-    { label: 'Total %', key: 'total_percent', unit: '%', decimals: 1, sortable: true },
-    { label: 'Bound', key: 'bound', colour: 'yellow', filterable: true },
-    { label: 'OP Code', key: 'op_code', colour: 'blue', sortable: true },
-    { label: 'Device Time', key: 'device_time', unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Op-to-Op Gap', key: 'op_to_op_gap', colour: 'red', unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Cores', key: 'cores', colour: 'green', sortable: true },
-    { label: 'DRAM', key: 'dram', colour: 'yellow', unit: 'GB/s', sortable: true },
-    { label: 'DRAM %', key: 'dram_percent', colour: 'yellow', unit: '%', sortable: true },
-    { label: 'FLOPs', key: 'flops', unit: 'TFLOPs', sortable: true },
-    { label: 'FLOPs %', key: 'flops_percent', unit: '%', sortable: true },
-    { label: 'Math Fidelity', key: 'math_fidelity', colour: 'cyan' },
+    { label: 'ID', key: COLUMN_HEADERS.id, sortable: true, filterable: true },
+    { label: 'Total %', key: COLUMN_HEADERS.total_percent, unit: '%', decimals: 1, sortable: true },
+    { label: 'Bound', key: COLUMN_HEADERS.bound, colour: 'yellow', filterable: true },
+    { label: 'OP Code', key: COLUMN_HEADERS.op_code, colour: 'blue', sortable: true, filterable: true },
+    { label: 'Device Time', key: COLUMN_HEADERS.device_time, unit: 'µs', decimals: 0, sortable: true },
+    { label: 'Op-to-Op Gap', key: COLUMN_HEADERS.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
+    { label: 'Cores', key: COLUMN_HEADERS.cores, colour: 'green', sortable: true },
+    { label: 'DRAM', key: COLUMN_HEADERS.dram, colour: 'yellow', unit: 'GB/s', sortable: true },
+    { label: 'DRAM %', key: COLUMN_HEADERS.dram_percent, colour: 'yellow', unit: '%', sortable: true },
+    { label: 'FLOPs', key: COLUMN_HEADERS.flops, unit: 'TFLOPs', sortable: true },
+    { label: 'FLOPs %', key: COLUMN_HEADERS.flops_percent, unit: '%', sortable: true },
+    { label: 'Math Fidelity', key: COLUMN_HEADERS.math_fidelity, colour: 'cyan', filterable: true },
 ];
 
 const OP_ID_INSERTION_POINT = 1;
@@ -70,6 +85,17 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     const opIdsMap = useOptoPerfIdFiltered();
     const { data: operations } = useOperationsList();
 
+    const filterableColumnKeys = useMemo(
+        () => TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key),
+        [],
+    );
+    const [filters, setFilters] = useState<Record<TableKeys, string> | null>(
+        Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
+            TableKeys,
+            string
+        >,
+    );
+
     const processedRows: PerfTableRow[] = useMemo(() => {
         return (
             data?.map((opData) => {
@@ -84,8 +110,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
         );
     }, [data, opIdsMap]);
 
-    const getFilteredRows: PerfTableRow[] = useMemo(() => {
-        const filteredRows =
+    const tableFields: PerfTableRow[] = useMemo(() => {
+        let filteredRows =
             selectedRange && processedRows.length > 0
                 ? processedRows.filter((row) => {
                       const rowId = parseInt(row?.id, 10);
@@ -93,7 +119,21 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                   })
                 : processedRows;
 
-        // console.log(data);
+        if (areFiltersActive(filters) && filterableColumnKeys) {
+            filteredRows = filteredRows.filter((row) => {
+                const isFilteredOut =
+                    filters &&
+                    Object.entries(filters)
+                        .filter(([_key, filterValue]) => String(filterValue).length)
+                        .some(([key, filterValue]) => {
+                            const bufferValue = getCellText(row, key as TableKeys);
+
+                            return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
+                        });
+
+                return !isFilteredOut;
+            });
+        }
 
         const parsedRows = filteredRows.map((row) => ({
             ...row,
@@ -109,15 +149,22 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
         })) as TypedPerfTableRow[];
 
         return sortTableFields(parsedRows);
-    }, [processedRows, selectedRange, sortTableFields]);
+    }, [processedRows, selectedRange, sortTableFields, filters, filterableColumnKeys]);
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
-        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: 'op', sortable: true }] : []),
+        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: 'op', sortable: true, filterable: true }] : []),
         ...TABLE_HEADERS.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
-        ...(hiliteHighDispatch ? [{ label: 'Slow', key: 'high_dispatch', filterable: true }] : []),
+        ...(hiliteHighDispatch ? [{ label: 'Slow', key: 'high_dispatch' }] : []),
         ...TABLE_HEADERS.slice(HIGH_DISPATCH_INSERTION_POINT),
     ] as TableHeader[];
+
+    const updateColumnFilter = (key: TableKeys, value: string) => {
+        setFilters({
+            ...filters,
+            [key]: value ?? '',
+        } as Record<TableKeys, string>);
+    };
 
     return (
         <>
@@ -128,12 +175,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                 checked={mergeDeviceData && isMultiDevice}
                 disabled={!isMultiDevice}
             />
+
             <Switch
                 className='expand-button'
                 label={provideMatmulAdvice ? 'Hide Matmul optimization analysis' : 'Show Matmul optimization analysis'}
                 onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
                 checked={provideMatmulAdvice}
             />
+
             <Switch
                 className='expand-button'
                 label='Highlight high dispatch ops'
@@ -142,35 +191,53 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
             />
 
             <div className='perf-report'>
-                <h3 className='title'>Performance report</h3>
-                Sorting: {sortingColumn} by {sortDirection}
-                <Button
-                    icon={IconNames.RESET}
-                    onClick={() => changeSorting(null)(null)}
-                >
-                    Reset
-                </Button>
+                <div className='table-header'>
+                    <h3 className='title'>Performance report</h3>
+
+                    <div className='header-aside'>
+                        <p className='result-count'>
+                            {tableFields.length !== data?.length
+                                ? `Showing ${tableFields.length} of ${data?.length} rows`
+                                : `Showing ${tableFields.length} rows`}
+                        </p>
+
+                        <Button
+                            icon={IconNames.RESET}
+                            onClick={() => {
+                                changeSorting(null)(null);
+                                setFilters(
+                                    Object.fromEntries(
+                                        filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string]),
+                                    ) as Record<TableKeys, string>,
+                                );
+                            }}
+                            intent={Intent.DANGER}
+                            // size={Size.SMALL}
+                            variant={ButtonVariant.OUTLINED}
+                        >
+                            Reset table
+                        </Button>
+                    </div>
+                </div>
+
                 <table className='perf-table monospace'>
                     <thead>
                         <tr>
                             {visibleHeaders.map((h) => {
-                                const isSortable = visibleHeaders?.find((header) => header.key === h.key)?.sortable;
+                                const targetSortDirection =
+                                    // eslint-disable-next-line no-nested-ternary
+                                    sortingColumn === h.key
+                                        ? sortDirection === SortingDirection.ASC
+                                            ? SortingDirection.DESC
+                                            : SortingDirection.ASC
+                                        : sortDirection;
 
-                                if (isSortable) {
-                                    let targetSortDirection = sortDirection;
-
-                                    if (sortingColumn === h.key) {
-                                        targetSortDirection =
-                                            sortDirection === SortingDirection.ASC
-                                                ? SortingDirection.DESC
-                                                : SortingDirection.ASC;
-                                    }
-
-                                    return (
-                                        <th
-                                            className='cell-header'
-                                            key={h.key}
-                                        >
+                                return (
+                                    <th
+                                        key={h.key}
+                                        className='cell-header'
+                                    >
+                                        {h.sortable ? (
                                             <Button
                                                 onClick={() => changeSorting(h.key)(targetSortDirection)}
                                                 variant='minimal'
@@ -199,15 +266,21 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                                                     />
                                                 )}
                                             </Button>
-                                        </th>
-                                    );
-                                }
-                                return (
-                                    <th
-                                        key={h.key}
-                                        className='cell-header'
-                                    >
-                                        {h.label}
+                                        ) : (
+                                            <span className='header-label no-button'>{h.label}</span>
+                                        )}
+
+                                        {h?.filterable && (
+                                            <div className='column-filter'>
+                                                <InputGroup
+                                                    asyncControl
+                                                    size='small'
+                                                    onValueChange={(value) => updateColumnFilter(h.key, value)}
+                                                    placeholder='Filter...'
+                                                    value={filters?.[h.key]}
+                                                />
+                                            </div>
+                                        )}
                                     </th>
                                 );
                             })}
@@ -215,17 +288,17 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                     </thead>
 
                     <tbody>
-                        {getFilteredRows.map((row, i) => (
+                        {tableFields.map((row, i) => (
                             <Fragment key={i}>
                                 <tr>
-                                    {visibleHeaders.map((header) => (
+                                    {visibleHeaders.map((h) => (
                                         <td
-                                            key={header.key}
+                                            key={h.key}
                                             className={classNames('cell', {
-                                                'align-right': header.key === 'math_fidelity',
+                                                'align-right': h.key === 'math_fidelity',
                                             })}
                                         >
-                                            {formatCell(row, header, operations)}
+                                            {formatCell(row, h, operations, filters?.[h.key])}
                                         </td>
                                     ))}
                                 </tr>
@@ -250,6 +323,16 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
             {hiliteHighDispatch && calcHighDispatchOps(processedRows)}
         </>
     );
+};
+
+function areFiltersActive(filters: Record<TableKeys, string> | null) {
+    return filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
+}
+
+const getCellText = (buffer: PerfTableRow, key: TableKeys) => {
+    const textValue = buffer[key]?.toString() || '';
+
+    return textValue;
 };
 
 export default PerformanceReport;
