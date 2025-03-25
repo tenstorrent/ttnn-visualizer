@@ -25,9 +25,31 @@
 
     .cell-header {
         text-align: left;
-        vertical-align: top;
         border-bottom: 1px solid #555;
-        padding-left: 5px;
+
+        .header-label {
+            flex-grow: 1;
+            flex-shrink: 0;
+        }
+
+        .bp5-button {
+            background-color: transparent;
+            width: 100%;
+        }
+
+        .bp5-button-text {
+            display: flex;
+            flex-wrap: wrap;
+            flex-grow: 1;
+        }
+    }
+
+    .sort-icon {
+        opacity: 0.2;
+
+        &.is-active {
+            opacity: 1;
+        }
     }
 
     .cell {

@@ -9,9 +9,14 @@ export enum SortingDirection {
     DESC = 'desc',
 }
 
-type SortingValue = number | string;
+type SortingValue = number | string | null;
 
 const sortAsc = (a: SortingValue, b: SortingValue) => {
+    // Nulls should be sorted to the end
+    if (a === null || b === null) {
+        return a === null ? 1 : -1;
+    }
+
     if (a === undefined || b === undefined || a === b) {
         return 0;
     }
@@ -24,6 +29,11 @@ const sortAsc = (a: SortingValue, b: SortingValue) => {
 };
 
 const sortDesc = (a: SortingValue, b: SortingValue) => {
+    // Nulls should be sorted to the end
+    if (a === null || b === null) {
+        return a === null ? 1 : -1;
+    }
+
     if (a === undefined || b === undefined || a === b) {
         return 0;
     }
@@ -35,19 +45,26 @@ const sortDesc = (a: SortingValue, b: SortingValue) => {
     return a < b ? 1 : -1;
 };
 
-const useBuffersTable = (defaultSortingKey: string) => {
-    const [sortingColumn, setSortingColumn] = useState<string>(defaultSortingKey);
-    const [sortDirection, setSortDirection] = useState<SortingDirection>(SortingDirection.ASC);
+const useBuffersTable = (defaultSortingKey: string | null) => {
+    const [sortingColumn, setSortingColumn] = useState<string | null>(defaultSortingKey);
+    const [sortDirection, setSortDirection] = useState<SortingDirection | null>(SortingDirection.ASC);
 
     const sortTableFields = useCallback(
-        (tableFields: []) =>
-            sortDirection === SortingDirection.ASC
-                ? tableFields.sort((a, b) => sortAsc(a ? a[sortingColumn] : '', b ? b[sortingColumn] : ''))
-                : tableFields.sort((a, b) => sortDesc(a ? a[sortingColumn] : '', b ? b[sortingColumn] : '')),
+        // TODO: Type this more strongly
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tableFields: any[]) => {
+            if (!sortingColumn) {
+                return tableFields;
+            }
+
+            return sortDirection === SortingDirection.ASC
+                ? tableFields.sort((a, b) => sortAsc(a[sortingColumn], b[sortingColumn]))
+                : tableFields.sort((a, b) => sortDesc(a[sortingColumn], b[sortingColumn]));
+        },
         [sortingColumn, sortDirection],
     );
 
-    const changeSorting = (selectedColumn: string) => (direction: SortingDirection) => {
+    const changeSorting = (selectedColumn: string | null) => (direction: SortingDirection | null) => {
         setSortDirection(direction);
         setSortingColumn(selectedColumn);
     };
