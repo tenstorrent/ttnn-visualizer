@@ -19,7 +19,7 @@ from ttnn_visualizer.exceptions import (
     NoProjectsException,
     RemoteSqliteException,
 )
-from ttnn_visualizer.sessions import get_or_create_tab_session
+from ttnn_visualizer.sessions import get_or_create_instance
 
 
 def with_session(func):
@@ -27,18 +27,18 @@ def with_session(func):
     def wrapper(*args, **kwargs):
         from flask import current_app
 
-        tab_id = request.args.get("tabId")
+        instance_id = request.args.get("instanceId")
 
-        if not tab_id:
-            current_app.logger.error("No tabId present on request, returning 404")
+        if not instance_id:
+            current_app.logger.error("No instanceId present on request, returning 404")
             abort(404)
 
-        session_query_data = get_or_create_tab_session(tab_id=tab_id)
+        session_query_data = get_or_create_instance(instance_id=instance_id)
         session = session_query_data.to_pydantic()
 
         if not session.active_report:
             current_app.logger.error(
-                f"No active report exists for tabId {tab_id}, returning 404"
+                f"No active report exists for instanceId {instance_id}, returning 404"
             )
             # Raise 404 if report_path is missing or does not exist
             abort(404)

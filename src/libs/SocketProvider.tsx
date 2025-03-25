@@ -6,7 +6,7 @@
 import React, { ReactNode, createContext, useEffect } from 'react';
 import { Socket, io } from 'socket.io-client';
 import { useAtom } from 'jotai';
-import { getOrCreateTabId } from './axiosInstance';
+import { getOrCreateInstanceId } from './axiosInstance';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileProgress, FileStatus } from '../model/APIData';
 
@@ -14,7 +14,7 @@ import { FileProgress, FileStatus } from '../model/APIData';
 type SocketContextType = Socket | null;
 
 // Initialize the socket connection (replace with your backend URL)
-const socket = io(`http://localhost:8000?tabId=${getOrCreateTabId()}`);
+const socket = io(`http://localhost:8000?instanceId=${getOrCreateInstanceId()}`);
 
 // Create the SocketContext with a default value of `null`
 const SocketContext = createContext<SocketContextType>(null);
@@ -26,7 +26,7 @@ interface SocketProviderProps {
 
 export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     const [_, setFileTransferProgress] = useAtom(fileTransferProgressAtom);
-    const tabId = getOrCreateTabId();
+    const instanceId = getOrCreateInstanceId();
 
     useEffect(() => {
         // Debugging: Listen for connection and disconnection events
@@ -50,7 +50,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
         // Handle file transfer progress from the socket
         socket.on('fileTransferProgress', (data) => {
-            if (data.tab_id === tabId) {
+            if (data.instanceId === instanceId) {
                 setFileTransferProgress({
                     currentFileName: data.current_file_name,
                     numberOfFiles: data.number_of_files,
@@ -74,7 +74,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
             socket.off('connect_error');
             socket.off('reconnect');
         };
-    }, [tabId, setFileTransferProgress]);
+    }, [instanceId, setFileTransferProgress]);
 
     return <SocketContext.Provider value={socket}>{children}</SocketContext.Provider>;
 };

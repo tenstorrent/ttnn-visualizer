@@ -13,7 +13,7 @@ from ttnn_visualizer.models import (
     DeviceOperation,
     Buffer,
     BufferPage,
-    TabSession,
+    Instance,
     Tensor,
     OperationArgument,
     StackTrace,
@@ -31,7 +31,7 @@ import paramiko
 
 
 class LocalQueryRunner:
-    def __init__(self, session: Optional[TabSession] = None, connection=None):
+    def __init__(self, session: Optional[Instance] = None, connection=None):
 
         if connection:
             self.connection = connection
@@ -66,7 +66,7 @@ class LocalQueryRunner:
 class RemoteQueryRunner:
     column_delimiter = "|||"
 
-    def __init__(self, session: TabSession):
+    def __init__(self, session: Instance):
         self.session = session
         self._validate_session()
         self.ssh_client = self._get_ssh_client(self.session.remote_connection)
@@ -165,11 +165,11 @@ class RemoteQueryRunner:
 
 class DatabaseQueries:
 
-    session: Optional[TabSession] = None
+    session: Optional[Instance] = None
     ssh_client = None
     query_runner: LocalQueryRunner | RemoteQueryRunner
 
-    def __init__(self, session: Optional[TabSession] = None, connection=None):
+    def __init__(self, session: Optional[Instance] = None, connection=None):
         self.session = session
 
         if connection:

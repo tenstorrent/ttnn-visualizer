@@ -147,31 +147,41 @@ function L1Plots({
                 onBufferClick={onBufferClick}
                 configuration={L1RenderConfiguration}
             />
-            <h3>L1 Operation Buffers</h3>
-            <br />
-            {[...bufferChartDataByOperation.entries()].map(([{ name: deviceOperationName }, plotData], index) => (
-                <Fragment key={`${deviceOperationName}-${index}`}>
-                    <h5 className='buffers-plot-title'>
-                        <Icon
-                            className='operation-icon'
-                            size={13}
-                            intent={Intent.SUCCESS}
-                            icon={IconNames.CUBE_ADD}
-                        />{' '}
-                        <span>{deviceOperationName}</span>
-                    </h5>
-                    <MemoryPlotRenderer
-                        title=''
-                        className='l1-memory-renderer interm-buffers'
-                        chartDataList={[plotData]}
-                        plotZoomRange={[zoomRangeStart - MEMORY_PADDING_L1, zoomRangeEnd + MEMORY_PADDING_L1]}
-                        isZoomedIn={zoomedInViewMainMemory}
-                        memorySize={memorySizeL1}
-                        configuration={BufferRenderConfiguration}
-                        onBufferClick={onBufferClick}
-                    />
-                </Fragment>
-            ))}
+            {bufferChartDataByOperation.size > 0 && (
+                <>
+                    <h3>Device Operation Tensors</h3>
+                    <br />
+
+                    {[...bufferChartDataByOperation.entries()].map(
+                        ([{ name: deviceOperationName }, plotData], index) => (
+                            <Fragment key={`${deviceOperationName}-${index}`}>
+                                <h5 className='buffers-plot-title'>
+                                    <Icon
+                                        className='operation-icon'
+                                        size={13}
+                                        intent={Intent.SUCCESS}
+                                        icon={IconNames.CUBE_ADD}
+                                    />{' '}
+                                    <span>{deviceOperationName}</span>
+                                </h5>
+                                <MemoryPlotRenderer
+                                    title=''
+                                    className='l1-memory-renderer interm-buffers'
+                                    chartDataList={[plotData]}
+                                    plotZoomRange={[
+                                        zoomRangeStart - MEMORY_PADDING_L1,
+                                        zoomRangeEnd + MEMORY_PADDING_L1,
+                                    ]}
+                                    isZoomedIn={zoomedInViewMainMemory}
+                                    memorySize={memorySizeL1}
+                                    configuration={BufferRenderConfiguration}
+                                    onBufferClick={onBufferClick}
+                                />
+                            </Fragment>
+                        ),
+                    )}
+                </>
+            )}
 
             {showL1Small && (
                 <MemoryPlotRenderer

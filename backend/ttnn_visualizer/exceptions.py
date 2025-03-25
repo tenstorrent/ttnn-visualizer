@@ -38,3 +38,10 @@ class DatabaseFileNotFoundException(Exception):
 
 class DataFormatError(Exception):
     pass
+
+
+class InvalidReportPath(Exception):
+    pass
+
+class InvalidProfilerPath(Exception):
+    pass
