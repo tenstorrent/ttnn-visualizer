@@ -5,7 +5,7 @@
 import { FC, Fragment, useMemo, useState } from 'react';
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
-import { Button, ButtonVariant, Icon, InputGroup, Intent, Size, Switch } from '@blueprintjs/core';
+import { Button, ButtonVariant, Icon, Size, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
 import { selectedPerformanceRangeAtom } from '../../store/app';
@@ -13,6 +13,7 @@ import 'styles/components/PerfReport.scss';
 import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
 import { calcHighDispatchOps, formatCell } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
+import SearchField from '../SearchField';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -60,9 +61,9 @@ enum COLUMN_HEADERS {
 }
 
 const TABLE_HEADERS: TableHeader[] = [
-    { label: 'ID', key: COLUMN_HEADERS.id, sortable: true, filterable: true },
+    { label: 'ID', key: COLUMN_HEADERS.id, sortable: true },
     { label: 'Total %', key: COLUMN_HEADERS.total_percent, unit: '%', decimals: 1, sortable: true },
-    { label: 'Bound', key: COLUMN_HEADERS.bound, colour: 'yellow', filterable: true },
+    { label: 'Bound', key: COLUMN_HEADERS.bound, colour: 'yellow' },
     { label: 'OP Code', key: COLUMN_HEADERS.op_code, colour: 'blue', sortable: true, filterable: true },
     { label: 'Device Time', key: COLUMN_HEADERS.device_time, unit: 'µs', decimals: 0, sortable: true },
     { label: 'Op-to-Op Gap', key: COLUMN_HEADERS.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
@@ -71,7 +72,7 @@ const TABLE_HEADERS: TableHeader[] = [
     { label: 'DRAM %', key: COLUMN_HEADERS.dram_percent, colour: 'yellow', unit: '%', sortable: true },
     { label: 'FLOPs', key: COLUMN_HEADERS.flops, unit: 'TFLOPs', sortable: true },
     { label: 'FLOPs %', key: COLUMN_HEADERS.flops_percent, unit: '%', sortable: true },
-    { label: 'Math Fidelity', key: COLUMN_HEADERS.math_fidelity, colour: 'cyan', filterable: true },
+    { label: 'Math Fidelity', key: COLUMN_HEADERS.math_fidelity, colour: 'cyan' },
 ];
 
 const OP_ID_INSERTION_POINT = 1;
@@ -155,7 +156,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
-        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: COLUMN_HEADERS.OP, sortable: true, filterable: true }] : []),
+        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: COLUMN_HEADERS.OP, sortable: true }] : []),
         ...TABLE_HEADERS.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
         ...(hiliteHighDispatch ? [{ label: 'Slow', key: COLUMN_HEADERS.HIGH_DISPATCH }] : []),
         ...TABLE_HEADERS.slice(HIGH_DISPATCH_INSERTION_POINT),
@@ -202,23 +203,32 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                                 ? `Showing ${tableFields.length} of ${data?.length} rows`
                                 : `Showing ${tableFields.length} rows`}
                         </p>
-
-                        <Button
-                            icon={IconNames.RESET}
-                            onClick={() => {
-                                changeSorting(null)(null);
-                                setFilters(
-                                    Object.fromEntries(
-                                        filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string]),
-                                    ) as Record<TableKeys, string>,
-                                );
-                            }}
-                            intent={Intent.DANGER}
-                            variant={ButtonVariant.OUTLINED}
-                        >
-                            Reset table
-                        </Button>
                     </div>
+                </div>
+
+                <div className='filters'>
+                    {filterableColumnKeys.map((key) => (
+                        <SearchField
+                            key={key}
+                            onQueryChanged={(value) => updateColumnFilter(key, value)}
+                            placeholder={`Filter ${TABLE_HEADERS.find((header) => header.key === key)?.label}`}
+                            searchQuery={filters?.[key] || ''}
+                        />
+                    ))}
+
+                    <Button
+                        onClick={() => {
+                            changeSorting(null)(null);
+                            setFilters(
+                                Object.fromEntries(
+                                    filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string]),
+                                ) as Record<TableKeys, string>,
+                            );
+                        }}
+                        variant={ButtonVariant.OUTLINED}
+                    >
+                        Reset
+                    </Button>
                 </div>
 
                 <table className='perf-table monospace'>
@@ -271,7 +281,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                                             <span className='header-label no-button'>{h.label}</span>
                                         )}
 
-                                        {h?.filterable && (
+                                        {/* TODO: May want this in the near future */}
+                                        {/* {h?.filterable && (
                                             <div className='column-filter'>
                                                 <InputGroup
                                                     asyncControl
@@ -281,7 +292,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                                                     value={filters?.[h.key]}
                                                 />
                                             </div>
-                                        )}
+                                        )} */}
                                     </th>
                                 );
                             })}

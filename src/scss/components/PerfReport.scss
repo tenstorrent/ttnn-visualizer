@@ -41,6 +41,13 @@
         margin-bottom: 0;
     }
 
+    .filters {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 5px;
+        margin-bottom: 15px;
+    }
+
     .cell-header {
         text-align: left;
         vertical-align: initial;
