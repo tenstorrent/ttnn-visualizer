@@ -45,7 +45,7 @@ const sortDesc = (a: SortingValue, b: SortingValue) => {
     return a < b ? 1 : -1;
 };
 
-const useBuffersTable = (defaultSortingKey: string | null) => {
+const useSortTable = (defaultSortingKey: string | null) => {
     const [sortingColumn, setSortingColumn] = useState<string | null>(defaultSortingKey);
     const [sortDirection, setSortDirection] = useState<SortingDirection | null>(SortingDirection.ASC);
 
@@ -77,4 +77,4 @@ const useBuffersTable = (defaultSortingKey: string | null) => {
     };
 };
 
-export default useBuffersTable;
+export default useSortTable;

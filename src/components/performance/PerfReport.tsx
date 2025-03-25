@@ -12,7 +12,7 @@ import { selectedPerformanceRangeAtom } from '../../store/app';
 import 'styles/components/PerfReport.scss';
 import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
 import { calcHighDispatchOps, formatCell } from '../../functions/perfFunctions';
-import useBuffersTable, { SortingDirection } from '../../hooks/useBuffersTable';
+import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -76,7 +76,7 @@ const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
 
 const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
-    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useBuffersTable(null);
+    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
