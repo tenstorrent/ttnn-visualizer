@@ -5,7 +5,7 @@
 import { FC, Fragment, useMemo, useState } from 'react';
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
-import { Button, ButtonVariant, Icon, InputGroup, Intent, Switch } from '@blueprintjs/core';
+import { Button, ButtonVariant, Icon, InputGroup, Intent, Size, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
 import { selectedPerformanceRangeAtom } from '../../store/app';
@@ -55,6 +55,8 @@ enum COLUMN_HEADERS {
     flops = 'flops',
     flops_percent = 'flops_percent',
     math_fidelity = 'math_fidelity',
+    OP = 'op',
+    HIGH_DISPATCH = 'high_dispatch',
 }
 
 const TABLE_HEADERS: TableHeader[] = [
@@ -153,9 +155,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
-        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: 'op', sortable: true, filterable: true }] : []),
+        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: COLUMN_HEADERS.OP, sortable: true, filterable: true }] : []),
         ...TABLE_HEADERS.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
-        ...(hiliteHighDispatch ? [{ label: 'Slow', key: 'high_dispatch' }] : []),
+        ...(hiliteHighDispatch ? [{ label: 'Slow', key: COLUMN_HEADERS.HIGH_DISPATCH }] : []),
         ...TABLE_HEADERS.slice(HIGH_DISPATCH_INSERTION_POINT),
     ] as TableHeader[];
 
@@ -212,7 +214,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                                 );
                             }}
                             intent={Intent.DANGER}
-                            // size={Size.SMALL}
                             variant={ButtonVariant.OUTLINED}
                         >
                             Reset table
@@ -240,8 +241,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                                         {h.sortable ? (
                                             <Button
                                                 onClick={() => changeSorting(h.key)(targetSortDirection)}
-                                                variant='minimal'
-                                                size='small'
+                                                variant={ButtonVariant.MINIMAL}
+                                                size={Size.SMALL}
                                             >
                                                 <span className='header-label'>{h.label}</span>
 
@@ -295,7 +296,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                                         <td
                                             key={h.key}
                                             className={classNames('cell', {
-                                                'align-right': h.key === 'math_fidelity',
+                                                'align-right': h.key === COLUMN_HEADERS.math_fidelity,
                                             })}
                                         >
                                             {formatCell(row, h, operations, filters?.[h.key])}
