@@ -18,7 +18,7 @@ import { formatSize, prettyPrintAddress, toReadableShape } from '../../functions
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import MemoryTag from '../MemoryTag';
 import { useGetTensorSizesById } from '../../hooks/useAPI';
-import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
+import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../../definitions/L1MemorySize';
 
 // TODO: this component definitely needs to be broken down into smaller components
 
@@ -240,8 +240,9 @@ const DeviceOperationsFullRender: React.FC<{
 
                     if (nodeType === NodeType.buffer_allocate) {
                         const buffer = node.params;
-                        const numCores = parseInt(buffer.num_cores, 10) || 1;
-                        const bufferSize = parseInt(buffer.size, 10) / numCores;
+                        const defaultNumberCores = buffer.type === DeviceOperationTypes.L1 ? L1_NUM_CORES : 1;
+                        const cores = parseInt(buffer.num_cores, 10) || defaultNumberCores;
+                        const bufferSize = parseInt(buffer.size, 10) / cores;
                         operationContent = (
                             <DeviceOperationNode
                                 _node={node}
@@ -256,7 +257,7 @@ const DeviceOperationsFullRender: React.FC<{
                                             address: parseInt(buffer.address, 10),
                                             size: bufferSize,
                                         }}
-                                        numCores={numCores}
+                                        numCores={cores}
                                         key={buffer.address}
                                         memSize={details.l1_sizes[0] || L1_DEFAULT_MEMORY_SIZE}
                                         selectedTensorAddress={selectedAddress}
@@ -281,9 +282,9 @@ const DeviceOperationsFullRender: React.FC<{
                         //     );
                     } else if (nodeType === NodeType.buffer_deallocate) {
                         const buffer = node.params;
-
                         const size = parseInt(buffer.size, 10);
-                        const cores = parseInt(buffer.num_cores, 10) || 1;
+                        const defaultNumberCores = buffer.type === DeviceOperationTypes.L1 ? L1_NUM_CORES : 1;
+                        const cores = parseInt(buffer.num_cores, 10) || defaultNumberCores;
                         const bufferSize = size / cores;
                         operationContent = (
                             <DeviceOperationNode
