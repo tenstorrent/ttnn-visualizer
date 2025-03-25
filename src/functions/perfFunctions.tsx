@@ -100,7 +100,7 @@ export const formatCell = (
     return getCellMarkup(formatted, getCellColour(row, key), highlight);
 };
 
-export const getCellMarkup = (text: string | string[], colour?: string, highlight?: string | null) => {
+export const getCellMarkup = (text: string, colour?: string, highlight?: string | null) => {
     if (!text) {
         return '';
     }

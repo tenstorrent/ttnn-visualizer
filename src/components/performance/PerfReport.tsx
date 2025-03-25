@@ -217,17 +217,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                     ))}
 
                     <Button
-                        onClick={() => {
-                            changeSorting(null)(null);
-                            setFilters(
-                                Object.fromEntries(
-                                    filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string]),
-                                ) as Record<TableKeys, string>,
-                            );
-                        }}
+                        onClick={() => changeSorting(null)(null)}
                         variant={ButtonVariant.OUTLINED}
+                        disabled={sortingColumn === null}
                     >
-                        Reset
+                        Reset sort
                     </Button>
                 </div>
 
