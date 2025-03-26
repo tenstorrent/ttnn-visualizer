@@ -117,6 +117,3 @@ The `ttnn-visualizer` command supports two CLI arguments for passing custom data
 
 * `--report-path` - specify the local path to `db.sqlite` file containing the report
 * `--profiler-path` - specify the local path to the folder containing the profiler data
-
-If either of these CLI args are passed, an instance record in the ttnn db will be created with the path(s)
-given, and the browser will opened with a custom `instanceId` parameter in the URL to load the data from the paths given. 
