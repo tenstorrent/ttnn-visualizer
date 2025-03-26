@@ -202,6 +202,7 @@ export const useOperationBuffers = (operationId: number) => {
         queryKey: ['get-operation-buffers', operationId],
         queryFn: () => fetchOperationBuffers(operationId),
         retry: false,
+        staleTime: Infinity,
     });
 };
 
@@ -324,6 +325,7 @@ export const useOperationDetails = (operationId: number | null) => {
     const operationDetails = useQuery<OperationDetailsData>(['get-operation-detail', operationId], fetchDetails, {
         retry: 2,
         retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
+        staleTime: Infinity,
     });
 
     const buffersSummary = useMemo(() => {
@@ -540,8 +542,10 @@ export const useReportMeta = () => {
 };
 
 export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
-    return useQuery<BufferPage[], AxiosError>(['get-buffer-pages', operationId, address, bufferType], () =>
-        fetchBufferPages(operationId, address, bufferType),
+    return useQuery<BufferPage[], AxiosError>(
+        ['get-buffer-pages', operationId, address, bufferType],
+        () => fetchBufferPages(operationId, address, bufferType),
+        { staleTime: Infinity },
     );
 };
 
@@ -611,6 +615,7 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
     return useQuery<BufferData, AxiosError>(queryKey, {
         queryFn: () => fetchNextUseOfBuffer(address, consumers),
         retry: false,
+        staleTime: Infinity,
     });
 };
 
