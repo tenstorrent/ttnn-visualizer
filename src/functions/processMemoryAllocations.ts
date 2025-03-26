@@ -73,12 +73,9 @@ export function processMemoryAllocations(
         }
 
         if (node.node_type === NodeType.buffer_deallocate) {
-            const connectionIndex = node.connections ? node.connections[0] : -1;
-            const connectedNode = graph[connectionIndex];
-            if (connectionIndex >= 0 && connectedNode && connectedNode.params.type === 'L1') {
-                const defaultNumberCores = node.params.type === DeviceOperationTypes.L1 ? L1_NUM_CORES : 1;
-                const numCores = parseInt(node.params.num_cores, 10) || defaultNumberCores;
-                const size = parseInt(node.params.size, 10) / numCores;
+            if (node.params.type === 'L1') {
+                const cores = parseInt(node.params.num_cores, 10) || L1_NUM_CORES;
+                const size = parseInt(node.params.size, 10) / cores;
                 totalBuffer -= size;
             }
         }
