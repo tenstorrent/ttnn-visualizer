@@ -4,21 +4,21 @@
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { RowData } from '../../definitions/PerfTable';
+import { PerfTableRow } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 
 interface PerfDeviceKernelRuntimeChartProps {
-    data?: RowData[];
     maxCores: number;
+    data?: PerfTableRow[];
 }
 
-function PerfDeviceKernelRuntimeChart({ data, maxCores }: PerfDeviceKernelRuntimeChartProps) {
+function PerfDeviceKernelRuntimeChart({ maxCores, data = [] }: PerfDeviceKernelRuntimeChartProps) {
     const chartDataCoreCount = useMemo(
         () =>
             ({
                 x: data?.map((_row, index) => index + 1),
-                y: data?.map((row) => row['CORE COUNT']),
+                y: data?.map((row) => row.cores),
                 type: 'bar',
                 hovertemplate: `Operation: %{x}<br />Cores: %{y}`,
                 name: '',
@@ -30,7 +30,7 @@ function PerfDeviceKernelRuntimeChart({ data, maxCores }: PerfDeviceKernelRuntim
         () =>
             ({
                 x: data?.map((_row, index) => index + 1),
-                y: data?.map((row) => row['DEVICE KERNEL DURATION [ns]']),
+                y: data?.map((row) => row.device_time),
                 yaxis: 'y2',
                 hovertemplate: `Operation: %{x}<br />Device Kernel Duration: %{y} ns`,
                 name: '',

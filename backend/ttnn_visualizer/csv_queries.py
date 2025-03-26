@@ -12,7 +12,7 @@ import pandas as pd
 from tt_perf_report import perf_report
 
 from ttnn_visualizer.exceptions import DataFormatError
-from ttnn_visualizer.models import TabSession
+from ttnn_visualizer.models import Instance
 from ttnn_visualizer.ssh_client import get_client
 
 
@@ -278,7 +278,7 @@ class DeviceLogProfilerQueries:
         "source file",
     ]
 
-    def __init__(self, session: TabSession):
+    def __init__(self, session: Instance):
         """
         Initialize the profiler with a session object.
         The session determines whether to use a local or remote runner.
@@ -366,7 +366,7 @@ class DeviceLogProfilerQueries:
         )
 
     @staticmethod
-    def get_raw_csv(session: TabSession):
+    def get_raw_csv(session: Instance):
         from ttnn_visualizer.sftp_operations import read_remote_file
 
         if (
@@ -455,7 +455,7 @@ class OpsPerformanceQueries:
         "HWCommandQueue_write_buffer_TT_HOST_FUNC [ns]",
     ]
 
-    def __init__(self, session: TabSession):
+    def __init__(self, session: Instance):
         """
         Initialize the performance profiler with a session object.
         """
@@ -571,6 +571,10 @@ class OpsPerformanceReportQueries:
         "raw_op_code"
     ]
 
+    PASSTHROUGH_COLUMNS = {
+        "pm_ideal_ns": "PM IDEAL [ns]",
+    }
+
     DEFAULT_SIGNPOST = None
     DEFAULT_IGNORE_SIGNPOSTS = None
     DEFAULT_MIN_PERCENTAGE = 0.5
@@ -596,6 +600,12 @@ class OpsPerformanceReportQueries:
             True,
         )
 
+        ops_perf_results = []
+        ops_perf_results_reader = csv.DictReader(StringIO(raw_csv))
+
+        for row in ops_perf_results_reader:
+            ops_perf_results.append(row)
+
         report = []
 
         try:
@@ -610,6 +620,12 @@ class OpsPerformanceReportQueries:
                         processed_row["advice"] = processed_row["advice"].split(" • ")
                     else:
                         processed_row["advice"] = []
+
+                    for key, value in cls.PASSTHROUGH_COLUMNS.items():
+                        op_id = int(row[0])
+                        idx = op_id - 2 # IDs in result column one correspond to row numbers in ops perf results csv
+                        processed_row[key] = ops_perf_results[idx][value]
+
                     report.append(processed_row)
         except csv.Error as e:
             raise DataFormatError() from e

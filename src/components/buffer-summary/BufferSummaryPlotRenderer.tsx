@@ -19,6 +19,7 @@ import isValidNumber from '../../functions/isValidNumber';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, selectedDeviceAtom, showBufferSummaryZoomedAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
+import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -47,7 +48,8 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
         [buffersByOperation],
     );
 
-    const getMemorySize = () => (!isLoadingDevices && devices ? devices[deviceId]?.worker_l1_size : 0);
+    const getMemorySize = () =>
+        !isLoadingDevices && devices ? devices[deviceId]?.worker_l1_size : L1_DEFAULT_MEMORY_SIZE;
 
     // TODO: Multi device support
     const memorySize = useMemo(getMemorySize, [deviceId, devices, isLoadingDevices]);

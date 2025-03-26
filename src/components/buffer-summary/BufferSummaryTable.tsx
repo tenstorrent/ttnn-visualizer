@@ -14,7 +14,7 @@ import LoadingSpinner from '../LoadingSpinner';
 import '@blueprintjs/table/lib/css/table.css';
 import 'styles/components/BufferSummaryTable.scss';
 import HighlightedText from '../HighlightedText';
-import useBuffersTable, { SortingDirection } from '../../hooks/useBuffersTable';
+import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
@@ -93,7 +93,7 @@ interface SummaryTableBuffer extends BufferData {
 }
 
 function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
-    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useBuffersTable(COLUMNS[0].key);
+    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(COLUMNS[0].key);
     const selectedTensor = useAtomValue(selectedTensorAtom);
     const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
     const [showOnlySelected, setShowOnlySelected] = useState(false);

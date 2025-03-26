@@ -51,7 +51,7 @@ debounce_delay = 0.5  # Delay in seconds (adjust as needed)
 last_emit_time = 0
 
 
-def emit_file_status(progress: FileProgress, tab_id=None):
+def emit_file_status(progress: FileProgress, instance_id=None):
     """Debounced emit for file status updates using a debounce timer."""
     global debounce_timer, last_emit_time
 
@@ -59,10 +59,10 @@ def emit_file_status(progress: FileProgress, tab_id=None):
         global last_emit_time
         last_emit_time = time.time()
         data = progress.to_dict()
-        data.update({"tab_id": tab_id})
+        data.update({"instance_id": instance_id})
         try:
             if socketio is not None and hasattr(socketio, "emit"):
-                socketio.emit(Messages.FILE_TRANSFER_PROGRESS, data, to=tab_id)
+                socketio.emit(Messages.FILE_TRANSFER_PROGRESS, data, to=instance_id)
         except NameError:
             pass  # Can silently pass since we know the NameError is from sockets being disabled
 
@@ -89,30 +89,30 @@ def register_handlers(socketio_instance):
 
         sid = getattr(request, "sid", "")
 
-        tab_id = request.args.get("tabId")
-        print(f"Received tabId: {tab_id}, socket ID: {sid}")  # Log for debugging
+        instance_id = request.args.get("instanceId")
+        print(f"Received instanceId: {instance_id}, socket ID: {sid}")  # Log for debugging
 
-        if tab_id:
-            join_room(tab_id)  # Join the room identified by the tabId
-            tab_clients[tab_id] = sid  # Store the socket ID associated with this tabId
-            print(f"Joined room: {tab_id}")
+        if instance_id:
+            join_room(instance_id)  # Join the room identified by the instanceId
+            tab_clients[instance_id] = sid  # Store the socket ID associated with this instanceId
+            print(f"Joined room: {instance_id}")
         else:
-            print("No tabId provided, disconnecting client.")
+            print("No instanceId provided, disconnecting client.")
             disconnect()
 
     @socketio.on("disconnect")
     def handle_disconnect():
         from flask import request
 
-        tab_id = None
-        # Find and remove the socket ID associated with this tabId
+        instance_id = None
+        # Find and remove the socket ID associated with this instanceId
         sid = getattr(request, "sid", "")
         for key, value in tab_clients.items():
 
             if value == sid:
-                tab_id = key
+                instance_id = key
                 break
-        if tab_id:
-            leave_room(tab_id)
-            del tab_clients[tab_id]
-            print(f"Client disconnected from tabId: {tab_id}, Socket ID: {sid}")
+        if instance_id:
+            leave_room(instance_id)
+            del tab_clients[instance_id]
+            print(f"Client disconnected from instanceId: {instance_id}, Socket ID: {sid}")

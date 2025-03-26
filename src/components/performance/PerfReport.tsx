@@ -2,80 +2,84 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import React, { FC, Fragment, useMemo, useState } from 'react';
+import { FC, Fragment, useMemo, useState } from 'react';
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
-import { Icon, Switch, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Icon, Size, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { Link } from 'react-router-dom';
-import { MathFidelity, PerfTableRow } from '../../definitions/PerfTable';
-import { formatSize, toSecondsPretty } from '../../functions/math';
+import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
 import { selectedPerformanceRangeAtom } from '../../store/app';
 import 'styles/components/PerfReport.scss';
 import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
-import ROUTES from '../../definitions/Routes';
-import { OperationDescription } from '../../model/APIData';
-import { CellColour } from '../../functions/perfFunctions';
+import { calcHighDispatchOps, formatCell } from '../../functions/perfFunctions';
+import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
+import SearchField from '../SearchField';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
 }
 
-type TableKeys = Partial<keyof PerfTableRow>;
-
-interface TableHeader {
-    label: string;
-    key: TableKeys;
-    colour?: string;
-    unit?: string;
-    decimals?: number;
+interface TypedPerfTableRow
+    extends Omit<
+        PerfTableRow,
+        | 'id'
+        | 'total_percent'
+        | 'device_time'
+        | 'op_to_op_gap'
+        | 'cores'
+        | 'dram'
+        | 'dram_percent'
+        | 'flops'
+        | 'flops_percent'
+    > {
+    id: number;
+    total_percent: number;
+    device_time: number;
+    op_to_op_gap: number | null;
+    cores: number;
+    dram: number;
+    dram_percent: number;
+    flops: number;
+    flops_percent: number;
 }
 
-const MIN_PERCENTAGE = 0.5;
-const OPERATION_COLOURS: { [key: string]: CellColour } = {
-    '(torch)': 'red',
-    Matmul: 'magenta',
-    LayerNorm: 'cyan',
-    AllGather: 'cyan',
-    AllReduce: 'cyan',
-    ScaledDotProductAttentionDecode: 'blue',
-    ScaledDotProductAttentionGQADecode: 'blue',
-    NlpCreateHeadsDeviceOperation: 'blue',
-    NLPConcatHeadsDecodeDeviceOperation: 'blue',
-    UpdateCache: 'blue',
-    OptimizedConvNew: 'orange',
-};
+enum COLUMN_HEADERS {
+    id = 'id',
+    total_percent = 'total_percent',
+    bound = 'bound',
+    op_code = 'op_code',
+    device_time = 'device_time',
+    op_to_op_gap = 'op_to_op_gap',
+    cores = 'cores',
+    dram = 'dram',
+    dram_percent = 'dram_percent',
+    flops = 'flops',
+    flops_percent = 'flops_percent',
+    math_fidelity = 'math_fidelity',
+    OP = 'op',
+    HIGH_DISPATCH = 'high_dispatch',
+}
 
 const TABLE_HEADERS: TableHeader[] = [
-    { label: 'ID', key: 'id' },
-    { label: 'Total %', key: 'total_percent', unit: '%', decimals: 1 },
-    { label: 'Bound', key: 'bound', colour: 'yellow' },
-    { label: 'OP Code', key: 'op_code', colour: 'blue' },
-    { label: 'Device Time', key: 'device_time', unit: 'µs', decimals: 0 },
-    { label: 'Op-to-Op Gap', key: 'op_to_op_gap', colour: 'red', unit: 'µs', decimals: 0 },
-    { label: 'Cores', key: 'cores', colour: 'green' },
-    { label: 'DRAM', key: 'dram', colour: 'yellow', unit: 'GB/s' },
-    { label: 'DRAM %', key: 'dram_percent', colour: 'yellow', unit: '%' },
-    { label: 'FLOPs', key: 'flops', unit: 'TFLOPs' },
-    { label: 'FLOPs %', key: 'flops_percent', unit: '%' },
-    { label: 'Math Fidelity', key: 'math_fidelity', colour: 'cyan' },
+    { label: 'ID', key: COLUMN_HEADERS.id, sortable: true },
+    { label: 'Total %', key: COLUMN_HEADERS.total_percent, unit: '%', decimals: 1, sortable: true },
+    { label: 'Bound', key: COLUMN_HEADERS.bound, colour: 'yellow' },
+    { label: 'OP Code', key: COLUMN_HEADERS.op_code, colour: 'blue', sortable: true, filterable: true },
+    { label: 'Device Time', key: COLUMN_HEADERS.device_time, unit: 'µs', decimals: 0, sortable: true },
+    { label: 'Op-to-Op Gap', key: COLUMN_HEADERS.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
+    { label: 'Cores', key: COLUMN_HEADERS.cores, colour: 'green', sortable: true },
+    { label: 'DRAM', key: COLUMN_HEADERS.dram, colour: 'yellow', unit: 'GB/s', sortable: true },
+    { label: 'DRAM %', key: COLUMN_HEADERS.dram_percent, colour: 'yellow', unit: '%', sortable: true },
+    { label: 'FLOPs', key: COLUMN_HEADERS.flops, unit: 'TFLOPs', sortable: true },
+    { label: 'FLOPs %', key: COLUMN_HEADERS.flops_percent, unit: '%', sortable: true },
+    { label: 'Math Fidelity', key: COLUMN_HEADERS.math_fidelity, colour: 'cyan' },
 ];
 
 const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
 
-const NUMBER_KEYS_TO_PARSE = [
-    'device_time',
-    'op_to_op_gap',
-    'cores',
-    'total_percent',
-    'dram',
-    'dram_percent',
-    'flops',
-    'flops_percent',
-];
-
-export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
+const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
+    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
@@ -83,6 +87,17 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     const selectedRange = useAtomValue(selectedPerformanceRangeAtom);
     const opIdsMap = useOptoPerfIdFiltered();
     const { data: operations } = useOperationsList();
+
+    const filterableColumnKeys = useMemo(
+        () => TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key),
+        [],
+    );
+    const [filters, setFilters] = useState<Record<TableKeys, string> | null>(
+        Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
+            TableKeys,
+            string
+        >,
+    );
 
     const processedRows: PerfTableRow[] = useMemo(() => {
         return (
@@ -98,22 +113,61 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
         );
     }, [data, opIdsMap]);
 
-    const getFilteredRows: PerfTableRow[] = useMemo(() => {
-        return selectedRange && processedRows.length > 0
-            ? processedRows.filter((row) => {
-                  const rowId = parseInt(row?.id, 10);
-                  return rowId >= selectedRange[0] && rowId <= selectedRange[1];
-              })
-            : processedRows;
-    }, [processedRows, selectedRange]);
+    const tableFields: PerfTableRow[] = useMemo(() => {
+        let filteredRows =
+            selectedRange && processedRows.length > 0
+                ? processedRows.filter((row) => {
+                      const rowId = parseInt(row?.id, 10);
+                      return rowId >= selectedRange[0] && rowId <= selectedRange[1];
+                  })
+                : processedRows;
+
+        if (areFiltersActive(filters) && filterableColumnKeys) {
+            filteredRows = filteredRows.filter((row) => {
+                const isFilteredOut =
+                    filters &&
+                    Object.entries(filters)
+                        .filter(([_key, filterValue]) => String(filterValue).length)
+                        .some(([key, filterValue]) => {
+                            const bufferValue = getCellText(row, key as TableKeys);
+
+                            return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
+                        });
+
+                return !isFilteredOut;
+            });
+        }
+
+        const parsedRows = filteredRows.map((row) => ({
+            ...row,
+            id: parseInt(row.id, 10),
+            total_percent: parseFloat(row.total_percent),
+            device_time: parseFloat(row.device_time),
+            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
+            cores: parseInt(row.cores, 10),
+            dram: row.dram ? parseFloat(row.dram) : null,
+            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
+            flops: row.flops ? parseFloat(row.flops) : null,
+            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
+        })) as TypedPerfTableRow[];
+
+        return sortTableFields(parsedRows);
+    }, [processedRows, selectedRange, sortTableFields, filters, filterableColumnKeys]);
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
-        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: 'op' }] : []),
+        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: COLUMN_HEADERS.OP, sortable: true }] : []),
         ...TABLE_HEADERS.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
-        ...(hiliteHighDispatch ? [{ label: 'Slow', key: 'high_dispatch' }] : []),
+        ...(hiliteHighDispatch ? [{ label: 'Slow', key: COLUMN_HEADERS.HIGH_DISPATCH }] : []),
         ...TABLE_HEADERS.slice(HIGH_DISPATCH_INSERTION_POINT),
     ] as TableHeader[];
+
+    const updateColumnFilter = (key: TableKeys, value: string) => {
+        setFilters({
+            ...filters,
+            [key]: value ?? '',
+        } as Record<TableKeys, string>);
+    };
 
     return (
         <>
@@ -140,33 +194,117 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
             />
 
             <div className='perf-report'>
-                <h3 className='title'>Performance report</h3>
+                <div className='table-header'>
+                    <h3 className='title'>Performance report</h3>
+
+                    <div className='header-aside'>
+                        <p className='result-count'>
+                            {tableFields.length !== data?.length
+                                ? `Showing ${tableFields.length} of ${data?.length} rows`
+                                : `Showing ${tableFields.length} rows`}
+                        </p>
+                    </div>
+                </div>
+
+                <div className='filters'>
+                    {filterableColumnKeys.map((key) => (
+                        <SearchField
+                            key={key}
+                            onQueryChanged={(value) => updateColumnFilter(key, value)}
+                            placeholder={`Filter ${TABLE_HEADERS.find((header) => header.key === key)?.label}`}
+                            searchQuery={filters?.[key] || ''}
+                        />
+                    ))}
+
+                    <Button
+                        onClick={() => changeSorting(null)(null)}
+                        variant={ButtonVariant.OUTLINED}
+                        disabled={sortingColumn === null}
+                    >
+                        Reset sort
+                    </Button>
+                </div>
+
                 <table className='perf-table monospace'>
                     <thead>
                         <tr>
-                            {visibleHeaders.map((h) => (
-                                <th
-                                    key={h.key}
-                                    className='cell-header'
-                                >
-                                    {h.label}
-                                </th>
-                            ))}
+                            {visibleHeaders.map((h) => {
+                                const targetSortDirection =
+                                    // eslint-disable-next-line no-nested-ternary
+                                    sortingColumn === h.key
+                                        ? sortDirection === SortingDirection.ASC
+                                            ? SortingDirection.DESC
+                                            : SortingDirection.ASC
+                                        : sortDirection;
+
+                                return (
+                                    <th
+                                        key={h.key}
+                                        className='cell-header'
+                                    >
+                                        {h.sortable ? (
+                                            <Button
+                                                onClick={() => changeSorting(h.key)(targetSortDirection)}
+                                                variant={ButtonVariant.MINIMAL}
+                                                size={Size.SMALL}
+                                            >
+                                                <span className='header-label'>{h.label}</span>
+
+                                                {sortingColumn === h.key ? (
+                                                    <Icon
+                                                        className={classNames(
+                                                            {
+                                                                'is-active': sortingColumn === h.key,
+                                                            },
+                                                            'sort-icon',
+                                                        )}
+                                                        icon={
+                                                            sortDirection === SortingDirection.ASC
+                                                                ? IconNames.CARET_DOWN
+                                                                : IconNames.CARET_UP
+                                                        }
+                                                    />
+                                                ) : (
+                                                    <Icon
+                                                        className={classNames('sort-icon')}
+                                                        icon={IconNames.CARET_DOWN}
+                                                    />
+                                                )}
+                                            </Button>
+                                        ) : (
+                                            <span className='header-label no-button'>{h.label}</span>
+                                        )}
+
+                                        {/* TODO: May want this in the near future */}
+                                        {/* {h?.filterable && (
+                                            <div className='column-filter'>
+                                                <InputGroup
+                                                    asyncControl
+                                                    size='small'
+                                                    onValueChange={(value) => updateColumnFilter(h.key, value)}
+                                                    placeholder='Filter...'
+                                                    value={filters?.[h.key]}
+                                                />
+                                            </div>
+                                        )} */}
+                                    </th>
+                                );
+                            })}
                         </tr>
                     </thead>
 
                     <tbody>
-                        {getFilteredRows.map((row, i) => (
+                        {tableFields.map((row, i) => (
                             <Fragment key={i}>
                                 <tr>
-                                    {visibleHeaders.map((header) => (
+                                    {visibleHeaders.map((h) => (
                                         <td
-                                            key={header.key}
+                                            key={h.key}
                                             className={classNames('cell', {
-                                                'align-right': header.key === 'math_fidelity',
+                                                'align-right': h.key === COLUMN_HEADERS.math_fidelity,
                                             })}
                                         >
-                                            {formatCell(row, header, operations)}
+                                            {formatCell(row, h, operations, filters?.[h.key])}
                                         </td>
                                     ))}
                                 </tr>
@@ -187,313 +325,20 @@ export const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                     </tbody>
                 </table>
             </div>
-
             <hr />
-
             {hiliteHighDispatch && calcHighDispatchOps(processedRows)}
         </>
     );
 };
 
-const formatCell = (
-    row: PerfTableRow,
-    header: TableHeader,
-    operations?: OperationDescription[],
-): React.JSX.Element | string => {
-    const { key, unit, decimals } = header;
-    let formatted: string | boolean | string[];
-    let value = row[key];
-
-    if (key === 'high_dispatch') {
-        return (
-            <Tooltip content='Op with > 6µs dispatch latency'>
-                <Icon
-                    color='#ff0'
-                    icon={IconNames.WARNING_SIGN}
-                />
-            </Tooltip>
-        );
-    }
-
-    if (key === 'op' && operations) {
-        return (
-            <Tooltip
-                content={
-                    <div className='op-tooltip'>
-                        {value} {getOperationDetails(operations, value as number)}
-                    </div>
-                }
-                usePortal={false}
-            >
-                <Link to={`${ROUTES.OPERATIONS}/${value}`}>{value}</Link>
-            </Tooltip>
-        );
-    }
-
-    if (NUMBER_KEYS_TO_PARSE.includes(key) && value) {
-        value = typeof value === 'string' ? parseFloat(value) : value;
-    }
-
-    if (value == null || value === '') {
-        return '';
-    }
-
-    if (typeof value === 'string' && value.includes('Matmul')) {
-        // there was a logic here to do something clever with Matmul size, removing it for now
-        formatted = `${value}`;
-    } else if (typeof value === 'number') {
-        formatted = formatSize(Number(value.toFixed(decimals ?? 0)));
-    } else {
-        formatted = value.toString();
-    }
-
-    if (unit) {
-        formatted += ` ${unit}`;
-    }
-
-    return getCellMarkup(formatted, getCellColour(row, key));
-};
-
-const getCellMarkup = (text: string | string[], color?: string) => {
-    if (!text) {
-        return text;
-    }
-
-    if (color) {
-        return <span className={color}> {text}</span>;
-    }
-
-    return <span>{text}</span>;
-};
-
-const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '' => {
-    const keyValue = row[key];
-    const percentage = parseFloat(row.total_percent);
-
-    if (percentage != null && percentage < MIN_PERCENTAGE) {
-        return 'grey';
-    }
-
-    if (key === 'id' || key === 'total_percent' || key === 'device_time') {
-        return 'white';
-    }
-
-    if (key === 'bound') {
-        if (keyValue === 'DRAM') {
-            return 'green';
-        }
-
-        if (keyValue === 'FLOP') {
-            return 'green';
-        }
-
-        if (keyValue === 'SLOW') {
-            return 'yellow';
-        }
-    }
-
-    if (key === 'dram' || key === 'dram_percent' || key === 'flops' || key === 'flops_percent') {
-        const dramP = row.dram_percent;
-        const flopsP = row.flops_percent;
-
-        if (dramP != null && flopsP != null) {
-            if (dramP > flopsP) {
-                if (key === 'dram' || key === 'dram_percent') {
-                    return 'yellow';
-                }
-            } else if (key === 'flops' || key === 'flops_percent') {
-                return 'yellow';
-            }
-        }
-
-        if (keyValue === 'HOST') {
-            return 'red';
-        }
-
-        return 'white';
-    }
-
-    if (key === 'cores' && keyValue != null) {
-        const cores = (typeof keyValue === 'string' ? parseInt(keyValue, 10) : keyValue) as number;
-
-        if (cores != null) {
-            if (cores < 10) {
-                return 'red';
-            }
-
-            if (cores === 64) {
-                return 'green';
-            }
-        } else {
-            return '';
-        }
-
-        return 'white';
-    }
-
-    if (key === 'op_code') {
-        const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.raw_op_code.includes(opCodeKey));
-
-        return match ? OPERATION_COLOURS[match] : 'white';
-    }
-
-    if (key === 'math_fidelity' && typeof keyValue === 'string') {
-        const parts = keyValue.split(' ');
-        const mathFidelity = parts[0] as MathFidelity;
-        const input0Datatype = row.input_0_datatype || '';
-        const input1Datatype = row.input_1_datatype || '';
-        const outputDatatype = row.output_datatype || '';
-        const [fidelityEval] = evaluateFidelity(input0Datatype, input1Datatype, outputDatatype, mathFidelity);
-
-        if (fidelityEval === 'sufficient') {
-            return 'green';
-        }
-
-        if (fidelityEval === 'too_high') {
-            return 'red';
-        }
-
-        if (fidelityEval === 'too_low') {
-            return 'cyan';
-        }
-
-        return 'white';
-    }
-
-    if (key === 'op_to_op_gap' && typeof keyValue === 'string') {
-        const parsedValue = keyValue ? parseInt(keyValue, 10) : 0;
-
-        return parsedValue > 6.5 ? 'red' : '';
-    }
-
-    // Shouldn't get to this point but need to return something
-    return 'grey';
-};
-
-const calcHighDispatchOps = (rows: PerfTableRow[]) => {
-    const highDispatchOps = rows
-        .map((opData: PerfTableRow, index: number): [number, PerfTableRow] => [index + 1, opData])
-        .filter(([_, opData]) => {
-            const val = opData.op_to_op_gap;
-            return val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
-        });
-
-    if (highDispatchOps.length === 0) {
-        return null;
-    }
-
-    // Compute the max dispatch overhead
-    const maxDispatchOverhead = highDispatchOps.reduce((acc, [_, opData]) => {
-        const val = parseInt(opData.op_to_op_gap, 10);
-
-        return acc + (val - 6);
-    }, 0);
-
-    // Compute total_duration as sum of device times + Op-to-Op Gaps
-    const totalDeviceTime = rows.reduce((acc, r) => {
-        const val = parseInt(r.device_time, 10);
-
-        return acc + (typeof val === 'number' ? val : 0);
-    }, 0);
-
-    const totalDispatchTime = rows.reduce((acc, r) => {
-        const val = r.op_to_op_gap;
-
-        return acc + (typeof val === 'number' ? val : 0);
-    }, 0);
-
-    const totalDuration = totalDeviceTime + totalDispatchTime;
-    const percentageSaved = (maxDispatchOverhead / totalDuration) * 100;
-
-    return (
-        <div>
-            <p>
-                Marked ops have &gt; 6µs dispatch latency. Running with tracing could save{' '}
-                {formatSize(Number(maxDispatchOverhead.toFixed(0)))} µs {toSecondsPretty(maxDispatchOverhead)} (
-                {percentageSaved.toFixed(1)}% of overall time).
-            </p>
-            <p>Alternatively, try moving runtime args in the kernels to compile-time args.</p>
-        </div>
-    );
-};
-
-function evaluateFidelity(
-    input0Datatype: string,
-    input1Datatype: string,
-    outputDatatype: string,
-    mathFidelity: MathFidelity | '',
-): [string, string | null] {
-    const mantissaBits: Record<string, number> = {
-        BFLOAT16: 8,
-        BFLOAT8_B: 7,
-        BFLOAT4_B: 3,
-    };
-
-    const in0Bits = mantissaBits[input0Datatype];
-    const in1Bits = mantissaBits[input1Datatype];
-    const outBits = mantissaBits[outputDatatype];
-
-    // I note that we're not using the second part of the returned array, only the first part.
-    if (in0Bits === 8 && outBits >= 7) {
-        if (mathFidelity === 'HiFi4') {
-            return ['sufficient', 'HiFi2 may also work and has 2x the throughput of HiFi4'];
-        }
-
-        if (mathFidelity === 'HiFi2') {
-            return ['too_low', 'If your matmuls are not FLOP-bound use HiFi4 with BF16 activations for full accuracy'];
-        }
-
-        if (mathFidelity === 'LoFi') {
-            return ['too_low', 'Use HiFi2 or HiFi4 with BF16 activations for improved accuracy'];
-        }
-    } else if (in0Bits === 8 && outBits === 3) {
-        if (mathFidelity === 'HiFi4') {
-            return ['too_high', 'HiFi2 is very likely to work for BFP8 output and has 2x the throughput of HiFi4'];
-        }
-
-        if (mathFidelity === 'HiFi2') {
-            return ['sufficient', 'LoFi might also be sufficient with BFP4 output and has almost 2x the throughput'];
-        }
-
-        if (mathFidelity === 'LoFi') {
-            return ['too_low', 'HiFi2 may give better accuracy for large matmuls with many intermediate accumulations'];
-        }
-    } else if (in1Bits >= 7 && outBits >= 7) {
-        if (mathFidelity === 'HiFi4') {
-            return ['too_high', 'HiFi2 is sufficient for BFP8 multiplication and faster'];
-        }
-
-        if (mathFidelity === 'HiFi2') {
-            return ['sufficient', null];
-        }
-
-        if (mathFidelity === 'LoFi') {
-            return ['too_low', 'HiFi2 is recommended for accuracy; LoFi discards low bits of weights'];
-        }
-    } else if (in1Bits >= 7 && outBits === 3) {
-        if (mathFidelity === 'HiFi4') {
-            return ['too_high', 'HiFi2 is sufficient and 2x throughput'];
-        }
-
-        if (mathFidelity === 'HiFi2') {
-            return ['sufficient', 'LoFi might also be sufficient (BFP4 output) and has almost 2x throughput'];
-        }
-
-        if (mathFidelity === 'LoFi') {
-            return ['too_low', 'HiFi2 may give slightly better accuracy for large matmuls'];
-        }
-    } else if (in1Bits === 3) {
-        if (mathFidelity === 'LoFi') {
-            return ['sufficient', null];
-        }
-        return ['too_high', 'LoFi is sufficient with BFP4 weights'];
-    }
-
-    return ['unknown', `Using ${mathFidelity} for ${input0Datatype}/${input1Datatype} => ${outputDatatype}`];
+function areFiltersActive(filters: Record<TableKeys, string> | null) {
+    return filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
 }
 
-function getOperationDetails(operations: OperationDescription[], id: number) {
-    const matchingOp = operations?.find((op) => op.id === id);
+const getCellText = (buffer: PerfTableRow, key: TableKeys) => {
+    const textValue = buffer[key]?.toString() || '';
 
-    return matchingOp ? `${matchingOp.name} (${matchingOp.operationFileIdentifier})` : '';
-}
+    return textValue;
+};
+
+export default PerformanceReport;

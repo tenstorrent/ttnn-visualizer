@@ -26,13 +26,13 @@ function MainNavigation() {
         <Navbar className='navbar'>
             <Navbar.Group align={Alignment.RIGHT}>
                 <Button
-                    text='Home'
+                    text='Reports'
                     onClick={() => handleNavigate(ROUTES.HOME)}
                     active={hasMatchingPath(ROUTES.HOME)}
-                    icon={IconNames.HOME}
+                    icon={IconNames.DOCUMENT_OPEN}
                     variant='minimal'
                     size='large'
-                    className='home-button'
+                    className='reports-button'
                 />
 
                 <Button

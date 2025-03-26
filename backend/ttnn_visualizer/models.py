@@ -192,8 +192,8 @@ class RemoteReportFolder(SerializeableModel):
     lastSynced: Optional[int] = None
 
 
-class TabSession(BaseModel):
-    tab_id: str
+class Instance(BaseModel):
+    instance_id: str
     report_path: Optional[str] = None
     profiler_path: Optional[str] = None
     npe_path: Optional[str] = None
@@ -203,11 +203,11 @@ class TabSession(BaseModel):
     remote_profile_folder: Optional[RemoteReportFolder] = None
 
 
-class TabSessionTable(db.Model):
-    __tablename__ = "tab_sessions"
+class InstanceTable(db.Model):
+    __tablename__ = "instances"
 
     id = Column(Integer, primary_key=True)
-    tab_id = Column(String, unique=True, nullable=False)
+    instance_id = Column(String, unique=True, nullable=False)
     report_path = Column(String)
     profiler_path = Column(String, nullable=True)
     npe_path = Column(String, nullable=True)
@@ -218,7 +218,7 @@ class TabSessionTable(db.Model):
 
     def __init__(
         self,
-        tab_id,
+        instance_id,
         active_report,
         remote_connection=None,
         remote_folder=None,
@@ -227,7 +227,7 @@ class TabSessionTable(db.Model):
         profiler_path=None,
         npe_path=None,
     ):
-        self.tab_id = tab_id
+        self.instance_id = instance_id
         self.active_report = active_report
         self.report_path = report_path
         self.npe_path = npe_path
@@ -239,7 +239,7 @@ class TabSessionTable(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
-            "tab_id": self.tab_id,
+            "instance_id": self.instance_id,
             "active_report": self.active_report,
             "remote_connection": self.remote_connection,
             "remote_folder": self.remote_folder,
@@ -249,9 +249,9 @@ class TabSessionTable(db.Model):
             "npe_path": self.npe_path
         }
 
-    def to_pydantic(self) -> TabSession:
-        return TabSession(
-            tab_id=str(self.tab_id),
+    def to_pydantic(self) -> Instance:
+        return Instance(
+            instance_id=str(self.instance_id),
             report_path=str(self.report_path) if self.report_path is not None else None,
             profiler_path=(
                 str(self.profiler_path) if self.profiler_path is not None else None
