@@ -17,7 +17,7 @@ export type AllocationDetails = {
 
 export function processMemoryAllocations(
     graph: Node[],
-    inputs: { id: number; size: number | null }[],
+    _inputs: { id: number; size: number | null }[],
 ): {
     peakMemoryLoad: number;
     memoryAllocationList: AllocationDetails[];
@@ -33,29 +33,17 @@ export function processMemoryAllocations(
         const node = graph[i];
         i += 1;
         if (node.node_type === NodeType.function_start) {
-            if (node.inputs?.length > 0) {
-                // eslint-disable-next-line no-loop-func
-                node.inputs.forEach((tensor) => {
-                    const size = inputs.find((x) => x.id === parseInt(String(tensor.params.tensor_id), 10))?.size;
-                    if (size !== null && size !== undefined) {
-                        totalBuffer += size;
-                    }
-                    // this is the 'original' math, shoudl stay for a bit
-                    //                 const tensor = graph[id];
-                    //                 if (tensor.node_type === NodeType.tensor) {
-                    //                     console.log('tensor', tensor.params.tensor_id);
-                    //
-                    //                     const size = inputs.find(
-                    //                         (x) => x.id === parseInt(String(tensor.params.tensor_id), 10),
-                    //                     )?.size;
-                    //                     console.log('found size', size);
-                    //                     if (size !== null && size !== undefined) {
-                    //                         totalBuffer += size;
-                    //                     }
-                    //                 }
-                    //             });
-                });
-            }
+            // logic below calculates inputs sizes. its is deemed unnessisary for now
+            // keeping for a while
+            // if (node.inputs?.length > 0) {
+            //     // eslint-disable-next-line no-loop-func
+            //     node.inputs.forEach((tensor) => {
+            //         const size = inputs.find((x) => x.id === parseInt(String(tensor.params.tensor_id), 10))?.size;
+            //         if (size !== null && size !== undefined) {
+            //             totalBuffer += size;
+            //         }
+            //     });
+            // }
 
             const { name } = node.params;
             curOp.push({ name, id: node.id, deviceId: node.params.device_id });
