@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { DeviceOperationTypes, Node, NodeType } from '../model/APIData';
+import { L1_NUM_CORES } from '../definitions/L1MemorySize';
 
 export type AllocationDetails = {
     id: number;
@@ -61,7 +62,8 @@ export function processMemoryAllocations(
         }
 
         if (node.node_type === NodeType.buffer_allocate && node.params.type === DeviceOperationTypes.L1) {
-            const numCores = parseInt(node.params.num_cores, 10) || 1;
+            const defaultNumberCores = node.params.type === DeviceOperationTypes.L1 ? L1_NUM_CORES : 1;
+            const numCores = parseInt(node.params.num_cores, 10) || defaultNumberCores;
             const totalSize = parseInt(node.params.size, 10);
             totalBuffer += totalSize / numCores;
         }
@@ -74,7 +76,8 @@ export function processMemoryAllocations(
             const connectionIndex = node.connections ? node.connections[0] : -1;
             const connectedNode = graph[connectionIndex];
             if (connectionIndex >= 0 && connectedNode && connectedNode.params.type === 'L1') {
-                const numCores = parseInt(node.params.num_cores, 10) || 1;
+                const defaultNumberCores = node.params.type === DeviceOperationTypes.L1 ? L1_NUM_CORES : 1;
+                const numCores = parseInt(node.params.num_cores, 10) || defaultNumberCores;
                 const size = parseInt(node.params.size, 10) / numCores;
                 totalBuffer -= size;
             }
