@@ -20,6 +20,7 @@ import { BufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import getChartData from '../functions/getChartData';
+import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../definitions/L1MemorySize';
 
 export class OperationDetails implements Partial<OperationDetailsData> {
     id: number;
@@ -175,12 +176,12 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
                         if (deviceOp) {
                             if (node.params.type === DeviceOperationTypes.L1) {
+                                const cores = parseInt(node.params.num_cores, 10) || L1_NUM_CORES;
                                 deviceOp.bufferList.push({
                                     address: parseInt(node.params.address, 10),
-                                    size: parseInt(node.params.size, 10) / parseInt(node.params.num_cores, 10),
+                                    size: parseInt(node.params.size, 10) / cores,
                                     layout: node.params.layout,
                                     type: node.params.type,
-                                    // tensorId: this.getTensorForAddress(parseInt(node.params.address, 10))?.id,
                                 });
                             }
                         }
@@ -215,7 +216,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     get memorySizeL1(): number {
         // TODO: memorysize will need to be read from the appropriate device even though its likely going to be the same for the multichip scenario
-        return this.l1_sizes?.[0] || 0;
+        return this.l1_sizes?.[0] || L1_DEFAULT_MEMORY_SIZE;
     }
 
     getTensorForAddress(address: number): Tensor | null {

@@ -35,7 +35,11 @@
     &.empty-collapsible {
         .collapsible-controls {
             [type='button'] {
-                pointer-events: none;
+                cursor: default;
+
+                &:hover {
+                    background: none;
+                }
             }
 
             .bp5-icon.bp5-icon-caret-up,

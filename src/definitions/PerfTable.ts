@@ -10,6 +10,8 @@ export interface TableHeader {
     colour?: string;
     unit?: string;
     decimals?: number;
+    sortable?: boolean;
+    filterable?: boolean;
 }
 
 export interface PerfTableRow {

@@ -174,15 +174,6 @@ $row-background: $tt-grey-2;
     z-index: 0;
 }
 
-.centred-loader {
-    position: absolute;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    width: 100%;
-}
-
 .bp5-tag {
     &.tag-l1 {
         background-color: $tt-yellow-accent;

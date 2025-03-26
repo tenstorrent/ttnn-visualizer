@@ -2,13 +2,18 @@
 #
 # SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import json
+import random
+import string
 from logging import getLogger
+from pathlib import Path
 
 from flask import request
 
+from ttnn_visualizer.exceptions import InvalidReportPath, InvalidProfilerPath
 from ttnn_visualizer.utils import get_report_path, get_profiler_path, get_npe_path
 from ttnn_visualizer.models import (
-    TabSessionTable,
+    InstanceTable,
 )
 from ttnn_visualizer.extensions import db
 
@@ -16,10 +21,9 @@ logger = getLogger(__name__)
 
 from flask import jsonify, current_app
 from sqlalchemy.exc import SQLAlchemyError
-import json
 
 
-def update_existing_tab_session(
+def update_existing_instance(
     session_data,
     report_name,
     profile_name,
@@ -66,12 +70,12 @@ def handle_sqlalchemy_error(error):
     db.session.rollback()
 
 
-def commit_and_log_session(session_data, tab_id):
+def commit_and_log_session(session_data, instance_id):
     db.session.commit()
 
-    session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
+    session_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
     current_app.logger.info(
-        f"Session data for tab {tab_id}: {json.dumps(session_data.to_dict(), indent=4)}"
+        f"Session data for instance {instance_id}: {json.dumps(session_data.to_dict(), indent=4)}"
     )
 
 
@@ -99,8 +103,8 @@ def update_paths(
         )
 
 
-def create_new_tab_session(
-    tab_id,
+def create_new_instance(
+    instance_id,
     report_name,
     profile_name,
     npe_name,
@@ -122,8 +126,8 @@ def create_new_tab_session(
         remote_folder = None
         remote_profile_folder = None
 
-    session_data = TabSessionTable(
-        tab_id=tab_id,
+    session_data = InstanceTable(
+        instance_id=instance_id,
         active_report=active_report,
         report_path=get_report_path(
             active_report,
@@ -142,8 +146,8 @@ def create_new_tab_session(
     return session_data
 
 
-def update_tab_session(
-    tab_id,
+def update_instance(
+    instance_id,
     report_name=None,
     profile_name=None,
     npe_name=None,
@@ -153,10 +157,10 @@ def update_tab_session(
     clear_remote=False,
 ):
     try:
-        session_data = get_or_create_tab_session(tab_id)
+        session_data = get_or_create_instance(instance_id)
 
         if session_data:
-            update_existing_tab_session(
+            update_existing_instance(
                 session_data,
                 report_name,
                 profile_name,
@@ -167,8 +171,8 @@ def update_tab_session(
                 clear_remote,
             )
         else:
-            session_data = create_new_tab_session(
-                tab_id,
+            session_data = create_new_instance(
+                instance_id,
                 report_name,
                 profile_name,
                 npe_name,
@@ -178,7 +182,7 @@ def update_tab_session(
                 clear_remote,
             )
 
-        commit_and_log_session(session_data, tab_id)
+        commit_and_log_session(session_data, instance_id)
         return jsonify({"message": "Tab session updated successfully"}), 200
 
     except SQLAlchemyError as e:
@@ -186,8 +190,8 @@ def update_tab_session(
         return jsonify({"error": "Failed to update tab session"}), 500
 
 
-def get_or_create_tab_session(
-    tab_id,
+def get_or_create_instance(
+    instance_id,
     report_name=None,
     profile_name=None,
     npe_name=None,
@@ -196,16 +200,16 @@ def get_or_create_tab_session(
 ):
     """
     Retrieve an existing tab session or create a new one if it doesn't exist.
-    Uses the TabSession model to manage session data and supports conditional updates.
+    Uses the Instance model to manage session data and supports conditional updates.
     """
     try:
         # Query the database for the tab session
-        session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
+        session_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
 
         # If session doesn't exist, initialize it
         if not session_data:
-            session_data = TabSessionTable(
-                tab_id=tab_id,
+            session_data = InstanceTable(
+                instance_id=instance_id,
                 active_report={},
                 remote_connection=None,
                 remote_folder=None,
@@ -215,8 +219,8 @@ def get_or_create_tab_session(
 
         # Update the session if any new data is provided
         if report_name or profile_name or npe_name or remote_connection or remote_folder:
-            update_tab_session(
-                tab_id=tab_id,
+            update_instance(
+                instance_id=instance_id,
                 report_name=report_name,
                 profile_name=profile_name,
                 npe_name=npe_name,
@@ -225,7 +229,7 @@ def get_or_create_tab_session(
             )
 
         # Query again to get the updated session data
-        session_data = TabSessionTable.query.filter_by(tab_id=tab_id).first()
+        session_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
 
         return session_data
 
@@ -235,20 +239,20 @@ def get_or_create_tab_session(
         return None
 
 
-def get_tab_session():
+def get_instance():
     """
-    Middleware to retrieve or create a tab session based on the tab_id.
+    Middleware to retrieve or create a tab session based on the instance_id.
     """
-    tab_id = request.args.get("tabId", None)
+    instance_id = request.args.get("instanceId", None)
 
-    current_app.logger.info(f"get_tab_session: Received tab_id: {tab_id}")
-    if not tab_id:
-        current_app.logger.error("get_tab_session: No tab_id found")
-        return jsonify({"error": "tabId is required"}), 400
+    current_app.logger.info(f"get_instance: Received instance_id: {instance_id}")
+    if not instance_id:
+        current_app.logger.error("get_instance: No instance_id found")
+        return jsonify({"error": "instanceId is required"}), 400
 
-    active_report = get_or_create_tab_session(tab_id)
+    active_report = get_or_create_instance(instance_id)
     current_app.logger.info(
-        f"get_tab_session: Session retrieved: {active_report.active_report}"
+        f"get_instance: Session retrieved: {active_report.active_report}"
     )
 
     return jsonify({"active_report": active_report.active_report}), 200
@@ -258,5 +262,39 @@ def init_sessions(app):
     """
     Initializes session middleware and hooks it into Flask.
     """
-    app.before_request(get_tab_session)
+    app.before_request(get_instance)
     app.logger.info("Sessions middleware initialized.")
+
+
+def create_random_instance_id():
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
+
+
+def create_instance_from_local_paths(report_path, profiler_path):
+    _report_path = Path(report_path)
+    _profiler_path = Path(profiler_path)
+
+    if not _report_path.exists():
+        raise InvalidReportPath()
+
+    if not _profiler_path.exists():
+        raise InvalidProfilerPath()
+
+    report_name = _report_path.parts[-2] if len(_report_path.parts) > 2 else ""
+    profile_name = _profiler_path.parts[-1] if len(_profiler_path.parts) > 2 else ""
+    session_data = InstanceTable(
+        instance_id=create_random_instance_id(),
+        active_report={
+            "report_name": report_name,
+            "profile_name": profile_name,
+            "npe_name": None,
+        },
+        report_path=report_path,
+        profiler_path=profiler_path,
+        remote_connection=None,
+        remote_folder=None,
+        remote_profile_folder=None,
+    )
+    db.session.add(session_data)
+    db.session.commit()
+    return session_data

@@ -80,6 +80,9 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
         );
     }
 
+    if (devices.length === 0) {
+        return null;
+    }
     const width = devices[0].num_x_cores;
     const height = devices[0].num_y_cores;
 

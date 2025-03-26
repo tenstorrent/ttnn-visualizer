@@ -110,3 +110,10 @@ Loading data remotely requires you to have SSH access to the relevant machine. Y
 You can have multiple sets of profiler data on the remote paths, but they must be separated into their own folders.
 
 The default behaviour is to sync the files to your local machine, but you may also enable [remote querying](https://github.com/tenstorrent/ttnn-visualizer/blob/main/docs/remote-querying.md) which queries the files directly on the remote machine.
+
+### Custom report and profiler data paths
+
+The `ttnn-visualizer` command supports two CLI arguments for passing custom data paths:
+
+* `--report-path` - specify the local path to `db.sqlite` file containing the report
+* `--profiler-path` - specify the local path to the folder containing the profiler data
