@@ -31,9 +31,9 @@ const HighlightedText: React.FC<HighlightedTextProps> = ({ text, filter, classNa
     return (
         <span
             title={text}
-            className={classNames(className)}
+            className={classNames('highlighted-text', className)}
             // eslint-disable-next-line react/no-danger
-            dangerouslySetInnerHTML={{ __html: `${before}<mark class="highlighted-text">${match}</mark>${after}` }}
+            dangerouslySetInnerHTML={{ __html: `${before}<mark>${match}</mark>${after}` }}
         />
     );
 };
