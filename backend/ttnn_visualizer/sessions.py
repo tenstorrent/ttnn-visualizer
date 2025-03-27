@@ -271,17 +271,17 @@ def create_random_instance_id():
 
 
 def create_instance_from_local_paths(report_path, profiler_path):
-    _report_path = Path(report_path)
-    _profiler_path = Path(profiler_path)
+    _report_path = Path(report_path) if report_path else None
+    _profiler_path = Path(profiler_path) if profiler_path else None
 
-    if not _report_path.exists() or not _report_path.is_dir():
+    if _report_path and (not _report_path.exists() or not _report_path.is_dir()):
         raise InvalidReportPath()
 
-    if not _profiler_path.exists() or not _profiler_path.is_dir():
+    if _profiler_path and (not _profiler_path.exists() or not _profiler_path.is_dir()):
         raise InvalidProfilerPath()
 
-    report_name = _report_path.parts[-1] if len(_report_path.parts) > 2 else ""
-    profile_name = _profiler_path.parts[-1] if len(_profiler_path.parts) > 2 else ""
+    report_name = _report_path.parts[-1] if _report_path and len(_report_path.parts) > 2 else ""
+    profile_name = _profiler_path.parts[-1] if _profiler_path and len(_profiler_path.parts) > 2 else ""
     session_data = InstanceTable(
         instance_id=create_random_instance_id(),
         active_report={
@@ -289,8 +289,8 @@ def create_instance_from_local_paths(report_path, profiler_path):
             "profile_name": profile_name,
             "npe_name": None,
         },
-        report_path=f"{report_path}/db.sqlite",
-        profiler_path=profiler_path,
+        report_path=f"{_report_path}/db.sqlite" if report_path else None,
+        profiler_path=profiler_path if profiler_path else None,
         remote_connection=None,
         remote_folder=None,
         remote_profile_folder=None,
