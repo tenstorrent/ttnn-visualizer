@@ -4,7 +4,7 @@
 
 import { Helmet } from 'react-helmet-async';
 import { useEffect, useMemo, useState } from 'react';
-import { Tab, TabId, Tabs } from '@blueprintjs/core';
+import { Size, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useDeviceLog, usePerformanceReport } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
@@ -65,11 +65,7 @@ export default function Performance() {
     }, [selectedOpCodes, perfData]);
 
     if (isLoadingPerformance || isLoadingDeviceLog) {
-        return (
-            <div className='centred-loader'>
-                <LoadingSpinner />
-            </div>
-        );
+        return <LoadingSpinner />;
     }
 
     const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
@@ -86,7 +82,7 @@ export default function Performance() {
                 selectedTabId={selectedTabId}
                 onChange={setSelectedTabId}
                 renderActiveTabPanelOnly
-                size='large'
+                size={Size.LARGE}
             >
                 <Tab
                     id='tab-1'
