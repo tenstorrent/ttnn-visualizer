@@ -1,12 +1,13 @@
 import dataclasses
 from collections import defaultdict
 from typing import List
+
+from ttnn_visualizer.models import BufferType, Operation, TensorComparisonRecord
+
+
 # SPDX-License-Identifier: Apache-2.0
 #
 # SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
-
-
-from ttnn_visualizer.models import BufferType, Operation, TensorComparisonRecord
 
 
 def serialize_operations(
@@ -39,7 +40,6 @@ def serialize_operations(
 
     results = []
     for operation in operations:
-
         inputs = inputs_dict[operation.operation_id]
         outputs = outputs_dict[operation.operation_id]
         arguments = [a.to_dict() for a in arguments_dict[operation.operation_id]]
@@ -207,7 +207,6 @@ def serialize_devices(devices):
 
 
 def serialize_operations_buffers(operations, buffers):
-
     buffer_dict = defaultdict(list)
     for b in buffers:
         buffer_dict[b.operation_id].append(b)
@@ -217,6 +216,15 @@ def serialize_operations_buffers(operations, buffers):
         operation_buffers = buffer_dict.get(operation.operation_id, [])
         results.append(serialize_operation_buffers(operation, operation_buffers))
     return results
+
+
+def serialize_buffer(b):
+    return {
+        "buffer_type": b.buffer_type,
+        "device_id": b.device_id,
+        "size": b.max_size_per_bank,
+        "address": b.address,
+    }
 
 
 def serialize_tensors(

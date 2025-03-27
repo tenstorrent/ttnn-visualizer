@@ -10,14 +10,13 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import List
 
-import yaml
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint
 from flask import request, current_app
 
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries, OpsPerformanceReportQueries
 from ttnn_visualizer.decorators import with_session
-from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.file_uploads import (
     extract_report_name,
@@ -40,7 +39,7 @@ from ttnn_visualizer.serializers import (
     serialize_buffer_pages,
     serialize_operation_buffers,
     serialize_operations_buffers,
-    serialize_devices,
+    serialize_devices, serialize_buffer,
 )
 from ttnn_visualizer.sessions import (
     update_instance,
@@ -306,6 +305,26 @@ def tensor_detail(tensor_id, session: Instance):
         return dataclasses.asdict(tensors[0])
 
 
+@api.route("/buffers", methods=["GET"])
+@with_session
+def get_all_buffers(session: Instance):
+    buffer_type = request.args.get("buffer_type", "")
+    device_id = request.args.get("device_id", None)
+    if buffer_type and str.isdigit(buffer_type):
+        buffer_type = int(buffer_type)
+    else:
+        buffer_type = None
+
+    with DatabaseQueries(session) as db:
+        buffers = list(
+            db.query_buffers(
+                filters={"buffer_type": buffer_type, "device_id": device_id}
+            )
+        )
+        serialized = [serialize_buffer(b) for b in buffers]
+        return jsonify(serialized)
+
+
 @api.route("/operation-buffers", methods=["GET"])
 @with_session
 def get_operations_buffers(session: Instance):
@@ -457,6 +476,7 @@ def create_report_files():
         status=ConnectionTestStates.OK, message="Success."
     ).model_dump()
 
+
 @api.route("/local/upload/profile", methods=["POST"])
 def create_profile_files():
     files = request.files.getlist("files")
@@ -531,6 +551,7 @@ def create_npe_files():
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success"
     ).model_dump()
+
 
 @api.route("/remote/folder", methods=["POST"])
 def get_remote_folders():
@@ -817,6 +838,7 @@ def health_check():
 def get_instance(session: Instance):
     # Used to gate UI functions if no report is active
     return session.model_dump()
+
 
 @api.route("/npe", methods=["GET"])
 @with_session
