@@ -55,7 +55,7 @@ const DeviceItem = (device: number, onClick: (device: number) => void, selectedD
     return (
         <li key={device}>
             <Checkbox
-                className='buffer-type-checkbox'
+                className='table-filter-checkbox'
                 label={`Device ${device}`}
                 checked={selectedDevice === device}
                 onClick={() => onClick(device)}
