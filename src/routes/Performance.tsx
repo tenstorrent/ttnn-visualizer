@@ -72,7 +72,7 @@ export default function Performance() {
     const maxCores = perfData ? getCoreCount(architecture, perfData) : 0;
 
     return (
-        <div className='performance'>
+        <div className='performance data-padding'>
             <Helmet title='Performance' />
 
             <h1 className='page-title'>Performance analysis</h1>

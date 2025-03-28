@@ -29,8 +29,9 @@ const GraphView: React.FC = () => {
     );
 
     return (
-        <>
+        <div className='data-padding'>
             <Helmet title='GraphTree' />
+
             {isLoading || !filteredOperationList ? (
                 <div className='graph-tree-loader'>
                     <LoadingSpinner />
@@ -41,7 +42,7 @@ const GraphView: React.FC = () => {
                     operationId={operationId ? parseInt(operationId, 10) : undefined}
                 />
             )}
-        </>
+        </div>
     );
 };
 

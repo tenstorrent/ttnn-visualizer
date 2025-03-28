@@ -61,7 +61,7 @@ function BufferSummary() {
     );
 
     return (
-        <div className='buffer-summary'>
+        <div className='buffer-summary data-padding'>
             <Helmet title='Buffer summary' />
 
             <h1 className='page-title'>Buffers by operation</h1>

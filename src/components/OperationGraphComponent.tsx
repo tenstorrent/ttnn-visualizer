@@ -367,9 +367,7 @@ const OperationGraph: React.FC<{
                 ref={containerRef}
             />
 
-            <div className='aside'>
-                <aside>Scroll to zoom. Drag to pan. Click a node to see operation details.</aside>
-            </div>
+            <aside className='aside'>Scroll to zoom. Drag to pan. Click a node to see operation details.</aside>
         </div>
     );
 };
