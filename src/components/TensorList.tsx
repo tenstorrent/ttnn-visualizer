@@ -6,7 +6,7 @@ import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Button, ButtonGroup, Checkbox, Icon, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, Icon, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import { MultiSelect } from '@blueprintjs/select';
@@ -15,17 +15,17 @@ import LoadingSpinner from './LoadingSpinner';
 import { useOperationsList, useTensors } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
 import { Tensor } from '../model/APIData';
-import { BufferType, BufferTypeLabel } from '../model/BufferType';
+import { BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
 import { expandedTensorsAtom, selectedOperationRangeAtom } from '../store/app';
 import ListItem from './ListItem';
 import '@blueprintjs/select/lib/css/blueprint-select.css';
 import 'styles/components/ListView.scss';
-import 'styles/components/TensorList.scss';
 import BufferDetails from './BufferDetails';
 import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
 import { toReadableShape, toReadableType } from '../functions/math';
+import useTableFilter from '../hooks/useTableFilter';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -41,7 +41,6 @@ const TensorList = () => {
     const [filteredTensorList, setFilteredTensorList] = useState<Tensor[]>([]);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
-    const [bufferTypeFilters, setBufferTypeFilters] = useState<BufferType[]>([]);
     const [showHighConsumerTensors, setShowHighConsumerTensors] = useState(false);
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
@@ -62,6 +61,11 @@ const TensorList = () => {
 
         return fetchedTensors;
     }, [fetchedTensors, selectedOperationRange]);
+
+    const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter(
+        'buffer_type',
+        tensorsWithRange || [],
+    );
 
     // TODO: Figure out an initial scroll position based on last used tensor
     const virtualizer = useVirtualizer({
@@ -101,15 +105,6 @@ const TensorList = () => {
         );
     };
 
-    const updateBufferTypeFilter = (bufferType: BufferType) => {
-        setBufferTypeFilters((currentFilters: BufferType[]) => {
-            if (currentFilters.includes(bufferType)) {
-                return currentFilters.filter((item) => item !== bufferType);
-            }
-            return [...currentFilters, bufferType];
-        });
-    };
-
     useMemo(() => {
         if (tensorsWithRange && operations) {
             let tensors = [...tensorsWithRange];
@@ -120,9 +115,9 @@ const TensorList = () => {
                 );
             }
 
-            if (bufferTypeFilters?.length > 0) {
+            if (activeFilters?.length > 0) {
                 tensors = tensors.filter(
-                    (tensor) => tensor?.buffer_type !== null && bufferTypeFilters.includes(tensor.buffer_type),
+                    (tensor) => tensor?.buffer_type !== null && activeFilters.includes(tensor.buffer_type),
                 );
             }
 
@@ -132,7 +127,7 @@ const TensorList = () => {
 
             setFilteredTensorList(tensors);
         }
-    }, [operations, tensorsWithRange, filterQuery, bufferTypeFilters, showHighConsumerTensors]);
+    }, [operations, tensorsWithRange, filterQuery, activeFilters, showHighConsumerTensors]);
 
     useEffect(() => {
         const initialTensorId = location.state?.previousOperationId;
@@ -222,16 +217,18 @@ const TensorList = () => {
                     </Tooltip>
 
                     <MultiSelect
-                        items={tensorsWithRange ? getBufferTypeFilterOptions(tensorsWithRange) : []}
+                        items={tensorsWithRange ? (getFilterOptions() as number[]) : []}
                         placeholder='Buffer type filter...'
                         // Type requires this but it seems pointless
-                        onItemSelect={(selectedType) => updateBufferTypeFilter(selectedType)}
-                        selectedItems={bufferTypeFilters}
-                        itemRenderer={(value: BufferType, _props) =>
-                            BufferTypeItem(value, updateBufferTypeFilter, bufferTypeFilters)
-                        }
-                        tagRenderer={(buffer) => BufferTypeLabel[buffer]}
-                        onRemove={(type) => updateBufferTypeFilter(type)}
+                        onItemSelect={(selectedType: number) => updateFilters(selectedType.toString())}
+                        selectedItems={activeFilters as number[]}
+                        itemRenderer={(value: number) => {
+                            return FilterItem(value, BufferTypeLabel[value]);
+                        }}
+                        tagRenderer={(buffer: number) => {
+                            return BufferTypeLabel[buffer];
+                        }}
+                        onRemove={(type) => updateFilters(type.toString())}
                         itemPredicate={(query, bufferType) =>
                             !query || BufferTypeLabel[bufferType].toLowerCase().includes(query.toLowerCase())
                         }
@@ -349,28 +346,5 @@ const TensorList = () => {
 
 const getTensorFilterName = (tensor: Tensor) =>
     `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensor.operationIdentifier ? tensor.operationIdentifier : ''}`;
-
-function getBufferTypeFilterOptions(tensors: Tensor[]) {
-    return [
-        ...new Set(
-            tensors
-                ?.map((tensor) => (tensor.buffer_type !== null ? tensor.buffer_type : ''))
-                .filter((value) => isValidNumber(value)) ?? [],
-        ),
-    ] as BufferType[];
-}
-
-const BufferTypeItem = (type: BufferType, onClick: (type: BufferType) => void, selectedBufferTypes: BufferType[]) => {
-    return (
-        <li key={type}>
-            <Checkbox
-                className='buffer-type-checkbox'
-                label={BufferTypeLabel[type]}
-                checked={selectedBufferTypes.includes(type)}
-                onClick={() => onClick(type)}
-            />
-        </li>
-    );
-};
 
 export default TensorList;
