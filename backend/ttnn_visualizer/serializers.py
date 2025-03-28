@@ -218,12 +218,12 @@ def serialize_operations_buffers(operations, buffers):
     return results
 
 
-def serialize_buffer(b):
+def serialize_buffer(buffer):
     return {
-        "buffer_type": b.buffer_type,
-        "device_id": b.device_id,
-        "size": b.max_size_per_bank,
-        "address": b.address,
+        "buffer_type": buffer.buffer_type,
+        "device_id": buffer.device_id,
+        "size": buffer.max_size_per_bank,
+        "address": buffer.address,
     }
 
 

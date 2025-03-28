@@ -179,7 +179,7 @@ export interface PerformanceData {
     zone_phase: 'begin' | 'end';
 }
 
-const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
+const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
     const params = {
         buffer_type: bufferType,
     };
@@ -189,6 +189,37 @@ const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersBy
     });
 
     return buffers;
+};
+
+const fetchAllBuffers = async (bufferType: BufferType | null): Promise<Buffer[]> => {
+    const params = {
+        buffer_type: bufferType,
+    };
+
+    const { data: buffers } = await axiosInstance.get<Buffer[]>('/api/buffers', {
+        params,
+    });
+
+    return buffers;
+};
+
+const useGetAllBuffers = (bufferType: BufferType | null) => {
+    return useQuery<Buffer[], AxiosError>({
+        queryFn: () => fetchAllBuffers(bufferType),
+        queryKey: ['fetch-all-buffers', bufferType],
+        staleTime: Infinity,
+    });
+};
+
+export const useGetL1SmallStart = (): number => {
+    const { data: buffers } = useGetAllBuffers(BufferType.L1_SMALL);
+
+    return useMemo(() => {
+        const sizes = buffers?.map((buffer) => {
+            return buffer.address;
+        }) || [0];
+        return Math.min(...sizes);
+    }, [buffers]);
 };
 
 export const fetchOperationBuffers = async (operationId: number) => {
@@ -624,7 +655,7 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     const range = useAtomValue(selectedOperationRangeAtom);
 
     const response = useQuery({
-        queryFn: () => fetchAllBuffers(bufferType),
+        queryFn: () => fetchBuffersByOperation(bufferType),
         queryKey: ['fetch-all-buffers', bufferType],
         staleTime: Infinity,
     });

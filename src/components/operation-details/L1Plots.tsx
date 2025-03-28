@@ -23,6 +23,7 @@ import {
 import { BufferType } from '../../model/BufferType';
 import { FragmentationEntry } from '../../model/APIData';
 import { MemoryLegendGroup } from './MemoryLegendGroup';
+import { useGetL1SmallStart } from '../../hooks/useAPI';
 
 interface L1PlotsProps {
     operationDetails: OperationDetails;
@@ -49,6 +50,10 @@ function L1Plots({
     onBufferClick,
     onLegendClick,
 }: L1PlotsProps) {
+    const l1SmallMark = useGetL1SmallStart();
+    // eslint-disable-next-line no-console
+    console.log(l1SmallMark);
+
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const {
         chartData,
