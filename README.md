@@ -77,15 +77,16 @@ https://github.com/user-attachments/assets/d00a2629-0bd1-4ee1-bb12-bd796d85221d
 
 | Tensor details list | Performance report |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Tensor details list" src="https://github.com/user-attachments/assets/d19d770b-a6cd-4c5d-96d5-181c2a5e9692" /> | <img width="400" alt="Performance report" src="https://github.com/user-attachments/assets/882ca7e3-3ef8-47cd-9e78-f69474f13e86" /> |
+| <img width="400" alt="Tensor details list" src="https://github.com/user-attachments/assets/919da94e-45f9-432e-9eb4-c584b4140663" /> | <img width="400" alt="Performnance analysis" src="https://github.com/user-attachments/assets/468b0acb-733e-4891-8e16-781c47889017" /> |
 
 | Performance charts |  |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Performance analysis" src="https://github.com/user-attachments/assets/03f64a7a-262a-4b2a-a0b6-c70f3f14705c" /> |  <img width="400" alt="" src="https://github.com/user-attachments/assets/224d14f7-c7b3-4f4c-99c6-528c800b1a84" /> |
+| <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/23e6b1d0-2def-490a-8921-3477ded2c8ce" /> |  <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/ee620711-10be-4582-ab6f-635c896a1101" /> |
 
 | NPE |  |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/1f4441c6-9d9e-4834-9e71-edec1955243c" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/7159992e-7691-41cf-a152-8bc6a3606ade" /> |
+| <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/5a25a79c-0fcc-4298-aaae-8e8656b99ab5" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/b2845948-02fa-4255-81f4-fc3257a282da" />
+
 
 ## Sample reports
 
