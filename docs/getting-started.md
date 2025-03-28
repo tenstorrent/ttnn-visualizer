@@ -115,5 +115,13 @@ The default behaviour is to sync the files to your local machine, but you may al
 
 The `ttnn-visualizer` command supports two CLI arguments for passing custom data paths:
 
-* `--report-path` - specify the local path to `db.sqlite` file containing the report
+* `--report-path` - specify the local path to the folder containing the report
 * `--profiler-path` - specify the local path to the folder containing the profiler data
+
+These options allow you to pass the folders when starting the visualizer, instead of uploading the report and profiler
+data files from the browser after loading the site. This can be used for starting `ttnn-visualizer` from other tools
+with the data preloaded, or for restarting the visualizer with the same data, without having to upload it again.
+
+```bash
+ttnn-visualizer --report-path ~/Downloads/report/generated/ttnn/reports/17274205533343344897 --profiler-path ~/Downloads/report/generated/profiler/reports/2025_02_24_23_17_27
+```
