@@ -5,8 +5,9 @@
 import { FC, Fragment, useMemo, useState } from 'react';
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
-import { Button, ButtonVariant, Icon, Size, Switch } from '@blueprintjs/core';
+import { Button, ButtonVariant, Icon, MenuItem, Size, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { MultiSelect } from '@blueprintjs/select';
 import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
 import { selectedPerformanceRangeAtom } from '../../store/app';
 import 'styles/components/PerfReport.scss';
@@ -14,6 +15,7 @@ import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
 import { calcHighDispatchOps, formatCell } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import SearchField from '../SearchField';
+import useTableFilter from '../../hooks/useTableFilter';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -79,6 +81,7 @@ const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
 
 const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
+    const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
@@ -138,6 +141,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
             });
         }
 
+        if (activeFilters?.length > 0) {
+            filteredRows = filteredRows.filter(
+                (tensor) => tensor?.math_fidelity !== null && activeFilters.includes(tensor.math_fidelity),
+            );
+        }
+
         const parsedRows = filteredRows.map((row) => ({
             ...row,
             id: parseInt(row.id, 10),
@@ -152,7 +161,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
         })) as TypedPerfTableRow[];
 
         return sortTableFields(parsedRows);
-    }, [processedRows, selectedRange, sortTableFields, filters, filterableColumnKeys]);
+    }, [processedRows, selectedRange, sortTableFields, filters, filterableColumnKeys, activeFilters]);
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
@@ -215,6 +224,28 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                             searchQuery={filters?.[key] || ''}
                         />
                     ))}
+
+                    <MultiSelect
+                        items={data ? getFilterOptions() : []}
+                        placeholder='Math fidelity filter...'
+                        // Type requires this but it seems pointless
+                        onItemSelect={(selectedType) => updateFilters(selectedType)}
+                        selectedItems={activeFilters}
+                        itemRenderer={(value: string | number, _props) => FilterItem(String(value))}
+                        tagRenderer={(mathFidelity) => mathFidelity}
+                        onRemove={(type) => updateFilters(type)}
+                        itemPredicate={(query, mathFidelity) =>
+                            !query || String(mathFidelity).toLowerCase().includes(query.toLowerCase())
+                        }
+                        noResults={
+                            <MenuItem
+                                disabled
+                                text='No results.'
+                                roleStructure='listoption'
+                            />
+                        }
+                        resetOnSelect
+                    />
 
                     <Button
                         onClick={() => changeSorting(null)(null)}
