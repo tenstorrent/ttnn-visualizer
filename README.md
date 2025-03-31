@@ -65,7 +65,7 @@ https://github.com/user-attachments/assets/d00a2629-0bd1-4ee1-bb12-bd796d85221d
 
 | Device operations with memory consumption | DRAM memory allocation |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Device operations with memory consumption" src="https://github.com/user-attachments/assets/33f83d13-4597-4ad6-bf93-3e81d888a16c" /> | <img width="400" alt="DRAM memory allocations" src="https://github.com/user-attachments/assets/588dbb57-3964-48f8-aa0d-bafc614706d3" /> |
+| <img width="400" alt="Device operations with memory consumption" src="https://github.com/user-attachments/assets/46f51cde-86ec-4251-8f41-261b5e14e1b7" />| <img width="400" alt="DRAM memory allocations" src="https://github.com/user-attachments/assets/588dbb57-3964-48f8-aa0d-bafc614706d3" /> |
 
 | Operation graph view | Model buffer summary |
 |-----------------------------------------------|------------------------------------------|
