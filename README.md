@@ -69,11 +69,11 @@ https://github.com/user-attachments/assets/d00a2629-0bd1-4ee1-bb12-bd796d85221d
 
 | Operation graph view | Model buffer summary |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Operation graph view" src="https://github.com/user-attachments/assets/04813765-8dd1-48af-b054-4de3fe1afba3" /> | <img width="400" alt="Model buffer summary" src="https://github.com/user-attachments/assets/0371e8bc-1f08-43db-a5a1-6191a611d411" /> |
+| <img width="400" alt="Operation graph view" src="https://github.com/user-attachments/assets/a77b099e-9caa-4758-8dee-8b30cad4dad8" /> | <img width="400" alt="Model buffer summary" src="https://github.com/user-attachments/assets/90a4c0e6-58cb-4031-b224-a91f3beadc51" /> |
 
 | Per core allocation details | Per core allocation details for individual tensors |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Per core allocation details" src="https://github.com/user-attachments/assets/e1647b4d-9bf9-4e30-98a5-8cfd48ef495f" /> | <img width="400" alt="Per core allocation details for individual tensor" src="https://github.com/user-attachments/assets/c160744e-0c23-42da-a3a4-ad4bbe513061" /> |
+| <img width="400" alt="Per core allocation details" src="https://github.com/user-attachments/assets/0d4a833a-d9b6-4239-a953-42c0b84d4f80" /> | <img width="400" alt="Per core allocation details for individual tensor" src="https://github.com/user-attachments/assets/06b69fbb-c6fc-45fe-9360-36722e68bee5" /> |
 
 | Tensor details list | Performance report |
 |-----------------------------------------------|------------------------------------------|
