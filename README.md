@@ -57,7 +57,7 @@ For the latest updates and features, please see [releases](https://github.com/te
 
 #### Application demo
 
-https://github.com/user-attachments/assets/d00a2629-0bd1-4ee1-bb12-bd796d85221d
+https://github.com/user-attachments/assets/4e51a636-c6d6-46df-bf34-a06bca13c0b3
 
 | L1 Summary with Tensor highlight | Operation inputs and outputs |
 |-----------------------------------------------|------------------------------------------|
