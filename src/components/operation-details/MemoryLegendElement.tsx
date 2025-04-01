@@ -11,6 +11,7 @@ import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatSize, prettyPrintAddress, toHex, toReadableShape, toReadableType } from '../../functions/math';
 import 'styles/components/MemoryLegendElement.scss';
+import { L1_SMALL_MARKER_COLOR } from '../../definitions/PlotConfigurations';
 
 export const MemoryLegendElement: React.FC<{
     chunk: FragmentationEntry;
@@ -62,7 +63,7 @@ export const MemoryLegendElement: React.FC<{
             className={classNames(
                 'legend-item',
                 {
-                    button: !chunk.empty,
+                    button: !chunk.empty && chunk.bufferType !== 'L1_SMALL',
                     active: selectedTensorAddress === chunk.address,
                     dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
                     'extra-info': bufferType || layout,
@@ -70,7 +71,7 @@ export const MemoryLegendElement: React.FC<{
                 className,
             )}
             // eslint-disable-next-line react/jsx-props-no-spreading
-            {...(!chunk.empty
+            {...(!chunk.empty && chunk.bufferType !== 'L1_SMALL'
                 ? {
                       type: 'button',
                       onClick: () => onLegendClick(chunk.address, chunk.tensorId),
@@ -90,13 +91,23 @@ export const MemoryLegendElement: React.FC<{
                                       ? getTensorColor(chunk.tensorId) || getTensorColor(derivedTensor?.id)
                                       : getBufferColor(chunk.address + (colorVariance || 0)),
                           }),
+                    ...(chunk.bufferType === 'L1_SMALL' && {
+                        // backgroundColor: 'var(--l1-small-color)',
+                        backgroundColor: L1_SMALL_MARKER_COLOR,
+                    }),
                 }}
             />
             <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize)}</div>
             <div className='format-numbers monospace keep-left'>({toHex(chunk.address)})</div>
             <div className='format-numbers monospace nowrap'>
-                {formatSize(chunk.size)}
-                {numCoresLabel}
+                {chunk.bufferType === 'L1_SMALL' ? (
+                    'L1_SMALL region'
+                ) : (
+                    <>
+                        {formatSize(chunk.size)}
+                        {numCoresLabel}
+                    </>
+                )}
             </div>
             <div>
                 {!isMultiDeviceBuffer && !chunk.empty && derivedTensor && (

@@ -11,19 +11,20 @@ import { useState } from 'react';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { OperationDetails } from '../../model/OperationDetails';
 import { MemoryLegendElement } from './MemoryLegendElement';
-import { selectedAddressAtom } from '../../store/app';
+import { selectedAddressAtom, showMemoryRegionsAtom } from '../../store/app';
 import {
     BufferRenderConfiguration,
     CBRenderConfiguration,
     L1RenderConfiguration,
     L1SmallRenderConfiguration,
+    L1_SMALL_MARKER_COLOR,
     MAX_LEGEND_LENGTH,
     PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
 import { BufferType } from '../../model/BufferType';
 import { FragmentationEntry } from '../../model/APIData';
 import { MemoryLegendGroup } from './MemoryLegendGroup';
-import { useGetL1SmallStart } from '../../hooks/useAPI';
+import { useGetL1SmallMarker } from '../../hooks/useAPI';
 
 interface L1PlotsProps {
     operationDetails: OperationDetails;
@@ -50,10 +51,8 @@ function L1Plots({
     onBufferClick,
     onLegendClick,
 }: L1PlotsProps) {
-    const l1SmallMark = useGetL1SmallStart();
-    // eslint-disable-next-line no-console
-    console.log(l1SmallMark);
-
+    const l1SmallMarker = useGetL1SmallMarker();
+    const showMemoryRegions = useAtomValue(showMemoryRegionsAtom);
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const {
         chartData,
@@ -64,6 +63,7 @@ function L1Plots({
         bufferMemory,
         bufferChartDataByOperation,
     } = operationDetails.memoryData();
+
     const { chartData: previousChartData } = previousOperationDetails.memoryData();
     const {
         chartData: l1SmallChartData,
@@ -126,6 +126,15 @@ function L1Plots({
     const zoomRangeStart = Math.min(plotZoomRangeStart, bufferZoomRangeStart);
     const zoomRangeEnd = Math.max(plotZoomRangeEnd, bufferZoomRangeEnd);
 
+    const memoryRegionsMarkers = showMemoryRegions
+        ? [
+              {
+                  color: L1_SMALL_MARKER_COLOR,
+                  address: l1SmallMarker,
+              },
+          ]
+        : [];
+
     return (
         <>
             <MemoryPlotRenderer
@@ -138,6 +147,7 @@ function L1Plots({
                 isZoomedIn={zoomedInViewMainMemory}
                 memorySize={memorySizeL1}
                 configuration={L1RenderConfiguration}
+                markers={memoryRegionsMarkers}
             />
 
             <MemoryPlotRenderer
@@ -151,6 +161,7 @@ function L1Plots({
                 memorySize={memorySizeL1}
                 onBufferClick={onBufferClick}
                 configuration={L1RenderConfiguration}
+                markers={memoryRegionsMarkers}
             />
             {bufferChartDataByOperation.size > 0 && (
                 <>
@@ -181,6 +192,7 @@ function L1Plots({
                                     memorySize={memorySizeL1}
                                     configuration={BufferRenderConfiguration}
                                     onBufferClick={onBufferClick}
+                                    markers={memoryRegionsMarkers}
                                 />
                             </Fragment>
                         ),
@@ -238,6 +250,7 @@ function L1Plots({
                                 memorySize={memorySizeL1}
                                 configuration={CBRenderConfiguration}
                                 onBufferClick={onBufferClick}
+                                markers={[{ color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker }]}
                             />
                         </Fragment>
                     ))}
@@ -286,6 +299,20 @@ function L1Plots({
                             />
                         );
                     })}
+                {showMemoryRegions && l1SmallMarker && l1SmallMarker !== Infinity && (
+                    <MemoryLegendElement
+                        chunk={{
+                            size: 0,
+                            address: l1SmallMarker,
+                            bufferType: 'L1_SMALL',
+                        }}
+                        key='l1small-marker'
+                        memSize={memorySizeL1}
+                        selectedTensorAddress={null}
+                        operationDetails={operationDetails}
+                        onLegendClick={onLegendClick}
+                    />
+                )}
             </div>
         </>
     );

@@ -211,14 +211,17 @@ const useGetAllBuffers = (bufferType: BufferType | null) => {
     });
 };
 
-export const useGetL1SmallStart = (): number => {
+/**
+ * @description returns start address of the first L1 small buffer. this is interim solution until BE can collect to devices table
+ */
+export const useGetL1SmallMarker = (): number => {
     const { data: buffers } = useGetAllBuffers(BufferType.L1_SMALL);
 
     return useMemo(() => {
-        const sizes = buffers?.map((buffer) => {
+        const addresses = buffers?.map((buffer) => {
             return buffer.address;
         }) || [0];
-        return Math.min(...sizes);
+        return Math.min(...addresses);
     }, [buffers]);
 };
 
