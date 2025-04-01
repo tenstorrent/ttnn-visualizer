@@ -162,7 +162,6 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
                     hoverCloseDelay={0}
                     isOpen
                     usePortal
-                    variant='minimal'
                     modifiers={{
                         offset: {
                             enabled: true,
@@ -171,17 +170,12 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
                             },
                         },
                     }}
+                    minimal
                 >
                     <div
+                        className='buffer-summary-row-tooltip'
                         style={{
-                            //
-                            position: 'absolute',
-                            top: 0,
                             left: `${tooltip.x}px`,
-                            width: '0',
-                            height: '0',
-                            backgroundColor: 'red',
-                            zIndex: 100,
                         }}
                     />
                 </Tooltip>

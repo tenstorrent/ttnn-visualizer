@@ -31,3 +31,11 @@
         height: 20px;
     }
 }
+
+.buffer-summary-row-tooltip {
+    position: absolute;
+    top: 0;
+    width: 0;
+    height: 0;
+    z-index: 100;
+}
