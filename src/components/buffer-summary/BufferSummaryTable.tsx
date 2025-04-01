@@ -228,7 +228,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         }
 
         if (areFiltersActive(filters) && filterableColumnKeys) {
-            filteredTableFields = listOfBuffers.filter((buffer) => {
+            filteredTableFields = filteredTableFields.filter((buffer) => {
                 const isFilteredOut = Object.entries(filters)
                     .filter(([_key, filterValue]) => String(filterValue).length)
                     .some(([key, filterValue]) => {
