@@ -8,8 +8,18 @@ import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
 import { Link } from 'react-router-dom';
 import { useAtom, useAtomValue } from 'jotai';
-import { BufferSummaryAxisConfiguration, L1_SMALL_MARKER_COLOR } from '../../definitions/PlotConfigurations';
-import { BuffersByOperationData, useDevices, useGetL1SmallMarker, useOperationsList } from '../../hooks/useAPI';
+import {
+    BufferSummaryAxisConfiguration,
+    L1_SMALL_MARKER_COLOR,
+    L1_START_MARKER_COLOR,
+} from '../../definitions/PlotConfigurations';
+import {
+    BuffersByOperationData,
+    useDevices,
+    useGetL1SmallMarker,
+    useGetL1StartMarker,
+    useOperationsList,
+} from '../../hooks/useAPI';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
@@ -49,6 +59,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const { data: operations } = useOperationsList();
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
 
+    const l1StartMarker = useGetL1StartMarker();
     const l1SmallMarker = useGetL1SmallMarker();
     const numberOfOperations = useMemo(
         () =>
@@ -98,7 +109,10 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     };
 
     const memoryRegionsMarkers = showMemoryRegions
-        ? [{ color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker, label: 'L1_SMALL' }]
+        ? [
+              { color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker, label: 'L1 SMALL' },
+              { color: L1_START_MARKER_COLOR, address: l1StartMarker, label: '' },
+          ]
         : [];
 
     return buffersByOperation && !isLoadingDevices && tensorListByOperation ? (

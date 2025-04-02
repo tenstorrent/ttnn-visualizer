@@ -225,6 +225,20 @@ export const useGetL1SmallMarker = (): number => {
     }, [buffers]);
 };
 
+/**
+ * @description returns start of a usable memory region for L1. This assumes identical device configuration.
+ */
+export const useGetL1StartMarker = (): number => {
+    const { data: devices } = useDevices();
+
+    return useMemo(() => {
+        if (devices && devices.length > 0) {
+            return devices[0].address_at_first_l1_cb_buffer;
+        }
+        return 0;
+    }, [devices]);
+};
+
 export const fetchOperationBuffers = async (operationId: number) => {
     const { data: buffers } = await axiosInstance.get(`/api/operation-buffers/${operationId}`);
 

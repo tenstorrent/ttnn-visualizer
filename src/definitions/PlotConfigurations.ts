@@ -217,3 +217,4 @@ export const PerfChartLayout: Partial<Layout> = {
 };
 
 export const L1_SMALL_MARKER_COLOR: string = '#FF0000';
+export const L1_START_MARKER_COLOR: string = '#8EF32F';
