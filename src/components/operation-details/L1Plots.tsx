@@ -18,13 +18,14 @@ import {
     L1RenderConfiguration,
     L1SmallRenderConfiguration,
     L1_SMALL_MARKER_COLOR,
+    L1_START_MARKER_COLOR,
     MAX_LEGEND_LENGTH,
     PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
 import { BufferType } from '../../model/BufferType';
 import { FragmentationEntry } from '../../model/APIData';
 import { MemoryLegendGroup } from './MemoryLegendGroup';
-import { useGetL1SmallMarker } from '../../hooks/useAPI';
+import { useGetL1SmallMarker, useGetL1StartMarker } from '../../hooks/useAPI';
 
 interface L1PlotsProps {
     operationDetails: OperationDetails;
@@ -52,6 +53,7 @@ function L1Plots({
     onLegendClick,
 }: L1PlotsProps) {
     const l1SmallMarker = useGetL1SmallMarker();
+    const l1StartMarker = useGetL1StartMarker();
     const showMemoryRegions = useAtomValue(showMemoryRegionsAtom);
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const {
@@ -128,6 +130,10 @@ function L1Plots({
 
     const memoryRegionsMarkers = showMemoryRegions
         ? [
+              {
+                  color: L1_START_MARKER_COLOR,
+                  address: l1StartMarker,
+              },
               {
                   color: L1_SMALL_MARKER_COLOR,
                   address: l1SmallMarker,
@@ -262,6 +268,20 @@ function L1Plots({
                     'lengthy-legend': memoryReport.length > MAX_LEGEND_LENGTH,
                 })}
             >
+                {showMemoryRegions && l1StartMarker && l1StartMarker !== 0 && (
+                    <MemoryLegendElement
+                        chunk={{
+                            size: 0,
+                            address: l1StartMarker,
+                            bufferType: 'L1_START',
+                        }}
+                        key='l1start-marker'
+                        memSize={memorySizeL1}
+                        selectedTensorAddress={null}
+                        operationDetails={operationDetails}
+                        onLegendClick={onLegendClick}
+                    />
+                )}
                 {showCircularBuffer &&
                     memoryReportWithCB.map((chunk, index) => (
                         <MemoryLegendElement

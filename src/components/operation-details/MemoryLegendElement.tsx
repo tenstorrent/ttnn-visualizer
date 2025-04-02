@@ -11,7 +11,7 @@ import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatSize, prettyPrintAddress, toHex, toReadableShape, toReadableType } from '../../functions/math';
 import 'styles/components/MemoryLegendElement.scss';
-import { L1_SMALL_MARKER_COLOR } from '../../definitions/PlotConfigurations';
+import { L1_SMALL_MARKER_COLOR, L1_START_MARKER_COLOR } from '../../definitions/PlotConfigurations';
 
 export const MemoryLegendElement: React.FC<{
     chunk: FragmentationEntry;
@@ -63,7 +63,7 @@ export const MemoryLegendElement: React.FC<{
             className={classNames(
                 'legend-item',
                 {
-                    button: !chunk.empty && chunk.bufferType !== 'L1_SMALL',
+                    button: !chunk.empty && chunk.bufferType !== 'L1_SMALL' && chunk.bufferType !== 'L1_START',
                     active: selectedTensorAddress === chunk.address,
                     dimmed: selectedTensorAddress !== null && selectedTensorAddress !== chunk.address,
                     'extra-info': bufferType || layout,
@@ -71,7 +71,7 @@ export const MemoryLegendElement: React.FC<{
                 className,
             )}
             // eslint-disable-next-line react/jsx-props-no-spreading
-            {...(!chunk.empty && chunk.bufferType !== 'L1_SMALL'
+            {...(!chunk.empty && chunk.bufferType !== 'L1_SMALL' && chunk.bufferType !== 'L1_START'
                 ? {
                       type: 'button',
                       onClick: () => onLegendClick(chunk.address, chunk.tensorId),
@@ -92,16 +92,21 @@ export const MemoryLegendElement: React.FC<{
                                       : getBufferColor(chunk.address + (colorVariance || 0)),
                           }),
                     ...(chunk.bufferType === 'L1_SMALL' && {
-                        // backgroundColor: 'var(--l1-small-color)',
                         backgroundColor: L1_SMALL_MARKER_COLOR,
+                    }),
+                    ...(chunk.bufferType === 'L1_START' && {
+                        backgroundColor: L1_START_MARKER_COLOR,
                     }),
                 }}
             />
             <div className='format-numbers monospace'>{prettyPrintAddress(chunk.address, memSize)}</div>
             <div className='format-numbers monospace keep-left'>({toHex(chunk.address)})</div>
             <div className='format-numbers monospace nowrap'>
+                {/* eslint-disable-next-line no-nested-ternary */}
                 {chunk.bufferType === 'L1_SMALL' ? (
-                    'L1_SMALL region'
+                    'L1 SMALL region'
+                ) : chunk.bufferType === 'L1_START' ? (
+                    'L1 START'
                 ) : (
                     <>
                         {formatSize(chunk.size)}

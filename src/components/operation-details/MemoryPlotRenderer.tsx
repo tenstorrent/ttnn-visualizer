@@ -62,13 +62,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             },
 
             label: {
-                // textangle: 0,
-                // position: 'bottom',
                 text: marker.label,
-                // align: 'start',
-                // placement: 'start',
-                // xanchor: 'right',
-                // yanchor: 'bottom',
                 textposition: 'bottom left',
                 font: {
                     size: 8,

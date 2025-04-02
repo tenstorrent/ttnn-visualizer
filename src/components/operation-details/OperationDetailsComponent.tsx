@@ -6,7 +6,13 @@ import React, { useState } from 'react';
 import { Button, ButtonGroup, Intent, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
-import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
+import {
+    useGetL1SmallMarker,
+    useGetL1StartMarker,
+    useOperationDetails,
+    useOperationsList,
+    usePreviousOperationDetails,
+} from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
@@ -44,6 +50,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [showL1Small, setShowL1Small] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
+    const l1start = useGetL1StartMarker();
+    const l1end = useGetL1SmallMarker();
 
     const {
         operationDetails: { data: operationDetails, isLoading, status },
@@ -81,11 +89,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         );
     }
 
-    const details: OperationDetails | null = new OperationDetails(operationDetails, operations, {
-        renderPattern: renderMemoryLayoutPattern,
-    });
+    const details: OperationDetails | null = new OperationDetails(
+        operationDetails,
+        operations,
+        { l1start, l1end },
+        {
+            renderPattern: renderMemoryLayoutPattern,
+        },
+    );
 
-    const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations);
+    const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations, {
+        l1start,
+        l1end,
+    });
 
     const l1Small = details.memoryData(BufferType.L1_SMALL);
 
