@@ -19,7 +19,7 @@ class DefaultConfig(object):
 
     # Path Settings
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
-    VERSION = "0.26.0"
+    DB_VERSION = "0.26.0"  # App version when DB schema last changed
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
     REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
@@ -37,7 +37,7 @@ class DefaultConfig(object):
 
     # SQL Alchemy Settings
     SQLALCHEMY_DATABASE_URI = (
-        f"sqlite:///{os.path.join(APPLICATION_DIR, f'ttnn_{VERSION}.db')}"
+        f"sqlite:///{os.path.join(APPLICATION_DIR, f'ttnn_{DB_VERSION}.db')}"
     )
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_size": 10,  # Adjust pool size as needed (default is 5)

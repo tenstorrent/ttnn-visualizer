@@ -6,13 +6,25 @@ import React, { useState } from 'react';
 import { Button, ButtonGroup, Intent, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
-import { useOperationDetails, useOperationsList, usePreviousOperationDetails } from '../../hooks/useAPI';
+import {
+    useGetL1SmallMarker,
+    useGetL1StartMarker,
+    useOperationDetails,
+    useOperationsList,
+    usePreviousOperationDetails,
+} from '../../hooks/useAPI';
 import 'styles/components/OperationDetailsComponent.scss';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
 import { PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
-import { renderMemoryLayoutAtom, selectedAddressAtom, selectedTensorAtom, showHexAtom } from '../../store/app';
+import {
+    renderMemoryLayoutAtom,
+    selectedAddressAtom,
+    selectedTensorAtom,
+    showHexAtom,
+    showMemoryRegionsAtom,
+} from '../../store/app';
 import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
@@ -37,6 +49,9 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
     const [showL1Small, setShowL1Small] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
+    const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
+    const l1start = useGetL1StartMarker();
+    const l1end = useGetL1SmallMarker();
 
     const {
         operationDetails: { data: operationDetails, isLoading, status },
@@ -74,11 +89,19 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
         );
     }
 
-    const details: OperationDetails | null = new OperationDetails(operationDetails, operations, {
-        renderPattern: renderMemoryLayoutPattern,
-    });
+    const details: OperationDetails | null = new OperationDetails(
+        operationDetails,
+        operations,
+        { l1start, l1end },
+        {
+            renderPattern: renderMemoryLayoutPattern,
+        },
+    );
 
-    const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations);
+    const previousDetails: OperationDetails | null = new OperationDetails(previousOperationDetails, operations, {
+        l1start,
+        l1end,
+    });
 
     const l1Small = details.memoryData(BufferType.L1_SMALL);
 
@@ -212,6 +235,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 checked={showHex}
                                 onChange={() => {
                                     setShowHex(!showHex);
+                                }}
+                            />
+                            <GlobalSwitch
+                                label='Memory regions'
+                                checked={showMemoryRegions}
+                                onChange={() => {
+                                    setShowMemoryRegions(!showMemoryRegions);
                                 }}
                             />
                         </div>

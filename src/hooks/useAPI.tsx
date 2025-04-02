@@ -2,8 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
-
 import axios, { AxiosError } from 'axios';
 import { useQuery } from 'react-query';
 import Papa, { ParseResult } from 'papaparse';
@@ -56,14 +54,12 @@ export const fetchBufferPages = async (
     operationId: number,
     address?: number | string,
     bufferType?: BufferType,
-    deviceId?: number,
 ): Promise<BufferPage[]> => {
     const response = await axiosInstance.get<BufferPage[]>(`/api/buffer-pages`, {
         params: {
             operation_id: operationId,
             address,
             buffer_type: bufferType,
-            // device_id: deviceId,
         },
     });
     return response.data;
@@ -95,13 +91,9 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
     return defaultOperationDetailsData;
 };
 
-const fetchOperations = async (deviceId?: number): Promise<OperationDescription[]> => {
+const fetchOperations = async (): Promise<OperationDescription[]> => {
     const tensorList: Map<number, Tensor> = new Map<number, Tensor>();
-    const { data: operationList } = await axiosInstance.get<OperationDescription[]>('/api/operations', {
-        params: {
-            device_id: deviceId,
-        },
-    });
+    const { data: operationList } = await axiosInstance.get<OperationDescription[]>('/api/operations');
 
     return operationList.map((operation: OperationDescription) => {
         operation.operationFileIdentifier = parseFileOperationIdentifier(operation.stack_trace);
@@ -187,7 +179,7 @@ export interface PerformanceData {
     zone_phase: 'begin' | 'end';
 }
 
-const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
+const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
     const params = {
         buffer_type: bufferType,
     };
@@ -197,6 +189,54 @@ const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersBy
     });
 
     return buffers;
+};
+
+const fetchAllBuffers = async (bufferType: BufferType | null): Promise<Buffer[]> => {
+    const params = {
+        buffer_type: bufferType,
+    };
+
+    const { data: buffers } = await axiosInstance.get<Buffer[]>('/api/buffers', {
+        params,
+    });
+
+    return buffers;
+};
+
+const useGetAllBuffers = (bufferType: BufferType | null) => {
+    return useQuery<Buffer[], AxiosError>({
+        queryFn: () => fetchAllBuffers(bufferType),
+        queryKey: ['fetch-all-buffers', bufferType],
+        staleTime: Infinity,
+    });
+};
+
+/**
+ * @description returns start address of the first L1 small buffer. this is interim solution until BE can collect to devices table
+ */
+export const useGetL1SmallMarker = (): number => {
+    const { data: buffers } = useGetAllBuffers(BufferType.L1_SMALL);
+
+    return useMemo(() => {
+        const addresses = buffers?.map((buffer) => {
+            return buffer.address;
+        }) || [0];
+        return Math.min(...addresses);
+    }, [buffers]);
+};
+
+/**
+ * @description returns start of a usable memory region for L1. This assumes identical device configuration.
+ */
+export const useGetL1StartMarker = (): number => {
+    const { data: devices } = useDevices();
+
+    return useMemo(() => {
+        if (devices && devices.length > 0) {
+            return devices[0].address_at_first_l1_cb_buffer;
+        }
+        return 0;
+    }, [devices]);
 };
 
 export const fetchOperationBuffers = async (operationId: number) => {
@@ -210,6 +250,7 @@ export const useOperationBuffers = (operationId: number) => {
         queryKey: ['get-operation-buffers', operationId],
         queryFn: () => fetchOperationBuffers(operationId),
         retry: false,
+        staleTime: Infinity,
     });
 };
 
@@ -229,17 +270,18 @@ const fetchDevices = async () => {
     return [...new Map(meta.map((device) => [device.device_id, device])).values()];
 };
 
-const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, string>>> => {
-    const { data } = await axiosInstance.get<string>('/api/profiler/perf-results/raw');
+// Not currently used
+// const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, string>>> => {
+//     const { data } = await axiosInstance.get<string>('/api/profiler/perf-results/raw');
 
-    return new Promise((resolve, reject) => {
-        Papa.parse<Record<string, string>>(data, {
-            complete: (results) => resolve(results),
-            error: (error: Error) => reject(error),
-            header: true,
-        });
-    });
-};
+//     return new Promise((resolve, reject) => {
+//         Papa.parse<Record<string, string>>(data, {
+//             complete: (results) => resolve(results),
+//             error: (error: Error) => reject(error),
+//             header: true,
+//         });
+//     });
+// };
 
 const fetchPerformanceDataReport = async (): Promise<PerfTableRow[]> => {
     const { data } = await axiosInstance.get<PerfTableRow[]>('/api/profiler/perf-results/report');
@@ -291,6 +333,7 @@ export const useOperationsList = () =>
         queryFn: () => fetchOperations(),
         queryKey: ['get-operations'],
         retry: false,
+        staleTime: Infinity,
     });
 
 export const useOperationListRange = (): NumberRange | null => {
@@ -313,6 +356,7 @@ export const useNpe = (fileName: string | null) =>
         queryFn: () => fetchNpeOpTrace(),
         queryKey: ['fetch-npe', fileName],
         retry: false,
+        staleTime: Infinity,
     });
 
 export const useOperationDetails = (operationId: number | null) => {
@@ -324,19 +368,14 @@ export const useOperationDetails = (operationId: number | null) => {
         [operations, operationId],
     );
 
-    const deviceId = null;
-
     // Memoized function for fetching operation details
     const fetchDetails = useCallback(() => fetchOperationDetails(operationId), [operationId]);
 
-    const operationDetails = useQuery<OperationDetailsData>(
-        ['get-operation-detail', operationId, deviceId],
-        fetchDetails,
-        {
-            retry: 2,
-            retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
-        },
-    );
+    const operationDetails = useQuery<OperationDetailsData>(['get-operation-detail', operationId], fetchDetails, {
+        retry: 2,
+        retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
+        staleTime: Infinity,
+    });
 
     const buffersSummary = useMemo(() => {
         if (!operationDetails.data) {
@@ -551,24 +590,18 @@ export const useReportMeta = () => {
     return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
 };
 
-export const useBufferPages = (
-    operationId: number,
-    address?: number | string,
-    bufferType?: BufferType,
-    deviceId?: number,
-) => {
-    return useQuery<BufferPage[], AxiosError>(['get-buffer-pages', operationId, address, bufferType, deviceId], () =>
-        fetchBufferPages(operationId, address, bufferType, deviceId),
+export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
+    return useQuery<BufferPage[], AxiosError>(
+        ['get-buffer-pages', operationId, address, bufferType],
+        () => fetchBufferPages(operationId, address, bufferType),
+        { staleTime: Infinity },
     );
 };
 
-export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> => {
+export const fetchTensors = async (): Promise<Tensor[]> => {
     try {
         const { data: tensorList } = await axiosInstance.get<Tensor[]>('/api/tensors', {
             maxRedirects: 1,
-            params: {
-                // device_id: deviceId,
-            },
         });
 
         const operationsList = await fetchOperations();
@@ -601,15 +634,16 @@ export const fetchTensors = async (deviceId?: number | null): Promise<Tensor[]> 
     return [defaultTensorData];
 };
 
-export const useTensors = (deviceId?: number | null) =>
+export const useTensors = () =>
     useQuery<Tensor[], AxiosError>({
-        queryFn: () => fetchTensors(deviceId),
-        queryKey: ['get-tensors', deviceId],
+        queryFn: () => fetchTensors(),
+        queryKey: ['get-tensors'],
         retry: false,
+        staleTime: Infinity,
     });
 
 export const useDevices = () => {
-    return useQuery<DeviceData[], AxiosError>('get-devices', fetchDevices);
+    return useQuery<DeviceData[], AxiosError>('get-devices', fetchDevices, { staleTime: Infinity });
 };
 
 export const fetchNextUseOfBuffer = async (address: number | null, consumers: number[]): Promise<BufferData> => {
@@ -630,6 +664,7 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
     return useQuery<BufferData, AxiosError>(queryKey, {
         queryFn: () => fetchNextUseOfBuffer(address, consumers),
         retry: false,
+        staleTime: Infinity,
     });
 };
 
@@ -637,8 +672,9 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     const range = useAtomValue(selectedOperationRangeAtom);
 
     const response = useQuery({
-        queryFn: () => fetchAllBuffers(bufferType),
+        queryFn: () => fetchBuffersByOperation(bufferType),
         queryKey: ['fetch-all-buffers', bufferType],
+        staleTime: Infinity,
     });
 
     return useMemo(() => {
@@ -655,20 +691,23 @@ export const useDeviceLog = () => {
     return useQuery({
         queryFn: () => fetchDeviceLogRaw(),
         queryKey: 'get-device-log-raw',
+        staleTime: Infinity,
     });
 };
 
-export const usePerformance = () => {
-    return useQuery({
-        queryFn: () => fetchPerformanceDataRaw(),
-        queryKey: 'get-performance-data-raw',
-    });
-};
+// Not currently used
+// export const usePerformance = () => {
+//     return useQuery({
+//         queryFn: () => fetchPerformanceDataRaw(),
+//         queryKey: 'get-performance-data-raw',
+//     });
+// };
 
 export const usePerformanceReport = () => {
     const response = useQuery({
         queryFn: () => fetchPerformanceDataReport(),
         queryKey: 'get-performance-data-report',
+        staleTime: Infinity,
     });
 
     return useMemo(() => {
