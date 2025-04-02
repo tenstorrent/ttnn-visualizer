@@ -1,3 +1,5 @@
+/* eslint-disable no-nested-ternary */
+// Temporary solution for now
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 
@@ -7,10 +9,11 @@ import NPEView from '../components/npe/NPEViewComponent';
 import { useNpe } from '../hooks/useAPI';
 import { activeNpeOpTraceAtom } from '../store/app';
 import { NPEData } from '../model/NPEModel';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const NPE: React.FC = () => {
     const npeFileName = useAtomValue(activeNpeOpTraceAtom);
-    const { data: npeData } = useNpe(npeFileName);
+    const { data: npeData, isLoading } = useNpe(npeFileName);
 
     return (
         <>
@@ -20,8 +23,9 @@ const NPE: React.FC = () => {
 
             <NPEFileLoader />
 
-            {/* eslint-disable-next-line no-nested-ternary */}
-            {npeData ? (
+            {isLoading ? (
+                <LoadingSpinner />
+            ) : npeData ? (
                 isValidNpeData(npeData) ? (
                     <NPEView npeData={npeData} />
                 ) : (
