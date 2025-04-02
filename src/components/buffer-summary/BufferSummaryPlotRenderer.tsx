@@ -2,14 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { UIEvent, useMemo, useRef, useState } from 'react';
+import React, { UIEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
 import { Link } from 'react-router-dom';
 import { useAtom, useAtomValue } from 'jotai';
-import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
-import { BuffersByOperationData, useDevices, useOperationsList } from '../../hooks/useAPI';
+import { BufferSummaryAxisConfiguration, L1_SMALL_MARKER_COLOR } from '../../definitions/PlotConfigurations';
+import { BuffersByOperationData, useDevices, useGetL1SmallMarker, useOperationsList } from '../../hooks/useAPI';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
@@ -17,7 +17,13 @@ import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/Routes';
 import isValidNumber from '../../functions/isValidNumber';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
-import { renderMemoryLayoutAtom, selectedDeviceAtom, showBufferSummaryZoomedAtom, showHexAtom } from '../../store/app';
+import {
+    renderMemoryLayoutAtom,
+    selectedDeviceAtom,
+    showBufferSummaryZoomedAtom,
+    showHexAtom,
+    showMemoryRegionsAtom,
+} from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 
@@ -41,7 +47,9 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const scrollElementRef = useRef(null);
     const { data: operations } = useOperationsList();
+    const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
 
+    const l1SmallMarker = useGetL1SmallMarker();
     const numberOfOperations = useMemo(
         () =>
             buffersByOperation && buffersByOperation.length >= 0 ? buffersByOperation.length : PLACEHOLDER_ARRAY_SIZE,
@@ -89,6 +97,10 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
         setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
     };
 
+    const memoryRegionsMarkers = showMemoryRegions
+        ? [{ color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker, label: 'L1_SMALL' }]
+        : [];
+
     return buffersByOperation && !isLoadingDevices && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
             <div className='controls'>
@@ -113,6 +125,14 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                     checked={renderMemoryLayout}
                     onChange={() => {
                         setRenderMemoryLayout(!renderMemoryLayout);
+                    }}
+                />
+
+                <GlobalSwitch
+                    label='Memory regions'
+                    checked={showMemoryRegions}
+                    onChange={() => {
+                        setShowMemoryRegions(!showMemoryRegions);
                     }}
                 />
             </div>
@@ -143,6 +163,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                             : [0, memorySize]
                     }
                     configuration={BufferSummaryAxisConfiguration}
+                    markers={memoryRegionsMarkers}
                 />
             </div>
 

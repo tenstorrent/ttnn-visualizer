@@ -12,7 +12,13 @@ import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
 import { PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
-import { renderMemoryLayoutAtom, selectedAddressAtom, selectedTensorAtom, showHexAtom } from '../../store/app';
+import {
+    renderMemoryLayoutAtom,
+    selectedAddressAtom,
+    selectedTensorAtom,
+    showHexAtom,
+    showMemoryRegionsAtom,
+} from '../../store/app';
 import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
@@ -37,6 +43,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
     const [showL1Small, setShowL1Small] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
+    const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
 
     const {
         operationDetails: { data: operationDetails, isLoading, status },
@@ -212,6 +219,13 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 checked={showHex}
                                 onChange={() => {
                                     setShowHex(!showHex);
+                                }}
+                            />
+                            <GlobalSwitch
+                                label='Memory regions'
+                                checked={showMemoryRegions}
+                                onChange={() => {
+                                    setShowMemoryRegions(!showMemoryRegions);
                                 }}
                             />
                         </div>
