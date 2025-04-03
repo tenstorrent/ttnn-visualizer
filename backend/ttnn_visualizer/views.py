@@ -56,6 +56,7 @@ from ttnn_visualizer.sftp_operations import (
 )
 from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.utils import (
+    get_cluster_descriptor_path,
     read_last_synced_file,
     timer,
 )
@@ -617,24 +618,36 @@ import yaml
 @api.route("/cluster_desc", methods=["GET"])
 @with_session
 def get_cluster_description_file(session: Instance):
-    if not session.remote_connection:
-        return jsonify({"error": "Remote connection not found"}), 404
+    if session.remote_connection:
+        try:
+            cluster_desc_file = get_cluster_desc(session.remote_connection)
+            if not cluster_desc_file:
+                return jsonify({"error": "cluster_descriptor.yaml not found"}), 404
+            yaml_data = yaml.safe_load(cluster_desc_file.decode("utf-8"))
+            return jsonify(yaml_data), 200
 
-    try:
-        cluster_desc_file = get_cluster_desc(session.remote_connection)
-        if not cluster_desc_file:
+        except yaml.YAMLError as e:
+            return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
+
+        except RemoteConnectionException as e:
+            return jsonify({"error": e.message}), e.http_status
+
+        except Exception as e:
+            return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+    else:
+        local_path = get_cluster_descriptor_path(session)
+
+        if not local_path:
             return jsonify({"error": "cluster_descriptor.yaml not found"}), 404
-        yaml_data = yaml.safe_load(cluster_desc_file.decode("utf-8"))
-        return jsonify(yaml_data), 200
 
-    except yaml.YAMLError as e:
-        return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
+        try:
+            with open(local_path) as cluster_desc_file:
+                yaml_data = yaml.safe_load(cluster_desc_file)
+                return jsonify(yaml_data), 200
+        except yaml.YAMLError as e:
+            return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
 
-    except RemoteConnectionException as e:
-        return jsonify({"error": e.message}), e.http_status
-
-    except Exception as e:
-        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+    return jsonify({"error": "Cluster descriptor not found"}), 404
 
 
 @api.route("/remote/test", methods=["POST"])
