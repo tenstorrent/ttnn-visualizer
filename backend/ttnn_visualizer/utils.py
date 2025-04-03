@@ -13,6 +13,7 @@ import re
 from timeit import default_timer
 from typing import Callable, Optional, Dict, Any
 
+
 logger = logging.getLogger(__name__)
 
 LAST_SYNCED_FILE_NAME = ".last-synced"
@@ -113,6 +114,19 @@ def get_npe_path(npe_name, current_app):
 
     return str(npe_path)
 
+
+def get_cluster_descriptor_path(instance):
+    if not instance.report_path:
+        return None
+
+    cluster_descriptor_path = Path(instance.report_path).parent / Path("cluster_descriptor.yaml")
+
+    if not cluster_descriptor_path.exists():
+        return None
+
+    return str(cluster_descriptor_path)
+
+
 def read_last_synced_file(directory: str) -> Optional[int]:
     """Reads the '.last-synced' file in the specified directory and returns the timestamp as an integer, or None if not found."""
     last_synced_path = Path(directory) / LAST_SYNCED_FILE_NAME
@@ -189,3 +203,4 @@ def read_version_from_package_json() -> str:
         raise FileNotFoundError(f"The file {file_path} was not found.")
     except KeyError:
         raise KeyError("The 'version' key was not found in the package.json file.")
+
