@@ -615,9 +615,9 @@ from flask import Response, jsonify
 import yaml
 
 
-@api.route("/cluster_desc", methods=["GET"])
+@api.route("/cluster-descriptor", methods=["GET"])
 @with_session
-def get_cluster_description_file(session: Instance):
+def get_cluster_descriptor(session: Instance):
     if session.remote_connection:
         try:
             cluster_desc_file = get_cluster_desc(session.remote_connection)
