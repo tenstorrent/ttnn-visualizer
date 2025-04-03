@@ -14,6 +14,7 @@ export const activeReportAtom = atom<string | null>(null);
 export const activePerformanceTraceAtom = atom<string | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
 export const showHexAtom = atomWithStorage<boolean>('showHex', false);
+export const showMemoryRegionsAtom = atomWithStorage<boolean>('showMemoryRegions', true);
 export const selectedBufferSummaryTabAtom = atomWithStorage<TAB_IDS>('selectedBufferSummaryTab', TAB_IDS.L1);
 export const showBufferSummaryZoomedAtom = atomWithStorage<boolean>('showBufferSummary', false);
 

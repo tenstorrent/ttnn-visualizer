@@ -51,9 +51,22 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     public deviceOperations: DeviceOperation[] = [];
 
+    private memoryConfig: {
+        l1start: number;
+        l1end: number;
+    };
+
     private options: { renderPattern: boolean } = { renderPattern: false };
 
-    constructor(data: OperationDetailsData, operations: OperationDescription[], options?: { renderPattern: boolean }) {
+    constructor(
+        data: OperationDetailsData,
+        operations: OperationDescription[],
+        memoryConfig: {
+            l1start: number;
+            l1end: number;
+        },
+        options?: { renderPattern: boolean },
+    ) {
         this.id = data.id;
         this.inputs = data.inputs;
         this.outputs = data.outputs;
@@ -68,6 +81,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         // this.device_operations = this.preprocessConnections(data.device_operations); // // this.mergeDevices(this.preprocessConnections(data.device_operations));
         this.device_operations = this.mergeDevices(this.preprocessConnections(data.device_operations));
         this.options = options || { renderPattern: false };
+        this.memoryConfig = memoryConfig;
 
         this.inputs.forEach((tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
@@ -339,11 +353,16 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                     }
                 }
                 if (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size < chunk.address) {
-                    fragmentation.push({
-                        address: prevChunk.address + prevChunk.size,
-                        size: chunk.address - (prevChunk.address + prevChunk.size),
-                        empty: true,
-                    });
+                    if (
+                        prevChunk.address + prevChunk.size > this.memoryConfig.l1start &&
+                        prevChunk.address < this.memoryConfig.l1end
+                    ) {
+                        fragmentation.push({
+                            address: prevChunk.address + prevChunk.size,
+                            size: chunk.address - (prevChunk.address + prevChunk.size),
+                            empty: true,
+                        });
+                    }
                 }
             }
         });
