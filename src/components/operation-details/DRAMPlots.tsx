@@ -4,7 +4,6 @@
 
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
-import { useMemo } from 'react';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { isEqual } from '../../functions/math';
@@ -24,6 +23,7 @@ import { MemoryLegendGroup } from './MemoryLegendGroup';
 
 const DRAM_PADDING_RATIO = 0.9998;
 const SPLIT_THRESHOLD_RATIO = 8;
+const EMPTY_CHART = [{ chartData: [] }];
 
 interface DramPlotProps {
     operationDetails: OperationDetails;
@@ -80,9 +80,9 @@ function DRAMPlots({
     }
 
     const groupedMemoryReport = getGroupedMemoryReport(BufferType.DRAM);
-    const splitPreviousDramData = useMemo(() => splitData(previousDramData), [previousDramData]);
-    const splitDramData = useMemo(() => splitData(dramData), [dramData]);
-    const splitDeltaData = useMemo(() => splitData(dramDeltaObject.chartData), [dramDeltaObject]);
+    const splitPreviousDramData = splitData(previousDramData);
+    const splitDramData = splitData(dramData);
+    const splitDeltaData = splitData(dramDeltaObject.chartData);
 
     const zoomedPlotSizes = getZoomedPlotSizes(splitPreviousDramData, splitDramData);
 
@@ -92,8 +92,7 @@ function DRAMPlots({
             <div className='zoomed-dram-plots'>
                 {zoomedInViewMainMemory && zoomedPlotSizes.length > 0 ? (
                     zoomedPlotSizes.map((data, index) => {
-                        // TODO: Fallback needs to be more generic and less random
-                        const chartData = splitPreviousDramData[index] ?? splitPreviousDramData[0];
+                        const chartData = splitPreviousDramData[index] ?? EMPTY_CHART;
 
                         if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
                             dramPlotZoomRangeStart = 0;
@@ -107,7 +106,8 @@ function DRAMPlots({
                             <MemoryPlotRenderer
                                 key={index}
                                 className={classNames('dram-memory-renderer', {
-                                    'empty-plot': dramData.length === 0,
+                                    'empty-plot': previousDramData.length === 0,
+                                    'identical-plot': dramHasntChanged,
                                 })}
                                 style={{ flexBasis: calculateWidth(splitPreviousDramData)[index] }}
                                 plotZoomRange={[dramNonContinuousPlotZoomRangeStart, dramNonContinuousPlotZoomRangeEnd]}
@@ -146,8 +146,7 @@ function DRAMPlots({
                     zoomedPlotSizes.map((data, index) => {
                         const dramNonContinuousPlotZoomRangeStart = data.min;
                         const dramNonContinuousPlotZoomRangeEnd = data.max;
-                        // TODO: Fallback needs to be more generic and less random
-                        const chartData = splitDramData[index] ?? splitDramData[0];
+                        const chartData = splitDramData[index] ?? EMPTY_CHART;
 
                         if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
                             dramPlotZoomRangeStart = 0;
@@ -198,7 +197,7 @@ function DRAMPlots({
                         const dramNonContinuousPlotZoomRangeStart = data.min;
                         const dramNonContinuousPlotZoomRangeEnd = data.max;
                         // TODO: Fallback needs to be more generic and less random
-                        const chartData = splitDeltaData[index] ?? splitDeltaData[0] ?? [{ chartData: [] }];
+                        const chartData = splitDeltaData[index] ?? EMPTY_CHART;
 
                         if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
                             dramPlotZoomRangeStart = 0;
