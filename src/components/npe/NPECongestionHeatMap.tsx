@@ -85,7 +85,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                                 />{' '}
                                 Max Demand:{' '}
                                 {congestionMapPerTimestamp.worst[hoveredIndex].value > -1
-                                    ? congestionMapPerTimestamp.worst[hoveredIndex].value.toFixed(2)
+                                    ? `${congestionMapPerTimestamp.worst[hoveredIndex].value.toFixed(2)} %`
                                     : 'N/A'}
                             </div>
                             <div>
@@ -97,7 +97,8 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                                         backgroundColor: congestionMapPerTimestamp.utilization[hoveredIndex].color,
                                     }}
                                 />{' '}
-                                Avg Utilization: {congestionMapPerTimestamp.utilization[hoveredIndex].value.toFixed(2)}
+                                Avg Utilization: {congestionMapPerTimestamp.utilization[hoveredIndex].value.toFixed(2)}{' '}
+                                %
                             </div>
                             <div>
                                 <span
@@ -108,7 +109,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                                         backgroundColor: congestionMapPerTimestamp.demand[hoveredIndex].color,
                                     }}
                                 />{' '}
-                                Avg Demand: {congestionMapPerTimestamp.demand[hoveredIndex].value.toFixed(2)}
+                                Avg Demand: {congestionMapPerTimestamp.demand[hoveredIndex].value.toFixed(2)} %
                             </div>
                         </div>
                     ),
@@ -135,7 +136,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                     hoverCloseDelay={0}
                     isOpen
                     usePortal
-                    variant='minimal'
+                    minimal
                     modifiers={{
                         offset: {
                             enabled: true,
