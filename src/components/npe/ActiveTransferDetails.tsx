@@ -83,7 +83,10 @@ const ActiveTransferDetails = ({
                                         </div>
                                         <div>{formatSize(transfer.total_bytes)}B</div>
                                         <div>{transfer.noc_event_type}</div>
-                                        <div>injection rate: {transfer.injection_rate.toFixed(2)}</div>
+                                        <div>
+                                            injection rate: <strong>{transfer.injection_rate.toFixed(2)}</strong>{' '}
+                                            bytes/cycle
+                                        </div>
                                     </div>
                                 ))}
                             </div>
