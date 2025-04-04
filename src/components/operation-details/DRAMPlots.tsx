@@ -80,11 +80,16 @@ function DRAMPlots({
     }
 
     const groupedMemoryReport = getGroupedMemoryReport(BufferType.DRAM);
-    const splitPreviousDramData = splitData(previousDramData);
-    const splitDramData = splitData(dramData);
-    const splitDeltaData = splitData(dramDeltaObject.chartData);
+    let splitPreviousDramData = splitData(previousDramData);
+    let splitDramData = splitData(dramData);
+    let splitDeltaData = splitData(dramDeltaObject.chartData);
 
     const zoomedPlotSizes = getZoomedPlotSizes(splitPreviousDramData, splitDramData);
+
+    // Fill empty spaces in split data arrays so their data indexes match zoomedPlotSizes
+    splitPreviousDramData = fillEmptySpaces(zoomedPlotSizes, splitPreviousDramData);
+    splitDramData = fillEmptySpaces(zoomedPlotSizes, splitDramData);
+    splitDeltaData = fillEmptySpaces(zoomedPlotSizes, splitDeltaData);
 
     return (
         <>
@@ -196,7 +201,6 @@ function DRAMPlots({
                     zoomedPlotSizes.map((data, index) => {
                         const dramNonContinuousPlotZoomRangeStart = data.min;
                         const dramNonContinuousPlotZoomRangeEnd = data.max;
-                        // TODO: Fallback needs to be more generic and less random
                         const chartData = splitDeltaData[index] ?? EMPTY_CHART;
 
                         if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
@@ -366,6 +370,23 @@ const getZoomedPlotSizes = (
     });
 
     return minMax;
+};
+
+const fillEmptySpaces = (zoomedPlotSizes: MinMaxPlotSize[], splitDataArray: Partial<PlotDataCustom>[][]) => {
+    return zoomedPlotSizes.map((plotSize) => {
+        const matchingIndex = splitDataArray.findIndex((data, index) => {
+            const address = data[index]?.memoryData?.address;
+            const size = data[index]?.memoryData?.size;
+
+            if (!address || !size) {
+                return false;
+            }
+
+            return data.length > 0 && address >= plotSize.min && address + size <= plotSize.max;
+        });
+
+        return matchingIndex !== -1 ? splitDataArray[matchingIndex] : [];
+    });
 };
 
 export default DRAMPlots;
