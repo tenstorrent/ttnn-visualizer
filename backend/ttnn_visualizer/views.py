@@ -403,14 +403,14 @@ def get_profiler_performance_data_list():
     else:
         report_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
 
-    path = f"{report_directory}/profiles"
-    folder_names = [folder.name for folder in Path(path).iterdir() if folder.is_dir()]
+    path = report_directory / "profiles"
+    directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
 
-    valid_folders = []
+    valid_dirs = []
 
-    for folder_name in folder_names:
-        folder_path = Path(path) / folder_name
-        files = list(folder_path.glob("**/*"))
+    for dir_name in directory_names:
+        dir_path = Path(path) / dir_name
+        files = list(dir_path.glob("**/*"))
 
         # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
         if not any(file.name == "profile_log_device.csv" for file in files):
@@ -420,9 +420,9 @@ def get_profiler_performance_data_list():
         if not any(file.name.startswith("ops_perf_results") for file in files):
             continue
 
-        valid_folders.append(folder_name)
+        valid_dirs.append(dir_name)
 
-    return jsonify(valid_folders)
+    return jsonify(valid_dirs)
 
 @api.route("/profiler/perf-results/raw", methods=["GET"])
 @with_session
