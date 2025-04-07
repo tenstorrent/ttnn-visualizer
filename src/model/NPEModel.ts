@@ -10,52 +10,60 @@ export interface CommonInfo {
     num_rows: number;
 }
 
+export interface NPE_KPI {
+    units: string;
+    label: string;
+    description: string;
+    decimals?: number;
+}
 export const NPE_KPI_METADATA = {
     congestion_model_name: {
         units: '',
-        label: null,
+        label: 'Congestion Model',
         description: 'Congestion model used in simulation to infer congestion (default: fast)',
     },
     cycles_per_timestep: {
         units: 'cycles',
-        label: null,
+        label: 'Device Cycles Per Timestep',
         description: 'How many cycles each simulation timestep/frame spans',
     },
     device_name: {
         units: '',
-        label: null,
+        label: 'Device Name',
         description: 'Device simulated (e.g. wormhole_b0, blackhole)',
     },
     dram_bw_util: {
         units: '%',
-        label: null,
+        label: 'DRAM Bandwidth Utilization',
         description: '% of DRAM RW bandwidth used over entire operation runtime (100% is maximum)',
     },
     link_demand: {
         units: '%',
-        label: null,
+        label: 'NoC Link Demand',
         description:
             'Average demand for NoC links over entire runtime. Multiple packets requesting results in demand exceeding 100% for a given link. Demand be compared with link utilization to understand how localized congestion is.',
     },
     link_util: {
         units: '%',
-        label: null,
+        label: 'NoC Link Utilization',
         description:
             'Average utilization of NoC links over entire runtime. Link utilization saturates at 100% for every NoC link, no matter how much demand there is. Useful for understanding NoC toggle rate and overall efficiency of communication.',
     },
     max_link_demand: {
         units: '%',
-        label: null,
+        label: 'Max NoC Link Demand',
         description: 'Maximum observed link demand over all timesteps. See link_demand for more details.',
     },
     num_cols: {
+        decimals: 0,
         units: '',
-        label: null,
+        label: 'Cols',
         description: 'Number of core columns on the device.',
     },
     num_rows: {
+        decimals: 0,
         units: '',
-        label: null,
+        label: 'Rows',
         description: 'Number of core rows on the device.',
     },
 };

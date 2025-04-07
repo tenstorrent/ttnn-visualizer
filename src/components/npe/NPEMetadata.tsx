@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tooltip } from '@blueprintjs/core';
-import { CommonInfo, NPE_KPI_METADATA } from '../../model/NPEModel';
+import { CommonInfo, NPE_KPI, NPE_KPI_METADATA } from '../../model/NPEModel';
 
 interface NPEMetadataProps {
     info?: CommonInfo;
@@ -9,8 +9,10 @@ interface NPEMetadataProps {
 
 const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
     const formatMetadataValue = (key: keyof CommonInfo, value: string | number) => {
-        const unit = NPE_KPI_METADATA[key].units;
-        return `${typeof value === 'number' ? Number(value).toFixed(2) : value} ${unit}`;
+        const kpi = NPE_KPI_METADATA[key] as NPE_KPI;
+        const unit = kpi.units;
+        const decimals = kpi.decimals !== undefined ? kpi.decimals : 2;
+        return `${typeof value === 'number' ? Number(value).toFixed(decimals) : value} ${unit}`;
     };
     const formatMetadataLabel = (key: keyof CommonInfo) => {
         const { label } = NPE_KPI_METADATA[key];
