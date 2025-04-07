@@ -395,15 +395,12 @@ def get_profiler_performance_data(session: Instance):
         result = csv.get_all_entries(as_dict=True, limit=100)
         return jsonify(result)
 
+
 @api.route("/profiler/perf-results/list", methods=["POST"])
 def get_profiler_performance_data_list():
     location = request.json.get("location")
     config_key = "REMOTE_DATA_DIRECTORY" if location == "remote" else "LOCAL_DATA_DIRECTORY"
     report_directory = Path(current_app.config[config_key])
-        report_directory = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
-    else:
-        report_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
-
     path = report_directory / "profiles"
     directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
 
@@ -424,6 +421,7 @@ def get_profiler_performance_data_list():
         valid_dirs.append(dir_name)
 
     return jsonify(valid_dirs)
+
 
 @api.route("/profiler/perf-results/raw", methods=["GET"])
 @with_session
