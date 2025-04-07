@@ -95,6 +95,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             fixedrange: true,
             showgrid: false,
             zeroline: false,
+            showticklabels: false,
         },
         margin: configuration.margin,
 
