@@ -22,6 +22,7 @@ import PerfOpCountVsRuntimeChart from '../components/performance/PerfOpCountVsRu
 import getCoreCount from '../functions/getCoreCount';
 import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
+import PerformanceFileLoader from '../components/performance/PerformanceFileLoader';
 
 export default function Performance() {
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
@@ -76,6 +77,8 @@ export default function Performance() {
             <Helmet title='Performance' />
 
             <h1 className='page-title'>Performance analysis</h1>
+
+            <PerformanceFileLoader onFileLoad={() => {}} />
 
             <Tabs
                 id='performance-tabs'
