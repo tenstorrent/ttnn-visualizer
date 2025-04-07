@@ -6,7 +6,8 @@ import { Helmet } from 'react-helmet-async';
 import { useEffect, useMemo, useState } from 'react';
 import { Size, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useDeviceLog, usePerformanceReport } from '../hooks/useAPI';
+import { useAtomValue } from 'jotai';
+import { useDeviceLog, usePerfFolderList, usePerformanceReport } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceReport from '../components/performance/PerfReport';
@@ -22,10 +23,14 @@ import PerfOpCountVsRuntimeChart from '../components/performance/PerfOpCountVsRu
 import getCoreCount from '../functions/getCoreCount';
 import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
+import PerformanceFileLoader from '../components/performance/PerformanceFileLoader';
+import { reportLocationAtom } from '../store/app';
 
 export default function Performance() {
+    const reportLocation = useAtomValue(reportLocationAtom);
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport();
+    const { data: folderList, isLoading: isLoadingFolderList } = usePerfFolderList(reportLocation);
 
     const opCodeOptions = useMemo(
         () =>
@@ -76,6 +81,21 @@ export default function Performance() {
             <Helmet title='Performance' />
 
             <h1 className='page-title'>Performance analysis</h1>
+
+            <PerformanceFileLoader onFileLoad={() => {}} />
+
+            {folderList && !isLoadingFolderList ? (
+                <div className='folder-list'>
+                    <h2>Performance folders</h2>
+                    <ul>
+                        {folderList.map((folder: string) => (
+                            <li key={folder}>{folder}</li>
+                        ))}
+                    </ul>
+                </div>
+            ) : (
+                <LoadingSpinner />
+            )}
 
             <Tabs
                 id='performance-tabs'
