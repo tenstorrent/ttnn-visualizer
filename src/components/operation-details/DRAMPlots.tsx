@@ -23,7 +23,7 @@ import { MemoryLegendGroup } from './MemoryLegendGroup';
 
 const DRAM_PADDING_RATIO = 0.9998;
 const SPLIT_THRESHOLD_RATIO = 8;
-const EMPTY_CHART = [{ chartData: [] }];
+const EMPTY_CHART: Partial<PlotDataCustom>[] = [];
 
 interface DramPlotProps {
     operationDetails: OperationDetails;
@@ -197,11 +197,11 @@ function DRAMPlots({
 
             <h3 className='plot-title'>DRAM Delta (difference between current and previous operation)</h3>
             <div className='zoomed-dram-plots'>
-                {zoomedInViewMainMemory && zoomedPlotSizes.length > 0 ? (
-                    zoomedPlotSizes.map((data, index) => {
-                        const dramNonContinuousPlotZoomRangeStart = data.min;
-                        const dramNonContinuousPlotZoomRangeEnd = data.max;
-                        const chartData = splitDeltaData[index] ?? EMPTY_CHART;
+                {dramDeltaObject.chartData.length > 0 && zoomedInViewMainMemory && splitDeltaData.length > 0 ? (
+                    splitDeltaData.map((data, index) => {
+                        const dramNonContinuousPlotZoomRangeStart = zoomedPlotSizes[index].min;
+                        const dramNonContinuousPlotZoomRangeEnd = zoomedPlotSizes[index].max;
+                        const chartData = data ?? EMPTY_CHART;
 
                         if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
                             dramPlotZoomRangeStart = 0;
@@ -235,9 +235,10 @@ function DRAMPlots({
                     <MemoryPlotRenderer
                         className={classNames('dram-memory-renderer', {
                             'empty-plot': dramData.length === 0,
+                            'identical-plot': dramHasntChanged,
                         })}
                         plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
-                        chartDataList={[dramData]}
+                        chartDataList={[dramHasntChanged ? EMPTY_CHART : dramData]}
                         isZoomedIn={zoomedInViewMainMemory}
                         memorySize={DRAM_MEMORY_SIZE}
                         onBufferClick={onDramBufferClick}
