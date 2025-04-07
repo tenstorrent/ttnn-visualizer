@@ -798,3 +798,16 @@ export const useNodeType = (arch: DeviceArchitecture) => {
 
     return { cores, dram, eth, pcie };
 };
+
+const fetchPerfFolderList = async () => {
+    const { data } = await axiosInstance.get('/api/profiler/perf-results/list');
+    return data;
+};
+
+export const usePerfFolderList = () => {
+    return useQuery({
+        queryFn: () => fetchPerfFolderList(),
+        queryKey: ['fetch-perf-folder-list'],
+        initialData: null,
+    });
+};

@@ -544,6 +544,22 @@ class OpsPerformanceQueries:
             columns=self.PERF_RESULTS_COLUMNS, as_dict=as_dict, limit=limit
         )
 
+    def get_all_folders(directory: str) -> List[str]:
+        """
+        Get a list of all folder names in the specified directory.
+
+        :param directory: Path to the /profiles directory.
+        :return: List of folder names.
+        """
+        try:
+            return [
+                folder.name
+                for folder in Path(directory).iterdir()
+                if folder.is_dir()
+            ]
+        except Exception as e:
+            raise RuntimeError(f"Error accessing directory: {e}")
+
 
 class OpsPerformanceReportQueries:
     REPORT_COLUMNS = [
