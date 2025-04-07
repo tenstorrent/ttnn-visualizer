@@ -398,7 +398,8 @@ def get_profiler_performance_data(session: Instance):
 @api.route("/profiler/perf-results/list", methods=["POST"])
 def get_profiler_performance_data_list():
     location = request.json.get("location")
-    if location == "remote":
+    config_key = "REMOTE_DATA_DIRECTORY" if location == "remote" else "LOCAL_DATA_DIRECTORY"
+    report_directory = Path(current_app.config[config_key])
         report_directory = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
     else:
         report_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
