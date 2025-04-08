@@ -9,7 +9,9 @@ import { FileProgress, FileStatus } from '../model/APIData';
 import { DEFAULT_DEVICE_ID } from '../definitions/Devices';
 import { TAB_IDS } from '../definitions/BufferSummary';
 
-export const reportLocationAtom = atom<'local' | 'remote' | null>(null);
+export type ReportLocation = 'local' | 'remote' | null;
+
+export const reportLocationAtom = atom<ReportLocation>(null);
 export const activeReportAtom = atom<string | null>(null);
 export const activePerformanceTraceAtom = atom<string | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);

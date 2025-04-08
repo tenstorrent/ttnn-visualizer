@@ -27,7 +27,7 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
-import { selectedOperationRangeAtom } from '../store/app';
+import { ReportLocation, selectedOperationRangeAtom } from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
@@ -797,4 +797,17 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     return { cores, dram, eth, pcie };
+};
+
+const fetchPerfFolderList = async (location: ReportLocation) => {
+    const { data } = await axiosInstance.post('/api/profiler/perf-results/list', { location });
+    return data;
+};
+
+export const usePerfFolderList = (location: ReportLocation) => {
+    return useQuery({
+        queryFn: () => fetchPerfFolderList(location),
+        queryKey: ['fetch-perf-folder-list', location],
+        initialData: null,
+    });
 };

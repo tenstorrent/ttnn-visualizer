@@ -396,6 +396,33 @@ def get_profiler_performance_data(session: Instance):
         return jsonify(result)
 
 
+@api.route("/profiler/perf-results/list", methods=["POST"])
+def get_profiler_performance_data_list():
+    location = request.json.get("location")
+    config_key = "REMOTE_DATA_DIRECTORY" if location == "remote" else "LOCAL_DATA_DIRECTORY"
+    report_directory = Path(current_app.config[config_key])
+    path = report_directory / "profiles"
+    directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
+
+    valid_dirs = []
+
+    for dir_name in directory_names:
+        dir_path = Path(path) / dir_name
+        files = list(dir_path.glob("**/*"))
+
+        # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
+        if not any(file.name == "profile_log_device.csv" for file in files):
+            continue
+        if not any(file.name == "tracy_profile_log_host.tracy" for file in files):
+            continue
+        if not any(file.name.startswith("ops_perf_results") for file in files):
+            continue
+
+        valid_dirs.append(dir_name)
+
+    return jsonify(valid_dirs)
+
+
 @api.route("/profiler/perf-results/raw", methods=["GET"])
 @with_session
 def get_profiler_perf_results_data_raw(session: Instance):
