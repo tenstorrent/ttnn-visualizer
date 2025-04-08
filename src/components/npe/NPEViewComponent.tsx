@@ -134,7 +134,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         return groups;
     }, [selectedTransferList, selectedNode]);
 
-    const startAnimation = () => {
+    const startAnimation = (speed: number = 1) => {
         setIsPlaying(true);
         clearInterval(animationInterval as number);
         const range = npeData.timestep_data.length;
@@ -143,7 +143,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             setSelectedTimestep((prev) => {
                 return prev < range - 1 ? prev + 1 : 0;
             });
-        }, 100);
+        }, 100 / speed);
         setAnimationInterval(interval as unknown as number);
     };
     const stopAnimation = () => {
@@ -154,8 +154,26 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const onPlay = () => {
         startAnimation();
     };
+    const onPlay2x = () => {
+        startAnimation(2);
+    };
     const onPause = () => {
         stopAnimation();
+    };
+    const onBackward = () => {
+        stopAnimation();
+        const range = npeData.timestep_data.length;
+
+        setSelectedTimestep((prev) => {
+            return prev > 0 ? prev - 1 : range - 1;
+        });
+    };
+    const onForward = () => {
+        stopAnimation();
+        const range = npeData.timestep_data.length;
+        setSelectedTimestep((prev) => {
+            return prev < range - 1 ? prev + 1 : 0;
+        });
     };
     const handleScrubberChange = (value: number) => {
         stopAnimation();
@@ -241,6 +259,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             />
             <div className='header'>
                 <ButtonGroup className='npe-controls'>
+                    <Button
+                        icon={IconNames.StepBackward}
+                        onClick={onBackward}
+                    />
                     {!isPlaying && (
                         <Button
                             icon={IconNames.Play}
@@ -253,6 +275,15 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             onClick={onPause}
                         />
                     )}
+                    <Button
+                        icon={IconNames.FastForward}
+                        onClick={onPlay2x}
+                    />
+                    <Button
+                        icon={IconNames.StepForward}
+                        onClick={onForward}
+                    />
+                    |
                     <Switch
                         label='Show all active transfers'
                         checked={isShowingAllTransfers}
