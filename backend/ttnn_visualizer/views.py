@@ -9,6 +9,7 @@ import time
 from http import HTTPStatus
 from pathlib import Path
 from typing import List
+import shutil
 
 from flask import Blueprint
 from flask import request, current_app
@@ -396,12 +397,37 @@ def get_profiler_performance_data(session: Instance):
         return jsonify(result)
 
 
-@api.route("/profiler/perf-results/list", methods=["POST"])
-def get_profiler_performance_data_list():
-    location = request.json.get("location")
-    config_key = "REMOTE_DATA_DIRECTORY" if location == "remote" else "LOCAL_DATA_DIRECTORY"
+@api.route("/profiler/perf-results/delete", methods=["POST"])
+@with_session
+def delete_performance_report(session: Instance):
+    config_key = "REMOTE_DATA_DIRECTORY" if session.remote_connection else "LOCAL_DATA_DIRECTORY"
+    report = request.json.get("report")
+
+    if not report:
+        return Response(status=HTTPStatus.BAD_REQUEST, response="Report name is required.")
+
+    path = Path(current_app.config[config_key]) / current_app.config["PROFILER_DIRECTORY_NAME"] / report
+    if path.exists() and path.is_dir():
+        shutil.rmtree(path)
+    else:
+        return Response(status=HTTPStatus.NOT_FOUND, response=f"Directory does not exist: {path}")
+
+    return Response(status=HTTPStatus.OK, response=f"Directory deleted successfully: {path}")
+
+
+@api.route("/profiler/perf-results/list", methods=["GET"])
+@with_session
+def get_profiler_performance_data_list(session: Instance):
+    is_remote = True if session.remote_connection else False
+    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     report_directory = Path(current_app.config[config_key])
-    path = report_directory / "profiles"
+
+    if is_remote:
+        connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
+        path = report_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
+    else:
+        path = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
+
     directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
 
     valid_dirs = []
@@ -441,6 +467,13 @@ def get_profiler_perf_results_data_raw(session: Instance):
 def get_profiler_perf_results_report(session: Instance):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
+
+    name = request.args.get("name", None)
+    profiler_path = Path(session.profiler_path)
+    if name:
+        profiler_path = profiler_path.parent / name
+        session.profiler_path = str(profiler_path)
+        logger.info(f"************ Profiler path set to {session.profiler_path}")
 
     try:
         report = OpsPerformanceReportQueries.generate_report(session)
@@ -521,10 +554,10 @@ def create_profile_files():
             message="Invalid project directory.",
         ).model_dump()
 
-    logger.info(f"Writing profile files to {report_directory} / 'profiles'")
+    logger.info(f"Writing profile files to {report_directory} / {current_app.config['PROFILER_DIRECTORY_NAME']}")
 
     # Construct the base directory with report_name first
-    target_directory = report_directory / "profiles"
+    target_directory = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
     target_directory.mkdir(parents=True, exist_ok=True)
 
     if files:

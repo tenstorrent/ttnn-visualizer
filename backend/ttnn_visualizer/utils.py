@@ -66,10 +66,7 @@ def get_profiler_path(profile_name, current_app, remote_connection=None):
         # Default to local directory if no remote connection is present
         base_dir = local_dir
 
-    if not remote_connection:
-        profile_dir = base_dir / "profiles"
-    else:
-        profile_dir = base_dir / "profiler"
+    profile_dir = base_dir / current_app.config["PROFILER_DIRECTORY_NAME"]
 
     # Construct the profiler path
     profiler_path = profile_dir / profile_name

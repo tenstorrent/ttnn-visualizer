@@ -22,6 +22,7 @@ class DefaultConfig(object):
     DB_VERSION = "0.26.0"  # App version when DB schema last changed
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
     REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
+    PROFILER_DIRECTORY_NAME = "profiler"
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
     STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0
