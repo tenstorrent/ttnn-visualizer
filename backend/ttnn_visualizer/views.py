@@ -400,13 +400,21 @@ def get_profiler_performance_data(session: Instance):
 @api.route("/profiler/perf-results/delete", methods=["POST"])
 @with_session
 def delete_performance_report(session: Instance):
-    config_key = "REMOTE_DATA_DIRECTORY" if session.remote_connection else "LOCAL_DATA_DIRECTORY"
+    is_remote = True if session.remote_connection else False
+    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     report = request.json.get("report")
+    report_directory = Path(current_app.config[config_key])
 
     if not report:
         return Response(status=HTTPStatus.BAD_REQUEST, response="Report name is required.")
 
-    path = Path(current_app.config[config_key]) / current_app.config["PROFILER_DIRECTORY_NAME"] / report
+
+    if is_remote:
+        connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
+        path = report_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
+    else:
+        path = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / report
+
     if path.exists() and path.is_dir():
         shutil.rmtree(path)
     else:
