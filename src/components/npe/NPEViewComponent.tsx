@@ -163,13 +163,16 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const onBackward = () => {
         stopAnimation();
         const range = npeData.timestep_data.length;
-
+        setSelectedNode(null);
+        setSelectedTransferList([]);
         setSelectedTimestep((prev) => {
             return prev > 0 ? prev - 1 : range - 1;
         });
     };
     const onForward = () => {
         stopAnimation();
+        setSelectedNode(null);
+        setSelectedTransferList([]);
         const range = npeData.timestep_data.length;
         setSelectedTimestep((prev) => {
             return prev < range - 1 ? prev + 1 : 0;
