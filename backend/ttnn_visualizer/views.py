@@ -397,30 +397,28 @@ def get_profiler_performance_data(session: Instance):
         return jsonify(result)
 
 
-@api.route("/profiler/perf-results/delete", methods=["POST"])
+@api.route("/profiler/perf-results/<report_name>", methods=["DELETE"])
 @with_session
-def delete_performance_report(session: Instance):
-    is_remote = True if session.remote_connection else False
+def delete_performance_report(report_name, session: Instance):
+    is_remote = bool(session.remote_connection)
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    report = request.json.get("report")
     report_directory = Path(current_app.config[config_key])
 
-    if not report:
+    if not report_name:
         return Response(status=HTTPStatus.BAD_REQUEST, response="Report name is required.")
-
 
     if is_remote:
         connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
         path = report_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
     else:
-        path = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / report
+        path = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / report_name
 
     if path.exists() and path.is_dir():
         shutil.rmtree(path)
     else:
-        return Response(status=HTTPStatus.NOT_FOUND, response=f"Directory does not exist: {path}")
+        return Response(status=HTTPStatus.NOT_FOUND, response=f"Report does not exist: {path}")
 
-    return Response(status=HTTPStatus.OK, response=f"Directory deleted successfully: {path}")
+    return Response(status=HTTPStatus.NO_CONTENT, response=f"Report deleted successfully: {path}")
 
 
 @api.route("/profiler/perf-results/list", methods=["GET"])
