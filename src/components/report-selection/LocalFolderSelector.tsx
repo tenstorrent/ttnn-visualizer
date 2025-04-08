@@ -2,19 +2,22 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
+import { Button, FormGroup, Icon, IconName, Intent, MenuItem } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
 import 'styles/components/FolderPicker.scss';
 import { useQueryClient } from 'react-query';
-import { useSetAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
+import { ItemRenderer, Select } from '@blueprintjs/select';
 import useLocalConnection from '../../hooks/useLocal';
 import { activePerformanceTraceAtom, activeReportAtom, reportLocationAtom, selectedDeviceAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification from '../../functions/createToastNotification';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
+import { deleteReport, updateTabSession, usePerfFolderList, useSession } from '../../hooks/useAPI';
+import { isEqual } from '../../functions/math';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -60,7 +63,7 @@ const LocalFolderOptions: FC = () => {
     const setReportLocation = useSetAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
     const setActiveReport = useSetAtom(activeReportAtom);
-    const setActivePerformanceTrace = useSetAtom(activePerformanceTraceAtom);
+    const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceTraceAtom);
 
     const {
         uploadLocalFolder,
@@ -69,6 +72,8 @@ const LocalFolderOptions: FC = () => {
         checkRequiredProfilerFiles,
         filterReportFiles,
     } = useLocalConnection();
+    const { data: perfFolderList } = usePerfFolderList();
+    const { data: session } = useSession(null, null, null);
 
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
@@ -175,6 +180,46 @@ const LocalFolderOptions: FC = () => {
         }
     }, [isUploadingReport, isUploadingPerformance]);
 
+    const renderFilm: ItemRenderer<string> = (folder, { handleClick, handleFocus, modifiers }) => {
+        if (!modifiers.matchesPredicate) {
+            return null;
+        }
+        return (
+            <>
+                <MenuItem
+                    text={folder}
+                    label={folder}
+                    roleStructure='listoption'
+                    active={isEqual(activePerformanceTrace, folder)}
+                    disabled={modifiers.disabled}
+                    key={folder}
+                    onClick={handleClick}
+                    onFocus={handleFocus}
+                />
+                <Button
+                    icon={IconNames.Delete}
+                    onClick={() => handleDeletePerformanceTrace(folder)}
+                />
+            </>
+        );
+    };
+
+    const handleDeletePerformanceTrace = async (folder: string) => {
+        await deleteReport(folder);
+        await queryClient.invalidateQueries(['fetch-perf-folder-list']);
+
+        if (activePerformanceTrace === folder) {
+            setActivePerformanceTrace(null);
+            setPerformanceDataUploadLabel('Choose directory...');
+            setPerformanceFolderStatus(undefined);
+        }
+    };
+
+    const handleItemSelect = async (item: string) => {
+        await updateTabSession({ active_report: { ...session, profile_name: item } });
+        setActivePerformanceTrace(item);
+    };
+
     return (
         <>
             {isSafari && (
@@ -236,7 +281,7 @@ const LocalFolderOptions: FC = () => {
 
                 <FormGroup
                     label={<h3>Performance data folder</h3>}
-                    subLabel='Select a local directory containing performance data (optional)'
+                    subLabel='Select a local directory containing performance data'
                 >
                     <div className='buttons-container'>
                         <label
@@ -273,6 +318,29 @@ const LocalFolderOptions: FC = () => {
                         )}
                     </div>
                 </FormGroup>
+
+                {activePerformanceTrace}
+
+                <div className='bp5-form-group'>
+                    <div className='bp5-form-group-sub-label'>Select a performance trace from the list below</div>
+
+                    <Select
+                        items={perfFolderList ?? []}
+                        // itemPredicate={filterFilm}
+                        itemRenderer={renderFilm}
+                        noResults={
+                            <MenuItem
+                                disabled
+                                text='No results.'
+                                roleStructure='listoption'
+                            />
+                        }
+                        onItemSelect={handleItemSelect}
+                        disabled={!perfFolderList}
+                    >
+                        <Button text={activePerformanceTrace ?? 'Select a film'} />
+                    </Select>
+                </div>
             </div>
         </>
     );

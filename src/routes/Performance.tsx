@@ -4,10 +4,11 @@
 
 import { Helmet } from 'react-helmet-async';
 import { useEffect, useMemo, useState } from 'react';
-import { Size, Tab, TabId, Tabs } from '@blueprintjs/core';
+import { Button, Size, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtomValue } from 'jotai';
-import { useDeviceLog, usePerfFolderList, usePerformanceReport } from '../hooks/useAPI';
+import { useAtom, useAtomValue } from 'jotai';
+import { useQueryClient } from 'react-query';
+import { deleteReport, useDeviceLog, usePerfFolderList, usePerformanceReport } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceReport from '../components/performance/PerfReport';
@@ -24,13 +25,15 @@ import getCoreCount from '../functions/getCoreCount';
 import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
 import PerformanceFileLoader from '../components/performance/PerformanceFileLoader';
-import { reportLocationAtom } from '../store/app';
+import { activePerformanceTraceAtom, comparisonPerformanceReportAtom } from '../store/app';
 
 export default function Performance() {
-    const reportLocation = useAtomValue(reportLocationAtom);
+    const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
+    const [comparisonReport, setComparisonReport] = useAtom(comparisonPerformanceReportAtom);
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
-    const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport();
-    const { data: folderList, isLoading: isLoadingFolderList } = usePerfFolderList(reportLocation);
+    const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport(comparisonReport);
+    const { data: folderList, isLoading: isLoadingFolderList } = usePerfFolderList();
+    const queryClient = useQueryClient();
 
     const opCodeOptions = useMemo(
         () =>
@@ -76,6 +79,12 @@ export default function Performance() {
     const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
     const maxCores = perfData ? getCoreCount(architecture, perfData) : 0;
 
+    const handleDeleteReport = async (report: string) => {
+        await deleteReport(report);
+        await queryClient.invalidateQueries(['fetch-perf-folder-list']);
+        setComparisonReport(null);
+    };
+
     return (
         <div className='performance data-padding'>
             <Helmet title='Performance' />
@@ -86,12 +95,26 @@ export default function Performance() {
 
             {folderList && !isLoadingFolderList ? (
                 <div className='folder-list'>
-                    <h2>Performance folders</h2>
                     <ul>
-                        {folderList.map((folder: string) => (
-                            <li key={folder}>{folder}</li>
-                        ))}
+                        {folderList
+                            .filter((folder: string) => folder !== activePerformanceTrace)
+                            .map((folder: string) => (
+                                <li
+                                    key={folder}
+                                    style={{ display: 'flex' }}
+                                >
+                                    <Button onClick={() => setComparisonReport(folder)}>
+                                        {folder ?? 'Not comparing any report'}
+                                    </Button>
+                                    <Button
+                                        icon={IconNames.DELETE}
+                                        onClick={() => handleDeleteReport(folder)}
+                                    />
+                                </li>
+                            ))}
                     </ul>
+
+                    {comparisonReport && perfData && `${comparisonReport} with ${perfData?.length} rows`}
                 </div>
             ) : (
                 <LoadingSpinner />

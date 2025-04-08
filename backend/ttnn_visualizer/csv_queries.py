@@ -261,7 +261,6 @@ class RemoteCSVQueryRunner:
 
 class DeviceLogProfilerQueries:
     DEVICE_LOG_FILE = "profile_log_device.csv"
-    LOCAL_PROFILER_DIRECTORY = "profiler"
     DEVICE_LOG_COLUMNS = [
         "PCIe slot",
         "core_x",

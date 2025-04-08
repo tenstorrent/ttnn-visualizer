@@ -9,7 +9,7 @@ import { FileProgress, FileStatus } from '../model/APIData';
 import { DEFAULT_DEVICE_ID } from '../definitions/Devices';
 import { TAB_IDS } from '../definitions/BufferSummary';
 
-export type ReportLocation = 'local' | 'remote' | null;
+type ReportLocation = 'local' | 'remote' | null;
 
 export const reportLocationAtom = atom<ReportLocation>(null);
 export const activeReportAtom = atom<string | null>(null);
@@ -32,6 +32,7 @@ export const operationRangeAtom = atom<NumberRange | null>(null);
 export const selectedOperationRangeAtom = atom<NumberRange | null>(null);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
+export const comparisonPerformanceReportAtom = atom<string | null>(null);
 
 // This atom stores the file transfer progress data in localStorage (or sessionStorage)
 export const fileTransferProgressAtom = atom<FileProgress>({

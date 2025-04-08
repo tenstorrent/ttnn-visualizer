@@ -27,7 +27,7 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
-import { ReportLocation, selectedOperationRangeAtom } from '../store/app';
+import { selectedOperationRangeAtom } from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
@@ -283,8 +283,8 @@ const fetchDevices = async () => {
 //     });
 // };
 
-const fetchPerformanceDataReport = async (): Promise<PerfTableRow[]> => {
-    const { data } = await axiosInstance.get<PerfTableRow[]>('/api/profiler/perf-results/report');
+const fetchPerformanceDataReport = async (name?: string | null): Promise<PerfTableRow[]> => {
+    const { data } = await axiosInstance.get<PerfTableRow[]>(`/api/profiler/perf-results/report`, { params: { name } });
 
     return data;
 };
@@ -703,10 +703,10 @@ export const useDeviceLog = () => {
 //     });
 // };
 
-export const usePerformanceReport = () => {
+export const usePerformanceReport = (name?: string | null) => {
     const response = useQuery({
-        queryFn: () => fetchPerformanceDataReport(),
-        queryKey: 'get-performance-data-report',
+        queryFn: () => fetchPerformanceDataReport(name),
+        queryKey: ['get-performance-data-report', name],
         staleTime: Infinity,
     });
 
@@ -721,7 +721,7 @@ export const usePerformanceReport = () => {
 
         return response;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.isLoading]);
+    }, [response.isLoading, name]);
 };
 
 export const useSession = (reportName: string | null, profileName: string | null, npeName: string | null) => {
@@ -799,15 +799,21 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     return { cores, dram, eth, pcie };
 };
 
-const fetchPerfFolderList = async (location: ReportLocation) => {
-    const { data } = await axiosInstance.post('/api/profiler/perf-results/list', { location });
+const fetchPerfFolderList = async () => {
+    const { data } = await axiosInstance.get('/api/profiler/perf-results/list');
     return data;
 };
 
-export const usePerfFolderList = (location: ReportLocation) => {
+export const usePerfFolderList = () => {
     return useQuery({
-        queryFn: () => fetchPerfFolderList(location),
-        queryKey: ['fetch-perf-folder-list', location],
+        queryFn: () => fetchPerfFolderList(),
+        queryKey: ['fetch-perf-folder-list'],
         initialData: null,
     });
+};
+
+export const deleteReport = async (report: string) => {
+    const { data } = await axiosInstance.post('/api/profiler/perf-results/delete', { report });
+
+    return data;
 };
