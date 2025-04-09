@@ -138,7 +138,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
 
     const startAnimation = (speed: number = PLAYBACK_SPEED) => {
         setPlaybackSpeed(speed);
-        // setIsPlaying(true);
         clearInterval(animationInterval as number);
         const range = npeData.timestep_data.length;
 
@@ -353,11 +352,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                         }}
                     >
-                        {transfers.map((transfer) => (
+                        {transfers.map((transfer, index) => (
                             <>
                                 {transfer.src && (
                                     <div
-                                        key={`${transfer.id}-src`}
+                                        key={`${transfer.id}-src-${index}`}
                                         className='tensix src-dst src'
                                         style={{
                                             gridColumn: transfer.src[1] + 1,
@@ -370,7 +369,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     const classname = transfer.src?.toString() === dst.toString() ? 'both' : 'dst';
                                     return (
                                         <div
-                                            key={`${transfer.id}-dst-${dst[0]}-${dst[1]}`}
+                                            key={`${transfer.id}-dst-${index}-${dst[0]}-${dst[1]}`}
                                             className={classNames('tensix src-dst', classname)}
                                             style={{
                                                 gridColumn: dst[1] + 1,
@@ -386,7 +385,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         {links?.link_demand.map((route, index) => (
                             <button
                                 type='button'
-                                key={`${index}${route[0]}-${route[1]}`}
+                                key={`${index}-${route[0]}-${route[1]}-${route[2]}`}
                                 className='tensix'
                                 style={{
                                     position: 'relative',
