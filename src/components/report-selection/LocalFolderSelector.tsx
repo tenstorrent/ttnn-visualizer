@@ -180,7 +180,7 @@ const LocalFolderOptions: FC = () => {
         }
     }, [isUploadingReport, isUploadingPerformance]);
 
-    const renderFilm: ItemRenderer<string> = (folder, { handleClick, handleFocus, modifiers }) => {
+    const renderItem: ItemRenderer<string> = (folder, { handleClick, handleFocus, modifiers }) => {
         if (!modifiers.matchesPredicate) {
             return null;
         }
@@ -216,7 +216,7 @@ const LocalFolderOptions: FC = () => {
     };
 
     const handleItemSelect = async (item: string) => {
-        await updateTabSession({ active_report: { ...session, profile_name: item } });
+        await updateTabSession({ ...session, active_report: { ...session?.active_report, profile_name: item } });
         setActivePerformanceTrace(item);
     };
 
@@ -319,15 +319,13 @@ const LocalFolderOptions: FC = () => {
                     </div>
                 </FormGroup>
 
-                {activePerformanceTrace}
-
                 <div className='bp5-form-group'>
                     <div className='bp5-form-group-sub-label'>Select a performance trace from the list below</div>
 
                     <Select
                         items={perfFolderList ?? []}
-                        // itemPredicate={filterFilm}
-                        itemRenderer={renderFilm}
+                        // itemPredicate={filterItem}
+                        itemRenderer={renderItem}
                         noResults={
                             <MenuItem
                                 disabled
@@ -338,7 +336,7 @@ const LocalFolderOptions: FC = () => {
                         onItemSelect={handleItemSelect}
                         disabled={!perfFolderList}
                     >
-                        <Button text={activePerformanceTrace ?? 'Select a film'} />
+                        <Button text={activePerformanceTrace ?? 'Select a report...'} />
                     </Select>
                 </div>
             </div>

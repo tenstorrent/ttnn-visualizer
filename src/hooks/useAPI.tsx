@@ -44,9 +44,16 @@ const parseFileOperationIdentifier = (stackTrace: string): string => {
     return '';
 };
 
+// Possibly rename this and related functions to be "Instance"
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
     const response = await axiosInstance.get<TabSession>('/api/session').catch();
+    return response?.data;
+};
+
+export const updateTabSession = async (payload: Partial<TabSession>): Promise<TabSession | null> => {
+    // eslint-disable-next-line promise/valid-params
+    const response = await axiosInstance.put<TabSession>('/api/session', payload).catch();
     return response?.data;
 };
 
@@ -813,7 +820,7 @@ export const usePerfFolderList = () => {
 };
 
 export const deleteReport = async (report: string) => {
-    const { data } = await axiosInstance.post('/api/profiler/perf-results/delete', { report });
+    const { data } = await axiosInstance.delete(`/api/profiler/perf-results/${report}`);
 
     return data;
 };

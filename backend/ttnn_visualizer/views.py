@@ -919,6 +919,35 @@ def get_instance(session: Instance):
     return session.model_dump()
 
 
+@api.route("/session", methods=["PUT"])
+@with_session
+def update_current_instance():
+    try:
+        update_data = request.get_json()
+
+        if not update_data:
+            return Response(status=HTTPStatus.BAD_REQUEST, response="No data provided.")
+
+        update_instance(
+            instance_id=update_data.get("instance_id"),
+            report_name=update_data["active_report"].get("report_name"),
+            profile_name=update_data["active_report"].get("profile_name"),
+            npe_name=update_data["active_report"].get("npe_name"),
+            remote_connection=update_data.get("remote_connection"),
+            remote_folder=update_data.get("remote_folder"),
+            remote_profile_folder=update_data.get("remote_profile_folder"),
+        )
+
+        return Response(status=HTTPStatus.OK, response="Session updated successfully.")
+    except Exception as e:
+        logger.error(f"Error updating session: {str(e)}")
+
+        return Response(
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            response="An error occurred while updating the session.",
+        )
+
+
 @api.route("/npe", methods=["GET"])
 @with_session
 @timer
