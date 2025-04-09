@@ -27,7 +27,12 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
-import { selectedOperationRangeAtom } from '../store/app';
+import {
+    activeNpeOpTraceAtom,
+    activePerformanceTraceAtom,
+    activeReportAtom,
+    selectedOperationRangeAtom,
+} from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
@@ -731,10 +736,14 @@ export const usePerformanceReport = (name?: string | null) => {
     }, [response.isLoading, name]);
 };
 
-export const useSession = (reportName: string | null, profileName: string | null, npeName: string | null) => {
+export const useSession = () => {
+    const activeReport = useAtomValue(activeReportAtom);
+    const activeProfilerReport = useAtomValue(activePerformanceTraceAtom);
+    const activeNpe = useAtomValue(activeNpeOpTraceAtom);
+
     return useQuery({
         queryFn: () => fetchTabSession(),
-        queryKey: ['get-session', reportName, profileName, npeName],
+        queryKey: ['get-session', activeReport, activeProfilerReport, activeNpe],
         initialData: null,
     });
 };

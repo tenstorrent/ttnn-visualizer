@@ -73,7 +73,7 @@ const LocalFolderOptions: FC = () => {
         filterReportFiles,
     } = useLocalConnection();
     const { data: perfFolderList } = usePerfFolderList();
-    const { data: session } = useSession(null, null, null);
+    const { data: session } = useSession();
 
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
@@ -334,9 +334,12 @@ const LocalFolderOptions: FC = () => {
                             />
                         }
                         onItemSelect={handleItemSelect}
-                        disabled={!perfFolderList}
+                        disabled={!perfFolderList || !session}
                     >
-                        <Button text={activePerformanceTrace ?? 'Select a report...'} />
+                        <Button
+                            text={activePerformanceTrace ?? 'Select a report...'}
+                            disabled={!perfFolderList || !session}
+                        />
                     </Select>
                 </div>
             </div>
