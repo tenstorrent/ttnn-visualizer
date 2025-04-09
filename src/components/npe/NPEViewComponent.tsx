@@ -6,7 +6,7 @@
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import React, { JSX, useEffect, useMemo, useState } from 'react';
-import { Button, ButtonGroup, Slider, Switch } from '@blueprintjs/core';
+import { Button, ButtonGroup, Intent, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { NPEData, NoCID, NoCTransfer } from '../../model/NPEModel';
@@ -26,6 +26,8 @@ const LABEL_STEP_THRESHOLD = 25;
 const RIGHT_MARGIN_OFFSET_PX = 25;
 const TENSIX_SIZE: number = NODE_SIZE; // * 0.75;
 const SVG_SIZE = TENSIX_SIZE;
+const PLAYBACK_SPEED = 1;
+const PLAYBACK_SPEED_2X = 2;
 
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const width = npeData.common_info.num_cols;
@@ -37,7 +39,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [animationInterval, setAnimationInterval] = useState<number | null>(null);
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: number[] } | null>(null);
-    const [isPlaying, setIsPlaying] = useState<boolean>(false);
+    const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
 
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
 
@@ -134,8 +136,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         return groups;
     }, [selectedTransferList, selectedNode]);
 
-    const startAnimation = () => {
-        setIsPlaying(true);
+    const startAnimation = (speed: number = PLAYBACK_SPEED) => {
+        setPlaybackSpeed(speed);
         clearInterval(animationInterval as number);
         const range = npeData.timestep_data.length;
 
@@ -143,19 +145,40 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             setSelectedTimestep((prev) => {
                 return prev < range - 1 ? prev + 1 : 0;
             });
-        }, 100);
+        }, 100 / speed);
         setAnimationInterval(interval as unknown as number);
     };
     const stopAnimation = () => {
-        setIsPlaying(false);
+        setPlaybackSpeed(0);
         return clearInterval(animationInterval as number);
     };
 
     const onPlay = () => {
         startAnimation();
     };
+    const onPlay2x = () => {
+        startAnimation(PLAYBACK_SPEED_2X);
+    };
     const onPause = () => {
         stopAnimation();
+    };
+    const onBackward = () => {
+        stopAnimation();
+        const range = npeData.timestep_data.length;
+        setSelectedNode(null);
+        setSelectedTransferList([]);
+        setSelectedTimestep((prev) => {
+            return prev > 0 ? prev - 1 : range - 1;
+        });
+    };
+    const onForward = () => {
+        stopAnimation();
+        setSelectedNode(null);
+        setSelectedTransferList([]);
+        const range = npeData.timestep_data.length;
+        setSelectedTimestep((prev) => {
+            return prev < range - 1 ? prev + 1 : 0;
+        });
     };
     const handleScrubberChange = (value: number) => {
         stopAnimation();
@@ -241,18 +264,29 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             />
             <div className='header'>
                 <ButtonGroup className='npe-controls'>
-                    {!isPlaying && (
-                        <Button
-                            icon={IconNames.Play}
-                            onClick={onPlay}
-                        />
-                    )}
-                    {isPlaying && (
-                        <Button
-                            icon={IconNames.Pause}
-                            onClick={onPause}
-                        />
-                    )}
+                    <Button
+                        icon={IconNames.StepBackward}
+                        onClick={onBackward}
+                    />
+                    <Button
+                        icon={IconNames.Play}
+                        intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
+                        onClick={onPlay}
+                    />
+                    <Button
+                        icon={IconNames.FastForward}
+                        onClick={onPlay2x}
+                        intent={playbackSpeed === PLAYBACK_SPEED_2X ? Intent.PRIMARY : Intent.NONE}
+                    />
+                    <Button
+                        icon={IconNames.STOP}
+                        onClick={onPause}
+                    />
+                    <Button
+                        icon={IconNames.StepForward}
+                        onClick={onForward}
+                    />
+                    |
                     <Switch
                         label='Show all active transfers'
                         checked={isShowingAllTransfers}
@@ -317,11 +351,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                         }}
                     >
-                        {transfers.map((transfer) => (
+                        {transfers.map((transfer, index) => (
                             <>
                                 {transfer.src && (
                                     <div
-                                        key={`${transfer.id}-src`}
+                                        key={`${transfer.id}-src-${index}`}
                                         className='tensix src-dst src'
                                         style={{
                                             gridColumn: transfer.src[1] + 1,
@@ -334,7 +368,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     const classname = transfer.src?.toString() === dst.toString() ? 'both' : 'dst';
                                     return (
                                         <div
-                                            key={`${transfer.id}-dst-${dst[0]}-${dst[1]}`}
+                                            key={`${transfer.id}-dst-${index}-${dst[0]}-${dst[1]}`}
                                             className={classNames('tensix src-dst', classname)}
                                             style={{
                                                 gridColumn: dst[1] + 1,
@@ -350,7 +384,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         {links?.link_demand.map((route, index) => (
                             <button
                                 type='button'
-                                key={`${index}${route[0]}-${route[1]}`}
+                                key={`${index}-${route[0]}-${route[1]}-${route[2]}`}
                                 className='tensix'
                                 style={{
                                     position: 'relative',

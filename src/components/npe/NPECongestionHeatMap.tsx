@@ -19,7 +19,8 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
         return {
             worst: timestepList.map((timestep) => {
                 const value = Math.max(-1, ...timestep.link_demand.map((route) => route[3]));
-                return { value, color: calculateLinkCongestionColor(value) };
+                const color = calculateLinkCongestionColor(value);
+                return { value, color };
             }),
 
             utilization: timestepList.map((timestep) => ({
@@ -27,10 +28,13 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                 color: calculateLinkCongestionColor(timestep.avg_link_util),
             })),
 
-            demand: timestepList.map((timestep) => ({
-                value: timestep.avg_link_demand,
-                color: calculateLinkCongestionColor(timestep.avg_link_demand),
-            })),
+            demand: timestepList.map((timestep) => {
+                const color = calculateLinkCongestionColor(timestep.avg_link_demand);
+                return {
+                    value: timestep.avg_link_demand,
+                    color,
+                };
+            }),
         };
     }, [timestepList]);
 
@@ -43,7 +47,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
         }
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const chunkWidth = canvas.width / congestionMapPerTimestamp.worst.length + 1;
+        const chunkWidth = canvas.width / congestionMapPerTimestamp.worst.length;
         congestionMapPerTimestamp.worst.forEach(({ color }, index) => {
             ctx.fillStyle = color;
             ctx.fillRect(index * chunkWidth, 0, chunkWidth, canvas.height / 3);
@@ -85,7 +89,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                                 />{' '}
                                 Max Demand:{' '}
                                 {congestionMapPerTimestamp.worst[hoveredIndex].value > -1
-                                    ? congestionMapPerTimestamp.worst[hoveredIndex].value.toFixed(2)
+                                    ? `${congestionMapPerTimestamp.worst[hoveredIndex].value.toFixed(2)} %`
                                     : 'N/A'}
                             </div>
                             <div>
@@ -96,8 +100,8 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                                         display: 'inline-block',
                                         backgroundColor: congestionMapPerTimestamp.utilization[hoveredIndex].color,
                                     }}
-                                />{' '}
-                                Avg Utilization: {congestionMapPerTimestamp.utilization[hoveredIndex].value.toFixed(2)}
+                                />
+                                {` Avg Utilization: ${congestionMapPerTimestamp.utilization[hoveredIndex].value.toFixed(2)} %`}
                             </div>
                             <div>
                                 <span
@@ -107,8 +111,8 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                                         display: 'inline-block',
                                         backgroundColor: congestionMapPerTimestamp.demand[hoveredIndex].color,
                                     }}
-                                />{' '}
-                                Avg Demand: {congestionMapPerTimestamp.demand[hoveredIndex].value.toFixed(2)}
+                                />
+                                {` Avg Demand: ${congestionMapPerTimestamp.demand[hoveredIndex].value.toFixed(2)} %`}
                             </div>
                         </div>
                     ),
@@ -135,7 +139,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                     hoverCloseDelay={0}
                     isOpen
                     usePortal
-                    variant='minimal'
+                    minimal
                     modifiers={{
                         offset: {
                             enabled: true,
