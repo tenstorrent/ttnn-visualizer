@@ -413,6 +413,10 @@ def delete_performance_report(report_name, session: Instance):
     else:
         path = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / report_name
 
+    if session.active_report.profile_name == report_name:
+        instance_id = request.args.get("instanceId")
+        update_instance(instance_id=instance_id,profile_name=None)
+
     if path.exists() and path.is_dir():
         shutil.rmtree(path)
     else:
