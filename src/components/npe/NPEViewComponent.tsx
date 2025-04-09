@@ -150,7 +150,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     };
     const stopAnimation = () => {
         setPlaybackSpeed(0);
-        // setIsPlaying(false);
         return clearInterval(animationInterval as number);
     };
 
