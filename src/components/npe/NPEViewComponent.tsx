@@ -6,7 +6,7 @@
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import React, { JSX, useEffect, useMemo, useState } from 'react';
-import { Button, ButtonGroup, Slider, Switch } from '@blueprintjs/core';
+import { Button, ButtonGroup, Intent, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { NPEData, NoCID, NoCTransfer } from '../../model/NPEModel';
@@ -26,6 +26,8 @@ const LABEL_STEP_THRESHOLD = 25;
 const RIGHT_MARGIN_OFFSET_PX = 25;
 const TENSIX_SIZE: number = NODE_SIZE; // * 0.75;
 const SVG_SIZE = TENSIX_SIZE;
+const PLAYBACK_SPEED = 1;
+const PLAYBACK_SPEED_2X = 2;
 
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const width = npeData.common_info.num_cols;
@@ -37,7 +39,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [animationInterval, setAnimationInterval] = useState<number | null>(null);
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: number[] } | null>(null);
-    const [isPlaying, setIsPlaying] = useState<boolean>(false);
+    const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
 
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
 
@@ -134,8 +136,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         return groups;
     }, [selectedTransferList, selectedNode]);
 
-    const startAnimation = (speed: number = 1) => {
-        setIsPlaying(true);
+    const startAnimation = (speed: number = PLAYBACK_SPEED) => {
+        setPlaybackSpeed(speed);
+        // setIsPlaying(true);
         clearInterval(animationInterval as number);
         const range = npeData.timestep_data.length;
 
@@ -147,7 +150,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setAnimationInterval(interval as unknown as number);
     };
     const stopAnimation = () => {
-        setIsPlaying(false);
+        setPlaybackSpeed(0);
+        // setIsPlaying(false);
         return clearInterval(animationInterval as number);
     };
 
@@ -155,7 +159,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         startAnimation();
     };
     const onPlay2x = () => {
-        startAnimation(2);
+        startAnimation(PLAYBACK_SPEED_2X);
     };
     const onPause = () => {
         stopAnimation();
@@ -266,21 +270,19 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         icon={IconNames.StepBackward}
                         onClick={onBackward}
                     />
-                    {!isPlaying && (
-                        <Button
-                            icon={IconNames.Play}
-                            onClick={onPlay}
-                        />
-                    )}
-                    {isPlaying && (
-                        <Button
-                            icon={IconNames.Pause}
-                            onClick={onPause}
-                        />
-                    )}
+                    <Button
+                        icon={IconNames.Play}
+                        intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
+                        onClick={onPlay}
+                    />
                     <Button
                         icon={IconNames.FastForward}
                         onClick={onPlay2x}
+                        intent={playbackSpeed === PLAYBACK_SPEED_2X ? Intent.PRIMARY : Intent.NONE}
+                    />
+                    <Button
+                        icon={IconNames.STOP}
+                        onClick={onPause}
                     />
                     <Button
                         icon={IconNames.StepForward}
