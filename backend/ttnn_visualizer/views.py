@@ -920,7 +920,6 @@ def get_instance(session: Instance):
 
 
 @api.route("/session", methods=["PUT"])
-@with_session
 def update_current_instance():
     try:
         update_data = request.get_json()
