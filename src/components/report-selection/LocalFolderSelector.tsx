@@ -2,14 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Button, FormGroup, Icon, IconName, Intent, MenuItem } from '@blueprintjs/core';
+import { FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
-import 'styles/components/FolderPicker.scss';
+import 'styles/components/OldFolderPicker.scss';
 import { useQueryClient } from 'react-query';
 import { useAtom, useSetAtom } from 'jotai';
-import { ItemRenderer, Select } from '@blueprintjs/select';
 import useLocalConnection from '../../hooks/useLocal';
 import { activePerformanceTraceAtom, activeReportAtom, reportLocationAtom, selectedDeviceAtom } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
@@ -17,7 +16,7 @@ import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification from '../../functions/createToastNotification';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 import { deleteReport, updateTabSession, usePerfFolderList, useSession } from '../../hooks/useAPI';
-import { isEqual } from '../../functions/math';
+import LocalFolderPicker from './LocalFolderPicker';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -180,30 +179,6 @@ const LocalFolderOptions: FC = () => {
         }
     }, [isUploadingReport, isUploadingPerformance]);
 
-    const renderItem: ItemRenderer<string> = (folder, { handleClick, handleFocus, modifiers }) => {
-        if (!modifiers.matchesPredicate) {
-            return null;
-        }
-        return (
-            <>
-                <MenuItem
-                    text={folder}
-                    label={folder}
-                    roleStructure='listoption'
-                    active={isEqual(activePerformanceTrace, folder)}
-                    disabled={modifiers.disabled}
-                    key={folder}
-                    onClick={handleClick}
-                    onFocus={handleFocus}
-                />
-                <Button
-                    icon={IconNames.Delete}
-                    onClick={() => handleDeletePerformanceTrace(folder)}
-                />
-            </>
-        );
-    };
-
     const handleDeletePerformanceTrace = async (folder: string) => {
         await deleteReport(folder);
         await queryClient.invalidateQueries(['fetch-perf-folder-list']);
@@ -281,8 +256,17 @@ const LocalFolderOptions: FC = () => {
 
                 <FormGroup
                     label={<h3>Performance data folder</h3>}
-                    subLabel='Select a local directory containing performance data'
+                    subLabel='Select a performance trace from the list below'
                 >
+                    <LocalFolderPicker
+                        items={perfFolderList}
+                        value={activePerformanceTrace}
+                        handleSelect={handleItemSelect}
+                        handleDelete={handleDeletePerformanceTrace}
+                    />
+                </FormGroup>
+
+                <FormGroup subLabel='Upload a local directory containing performance data'>
                     <div className='buttons-container'>
                         <label
                             className='bp5-file-input'
@@ -318,30 +302,6 @@ const LocalFolderOptions: FC = () => {
                         )}
                     </div>
                 </FormGroup>
-
-                <div className='bp5-form-group'>
-                    <div className='bp5-form-group-sub-label'>Select a performance trace from the list below</div>
-
-                    <Select
-                        items={perfFolderList ?? []}
-                        // itemPredicate={filterItem}
-                        itemRenderer={renderItem}
-                        noResults={
-                            <MenuItem
-                                disabled
-                                text='No results.'
-                                roleStructure='listoption'
-                            />
-                        }
-                        onItemSelect={handleItemSelect}
-                        disabled={!perfFolderList || !session}
-                    >
-                        <Button
-                            text={activePerformanceTrace ?? 'Select a report...'}
-                            disabled={!perfFolderList || !session}
-                        />
-                    </Select>
-                </div>
             </div>
         </>
     );
