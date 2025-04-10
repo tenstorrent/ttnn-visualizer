@@ -35,12 +35,9 @@ def update_existing_instance(
 ):
     active_report = session_data.active_report or {}
 
-    if report_name:
-        active_report["report_name"] = report_name
-    if profile_name:
-        active_report["profile_name"] = profile_name
-    if npe_name:
-        active_report["npe_name"] = npe_name
+    active_report["report_name"] = report_name
+    active_report["profile_name"] = profile_name
+    active_report["npe_name"] = npe_name
 
     session_data.active_report = active_report
 

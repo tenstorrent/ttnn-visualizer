@@ -5,7 +5,7 @@
 import { Outlet } from 'react-router-dom';
 import { Classes } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
-import { useAtom } from 'jotai';
+import { useSetAtom } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
 import { useEffect } from 'react';
@@ -25,10 +25,10 @@ const BounceIn = cssTransition({
 
 function Layout() {
     const appVersion = import.meta.env.APP_VERSION;
-    const [activeReport, setActiveReport] = useAtom(activeReportAtom);
-    const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceTraceAtom);
-    const [activeNpe, setActiveNpe] = useAtom(activeNpeOpTraceAtom);
-    const { data: session } = useSession(activeReport, activePerformanceTrace, activeNpe);
+    const setActiveReport = useSetAtom(activeReportAtom);
+    const setActivePerformanceTrace = useSetAtom(activePerformanceTraceAtom);
+    const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
+    const { data: session } = useSession();
 
     useEffect(() => {
         if (session?.active_report) {

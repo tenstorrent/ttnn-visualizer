@@ -27,7 +27,12 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
-import { selectedOperationRangeAtom } from '../store/app';
+import {
+    activeNpeOpTraceAtom,
+    activePerformanceTraceAtom,
+    activeReportAtom,
+    selectedOperationRangeAtom,
+} from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
@@ -44,9 +49,16 @@ const parseFileOperationIdentifier = (stackTrace: string): string => {
     return '';
 };
 
+// Possibly rename this and related functions to be "Instance"
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
     const response = await axiosInstance.get<TabSession>('/api/session').catch();
+    return response?.data;
+};
+
+export const updateTabSession = async (payload: Partial<TabSession>): Promise<TabSession | null> => {
+    // eslint-disable-next-line promise/valid-params
+    const response = await axiosInstance.put<TabSession>('/api/session', payload).catch();
     return response?.data;
 };
 
@@ -724,10 +736,14 @@ export const usePerformanceReport = (name?: string | null) => {
     }, [response.isLoading, name]);
 };
 
-export const useSession = (reportName: string | null, profileName: string | null, npeName: string | null) => {
+export const useSession = () => {
+    const activeReport = useAtomValue(activeReportAtom);
+    const activeProfilerReport = useAtomValue(activePerformanceTraceAtom);
+    const activeNpe = useAtomValue(activeNpeOpTraceAtom);
+
     return useQuery({
         queryFn: () => fetchTabSession(),
-        queryKey: ['get-session', reportName, profileName, npeName],
+        queryKey: ['get-session', activeReport, activeProfilerReport, activeNpe],
         initialData: null,
     });
 };
@@ -813,7 +829,7 @@ export const usePerfFolderList = () => {
 };
 
 export const deleteReport = async (report: string) => {
-    const { data } = await axiosInstance.post('/api/profiler/perf-results/delete', { report });
+    const { data } = await axiosInstance.delete(`/api/profiler/perf-results/${report}`);
 
     return data;
 };
