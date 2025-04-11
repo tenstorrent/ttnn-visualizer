@@ -238,7 +238,6 @@ const LocalFolderOptions: FC = () => {
             )}
 
             <div>
-                {`activeReport: ${activeReport}`}
                 <FormGroup
                     label={<h3>Report folder</h3>}
                     subLabel='Select a performance trace from the list below'

@@ -1,7 +1,6 @@
 import { Button, ButtonVariant, Intent, MenuItem } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import { isEqual } from '../../functions/math';
 import { useSession } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
 
@@ -20,6 +19,7 @@ const LocalFolderPicker = ({ items, value, handleSelect, handleDelete }: LocalFo
         if (!modifiers.matchesPredicate) {
             return null;
         }
+
         return (
             <div
                 className='folder-picker-menu-item'
@@ -27,18 +27,17 @@ const LocalFolderPicker = ({ items, value, handleSelect, handleDelete }: LocalFo
             >
                 <MenuItem
                     text={`/${folder}`}
-                    labelElement={getLabelElement(folder)}
                     roleStructure='listoption'
-                    active={isEqual(value, folder)}
+                    active={modifiers.active}
                     disabled={modifiers.disabled}
                     key={folder}
                     onClick={handleClick}
                     onFocus={handleFocus}
-                    icon={IconNames.FOLDER_CLOSE}
+                    icon={modifiers.active ? IconNames.FOLDER_OPEN : IconNames.FOLDER_CLOSE}
                 />
 
                 <Button
-                    icon={IconNames.Delete}
+                    icon={IconNames.TRASH}
                     onClick={handleDelete ? () => handleDelete(folder) : undefined}
                     variant={ButtonVariant.MINIMAL}
                     intent={Intent.DANGER}
@@ -76,7 +75,5 @@ const LocalFolderPicker = ({ items, value, handleSelect, handleDelete }: LocalFo
         </Select>
     );
 };
-
-const getLabelElement = (folder: string) => <span>{folder}</span>;
 
 export default LocalFolderPicker;
