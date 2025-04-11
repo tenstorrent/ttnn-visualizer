@@ -846,7 +846,7 @@ const fetchPerfFolderList = async () => {
 };
 
 export const deletePerformance = async (report: string) => {
-    const { data } = await axiosInstance.delete(`/api/performance/perf-results/${report}`);
+    const { data } = await axiosInstance.delete(`/api/performance/${report}`);
 
     return data;
 };

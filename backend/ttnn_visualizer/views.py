@@ -455,7 +455,7 @@ def get_profiler_performance_data(session: Instance):
         return jsonify(result)
 
 
-@api.route("/performance/perf-results/<performance_name>", methods=["DELETE"])
+@api.route("/performance/<performance_name>", methods=["DELETE"])
 @with_session
 def delete_performance_report(performance_name, session: Instance):
     is_remote = bool(session.remote_connection)
