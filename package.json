@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualizer",
   "private": true,
-  "version": "0.29.0",
+  "version": "0.29.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,7 +16,11 @@
     "flask:mypy": "PYTHONPATH=backend mypy backend/ttnn_visualizer",
     "build:wheel": "pnpm run build && python -m build --wheel",
     "prepare": "husky",
-    "preinstall": "npx only-allow pnpm"
+    "preinstall": "npx only-allow pnpm",
+    "release": "node scripts/release.mjs -minor",
+    "release:patch": "node scripts/release.mjs -patch",
+    "release:minor": "node scripts/release.mjs -minor",
+    "release:major": "node scripts/release.mjs -major"
   },
   "dependencies": {
     "@blueprintjs/colors": "^5.1.8",
