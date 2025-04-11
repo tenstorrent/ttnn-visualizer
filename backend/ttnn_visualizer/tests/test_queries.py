@@ -227,7 +227,7 @@ class TestDatabaseQueries(unittest.TestCase):
         mock_session = Mock()
         mock_session.remote_connection = Mock(useRemoteQuerying=True)
         mock_session.remote_connection.sqliteBinaryPath = "/usr/bin/sqlite3"
-        mock_session.remote_folder = Mock(remotePath="/remote/path")
+        mock_session.remote_profiler_folder = Mock(remotePath="/remote/path")
         db_queries = DatabaseQueries(session=mock_session)
         self.assertIsInstance(db_queries.query_runner, RemoteQueryRunner)
 
@@ -238,7 +238,7 @@ class TestDatabaseQueries(unittest.TestCase):
             connection.close()
 
             mock_session = Mock()
-            mock_session.report_path = temp_db_file.name
+            mock_session.profiler_path = temp_db_file.name
             mock_session.remote_connection = None
 
             db_queries = DatabaseQueries(session=mock_session)
@@ -246,7 +246,7 @@ class TestDatabaseQueries(unittest.TestCase):
 
     def test_init_with_invalid_session(self):
         mock_session = Mock()
-        mock_session.report_path = None
+        mock_session.profiler_path = None
         mock_session.remote_connection = None
         with self.assertRaises(ValueError) as context:
             DatabaseQueries(session=mock_session)
@@ -388,7 +388,7 @@ class TestRemoteQueryRunner(unittest.TestCase):
         self.mock_session.remote_connection.sqliteBinaryPath = "/usr/bin/sqlite3"
         self.mock_session.remote_connection.host = "mockhost"
         self.mock_session.remote_connection.user = "mockuser"
-        self.mock_session.remote_folder.remotePath = "/remote/db"
+        self.mock_session.remote_profiler_folder.remotePath = "/remote/db"
 
     @patch("ttnn_visualizer.queries.get_client")
     def test_init_with_mock_get_client(self, mock_get_client):

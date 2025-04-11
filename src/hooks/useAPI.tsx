@@ -27,7 +27,12 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
-import { selectedOperationRangeAtom } from '../store/app';
+import {
+    activeNpeOpTraceAtom,
+    activePerformanceTraceAtom,
+    activeReportAtom,
+    selectedOperationRangeAtom,
+} from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
@@ -44,9 +49,16 @@ const parseFileOperationIdentifier = (stackTrace: string): string => {
     return '';
 };
 
+// Possibly rename this and related functions to be "Instance"
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
     const response = await axiosInstance.get<TabSession>('/api/session').catch();
+    return response?.data;
+};
+
+export const updateTabSession = async (payload: Partial<TabSession>): Promise<TabSession | null> => {
+    // eslint-disable-next-line promise/valid-params
+    const response = await axiosInstance.put<TabSession>('/api/session', payload).catch();
     return response?.data;
 };
 
@@ -272,7 +284,7 @@ const fetchDevices = async () => {
 
 // Not currently used
 // const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, string>>> => {
-//     const { data } = await axiosInstance.get<string>('/api/profiler/perf-results/raw');
+//     const { data } = await axiosInstance.get<string>('/api/performance/perf-results/raw');
 
 //     return new Promise((resolve, reject) => {
 //         Papa.parse<Record<string, string>>(data, {
@@ -283,8 +295,10 @@ const fetchDevices = async () => {
 //     });
 // };
 
-const fetchPerformanceDataReport = async (): Promise<PerfTableRow[]> => {
-    const { data } = await axiosInstance.get<PerfTableRow[]>('/api/profiler/perf-results/report');
+const fetchPerformanceDataReport = async (name?: string | null): Promise<PerfTableRow[]> => {
+    const { data } = await axiosInstance.get<PerfTableRow[]>(`/api/performance/perf-results/report`, {
+        params: { name },
+    });
 
     return data;
 };
@@ -300,7 +314,7 @@ interface FetchDeviceLogRawResult {
 }
 
 const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
-    const { data } = await axiosInstance.get<string>('/api/profiler/device-log/raw');
+    const { data } = await axiosInstance.get<string>('/api/performance/device-log/raw');
 
     function parseArchAndFreq(input: string): MetaData {
         const archMatch = input.match(/ARCH:\s*([\w\d_]+)/);
@@ -703,10 +717,10 @@ export const useDeviceLog = () => {
 //     });
 // };
 
-export const usePerformanceReport = () => {
+export const usePerformanceReport = (name?: string | null) => {
     const response = useQuery({
-        queryFn: () => fetchPerformanceDataReport(),
-        queryKey: 'get-performance-data-report',
+        queryFn: () => fetchPerformanceDataReport(name),
+        queryKey: ['get-performance-data-report', name],
         staleTime: Infinity,
     });
 
@@ -721,13 +735,17 @@ export const usePerformanceReport = () => {
 
         return response;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.isLoading]);
+    }, [response.isLoading, name]);
 };
 
-export const useSession = (reportName: string | null, profileName: string | null, npeName: string | null) => {
+export const useSession = () => {
+    const activeReport = useAtomValue(activeReportAtom);
+    const activeProfilerReport = useAtomValue(activePerformanceTraceAtom);
+    const activeNpe = useAtomValue(activeNpeOpTraceAtom);
+
     return useQuery({
         queryFn: () => fetchTabSession(),
-        queryKey: ['get-session', reportName, profileName, npeName],
+        queryKey: ['get-session', activeReport, activeProfilerReport, activeNpe],
         initialData: null,
     });
 };
@@ -797,4 +815,46 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     return { cores, dram, eth, pcie };
+};
+
+export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';
+
+const fetchReportFolderList = async () => {
+    const { data } = await axiosInstance.get('/api/profiler');
+    return data;
+};
+
+export const deleteProfiler = async (report: string) => {
+    const { data } = await axiosInstance.delete(`/api/profiler/${report}`);
+
+    return data;
+};
+
+export const useReportFolderList = () => {
+    return useQuery({
+        queryFn: () => fetchReportFolderList(),
+        queryKey: [PROFILER_FOLDER_QUERY_KEY],
+        initialData: null,
+    });
+};
+
+export const PERFORMANCE_FOLDER_QUERY_KEY = 'fetch-performance-folder-list';
+
+const fetchPerfFolderList = async () => {
+    const { data } = await axiosInstance.get('/api/performance');
+    return data;
+};
+
+export const deletePerformance = async (report: string) => {
+    const { data } = await axiosInstance.delete(`/api/performance/perf-results/${report}`);
+
+    return data;
+};
+
+export const usePerfFolderList = () => {
+    return useQuery({
+        queryFn: () => fetchPerfFolderList(),
+        queryKey: [PERFORMANCE_FOLDER_QUERY_KEY],
+        initialData: null,
+    });
 };

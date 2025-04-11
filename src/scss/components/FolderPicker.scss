@@ -2,100 +2,24 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-@use '../definitions/colours' as *;
-
-.bp5-button-text:has(.path-label) {
-    display: inline-flex;
-    align-items: center;
-    width: 100%;
-}
-
-.folder-picker-options {
+.folder-picker-menu-item {
     display: flex;
-    flex-wrap: wrap;
-    width: 100%;
-    gap: 20px;
-    justify-content: center;
-    align-items: stretch;
+    flex-wrap: nowrap;
+    justify-content: space-between;
 
-    fieldset {
-        border: solid 1px $tt-grey-5;
-        border-radius: 5px;
-        padding: 5px 20px 20px;
-        display: flex;
-        gap: 20px;
-        align-items: start;
-        justify-content: stretch;
-        min-height: fit-content;
-        flex-basis: 45%;
-        flex-grow: 0;
-        max-width: 550px;
-
-        & > .bp5-icon {
-            color: $tt-grey-4;
-        }
-
-        .folder-picker-wrapper {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        .buttons-container {
-            display: inline-flex;
-            flex-wrap: wrap;
-            gap: 5px;
-        }
-
-        .remote-connection-select .bp5-button-text,
-        .remote-folder-select .bp5-button-text {
-            width: 8rem;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .bp5-form-group-sub-label {
-            color: $tt-grey-7;
-        }
+    .bp5-menu-item {
+        padding-left: 7px;
     }
 
-    legend {
-        font-size: 30px;
-        padding: 0 10px;
+    > li {
+        flex-grow: 1;
+        flex-shrink: 1;
     }
 }
 
-.loading-error {
-    color: #ff5020;
-    width: 50%;
-    margin: auto;
-    background: #400610;
-    word-wrap: break-word;
-    padding: 10px;
-}
-
-.remote-folder-item {
-    align-items: center;
-
-    .folder-path {
-        font-weight: 700;
+.folder-picker-button {
+    .bp5-button-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
-
-    .test-name {
-        margin-right: 8px;
-    }
-
-    .remote-folder-status-icon {
-        display: contents;
-    }
-}
-
-.path-label {
-    max-width: clamp(150px, 15vw, 250px);
-    display: inline-block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    text-wrap: nowrap;
 }

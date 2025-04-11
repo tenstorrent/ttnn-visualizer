@@ -175,7 +175,7 @@ def is_excluded(file_path, exclude_patterns):
 
 @remote_exception_handler
 def sync_files_and_directories(
-    client, remote_folder: str, destination_dir: Path, exclude_patterns=None, sid=None
+    client, remote_profiler_folder: str, destination_dir: Path, exclude_patterns=None, sid=None
 ):
     """Download files and directories sequentially in one unified loop."""
     exclude_patterns = (
@@ -236,7 +236,7 @@ def sync_files_and_directories(
                 download_directory_contents(remote_subdir, local_subdir)
 
         # Start downloading from the root folder
-        download_directory_contents(remote_folder, destination_dir)
+        download_directory_contents(remote_profiler_folder, destination_dir)
 
         # Create a .last-synced file in directory
         update_last_synced(destination_dir)
@@ -280,7 +280,7 @@ def download_file_with_progress(
         raise
 
 
-def get_remote_report_folder_from_config_path(
+def get_remote_performance_folder_from_config_path(
     sftp: SFTPClient, config_path: str
 ) -> RemoteReportFolder:
     """Read a remote config file and return RemoteFolder object."""
@@ -289,26 +289,26 @@ def get_remote_report_folder_from_config_path(
         data = json.loads(config_file.read())
         return RemoteReportFolder(
             remotePath=str(Path(config_path).parent),
-            testName=data["report_name"],
+            testName=data["profiler_name"],
             lastModified=(
                 int(attributes.st_mtime) if attributes.st_mtime else int(time.time())
             ),
         )
 
 
-def get_remote_profile_folder(
+def get_remote_performance_folder(
     sftp: SFTPClient, profile_folder: str
 ) -> RemoteReportFolder:
     """Read a remote config file and return RemoteFolder object."""
     attributes = sftp.stat(str(profile_folder))
-    profile_name = profile_folder.split("/")[-1]
+    performance_name = profile_folder.split("/")[-1]
     remote_path = profile_folder
     last_modified = (
         int(attributes.st_mtime) if attributes.st_mtime else int(time.time())
     )
     return RemoteReportFolder(
         remotePath=str(remote_path),
-        testName=str(profile_name),
+        testName=str(performance_name),
         lastModified=last_modified,
     )
 
@@ -398,27 +398,27 @@ def find_folders_by_files(
 
 
 @remote_exception_handler
-def get_remote_profiler_folders(
+def get_remote_performance_folders(
     remote_connection: RemoteConnection,
 ) -> List[RemoteReportFolder]:
     """Return a list of remote folders containing a profile_log_device file."""
     client = get_client(remote_connection)
-    profiler_paths = find_folders_by_files(
+    performance_paths = find_folders_by_files(
         client, remote_connection.performancePath, [TEST_PROFILER_FILE]
     )
-    if not profiler_paths:
+    if not performance_paths:
         error = f"No profiler paths found at {remote_connection.performancePath}"
         logger.info(error)
         raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
     remote_folder_data = []
     with client.open_sftp() as sftp:
-        for path in profiler_paths:
-            remote_folder_data.append(get_remote_profile_folder(sftp, path))
+        for path in performance_paths:
+            remote_folder_data.append(get_remote_performance_folder(sftp, path))
         return remote_folder_data
 
 
 @remote_exception_handler
-def get_remote_report_folders(
+def get_remote_performance_folders(
     remote_connection: RemoteConnection,
 ) -> List[RemoteReportFolder]:
     """Return a list of remote folders containing a config.json file."""
@@ -433,7 +433,7 @@ def get_remote_report_folders(
     remote_folder_data = []
     with client.open_sftp() as sftp:
         for config_path in remote_config_paths:
-            remote_folder = get_remote_report_folder_from_config_path(
+            remote_folder = get_remote_performance_folder_from_config_path(
                 sftp, str(Path(config_path).joinpath(TEST_CONFIG_FILE))
             )
             remote_folder_data.append(remote_folder)
@@ -450,9 +450,9 @@ def sync_remote_folders(
 ):
     """Main function to sync test folders, handles both compressed and individual syncs."""
     client = get_client(remote_connection)
-    report_folder = Path(remote_folder_path).name
+    profiler_folder = Path(remote_folder_path).name
     destination_dir = Path(
-        REPORT_DATA_DIRECTORY, path_prefix, remote_connection.host, report_folder
+        REPORT_DATA_DIRECTORY, path_prefix, remote_connection.host, profiler_folder
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
 
@@ -462,7 +462,7 @@ def sync_remote_folders(
 
 
 @remote_exception_handler
-def sync_remote_profiler_folders(
+def sync_remote_performance_folders(
     remote_connection: RemoteConnection,
     path_prefix: str,
     profile: RemoteReportFolder,

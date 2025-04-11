@@ -261,7 +261,6 @@ class RemoteCSVQueryRunner:
 
 class DeviceLogProfilerQueries:
     DEVICE_LOG_FILE = "profile_log_device.csv"
-    LOCAL_PROFILER_DIRECTORY = "profiler"
     DEVICE_LOG_COLUMNS = [
         "PCIe slot",
         "core_x",
@@ -309,7 +308,7 @@ class DeviceLogProfilerQueries:
             )
         else:
             self.runner = LocalCSVQueryRunner(
-                file_path=Path(self.session.profiler_path).joinpath(
+                file_path=Path(self.session.performance_path).joinpath(
                     self.DEVICE_LOG_FILE
                 ),
                 offset=1,  # Skip the first line for device log files
@@ -375,7 +374,7 @@ class DeviceLogProfilerQueries:
             and not session.remote_connection.useRemoteQuerying
         ):
             file_path = Path(
-                session.profiler_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE
+                session.performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE
             )
             with open(file_path, "r") as f:
                 return f.read()
@@ -479,11 +478,11 @@ class OpsPerformanceQueries:
 
     @staticmethod
     def get_local_ops_perf_file_path(session):
-        profiler_path = Path(session.profiler_path)
+        performance_path = Path(session.performance_path)
 
         # Find the latest file with the correct prefix
         perf_files = list(
-            profiler_path.glob(f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}_*.csv")
+            performance_path.glob(f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}_*.csv")
         )
         if not perf_files:
             raise FileNotFoundError("No performance results file found.")
@@ -543,6 +542,22 @@ class OpsPerformanceQueries:
         return self.runner.execute_query(
             columns=self.PERF_RESULTS_COLUMNS, as_dict=as_dict, limit=limit
         )
+
+    def get_all_folders(directory: str) -> List[str]:
+        """
+        Get a list of all folder names in the specified directory.
+
+        :param directory: Path to the /profiles directory.
+        :return: List of folder names.
+        """
+        try:
+            return [
+                folder.name
+                for folder in Path(directory).iterdir()
+                if folder.is_dir()
+            ]
+        except Exception as e:
+            raise RuntimeError(f"Error accessing directory: {e}")
 
 
 class OpsPerformanceReportQueries:

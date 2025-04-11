@@ -44,7 +44,7 @@ const useRemoteConnection = () => {
         }
 
         const response = await axiosInstance.post<RemoteFolder[]>(
-            `${import.meta.env.VITE_API_ROOT}/remote/folder`,
+            `${import.meta.env.VITE_API_ROOT}/remote/profiler`,
             connection,
         );
 
@@ -55,9 +55,12 @@ const useRemoteConnection = () => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
-        const response = await axiosInstance.post<RemoteFolder[]>(`${import.meta.env.VITE_API_ROOT}/remote/profiles`, {
-            connection,
-        });
+        const response = await axiosInstance.post<RemoteFolder[]>(
+            `${import.meta.env.VITE_API_ROOT}/remote/performance`,
+            {
+                connection,
+            },
+        );
 
         return response.data;
     };
