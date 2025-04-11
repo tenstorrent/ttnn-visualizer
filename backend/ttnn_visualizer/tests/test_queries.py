@@ -238,7 +238,7 @@ class TestDatabaseQueries(unittest.TestCase):
             connection.close()
 
             mock_session = Mock()
-            mock_session.report_path = temp_db_file.name
+            mock_session.profiler_path = temp_db_file.name
             mock_session.remote_connection = None
 
             db_queries = DatabaseQueries(session=mock_session)
@@ -246,7 +246,7 @@ class TestDatabaseQueries(unittest.TestCase):
 
     def test_init_with_invalid_session(self):
         mock_session = Mock()
-        mock_session.report_path = None
+        mock_session.profiler_path = None
         mock_session.remote_connection = None
         with self.assertRaises(ValueError) as context:
             DatabaseQueries(session=mock_session)

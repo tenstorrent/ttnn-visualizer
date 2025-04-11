@@ -20,7 +20,7 @@ from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.file_uploads import (
-    extract_report_name,
+    extract_profiler_name,
     extract_npe_name,
     save_uploaded_files,
     validate_files,
@@ -188,7 +188,7 @@ def operation_history(session: Instance):
         return json.loads(operation_history)
     else:
         operation_history_file = (
-            Path(str(session.report_path)).parent / operation_history_filename
+            Path(str(session.profiler_path)).parent / operation_history_filename
         )
         if not operation_history_file.exists():
             return []
@@ -211,7 +211,7 @@ def get_config(session: Instance):
             return {}
         return config
     else:
-        config_file = Path(str(session.report_path)).parent.joinpath("config.json")
+        config_file = Path(str(session.profiler_path)).parent.joinpath("config.json")
         if not config_file.exists():
             return {}
         with open(config_file, "r") as file:
@@ -422,9 +422,9 @@ def delete_profiler_report(profiler_name, session: Instance):
     else:
         path = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / profiler_name
 
-    if session.active_report.profile_name == profiler_name:
+    if session.active_report.performance_name == profiler_name:
         instance_id = request.args.get("instanceId")
-        update_instance(instance_id=instance_id,report_name="")
+        update_instance(instance_id=instance_id,profiler_name="")
 
     if path.exists() and path.is_dir():
         shutil.rmtree(path)
@@ -437,7 +437,7 @@ def delete_profiler_report(profiler_name, session: Instance):
 @api.route("/performance/device-log", methods=["GET"])
 @with_session
 def get_performance_data(session: Instance):
-    if not session.profiler_path:
+    if not session.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     with DeviceLogProfilerQueries(session) as csv:
         result = csv.get_all_entries(as_dict=True, limit=100)
@@ -447,7 +447,7 @@ def get_performance_data(session: Instance):
 @api.route("/performance/perf-results", methods=["GET"])
 @with_session
 def get_profiler_performance_data(session: Instance):
-    if not session.profiler_path:
+    if not session.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     with OpsPerformanceQueries(session) as csv:
         # result = csv.query_by_op_code(op_code="(torch) contiguous", as_dict=True)
@@ -471,9 +471,9 @@ def delete_performance_report(performance_name, session: Instance):
     else:
         path = report_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"] / performance_name
 
-    if session.active_report.profile_name == performance_name:
+    if session.active_report.performance_name == performance_name:
         instance_id = request.args.get("instanceId")
-        update_instance(instance_id=instance_id,profile_name="")
+        update_instance(instance_id=instance_id,performance_name="")
 
     if path.exists() and path.is_dir():
         shutil.rmtree(path)
@@ -523,7 +523,7 @@ def get_performance_data_list(session: Instance):
 @api.route("/performance/perf-results/raw", methods=["GET"])
 @with_session
 def get_performance_results_data_raw(session: Instance):
-    if not session.profiler_path:
+    if not session.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     content = OpsPerformanceQueries.get_raw_csv(session)
     return Response(
@@ -536,15 +536,15 @@ def get_performance_results_data_raw(session: Instance):
 @api.route("/performance/perf-results/report", methods=["GET"])
 @with_session
 def get_performance_results_report(session: Instance):
-    if not session.profiler_path:
+    if not session.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
 
     name = request.args.get("name", None)
-    profiler_path = Path(session.profiler_path)
+    performance_path = Path(session.performance_path)
     if name:
-        profiler_path = profiler_path.parent / name
-        session.profiler_path = str(profiler_path)
-        logger.info(f"************ Profiler path set to {session.profiler_path}")
+        performance_path = performance_path.parent / name
+        session.performance_path = str(performance_path)
+        logger.info(f"************ Profiler path set to {session.performance_path}")
 
     try:
         report = OpsPerformanceReportQueries.generate_report(session)
@@ -557,7 +557,7 @@ def get_performance_results_report(session: Instance):
 @api.route("/performance/device-log/raw", methods=["GET"])
 @with_session
 def get_performance_data_raw(session: Instance):
-    if not session.profiler_path:
+    if not session.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     content = DeviceLogProfilerQueries.get_raw_csv(session)
     return Response(
@@ -570,7 +570,7 @@ def get_performance_data_raw(session: Instance):
 @api.route("/performance/device-log/zone/<zone>", methods=["GET"])
 @with_session
 def get_zone_statistics(zone, session: Instance):
-    if not session.profiler_path:
+    if not session.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     with DeviceLogProfilerQueries(session) as csv:
         result = csv.query_zone_statistics(zone_name=zone, as_dict=True)
@@ -599,13 +599,13 @@ def create_profiler_files():
     if not profiler_directory.exists():
         profiler_directory.mkdir(parents=True, exist_ok=True)
 
-    report_name = extract_report_name(files)
-    logger.info(f"Writing report files to {profiler_directory}/{report_name}")
+    profiler_name = extract_profiler_name(files)
+    logger.info(f"Writing report files to {profiler_directory}/{profiler_name}")
 
-    save_uploaded_files(files, profiler_directory, report_name)
+    save_uploaded_files(files, profiler_directory, profiler_name)
 
     instance_id = request.args.get("instanceId")
-    update_instance(instance_id=instance_id, report_name=report_name, clear_remote=True)
+    update_instance(instance_id=instance_id, profiler_name=profiler_name, clear_remote=True)
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
@@ -630,7 +630,7 @@ def create_profile_files():
 
     logger.info(f"Writing profile files to {report_directory} / {current_app.config['PERFORMANCE_DIRECTORY_NAME']}")
 
-    # Construct the base directory with report_name first
+    # Construct the base directory with profiler_name first
     target_directory = report_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
     target_directory.mkdir(parents=True, exist_ok=True)
 
@@ -654,7 +654,7 @@ def create_profile_files():
     )
 
     update_instance(
-        instance_id=instance_id, profile_name=profiler_folder_name, clear_remote=True
+        instance_id=instance_id, performance_name=profiler_folder_name, clear_remote=True
     )
 
     return StatusMessage(
@@ -727,18 +727,18 @@ def get_remote_profile_folders():
         )
 
         for rf in remote_profile_folders:
-            profile_name = Path(rf.remotePath).name
+            performance_name = Path(rf.remotePath).name
             remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
             local_path = (
                 Path(remote_data_directory)
                 .joinpath(connection.host)
                 .joinpath("profiler")
-                .joinpath(profile_name)
+                .joinpath(performance_name)
             )
-            logger.info(f"Checking last synced for {profile_name}")
+            logger.info(f"Checking last synced for {performance_name}")
             rf.lastSynced = read_last_synced_file(str(local_path))
             if not rf.lastSynced:
-                logger.info(f"{profile_name} not yet synced")
+                logger.info(f"{performance_name} not yet synced")
 
         return [r.model_dump() for r in remote_profile_folders]
     except RemoteConnectionException as e:
@@ -942,11 +942,11 @@ def use_remote_folder():
 
     connection = RemoteConnection.model_validate(connection, strict=False)
     folder = RemoteReportFolder.model_validate(folder, strict=False)
-    profile_name = None
+    performance_name = None
     remote_profile_folder = None
     if profile:
         remote_profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
-        profile_name = remote_profile_folder.testName
+        performance_name = remote_profile_folder.testName
     report_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
     report_folder = Path(folder.remotePath).name
 
@@ -965,8 +965,8 @@ def use_remote_folder():
 
     update_instance(
         instance_id=instance_id,
-        report_name=report_folder,
-        profile_name=profile_name,
+        profiler_name=report_folder,
+        performance_name=performance_name,
         remote_connection=connection,
         remote_folder=folder,
         remote_profile_folder=remote_profile_folder,
@@ -999,8 +999,8 @@ def update_current_instance():
 
         update_instance(
             instance_id=update_data.get("instance_id"),
-            report_name=update_data["active_report"].get("report_name"),
-            profile_name=update_data["active_report"].get("profile_name"),
+            profiler_name=update_data["active_report"].get("profiler_name"),
+            performance_name=update_data["active_report"].get("performance_name"),
             npe_name=update_data["active_report"].get("npe_name"),
             remote_connection=update_data.get("remote_connection"),
             remote_folder=update_data.get("remote_folder"),

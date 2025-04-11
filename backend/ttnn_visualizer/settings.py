@@ -19,7 +19,7 @@ class DefaultConfig(object):
 
     # Path Settings
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
-    DB_VERSION = "0.26.0"  # App version when DB schema last changed
+    DB_VERSION = "0.29.0"  # App version when DB schema last changed
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
     REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
     PROFILER_DIRECTORY_NAME = "profiler-reports"

@@ -45,13 +45,13 @@ def timer(f: Callable):
     return wrapper
 
 
-def get_profiler_path(profile_name, current_app, remote_connection=None):
+def get_performance_path(performance_name, current_app, remote_connection=None):
     """
-    Gets the profiler path for the given profile_name.
+    Gets the path for the given performance_name.
 
-    :param profile_name: The name of the profiler directory.
+    :param performance_name: The name of the performance directory.
     :param current_app: Flask current application object.
-    :param report_name: Optional name of the report directory under which the profiler resides.
+    :param remote_connection: Remote connection model instance
 
     :return: Profiler path as a string.
     """
@@ -64,32 +64,32 @@ def get_profiler_path(profile_name, current_app, remote_connection=None):
         base_dir = local_dir
 
     profiler_dir = base_dir / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-    profiler_path = profiler_dir / profile_name
+    performance_path = profiler_dir / performance_name
 
-    return str(profiler_path)
+    return str(performance_path)
 
 
-def get_report_path(report_name, current_app, remote_connection=None):
+def get_profiler_path(profiler_name, current_app, remote_connection=None):
     """
     Gets the report path for the given active_report object.
-    :param report_name: The name of the report directory.
+    :param profiler_name: The name of the report directory.
     :param current_app: Flask current application
     :param remote_connection: Remote connection model instance
 
-    :return: report_path as a string
+    :return: profiler_path as a string
     """
     database_file_name = current_app.config["SQLITE_DB_PATH"]
     local_dir = current_app.config["LOCAL_DATA_DIRECTORY"]
     remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
 
-    if report_name:
+    if profiler_name:
         if remote_connection:
             base_dir = Path(remote_dir).joinpath(remote_connection.host)
         else:
             base_dir = local_dir
 
-        report_path = base_dir / current_app.config["PROFILER_DIRECTORY_NAME"] / report_name
-        target_path = report_path / database_file_name
+        profiler_path = base_dir / current_app.config["PROFILER_DIRECTORY_NAME"] / profiler_name
+        target_path = profiler_path / database_file_name
 
         return str(target_path)
     else:
@@ -104,10 +104,10 @@ def get_npe_path(npe_name, current_app):
 
 
 def get_cluster_descriptor_path(instance):
-    if not instance.report_path:
+    if not instance.profiler_path:
         return None
 
-    cluster_descriptor_path = Path(instance.report_path).parent / Path("cluster_descriptor.yaml")
+    cluster_descriptor_path = Path(instance.profiler_path).parent / Path("cluster_descriptor.yaml")
 
     if not cluster_descriptor_path.exists():
         return None

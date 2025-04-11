@@ -289,7 +289,7 @@ def get_remote_report_folder_from_config_path(
         data = json.loads(config_file.read())
         return RemoteReportFolder(
             remotePath=str(Path(config_path).parent),
-            testName=data["report_name"],
+            testName=data["profiler_name"],
             lastModified=(
                 int(attributes.st_mtime) if attributes.st_mtime else int(time.time())
             ),
@@ -301,14 +301,14 @@ def get_remote_profile_folder(
 ) -> RemoteReportFolder:
     """Read a remote config file and return RemoteFolder object."""
     attributes = sftp.stat(str(profile_folder))
-    profile_name = profile_folder.split("/")[-1]
+    performance_name = profile_folder.split("/")[-1]
     remote_path = profile_folder
     last_modified = (
         int(attributes.st_mtime) if attributes.st_mtime else int(time.time())
     )
     return RemoteReportFolder(
         remotePath=str(remote_path),
-        testName=str(profile_name),
+        testName=str(performance_name),
         lastModified=last_modified,
     )
 
@@ -403,16 +403,16 @@ def get_remote_profiler_folders(
 ) -> List[RemoteReportFolder]:
     """Return a list of remote folders containing a profile_log_device file."""
     client = get_client(remote_connection)
-    profiler_paths = find_folders_by_files(
+    performance_paths = find_folders_by_files(
         client, remote_connection.performancePath, [TEST_PROFILER_FILE]
     )
-    if not profiler_paths:
+    if not performance_paths:
         error = f"No profiler paths found at {remote_connection.performancePath}"
         logger.info(error)
         raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
     remote_folder_data = []
     with client.open_sftp() as sftp:
-        for path in profiler_paths:
+        for path in performance_paths:
             remote_folder_data.append(get_remote_profile_folder(sftp, path))
         return remote_folder_data
 

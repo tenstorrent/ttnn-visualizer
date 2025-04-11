@@ -308,7 +308,7 @@ class DeviceLogProfilerQueries:
             )
         else:
             self.runner = LocalCSVQueryRunner(
-                file_path=Path(self.session.profiler_path).joinpath(
+                file_path=Path(self.session.performance_path).joinpath(
                     self.DEVICE_LOG_FILE
                 ),
                 offset=1,  # Skip the first line for device log files
@@ -374,7 +374,7 @@ class DeviceLogProfilerQueries:
             and not session.remote_connection.useRemoteQuerying
         ):
             file_path = Path(
-                session.profiler_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE
+                session.performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE
             )
             with open(file_path, "r") as f:
                 return f.read()
@@ -478,11 +478,11 @@ class OpsPerformanceQueries:
 
     @staticmethod
     def get_local_ops_perf_file_path(session):
-        profiler_path = Path(session.profiler_path)
+        performance_path = Path(session.performance_path)
 
         # Find the latest file with the correct prefix
         perf_files = list(
-            profiler_path.glob(f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}_*.csv")
+            performance_path.glob(f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}_*.csv")
         )
         if not perf_files:
             raise FileNotFoundError("No performance results file found.")

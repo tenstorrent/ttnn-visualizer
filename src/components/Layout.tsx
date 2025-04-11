@@ -32,8 +32,8 @@ function Layout() {
 
     useEffect(() => {
         if (session?.active_report) {
-            setActiveReport(session.active_report?.report_name ?? null);
-            setActivePerformanceTrace(session.active_report?.profile_name ?? null);
+            setActiveReport(session.active_report?.profiler_name ?? null);
+            setActivePerformanceTrace(session.active_report?.performance_name ?? null);
             setActiveNpe(session.active_report?.npe_name ?? null);
         }
     }, [session, setActiveReport, setActivePerformanceTrace, setActiveNpe]);

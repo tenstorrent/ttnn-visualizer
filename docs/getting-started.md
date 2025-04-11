@@ -115,8 +115,8 @@ The default behaviour is to sync the files to your local machine, but you may al
 
 The `ttnn-visualizer` command supports two CLI arguments for passing custom data paths:
 
-* `--report-path` - specify the local path to the folder containing the report
-* `--profiler-path` - specify the local path to the folder containing the profiler data
+* `--profiler-path` - specify the local path to the folder containing the report
+* `--performance-path` - specify the local path to the folder containing the profiler data
 
 These options allow you to pass the folders when starting the visualizer, instead of uploading the report and profiler
 data files from the browser after loading the site. This can be used for starting `ttnn-visualizer` from other tools

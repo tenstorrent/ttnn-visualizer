@@ -190,7 +190,7 @@ const LocalFolderOptions: FC = () => {
     }, [isUploadingReport, isUploadingPerformance]);
 
     const handleSelectProfiler = async (item: string) => {
-        await updateTabSession({ ...session, active_report: { report_name: item } });
+        await updateTabSession({ ...session, active_report: { profiler_name: item } });
         setActiveReport(item);
     };
 
@@ -206,7 +206,7 @@ const LocalFolderOptions: FC = () => {
     };
 
     const handleSelectPerformance = async (item: string) => {
-        await updateTabSession({ ...session, active_report: { profile_name: item } });
+        await updateTabSession({ ...session, active_report: { performance_name: item } });
         setActivePerformanceTrace(item);
     };
 

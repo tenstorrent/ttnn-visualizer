@@ -180,8 +180,8 @@ class StatusMessage(SerializeableModel):
 
 
 class ActiveReport(SerializeableModel):
-    report_name: Optional[str] = None
-    profile_name: Optional[str] = None
+    profiler_name: Optional[str] = None
+    performance_name: Optional[str] = None
     npe_name: Optional[str] = None
 
 
@@ -194,8 +194,8 @@ class RemoteReportFolder(SerializeableModel):
 
 class Instance(BaseModel):
     instance_id: str
-    report_path: Optional[str] = None
     profiler_path: Optional[str] = None
+    performance_path: Optional[str] = None
     npe_path: Optional[str] = None
     active_report: Optional[ActiveReport] = None
     remote_connection: Optional[RemoteConnection] = None
@@ -208,8 +208,8 @@ class InstanceTable(db.Model):
 
     id = Column(Integer, primary_key=True)
     instance_id = Column(String, unique=True, nullable=False)
-    report_path = Column(String)
-    profiler_path = Column(String, nullable=True)
+    profiler_path = Column(String)
+    performance_path = Column(String, nullable=True)
     npe_path = Column(String, nullable=True)
     active_report = db.Column(MutableDict.as_mutable(JSON), nullable=False, default={})
     remote_connection = Column(JSON, nullable=True)
@@ -223,17 +223,17 @@ class InstanceTable(db.Model):
         remote_connection=None,
         remote_folder=None,
         remote_profile_folder=None,
-        report_path=None,
         profiler_path=None,
+        performance_path=None,
         npe_path=None,
     ):
         self.instance_id = instance_id
         self.active_report = active_report
-        self.report_path = report_path
+        self.profiler_path = profiler_path
         self.npe_path = npe_path
         self.remote_connection = remote_connection
         self.remote_folder = remote_folder
-        self.profiler_path = profiler_path
+        self.performance_path = performance_path
         self.remote_profile_folder = remote_profile_folder
 
     def to_dict(self):
@@ -244,17 +244,17 @@ class InstanceTable(db.Model):
             "remote_connection": self.remote_connection,
             "remote_folder": self.remote_folder,
             "remote_profile_folder": self.remote_profile_folder,
-            "report_path": self.report_path,
             "profiler_path": self.profiler_path,
+            "performance_path": self.performance_path,
             "npe_path": self.npe_path
         }
 
     def to_pydantic(self) -> Instance:
         return Instance(
             instance_id=str(self.instance_id),
-            report_path=str(self.report_path) if self.report_path is not None else None,
-            profiler_path=(
-                str(self.profiler_path) if self.profiler_path is not None else None
+            profiler_path=str(self.profiler_path) if self.profiler_path is not None else None,
+            performance_path=(
+                str(self.performance_path) if self.performance_path is not None else None
             ),
             npe_path=(
                 str(self.npe_path) if self.npe_path is not None else None

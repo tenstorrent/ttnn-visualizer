@@ -36,15 +36,15 @@ class LocalQueryRunner:
         if connection:
             self.connection = connection
         else:
-            if not session or not session.report_path:
+            if not session or not session.profiler_path:
                 raise ValueError("Report path must be provided for local queries")
-            db_path = str(session.report_path)
+            db_path = str(session.profiler_path)
             if not Path(db_path).exists():
                 raise DatabaseFileNotFoundException(
                     f"Database not found at path: {db_path}"
                 )
             self.connection = sqlite3.connect(
-                session.report_path, isolation_level=None, timeout=30
+                session.profiler_path, isolation_level=None, timeout=30
             )
 
     def execute_query(self, query: str, params: Optional[List] = None) -> List:

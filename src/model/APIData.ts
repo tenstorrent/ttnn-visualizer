@@ -74,7 +74,7 @@ export interface OperationDetailsData extends Operation {
 }
 
 export interface TabSession {
-    active_report?: { profile_name?: string; report_name?: string; npe_name?: string };
+    active_report?: { performance_name?: string; profiler_name?: string; npe_name?: string };
     remote_connection?: RemoteConnection;
     remote_folder?: RemoteFolder;
 }
@@ -169,8 +169,8 @@ export interface ReportMetaData {
     enable_detailed_tensor_report: boolean;
     enable_comparison_mode: boolean;
     comparison_mode_pcc: number;
-    root_report_path: string;
-    report_name: string;
+    root_profiler_path: string;
+    profiler_name: string;
 }
 
 export interface OperationDescription extends Operation {
