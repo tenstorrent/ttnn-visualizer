@@ -84,11 +84,11 @@ const LocalFolderOptions: FC = () => {
     const { data: reportFolderList } = useReportFolderList();
     const { data: session } = useSession();
 
-    const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
+    const [profilerFolder, setProfilerFolder] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
     const [isUploadingPerformance, setIsPerformanceUploading] = useState(false);
     const [profilerUploadLabel, setProfilerUploadLabel] = useState('Choose directory...');
-    const [performanceFolderStatus, setPerformanceFolderStatus] = useState<ConnectionStatus | undefined>();
+    const [performanceFolder, setPerformanceFolder] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
     /**
@@ -106,7 +106,7 @@ const LocalFolderOptions: FC = () => {
         const files = filterReportFiles(unfilteredFiles);
 
         if (!checkRequiredReportFiles(files)) {
-            setFolderStatus(invalidReportStatus);
+            setProfilerFolder(invalidReportStatus);
             return;
         }
 
@@ -133,7 +133,7 @@ const LocalFolderOptions: FC = () => {
 
         queryClient.clear();
         setIsUploadingReport(false);
-        setFolderStatus(connectionStatus);
+        setProfilerFolder(connectionStatus);
     };
 
     const handlePerformanceDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -145,7 +145,7 @@ const LocalFolderOptions: FC = () => {
         const files = filterReportFiles(unfilteredFiles);
 
         if (!checkRequiredProfilerFiles(files)) {
-            setPerformanceFolderStatus(invalidProfilerStatus);
+            setPerformanceFolder(invalidProfilerStatus);
             return;
         }
 
@@ -170,19 +170,19 @@ const LocalFolderOptions: FC = () => {
 
         queryClient.clear();
         setIsPerformanceUploading(false);
-        setPerformanceFolderStatus(connectionStatus);
+        setPerformanceFolder(connectionStatus);
     };
 
     useEffect(() => {
         if (isUploadingReport) {
-            setFolderStatus({
+            setProfilerFolder({
                 status: ConnectionTestStates.PROGRESS,
                 message: 'Files uploading...',
             });
         }
 
         if (isUploadingPerformance) {
-            setPerformanceFolderStatus({
+            setPerformanceFolder({
                 status: ConnectionTestStates.PROGRESS,
                 message: 'Files uploading...',
             });
@@ -198,10 +198,10 @@ const LocalFolderOptions: FC = () => {
         await deleteProfiler(folder);
         await queryClient.invalidateQueries([PROFILER_FOLDER_QUERY_KEY]);
 
-        if (activePerformanceTrace === folder) {
+        if (activeReport === folder) {
             setActiveReport(null);
-            setPerformanceDataUploadLabel('Choose directory...');
-            setPerformanceFolderStatus(undefined);
+            setProfilerUploadLabel('Choose directory...');
+            setProfilerFolder(undefined);
         }
     };
 
@@ -217,7 +217,7 @@ const LocalFolderOptions: FC = () => {
         if (activePerformanceTrace === folder) {
             setActivePerformanceTrace(null);
             setPerformanceDataUploadLabel('Choose directory...');
-            setPerformanceFolderStatus(undefined);
+            setPerformanceFolder(undefined);
         }
     };
 
@@ -238,6 +238,7 @@ const LocalFolderOptions: FC = () => {
             )}
 
             <div>
+                {`activeReport: ${activeReport}`}
                 <FormGroup
                     label={<h3>Report folder</h3>}
                     subLabel='Select a performance trace from the list below'
@@ -272,18 +273,18 @@ const LocalFolderOptions: FC = () => {
 
                         <FileStatusOverlay />
 
-                        {folderStatus && !isUploadingReport && (
+                        {profilerFolder && !isUploadingReport && (
                             <div
-                                className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}
+                                className={`verify-connection-item status-${ConnectionTestStates[profilerFolder.status]}`}
                             >
                                 <Icon
                                     className='connection-status-icon'
-                                    icon={ICON_MAP[folderStatus.status]}
+                                    icon={ICON_MAP[profilerFolder.status]}
                                     size={20}
-                                    intent={INTENT_MAP[folderStatus.status]}
+                                    intent={INTENT_MAP[profilerFolder.status]}
                                 />
 
-                                <span className='connection-status-text'>{folderStatus.message}</span>
+                                <span className='connection-status-text'>{profilerFolder.message}</span>
                             </div>
                         )}
                     </div>
@@ -321,18 +322,18 @@ const LocalFolderOptions: FC = () => {
                             <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
                         </label>
 
-                        {performanceFolderStatus && !isUploadingPerformance && (
+                        {performanceFolder && !isUploadingPerformance && (
                             <div
-                                className={`verify-connection-item status-${ConnectionTestStates[performanceFolderStatus.status]}`}
+                                className={`verify-connection-item status-${ConnectionTestStates[performanceFolder.status]}`}
                             >
                                 <Icon
                                     className='connection-status-icon'
-                                    icon={ICON_MAP[performanceFolderStatus.status]}
+                                    icon={ICON_MAP[performanceFolder.status]}
                                     size={20}
-                                    intent={INTENT_MAP[performanceFolderStatus.status]}
+                                    intent={INTENT_MAP[performanceFolder.status]}
                                 />
 
-                                <span className='connection-status-text'>{performanceFolderStatus.message}</span>
+                                <span className='connection-status-text'>{performanceFolder.message}</span>
                             </div>
                         )}
                     </div>

@@ -76,7 +76,7 @@ export interface OperationDetailsData extends Operation {
 export interface TabSession {
     active_report?: { performance_name?: string; profiler_name?: string; npe_name?: string };
     remote_connection?: RemoteConnection;
-    remote_folder?: RemoteFolder;
+    remote_profiler_folder?: RemoteFolder;
 }
 
 export enum FileStatus {

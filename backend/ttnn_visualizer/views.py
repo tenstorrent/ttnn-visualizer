@@ -49,10 +49,10 @@ from ttnn_visualizer.sftp_operations import (
     sync_remote_folders,
     read_remote_file,
     check_remote_path_for_reports,
-    get_remote_report_folders,
+    get_remote_performance_folders,
     check_remote_path_exists,
-    get_remote_profiler_folders,
-    sync_remote_profiler_folders,
+    get_remote_performance_folders,
+    sync_remote_performance_folders,
     get_cluster_desc,
 )
 from ttnn_visualizer.ssh_client import get_client
@@ -201,11 +201,11 @@ def operation_history(session: Instance):
 @timer
 def get_config(session: Instance):
     if session.remote_connection and session.remote_connection.useRemoteQuerying:
-        if not session.remote_folder:
+        if not session.remote_profiler_folder:
             return {}
         config = read_remote_file(
             remote_connection=session.remote_connection,
-            remote_path=Path(session.remote_folder.remotePath, "config.json"),
+            remote_path=Path(session.remote_profiler_folder.remotePath, "config.json"),
         )
         if not config:
             return {}
@@ -376,13 +376,13 @@ def get_operation_buffers(operation_id, session: Instance):
 def get_profiler_data_list(session: Instance):
     is_remote = True if session.remote_connection else False
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    report_directory = Path(current_app.config[config_key])
+    data_directory = Path(current_app.config[config_key])
 
     if is_remote:
         connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
-        path = report_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
+        path = data_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
     else:
-        path = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
+        path = data_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
 
     if not path.exists():
         path.mkdir(parents=True, exist_ok=True)
@@ -411,18 +411,18 @@ def get_profiler_data_list(session: Instance):
 def delete_profiler_report(profiler_name, session: Instance):
     is_remote = bool(session.remote_connection)
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    report_directory = Path(current_app.config[config_key])
+    data_directory = Path(current_app.config[config_key])
 
     if not profiler_name:
         return Response(status=HTTPStatus.BAD_REQUEST, response="Report name is required.")
 
     if is_remote:
         connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
-        path = report_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
+        path = data_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
     else:
-        path = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / profiler_name
+        path = data_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / profiler_name
 
-    if session.active_report.performance_name == profiler_name:
+    if session.active_report.profiler_name == profiler_name:
         instance_id = request.args.get("instanceId")
         update_instance(instance_id=instance_id,profiler_name="")
 
@@ -460,16 +460,16 @@ def get_profiler_performance_data(session: Instance):
 def delete_performance_report(performance_name, session: Instance):
     is_remote = bool(session.remote_connection)
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    report_directory = Path(current_app.config[config_key])
+    data_directory = Path(current_app.config[config_key])
 
     if not performance_name:
         return Response(status=HTTPStatus.BAD_REQUEST, response="Report name is required.")
 
     if is_remote:
         connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
-        path = report_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+        path = data_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
     else:
-        path = report_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"] / performance_name
+        path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"] / performance_name
 
     if session.active_report.performance_name == performance_name:
         instance_id = request.args.get("instanceId")
@@ -488,13 +488,13 @@ def delete_performance_report(performance_name, session: Instance):
 def get_performance_data_list(session: Instance):
     is_remote = True if session.remote_connection else False
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    report_directory = Path(current_app.config[config_key])
+    data_directory = Path(current_app.config[config_key])
 
     if is_remote:
         connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
-        path = report_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+        path = data_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
     else:
-        path = report_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+        path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
 
     if not path.exists():
         path.mkdir(parents=True, exist_ok=True)
@@ -612,10 +612,10 @@ def create_profiler_files():
     ).model_dump()
 
 
-@api.route("/local/upload/profile", methods=["POST"])
+@api.route("/local/upload/performance", methods=["POST"])
 def create_profile_files():
     files = request.files.getlist("files")
-    report_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+    data_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
     instance_id = request.args.get("instanceId")
 
     if not validate_files(
@@ -628,10 +628,10 @@ def create_profile_files():
             message="Invalid project directory.",
         ).model_dump()
 
-    logger.info(f"Writing profile files to {report_directory} / {current_app.config['PERFORMANCE_DIRECTORY_NAME']}")
+    logger.info(f"Writing profile files to {data_directory} / {current_app.config['PERFORMANCE_DIRECTORY_NAME']}")
 
     # Construct the base directory with profiler_name first
-    target_directory = report_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+    target_directory = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
     target_directory.mkdir(parents=True, exist_ok=True)
 
     if files:
@@ -650,7 +650,7 @@ def create_profile_files():
 
     save_uploaded_files(
         updated_files,
-        str(report_directory),
+        str(data_directory),
     )
 
     update_instance(
@@ -665,7 +665,7 @@ def create_profile_files():
 @api.route("/local/upload/npe", methods=["POST"])
 def create_npe_files():
     files = request.files.getlist("files")
-    report_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
+    data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
     for file in files:
         if not file.filename.endswith(".json"):
@@ -675,7 +675,7 @@ def create_npe_files():
             ).model_dump()
 
     npe_name = extract_npe_name(files)
-    target_directory = report_directory / current_app.config["NPE_DIRECTORY_NAME"]
+    target_directory = data_directory / current_app.config["NPE_DIRECTORY_NAME"]
     target_directory.mkdir(parents=True, exist_ok=True)
 
     save_uploaded_files(files, target_directory, npe_name)
@@ -688,22 +688,18 @@ def create_npe_files():
     ).model_dump()
 
 
-@api.route("/remote/folder", methods=["POST"])
+@api.route("/remote/profiler", methods=["POST"])
 def get_remote_folders():
     connection = RemoteConnection.model_validate(request.json, strict=False)
     try:
-        remote_folders: List[RemoteReportFolder] = get_remote_report_folders(
+        remote_folders: List[RemoteReportFolder] = get_remote_performance_folders(
             RemoteConnection.model_validate(connection, strict=False)
         )
 
         for rf in remote_folders:
             directory_name = Path(rf.remotePath).name
             remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-            local_path = (
-                Path(remote_data_directory)
-                .joinpath(connection.host)
-                .joinpath(directory_name)
-            )
+            local_path = remote_data_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / connection.host / directory_name
             logger.info(f"Checking last synced for {directory_name}")
             rf.lastSynced = read_last_synced_file(str(local_path))
             if not rf.lastSynced:
@@ -714,33 +710,28 @@ def get_remote_folders():
         return Response(status=e.http_status, response=e.message)
 
 
-@api.route("/remote/profiles", methods=["POST"])
-def get_remote_profile_folders():
+@api.route("/remote/performance", methods=["POST"])
+def get_remote_performance_folders():
     request_body = request.get_json()
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
     )
 
     try:
-        remote_profile_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
+        remote_performance_folders: List[RemoteReportFolder] = get_remote_performance_folders(
             RemoteConnection.model_validate(connection, strict=False)
         )
 
-        for rf in remote_profile_folders:
+        for rf in remote_performance_folders:
             performance_name = Path(rf.remotePath).name
             remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-            local_path = (
-                Path(remote_data_directory)
-                .joinpath(connection.host)
-                .joinpath("profiler")
-                .joinpath(performance_name)
-            )
+            local_path = remote_data_directory / current_app.config["PERFORMANCE_DATA_LABEL"] / connection.host / performance_name
             logger.info(f"Checking last synced for {performance_name}")
             rf.lastSynced = read_last_synced_file(str(local_path))
             if not rf.lastSynced:
                 logger.info(f"{performance_name} not yet synced")
 
-        return [r.model_dump() for r in remote_profile_folders]
+        return [r.model_dump() for r in remote_performance_folders]
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
 
@@ -871,7 +862,7 @@ def sync_remote_folder():
     if profile:
         profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
         try:
-            sync_remote_profiler_folders(
+            sync_remote_performance_folders(
                 connection,
                 remote_dir,
                 profile=profile_folder,
@@ -887,19 +878,19 @@ def sync_remote_folder():
             return Response(status=e.http_status, response=e.message)
 
     try:
-        remote_folder = RemoteReportFolder.model_validate(folder, strict=False)
+        remote_profiler_folder = RemoteReportFolder.model_validate(folder, strict=False)
 
         sync_remote_folders(
             connection,
-            remote_folder.remotePath,
+            remote_profiler_folder.remotePath,
             remote_dir,
             exclude_patterns=[r"/tensors(/|$)"],
             sid=instance_id,
         )
 
-        remote_folder.lastSynced = int(time.time())
+        remote_profiler_folder.lastSynced = int(time.time())
 
-        return remote_folder.model_dump()
+        return remote_profiler_folder.model_dump()
 
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
@@ -943,14 +934,14 @@ def use_remote_folder():
     connection = RemoteConnection.model_validate(connection, strict=False)
     folder = RemoteReportFolder.model_validate(folder, strict=False)
     performance_name = None
-    remote_profile_folder = None
+    remote_performance_folder = None
     if profile:
-        remote_profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
-        performance_name = remote_profile_folder.testName
-    report_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-    report_folder = Path(folder.remotePath).name
+        remote_performance_folder = RemoteReportFolder.model_validate(profile, strict=False)
+        performance_name = remote_performance_folder.testName
+    data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
+    profiler_folder = Path(folder.remotePath).name
 
-    connection_directory = Path(report_data_directory, connection.host, report_folder)
+    connection_directory = Path(data_directory, connection.host, profiler_folder)
 
     if not connection.useRemoteQuerying and not connection_directory.exists():
         return Response(
@@ -958,18 +949,18 @@ def use_remote_folder():
             response=f"{connection_directory} does not exist.",
         )
 
-    remote_path = f"{Path(report_data_directory).name}/{connection.host}/{connection_directory.name}"
+    remote_path = f"{Path(data_directory).name}/{connection.host}/{connection_directory.name}"
 
     instance_id = request.args.get("instanceId")
     current_app.logger.info(f"Setting active report for {instance_id} - {remote_path}")
 
     update_instance(
         instance_id=instance_id,
-        profiler_name=report_folder,
+        profiler_name=profiler_folder,
         performance_name=performance_name,
         remote_connection=connection,
-        remote_folder=folder,
-        remote_profile_folder=remote_profile_folder,
+        remote_profiler_folder=folder,
+        remote_performance_folder=remote_performance_folder,
     )
 
     return Response(status=HTTPStatus.OK)
@@ -995,16 +986,14 @@ def update_current_instance():
         if not update_data:
             return Response(status=HTTPStatus.BAD_REQUEST, response="No data provided.")
 
-        logger.info(f"%%%%%%%%% update_data payload: {update_data}")
-
         update_instance(
             instance_id=update_data.get("instance_id"),
             profiler_name=update_data["active_report"].get("profiler_name"),
             performance_name=update_data["active_report"].get("performance_name"),
             npe_name=update_data["active_report"].get("npe_name"),
             remote_connection=update_data.get("remote_connection"),
-            remote_folder=update_data.get("remote_folder"),
-            remote_profile_folder=update_data.get("remote_profile_folder"),
+            remote_profiler_folder=update_data.get("remote_profiler_folder"),
+            remote_performance_folder=update_data.get("remote_performance_folder"),
         )
 
         return Response(status=HTTPStatus.OK)

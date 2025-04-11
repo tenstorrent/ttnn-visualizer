@@ -199,8 +199,8 @@ class Instance(BaseModel):
     npe_path: Optional[str] = None
     active_report: Optional[ActiveReport] = None
     remote_connection: Optional[RemoteConnection] = None
-    remote_folder: Optional[RemoteReportFolder] = None
-    remote_profile_folder: Optional[RemoteReportFolder] = None
+    remote_profiler_folder: Optional[RemoteReportFolder] = None
+    remote_performance_folder: Optional[RemoteReportFolder] = None
 
 
 class InstanceTable(db.Model):
@@ -213,16 +213,16 @@ class InstanceTable(db.Model):
     npe_path = Column(String, nullable=True)
     active_report = db.Column(MutableDict.as_mutable(JSON), nullable=False, default={})
     remote_connection = Column(JSON, nullable=True)
-    remote_folder = Column(JSON, nullable=True)
-    remote_profile_folder = Column(JSON, nullable=True)
+    remote_profiler_folder = Column(JSON, nullable=True)
+    remote_performance_folder = Column(JSON, nullable=True)
 
     def __init__(
         self,
         instance_id,
         active_report,
         remote_connection=None,
-        remote_folder=None,
-        remote_profile_folder=None,
+        remote_profiler_folder=None,
+        remote_performance_folder=None,
         profiler_path=None,
         performance_path=None,
         npe_path=None,
@@ -232,9 +232,9 @@ class InstanceTable(db.Model):
         self.profiler_path = profiler_path
         self.npe_path = npe_path
         self.remote_connection = remote_connection
-        self.remote_folder = remote_folder
+        self.remote_profiler_folder = remote_profiler_folder
         self.performance_path = performance_path
-        self.remote_profile_folder = remote_profile_folder
+        self.remote_performance_folder = remote_performance_folder
 
     def to_dict(self):
         return {
@@ -242,8 +242,8 @@ class InstanceTable(db.Model):
             "instance_id": self.instance_id,
             "active_report": self.active_report,
             "remote_connection": self.remote_connection,
-            "remote_folder": self.remote_folder,
-            "remote_profile_folder": self.remote_profile_folder,
+            "remote_profiler_folder": self.remote_profiler_folder,
+            "remote_performance_folder": self.remote_performance_folder,
             "profiler_path": self.profiler_path,
             "performance_path": self.performance_path,
             "npe_path": self.npe_path
@@ -269,16 +269,16 @@ class InstanceTable(db.Model):
                 if self.remote_connection is not None
                 else None
             ),
-            remote_folder=(
-                RemoteReportFolder.model_validate(self.remote_folder, strict=False)
-                if self.remote_folder is not None
+            remote_profiler_folder=(
+                RemoteReportFolder.model_validate(self.remote_profiler_folder, strict=False)
+                if self.remote_profiler_folder is not None
                 else None
             ),
-            remote_profile_folder=(
+            remote_performance_folder=(
                 RemoteReportFolder.model_validate(
-                    self.remote_profile_folder, strict=False
+                    self.remote_performance_folder, strict=False
                 )
-                if self.remote_profile_folder is not None
+                if self.remote_performance_folder is not None
                 else None
             ),
         )

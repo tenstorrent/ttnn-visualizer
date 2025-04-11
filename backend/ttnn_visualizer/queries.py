@@ -72,7 +72,7 @@ class RemoteQueryRunner:
         self.ssh_client = self._get_ssh_client(self.session.remote_connection)
         self.sqlite_binary = self.session.remote_connection.sqliteBinaryPath
         self.remote_db_path = str(
-            Path(self.session.remote_folder.remotePath, "db.sqlite")
+            Path(self.session.remote_profiler_folder.remotePath, "db.sqlite")
         )
 
     def _validate_session(self):
@@ -82,8 +82,8 @@ class RemoteQueryRunner:
         if (
             not self.session.remote_connection
             or not self.session.remote_connection.sqliteBinaryPath
-            or not self.session.remote_folder
-            or not self.session.remote_folder.remotePath
+            or not self.session.remote_profiler_folder
+            or not self.session.remote_profiler_folder.remotePath
         ):
             raise ValueError(
                 "Remote connections require remote path and sqliteBinaryPath"

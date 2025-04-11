@@ -29,8 +29,8 @@ def update_existing_instance(
     performance_name,
     npe_name,
     remote_connection,
-    remote_folder,
-    remote_profile_folder,
+    remote_profiler_folder,
+    remote_performance_folder,
     clear_remote,
 ):
     active_report = session_data.active_report or {}
@@ -40,9 +40,11 @@ def update_existing_instance(
         active_report.pop("profiler_name", None)
     elif profiler_name is not None:
         active_report["profiler_name"] = profiler_name
+
     if performance_name == "":
         active_report.pop("performance_name", None)
     elif performance_name is not None:
+
         active_report["performance_name"] = performance_name
     if npe_name == "":
         active_report.pop("npe_name", None)
@@ -53,10 +55,10 @@ def update_existing_instance(
 
     if remote_connection:
         session_data.remote_connection = remote_connection.model_dump()
-    if remote_folder:
-        session_data.remote_folder = remote_folder.model_dump()
-    if remote_profile_folder:
-        session_data.remote_profile_folder = remote_profile_folder.model_dump()
+    if remote_profiler_folder:
+        session_data.remote_profiler_folder = remote_profiler_folder.model_dump()
+    if remote_performance_folder:
+        session_data.remote_performance_folder = remote_performance_folder.model_dump()
 
     if clear_remote:
         clear_remote_data(session_data)
@@ -68,8 +70,8 @@ def update_existing_instance(
 
 def clear_remote_data(session_data):
     session_data.remote_connection = None
-    session_data.remote_folder = None
-    session_data.remote_profile_folder = None
+    session_data.remote_profiler_folder = None
+    session_data.remote_performance_folder = None
 
 
 def handle_sqlalchemy_error(error):
@@ -116,8 +118,8 @@ def create_new_instance(
     performance_name,
     npe_name,
     remote_connection,
-    remote_folder,
-    remote_profile_folder,
+    remote_profiler_folder,
+    remote_performance_folder,
     clear_remote,
 ):
     active_report = {}
@@ -130,8 +132,8 @@ def create_new_instance(
 
     if clear_remote:
         remote_connection = None
-        remote_folder = None
-        remote_profile_folder = None
+        remote_profiler_folder = None
+        remote_performance_folder = None
 
     session_data = InstanceTable(
         instance_id=instance_id,
@@ -144,9 +146,9 @@ def create_new_instance(
         remote_connection=(
             remote_connection.model_dump() if remote_connection else None
         ),
-        remote_folder=remote_folder.model_dump() if remote_folder else None,
-        remote_profile_folder=(
-            remote_profile_folder.model_dump() if remote_profile_folder else None
+        remote_profiler_folder=remote_profiler_folder.model_dump() if remote_profiler_folder else None,
+        remote_performance_folder=(
+            remote_performance_folder.model_dump() if remote_performance_folder else None
         ),
     )
     db.session.add(session_data)
@@ -159,8 +161,8 @@ def update_instance(
     performance_name=None,
     npe_name=None,
     remote_connection=None,
-    remote_folder=None,
-    remote_profile_folder=None,
+    remote_profiler_folder=None,
+    remote_performance_folder=None,
     clear_remote=False,
 ):
     try:
@@ -173,8 +175,8 @@ def update_instance(
                 performance_name,
                 npe_name,
                 remote_connection,
-                remote_folder,
-                remote_profile_folder,
+                remote_profiler_folder,
+                remote_performance_folder,
                 clear_remote,
             )
         else:
@@ -184,8 +186,8 @@ def update_instance(
                 performance_name,
                 npe_name,
                 remote_connection,
-                remote_folder,
-                remote_profile_folder,
+                remote_profiler_folder,
+                remote_performance_folder,
                 clear_remote,
             )
 
@@ -203,7 +205,7 @@ def get_or_create_instance(
     performance_name=None,
     npe_name=None,
     remote_connection=None,
-    remote_folder=None,
+    remote_profiler_folder=None,
 ):
     """
     Retrieve an existing tab session or create a new one if it doesn't exist.
@@ -219,20 +221,20 @@ def get_or_create_instance(
                 instance_id=instance_id,
                 active_report={},
                 remote_connection=None,
-                remote_folder=None,
+                remote_profiler_folder=None,
             )
             db.session.add(session_data)
             db.session.commit()
 
         # Update the session if any new data is provided
-        if profiler_name or performance_name or npe_name or remote_connection or remote_folder:
+        if profiler_name or performance_name or npe_name or remote_connection or remote_profiler_folder:
             update_instance(
                 instance_id=instance_id,
                 profiler_name=profiler_name,
                 performance_name=performance_name,
                 npe_name=npe_name,
                 remote_connection=remote_connection,
-                remote_folder=remote_folder,
+                remote_profiler_folder=remote_profiler_folder,
             )
 
         # Query again to get the updated session data
@@ -299,8 +301,8 @@ def create_instance_from_local_paths(profiler_path, performance_path):
         profiler_path=f"{_profiler_path}/db.sqlite" if profiler_path else None,
         performance_path=performance_path if performance_path else None,
         remote_connection=None,
-        remote_folder=None,
-        remote_profile_folder=None,
+        remote_profiler_folder=None,
+        remote_performance_folder=None,
     )
     db.session.add(session_data)
     db.session.commit()
