@@ -1,6 +1,6 @@
 import { Button, Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { NoCID, NoCTransfer } from '../../model/NPEModel';
+import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer } from '../../model/NPEModel';
 import { calculateLinkCongestionColor, getRouteColor } from './drawingApi';
 import { formatSize } from '../../functions/math';
 
@@ -17,7 +17,8 @@ const ActiveTransferDetails = ({
     showActiveTransfers: (route: [number, number, NoCID, number] | null, index?: number) => void;
     highlightedTransfer: NoCTransfer | null;
     setHighlightedTransfer: (transfer: NoCTransfer | null) => void;
-    congestionData: [number, number, NoCID, number][]; // [src, dst, congestion, demand]
+    congestionData: LinkUtilization[];
+    // congestionData: [number, number, NoCID, number][]; // [src, dst, congestion, demand]
 }) => {
     return (
         <div className='side-data'>
@@ -32,8 +33,9 @@ const ActiveTransferDetails = ({
                         />
                     </h3>
                     {Object.entries(groupedTransfersByNoCID).map(([nocId, localTransferList]) => {
-                        const nocData = congestionData.find((el) => el[2] === nocId);
-                        const congestion = nocData ? nocData[3] : 0;
+                        const nocData = congestionData.find((el) => el[NPE_LINK.NOC_ID] === nocId);
+                        const congestion = nocData ? nocData[NPE_LINK.DEMAND] : 0;
+
                         return (
                             <div
                                 className='local-transfer-ctn'

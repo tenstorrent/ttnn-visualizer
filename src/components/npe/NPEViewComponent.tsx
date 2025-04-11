@@ -9,7 +9,7 @@ import React, { JSX, useEffect, useMemo, useState } from 'react';
 import { Button, ButtonGroup, Intent, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
-import { NPEData, NoCID, NoCTransfer } from '../../model/NPEModel';
+import { LinkUtilization, NPEData, NPE_COORDINATES, NPE_LINK, NoCID, NoCTransfer } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import { NODE_SIZE, calculateLinkCongestionColor, getLinkPoints, getRouteColor, resetRouteColors } from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
@@ -38,7 +38,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const transfers = npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));
     const [animationInterval, setAnimationInterval] = useState<number | null>(null);
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
-    const [selectedNode, setSelectedNode] = useState<{ index: number; coords: number[] } | null>(null);
+    const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
     const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
 
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
@@ -97,11 +97,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 transfer.route.forEach(([row, col]) => {
                     list[row] = list[row] || [];
                     list[row][col] = list[row][col] || [];
-                    const routes = transfer.route.filter((r) => r[0] === row && r[1] === col);
+                    const routes = transfer.route.filter((r) => r[NPE_LINK.Y] === row && r[NPE_LINK.X] === col);
                     routes?.forEach((route) => {
                         list[row][col].push({
                             transfer: transfer.id,
-                            nocId: route[2],
+                            nocId: route[NPE_LINK.NOC_ID],
                         });
                     });
                 });
@@ -186,7 +186,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedNode(null);
         setSelectedTransferList([]);
     };
-    const showActiveTransfers = (route: [number, number, NoCID, number] | null, index?: number) => {
+    const showActiveTransfers = (route: LinkUtilization | null, index?: number) => {
         hideAllTransfers();
         if (route === null) {
             setSelectedTransferList([]);
@@ -199,7 +199,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return;
         }
         if (index !== undefined) {
-            setSelectedNode({ index, coords: [route[0], route[1]] });
+            setSelectedNode({ index, coords: [route[NPE_LINK.Y], route[NPE_LINK.X]] });
         }
 
         onPause();
@@ -208,7 +208,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             .map((transferId) => {
                 const transfer = npeData.noc_transfers.find((tr) => tr.id === transferId);
                 if (transfer) {
-                    if (transfer.route.some((r) => r[0] === route[0] && r[1] === route[1])) {
+                    if (
+                        transfer.route.some(
+                            (r) => r[NPE_LINK.Y] === route[NPE_LINK.Y] && r[NPE_LINK.X] === route[NPE_LINK.X],
+                        )
+                    ) {
                         return transfer;
                     }
                 }
@@ -384,12 +388,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         {links?.link_demand.map((route, index) => (
                             <button
                                 type='button'
-                                key={`${index}-${route[0]}-${route[1]}-${route[2]}`}
+                                key={`${index}-${route[NPE_LINK.Y]}-${route[NPE_LINK.X]}-${route[NPE_LINK.NOC_ID]}`}
                                 className='tensix'
                                 style={{
                                     position: 'relative',
-                                    gridColumn: route[1] + 1,
-                                    gridRow: route[0] + 1,
+                                    gridColumn: route[NPE_LINK.X] + 1,
+                                    gridRow: route[NPE_LINK.Y] + 1,
                                 }}
                                 onClick={() => showActiveTransfers(route, index)}
                             >
@@ -403,11 +407,13 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     }}
                                     width={SVG_SIZE}
                                     height={SVG_SIZE}
-                                    data={[getLinkPoints(route[2], calculateLinkCongestionColor(route[3]))]}
+                                    data={[
+                                        getLinkPoints(route[2], calculateLinkCongestionColor(route[NPE_LINK.DEMAND])),
+                                    ]}
                                     isMulticolor={false}
                                 />
                                 <div style={{ fontSize: '9px', position: 'absolute', top: 0 }}>
-                                    {route[0]}-{route[1]}
+                                    {route[NPE_LINK.Y]}-{route[NPE_LINK.X]}
                                 </div>
                             </button>
                         ))}
@@ -424,7 +430,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 <div
                                     key={`selected-transfer-${rowIndex}-${colIndex}`}
                                     className={
-                                        selectedNode?.coords[0] === rowIndex && selectedNode?.coords[1] === colIndex
+                                        selectedNode?.coords[NPE_LINK.Y] === rowIndex &&
+                                        selectedNode?.coords[NPE_LINK.X] === colIndex
                                             ? 'selected tensix no-click'
                                             : 'tensix no-click'
                                     }
@@ -459,12 +466,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         >
                             {highlightedTransfer?.route.map((point) => (
                                 <div
-                                    key={`${point[0]}-${point[1]}-${point[2]}`}
+                                    key={`${point[NPE_LINK.Y]}-${point[NPE_LINK.X]}-${point[NPE_LINK.NOC_ID]}`}
                                     className='tensix'
                                     style={{
                                         position: 'relative',
-                                        gridColumn: point[1] + 1,
-                                        gridRow: point[0] + 1,
+                                        gridColumn: point[NPE_LINK.X] + 1,
+                                        gridRow: point[NPE_LINK.Y] + 1,
                                     }}
                                 >
                                     <div className='transfer-render-ctn'>
@@ -472,7 +479,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                         <TensixTransferRenderer
                                             width={SVG_SIZE}
                                             height={SVG_SIZE}
-                                            data={getLines([{ transfer: highlightedTransfer.id, nocId: point[2] }])}
+                                            data={getLines([
+                                                { transfer: highlightedTransfer.id, nocId: point[NPE_LINK.NOC_ID] },
+                                            ])}
                                             isMulticolor={false}
                                         />
                                     </div>
@@ -486,7 +495,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     groupedTransfersByNoCID={groupedTransfersByNoCID}
                     selectedNode={selectedNode}
                     congestionData={links?.link_demand.filter(
-                        (route) => route[0] === selectedNode?.coords[0] && route[1] === selectedNode?.coords[1],
+                        (route) =>
+                            route[NPE_LINK.Y] === selectedNode?.coords[NPE_LINK.Y] &&
+                            route[NPE_LINK.X] === selectedNode?.coords[NPE_LINK.X],
                     )}
                     showActiveTransfers={showActiveTransfers}
                     highlightedTransfer={highlightedTransfer}
