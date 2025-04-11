@@ -169,12 +169,7 @@ def operation_detail(operation_id, session):
         )
 
 
-@api.route(
-    "operation-history",
-    methods=[
-        "GET",
-    ],
-)
+@api.route("operation-history", methods=["GET"])
 @with_session
 @timer
 def operation_history(session: Instance):
@@ -376,9 +371,72 @@ def get_operation_buffers(operation_id, session: Instance):
         return serialize_operation_buffers(operation, buffers)
 
 
-@api.route("/profiler/device-log", methods=["GET"])
+@api.route("/profiler", methods=["GET"])
 @with_session
-def get_profiler_data(session: Instance):
+def get_profiler_data_list(session: Instance):
+    is_remote = True if session.remote_connection else False
+    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
+    report_directory = Path(current_app.config[config_key])
+
+    if is_remote:
+        connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
+        path = report_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
+    else:
+        path = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
+
+    if not path.exists():
+        path.mkdir(parents=True, exist_ok=True)
+
+    directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
+
+    valid_dirs = []
+
+    for dir_name in directory_names:
+        dir_path = Path(path) / dir_name
+        files = list(dir_path.glob("**/*"))
+
+        # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
+        if not any(file.name == "db.sqlite" for file in files):
+            continue
+        if not any(file.name == "config.json" for file in files):
+            continue
+
+        valid_dirs.append(dir_name)
+
+    return jsonify(valid_dirs)
+
+
+@api.route("/profiler/<profiler_name>", methods=["DELETE"])
+@with_session
+def delete_profiler_report(profiler_name, session: Instance):
+    is_remote = bool(session.remote_connection)
+    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
+    report_directory = Path(current_app.config[config_key])
+
+    if not profiler_name:
+        return Response(status=HTTPStatus.BAD_REQUEST, response="Report name is required.")
+
+    if is_remote:
+        connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
+        path = report_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
+    else:
+        path = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / profiler_name
+
+    if session.active_report.profile_name == profiler_name:
+        instance_id = request.args.get("instanceId")
+        update_instance(instance_id=instance_id,report_name="")
+
+    if path.exists() and path.is_dir():
+        shutil.rmtree(path)
+    else:
+        return Response(status=HTTPStatus.NOT_FOUND, response=f"Report does not exist: {path}")
+
+    return Response(status=HTTPStatus.NO_CONTENT, response=f"Report deleted successfully: {path}")
+
+
+@api.route("/performance/device-log", methods=["GET"])
+@with_session
+def get_performance_data(session: Instance):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     with DeviceLogProfilerQueries(session) as csv:
@@ -386,7 +444,7 @@ def get_profiler_data(session: Instance):
         return jsonify(result)
 
 
-@api.route("/profiler/perf-results", methods=["GET"])
+@api.route("/performance/perf-results", methods=["GET"])
 @with_session
 def get_profiler_performance_data(session: Instance):
     if not session.profiler_path:
@@ -397,25 +455,25 @@ def get_profiler_performance_data(session: Instance):
         return jsonify(result)
 
 
-@api.route("/profiler/perf-results/<report_name>", methods=["DELETE"])
+@api.route("/performance/perf-results/<performance_name>", methods=["DELETE"])
 @with_session
-def delete_performance_report(report_name, session: Instance):
+def delete_performance_report(performance_name, session: Instance):
     is_remote = bool(session.remote_connection)
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     report_directory = Path(current_app.config[config_key])
 
-    if not report_name:
+    if not performance_name:
         return Response(status=HTTPStatus.BAD_REQUEST, response="Report name is required.")
 
     if is_remote:
         connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
-        path = report_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
+        path = report_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
     else:
-        path = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / report_name
+        path = report_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"] / performance_name
 
-    if session.active_report.profile_name == report_name:
+    if session.active_report.profile_name == performance_name:
         instance_id = request.args.get("instanceId")
-        update_instance(instance_id=instance_id,profile_name=None)
+        update_instance(instance_id=instance_id,profile_name="")
 
     if path.exists() and path.is_dir():
         shutil.rmtree(path)
@@ -425,18 +483,21 @@ def delete_performance_report(report_name, session: Instance):
     return Response(status=HTTPStatus.NO_CONTENT, response=f"Report deleted successfully: {path}")
 
 
-@api.route("/profiler/perf-results/list", methods=["GET"])
+@api.route("/performance", methods=["GET"])
 @with_session
-def get_profiler_performance_data_list(session: Instance):
+def get_performance_data_list(session: Instance):
     is_remote = True if session.remote_connection else False
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     report_directory = Path(current_app.config[config_key])
 
     if is_remote:
         connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
-        path = report_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
+        path = report_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
     else:
-        path = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
+        path = report_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+
+    if not path.exists():
+        path.mkdir(parents=True, exist_ok=True)
 
     directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
 
@@ -459,9 +520,9 @@ def get_profiler_performance_data_list(session: Instance):
     return jsonify(valid_dirs)
 
 
-@api.route("/profiler/perf-results/raw", methods=["GET"])
+@api.route("/performance/perf-results/raw", methods=["GET"])
 @with_session
-def get_profiler_perf_results_data_raw(session: Instance):
+def get_performance_results_data_raw(session: Instance):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     content = OpsPerformanceQueries.get_raw_csv(session)
@@ -472,9 +533,9 @@ def get_profiler_perf_results_data_raw(session: Instance):
     )
 
 
-@api.route("/profiler/perf-results/report", methods=["GET"])
+@api.route("/performance/perf-results/report", methods=["GET"])
 @with_session
-def get_profiler_perf_results_report(session: Instance):
+def get_performance_results_report(session: Instance):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
 
@@ -493,9 +554,9 @@ def get_profiler_perf_results_report(session: Instance):
     return jsonify(report), 200
 
 
-@api.route("/profiler/device-log/raw", methods=["GET"])
+@api.route("/performance/device-log/raw", methods=["GET"])
 @with_session
-def get_profiler_data_raw(session: Instance):
+def get_performance_data_raw(session: Instance):
     if not session.profiler_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     content = DeviceLogProfilerQueries.get_raw_csv(session)
@@ -506,7 +567,7 @@ def get_profiler_data_raw(session: Instance):
     )
 
 
-@api.route("/profiler/device-log/zone/<zone>", methods=["GET"])
+@api.route("/performance/device-log/zone/<zone>", methods=["GET"])
 @with_session
 def get_zone_statistics(zone, session: Instance):
     if not session.profiler_path:
@@ -524,10 +585,10 @@ def get_devices(session: Instance):
         return serialize_devices(devices)
 
 
-@api.route("/local/upload/report", methods=["POST"])
-def create_report_files():
+@api.route("/local/upload/profiler", methods=["POST"])
+def create_profiler_files():
     files = request.files.getlist("files")
-    report_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
+    profiler_directory = current_app.config["LOCAL_DATA_DIRECTORY"] / current_app.config["PROFILER_DIRECTORY_NAME"]
 
     if not validate_files(files, {"db.sqlite", "config.json"}):
         return StatusMessage(
@@ -535,10 +596,13 @@ def create_report_files():
             message="Invalid project directory.",
         ).model_dump()
 
-    report_name = extract_report_name(files)
-    logger.info(f"Writing report files to {report_directory}/{report_name}")
+    if not profiler_directory.exists():
+        profiler_directory.mkdir(parents=True, exist_ok=True)
 
-    save_uploaded_files(files, report_directory, report_name)
+    report_name = extract_report_name(files)
+    logger.info(f"Writing report files to {profiler_directory}/{report_name}")
+
+    save_uploaded_files(files, profiler_directory, report_name)
 
     instance_id = request.args.get("instanceId")
     update_instance(instance_id=instance_id, report_name=report_name, clear_remote=True)
@@ -564,10 +628,10 @@ def create_profile_files():
             message="Invalid project directory.",
         ).model_dump()
 
-    logger.info(f"Writing profile files to {report_directory} / {current_app.config['PROFILER_DIRECTORY_NAME']}")
+    logger.info(f"Writing profile files to {report_directory} / {current_app.config['PERFORMANCE_DIRECTORY_NAME']}")
 
     # Construct the base directory with report_name first
-    target_directory = report_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
+    target_directory = report_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
     target_directory.mkdir(parents=True, exist_ok=True)
 
     if files:
@@ -611,7 +675,7 @@ def create_npe_files():
             ).model_dump()
 
     npe_name = extract_npe_name(files)
-    target_directory = report_directory / "npe"
+    target_directory = report_directory / current_app.config["NPE_DIRECTORY_NAME"]
     target_directory.mkdir(parents=True, exist_ok=True)
 
     save_uploaded_files(files, target_directory, npe_name)
@@ -931,6 +995,8 @@ def update_current_instance():
         if not update_data:
             return Response(status=HTTPStatus.BAD_REQUEST, response="No data provided.")
 
+        logger.info(f"%%%%%%%%% update_data payload: {update_data}")
+
         update_instance(
             instance_id=update_data.get("instance_id"),
             report_name=update_data["active_report"].get("report_name"),
@@ -941,7 +1007,7 @@ def update_current_instance():
             remote_profile_folder=update_data.get("remote_profile_folder"),
         )
 
-        return Response(status=HTTPStatus.OK, response="Session updated successfully.")
+        return Response(status=HTTPStatus.OK)
     except Exception as e:
         logger.error(f"Error updating session: {str(e)}")
 
@@ -960,9 +1026,12 @@ def get_npe_data(session: Instance):
         return Response(status=HTTPStatus.NOT_FOUND)
 
     npe_file = Path(f"{session.npe_path}/{session.active_report.npe_name}.json")
+
     if not npe_file.exists():
         logger.error(f"NPE file does not exist: {npe_file}")
         return Response(status=HTTPStatus.NOT_FOUND)
+
     with open(npe_file, "r") as file:
         npe_data = json.load(file)
+
     return jsonify(npe_data)

@@ -15,7 +15,16 @@ import { ConnectionStatus, ConnectionTestStates } from '../../definitions/Connec
 import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification from '../../functions/createToastNotification';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
-import { deleteReport, updateTabSession, usePerfFolderList, useSession } from '../../hooks/useAPI';
+import {
+    PERFORMANCE_FOLDER_QUERY_KEY,
+    PROFILER_FOLDER_QUERY_KEY,
+    deletePerformance,
+    deleteProfiler,
+    updateTabSession,
+    usePerfFolderList,
+    useReportFolderList,
+    useSession,
+} from '../../hooks/useAPI';
 import LocalFolderPicker from './LocalFolderPicker';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
@@ -61,7 +70,7 @@ const LocalFolderOptions: FC = () => {
     const queryClient = useQueryClient();
     const setReportLocation = useSetAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
-    const setActiveReport = useSetAtom(activeReportAtom);
+    const [activeReport, setActiveReport] = useAtom(activeReportAtom);
     const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceTraceAtom);
 
     const {
@@ -72,12 +81,13 @@ const LocalFolderOptions: FC = () => {
         filterReportFiles,
     } = useLocalConnection();
     const { data: perfFolderList } = usePerfFolderList();
+    const { data: reportFolderList } = useReportFolderList();
     const { data: session } = useSession();
 
     const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
     const [isUploadingPerformance, setIsPerformanceUploading] = useState(false);
-    const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
+    const [profilerUploadLabel, setProfilerUploadLabel] = useState('Choose directory...');
     const [performanceFolderStatus, setPerformanceFolderStatus] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
@@ -103,7 +113,7 @@ const LocalFolderOptions: FC = () => {
         let connectionStatus = connectionOkStatus;
 
         setIsUploadingReport(true);
-        setLocalUploadLabel(`${files.length} files selected.`);
+        setProfilerUploadLabel(`${files.length} files selected.`);
 
         const response = await uploadLocalFolder(files);
 
@@ -114,7 +124,7 @@ const LocalFolderOptions: FC = () => {
         } else {
             const fileName = getReportName(files);
 
-            setLocalUploadLabel(`${files.length} files uploaded`);
+            setProfilerUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
             setSelectedDevice(DEFAULT_DEVICE_ID);
             setActiveReport(fileName);
@@ -179,20 +189,36 @@ const LocalFolderOptions: FC = () => {
         }
     }, [isUploadingReport, isUploadingPerformance]);
 
-    const handleDeletePerformanceTrace = async (folder: string) => {
-        await deleteReport(folder);
-        await queryClient.invalidateQueries(['fetch-perf-folder-list']);
+    const handleSelectProfiler = async (item: string) => {
+        await updateTabSession({ ...session, active_report: { report_name: item } });
+        setActiveReport(item);
+    };
+
+    const handleDeleteProfiler = async (folder: string) => {
+        await deleteProfiler(folder);
+        await queryClient.invalidateQueries([PROFILER_FOLDER_QUERY_KEY]);
+
+        if (activePerformanceTrace === folder) {
+            setActiveReport(null);
+            setPerformanceDataUploadLabel('Choose directory...');
+            setPerformanceFolderStatus(undefined);
+        }
+    };
+
+    const handleSelectPerformance = async (item: string) => {
+        await updateTabSession({ ...session, active_report: { profile_name: item } });
+        setActivePerformanceTrace(item);
+    };
+
+    const handleDeletePerformance = async (folder: string) => {
+        await deletePerformance(folder);
+        await queryClient.invalidateQueries([PERFORMANCE_FOLDER_QUERY_KEY]);
 
         if (activePerformanceTrace === folder) {
             setActivePerformanceTrace(null);
             setPerformanceDataUploadLabel('Choose directory...');
             setPerformanceFolderStatus(undefined);
         }
-    };
-
-    const handleItemSelect = async (item: string) => {
-        await updateTabSession({ ...session, active_report: { ...session?.active_report, profile_name: item } });
-        setActivePerformanceTrace(item);
     };
 
     return (
@@ -214,8 +240,17 @@ const LocalFolderOptions: FC = () => {
             <div>
                 <FormGroup
                     label={<h3>Report folder</h3>}
-                    subLabel='Select a local directory containing a report'
+                    subLabel='Select a performance trace from the list below'
                 >
+                    <LocalFolderPicker
+                        items={reportFolderList}
+                        value={activeReport}
+                        handleSelect={handleSelectProfiler}
+                        handleDelete={handleDeleteProfiler}
+                    />
+                </FormGroup>
+
+                <FormGroup subLabel='Select a local directory containing a report'>
                     <div className='buttons-container'>
                         <label
                             className='bp5-file-input'
@@ -232,7 +267,7 @@ const LocalFolderOptions: FC = () => {
                                 disabled={isSafari}
                                 onChange={handleReportDirectoryOpen}
                             />
-                            <span className='bp5-file-upload-input'>{localUploadLabel}</span>
+                            <span className='bp5-file-upload-input'>{profilerUploadLabel}</span>
                         </label>
 
                         <FileStatusOverlay />
@@ -261,8 +296,8 @@ const LocalFolderOptions: FC = () => {
                     <LocalFolderPicker
                         items={perfFolderList}
                         value={activePerformanceTrace}
-                        handleSelect={handleItemSelect}
-                        handleDelete={handleDeletePerformanceTrace}
+                        handleSelect={handleSelectPerformance}
+                        handleDelete={handleDeletePerformance}
                     />
                 </FormGroup>
 

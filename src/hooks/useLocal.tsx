@@ -101,7 +101,7 @@ const useLocalConnection = () => {
         });
 
         return axiosInstance
-            .post(`${import.meta.env.VITE_API_ROOT}/local/upload/report`, formData, {
+            .post(`${import.meta.env.VITE_API_ROOT}/local/upload/profiler`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },

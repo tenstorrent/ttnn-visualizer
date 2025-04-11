@@ -21,7 +21,10 @@ const LocalFolderPicker = ({ items, value, handleSelect, handleDelete }: LocalFo
             return null;
         }
         return (
-            <div className='folder-picker-menu-item'>
+            <div
+                className='folder-picker-menu-item'
+                key={folder}
+            >
                 <MenuItem
                     text={`/${folder}`}
                     labelElement={getLabelElement(folder)}

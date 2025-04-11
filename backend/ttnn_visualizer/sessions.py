@@ -35,9 +35,19 @@ def update_existing_instance(
 ):
     active_report = session_data.active_report or {}
 
-    active_report["report_name"] = report_name
-    active_report["profile_name"] = profile_name
-    active_report["npe_name"] = npe_name
+    # First ifs are explicit deletes and elifs are updates
+    if report_name == "":
+        active_report.pop("report_name", None)
+    elif report_name is not None:
+        active_report["report_name"] = report_name
+    if profile_name == "":
+        active_report.pop("profile_name", None)
+    elif profile_name is not None:
+        active_report["profile_name"] = profile_name
+    if npe_name == "":
+        active_report.pop("npe_name", None)
+    elif npe_name is not None:
+        active_report["npe_name"] = npe_name
 
     session_data.active_report = active_report
 
@@ -88,7 +98,7 @@ def update_paths(
 
     if active_report.get("report_name"):
         session_data.report_path = get_report_path(
-            active_report=active_report,
+            report_name=active_report["report_name"],
             current_app=current_app,
             remote_connection=remote_connection,
         )
@@ -127,7 +137,7 @@ def create_new_instance(
         instance_id=instance_id,
         active_report=active_report,
         report_path=get_report_path(
-            active_report,
+            active_report["report_name"],
             current_app=current_app,
             remote_connection=remote_connection,
         ),

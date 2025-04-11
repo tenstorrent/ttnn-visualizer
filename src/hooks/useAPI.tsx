@@ -284,7 +284,7 @@ const fetchDevices = async () => {
 
 // Not currently used
 // const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, string>>> => {
-//     const { data } = await axiosInstance.get<string>('/api/profiler/perf-results/raw');
+//     const { data } = await axiosInstance.get<string>('/api/performance/perf-results/raw');
 
 //     return new Promise((resolve, reject) => {
 //         Papa.parse<Record<string, string>>(data, {
@@ -296,7 +296,9 @@ const fetchDevices = async () => {
 // };
 
 const fetchPerformanceDataReport = async (name?: string | null): Promise<PerfTableRow[]> => {
-    const { data } = await axiosInstance.get<PerfTableRow[]>(`/api/profiler/perf-results/report`, { params: { name } });
+    const { data } = await axiosInstance.get<PerfTableRow[]>(`/api/performance/perf-results/report`, {
+        params: { name },
+    });
 
     return data;
 };
@@ -312,7 +314,7 @@ interface FetchDeviceLogRawResult {
 }
 
 const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
-    const { data } = await axiosInstance.get<string>('/api/profiler/device-log/raw');
+    const { data } = await axiosInstance.get<string>('/api/performance/device-log/raw');
 
     function parseArchAndFreq(input: string): MetaData {
         const archMatch = input.match(/ARCH:\s*([\w\d_]+)/);
@@ -815,21 +817,44 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     return { cores, dram, eth, pcie };
 };
 
-const fetchPerfFolderList = async () => {
-    const { data } = await axiosInstance.get('/api/profiler/perf-results/list');
+const fetchReportFolderList = async () => {
+    const { data } = await axiosInstance.get('/api/profiler');
     return data;
 };
 
-export const usePerfFolderList = () => {
+export const deleteProfiler = async (report: string) => {
+    const { data } = await axiosInstance.delete(`/api/profiler/${report}`);
+
+    return data;
+};
+
+export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';
+
+export const useReportFolderList = () => {
     return useQuery({
-        queryFn: () => fetchPerfFolderList(),
-        queryKey: ['fetch-perf-folder-list'],
+        queryFn: () => fetchReportFolderList(),
+        queryKey: ['fetch-profiler-folder-list'],
         initialData: null,
     });
 };
 
-export const deleteReport = async (report: string) => {
-    const { data } = await axiosInstance.delete(`/api/profiler/perf-results/${report}`);
+const fetchPerfFolderList = async () => {
+    const { data } = await axiosInstance.get('/api/performance');
+    return data;
+};
+
+export const PERFORMANCE_FOLDER_QUERY_KEY = 'fetch-performance-folder-list';
+
+export const usePerfFolderList = () => {
+    return useQuery({
+        queryFn: () => fetchPerfFolderList(),
+        queryKey: [PERFORMANCE_FOLDER_QUERY_KEY],
+        initialData: null,
+    });
+};
+
+export const deletePerformance = async (report: string) => {
+    const { data } = await axiosInstance.delete(`/api/performance/perf-results/${report}`);
 
     return data;
 };

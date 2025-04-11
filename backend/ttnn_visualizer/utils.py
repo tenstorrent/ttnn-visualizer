@@ -58,22 +58,21 @@ def get_profiler_path(profile_name, current_app, remote_connection=None):
     local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
     remote_dir = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
 
-    # Check if there's an associated RemoteConnection or default to local directory
     if remote_connection:
         base_dir = Path(remote_dir).joinpath(remote_connection.host)
     else:
         base_dir = local_dir
 
-    profiler_dir = base_dir / current_app.config["PROFILER_DIRECTORY_NAME"]
+    profiler_dir = base_dir / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
     profiler_path = profiler_dir / profile_name
 
     return str(profiler_path)
 
 
-def get_report_path(active_report, current_app, remote_connection=None):
+def get_report_path(report_name, current_app, remote_connection=None):
     """
     Gets the report path for the given active_report object.
-    :param active_report: Dictionary representing the active report.
+    :param report_name: The name of the report directory.
     :param current_app: Flask current application
     :param remote_connection: Remote connection model instance
 
@@ -83,27 +82,23 @@ def get_report_path(active_report, current_app, remote_connection=None):
     local_dir = current_app.config["LOCAL_DATA_DIRECTORY"]
     remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
 
-    if active_report:
-        # Check if there's an associated RemoteConnection
+    if report_name:
         if remote_connection:
-            # Use the remote directory if a remote connection exists
             base_dir = Path(remote_dir).joinpath(remote_connection.host)
         else:
-            # Default to local directory if no remote connection is present
             base_dir = local_dir
 
-        # Construct the full report path
-        report_path = Path(base_dir).joinpath(active_report.get("report_name"))
-        target_path = str(Path(report_path).joinpath(database_file_name))
+        report_path = base_dir / current_app.config["PROFILER_DIRECTORY_NAME"] / report_name
+        target_path = report_path / database_file_name
 
-        return target_path
+        return str(target_path)
     else:
         return ""
 
 def get_npe_path(npe_name, current_app):
     local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
 
-    npe_path = local_dir / "npe"
+    npe_path = local_dir / current_app.config["NPE_DIRECTORY_NAME"]
 
     return str(npe_path)
 
