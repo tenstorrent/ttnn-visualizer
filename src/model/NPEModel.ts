@@ -16,6 +16,7 @@ export interface NPE_KPI {
     description: string;
     decimals?: number;
 }
+
 export const NPE_KPI_METADATA = {
     congestion_model_name: {
         units: '',
@@ -73,7 +74,6 @@ type col = number;
 type NoCTransferId = number;
 export type NoCType = 'NOC0' | 'NOC1';
 
-// export type NoCID = 'NOC1_NORTH' | 'NOC0_SOUTH' | 'NOC0_EAST' | 'NOC1_WEST';
 export enum NoCID {
     NOC1_NORTH = 'NOC1_NORTH',
     NOC0_SOUTH = 'NOC0_SOUTH',
@@ -85,6 +85,10 @@ export enum NoCID {
     NOC1_OUT = 'NOC1_OUT',
 }
 
+export type LinkUtilization = [row: number, col: number, noc_id: NoCID, demand: number];
+export type NoCRoute = [row: number, col: number, noc_id: NoCID];
+export type NPE_COORDINATES = [row: number, col: number];
+
 export interface NoCTransfer {
     id: NoCTransferId;
     src: [row, col];
@@ -95,21 +99,14 @@ export interface NoCTransfer {
     injection_rate: number;
     start_cycle: number;
     end_cycle: number;
-    route: [row, col, NoCID][];
-}
-
-export interface LinkUtilization {
-    row: row;
-    column: col;
-    noc_id: NoCID;
-    utilization: number;
+    route: NoCRoute[];
 }
 
 export interface TimestepData {
     start_cycle: number;
     end_cycle: number;
     active_transfers: NoCTransferId[];
-    link_demand: [row, col, NoCID, number][]; // LinkUtilization[];
+    link_demand: LinkUtilization[];
     avg_link_demand: number;
     avg_link_util: number;
 }
@@ -118,4 +115,12 @@ export interface NPEData {
     common_info: CommonInfo;
     noc_transfers: NoCTransfer[];
     timestep_data: TimestepData[];
+}
+
+export enum NPE_LINK {
+    Y,
+    X,
+    NOC_ID,
+    DEMAND,
+    CHIP_ID, // future iteration
 }
