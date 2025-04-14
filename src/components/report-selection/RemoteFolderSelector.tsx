@@ -8,8 +8,8 @@ import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
-import { isEqual } from '../../functions/math';
 import useRemoteConnection from '../../hooks/useRemote';
+import { isEqual } from '../../functions/math';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
@@ -17,15 +17,20 @@ const formatter = new Intl.DateTimeFormat('en-US', {
 });
 
 const MAX_REPORT_NAME_LENGTH = 50;
-type FolderTypes = 'performance' | 'report';
+type FolderTypes = 'performance' | 'profiler';
 
-const formatRemoteFolderName = (folder: RemoteFolder, type: FolderTypes, selectedConnection?: RemoteConnection) => {
+const formatRemoteFolderName = (
+    folder: RemoteFolder,
+    type: FolderTypes,
+    selectedConnection?: RemoteConnection,
+): string => {
     if (!folder || !selectedConnection) {
         return 'n/a';
     }
 
     const paths = {
-        report: selectedConnection.reportPath,
+        // report: selectedConnection.reportPath, // Deprecated - use profiler and profilerPath
+        profiler: selectedConnection.profilerPath || selectedConnection.reportPath,
         performance: selectedConnection.performancePath,
     };
 

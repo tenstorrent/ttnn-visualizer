@@ -31,7 +31,6 @@ logger = logging.getLogger(__name__)
 
 TEST_CONFIG_FILE = "config.json"
 TEST_PROFILER_FILE = "profile_log_device.csv"
-PROFILER_DIRECTORY = "profiler"
 REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
 
 
@@ -280,7 +279,7 @@ def download_file_with_progress(
         raise
 
 
-def get_remote_performance_folder_from_config_path(
+def get_remote_profiler_folder_from_config_path(
     sftp: SFTPClient, config_path: str
 ) -> RemoteReportFolder:
     """Read a remote config file and return RemoteFolder object."""
@@ -289,7 +288,7 @@ def get_remote_performance_folder_from_config_path(
         data = json.loads(config_file.read())
         return RemoteReportFolder(
             remotePath=str(Path(config_path).parent),
-            testName=data["profiler_name"],
+            testName=data["report_name"], # Config file includes "report_name"
             lastModified=(
                 int(attributes.st_mtime) if attributes.st_mtime else int(time.time())
             ),
@@ -324,7 +323,7 @@ def read_remote_file(
         if remote_path:
             path = Path(remote_path)
         else:
-            path = Path(remote_connection.reportPath)
+            path = Path(remote_connection.profilerPath)
 
         logger.info(f"Opening remote file {path}")
         directory_path = str(path.parent)
@@ -348,7 +347,7 @@ def check_remote_path_for_reports(remote_connection):
     """Check the remote path for config files."""
     ssh_client = get_client(remote_connection)
     remote_config_paths = find_folders_by_files(
-        ssh_client, remote_connection.reportPath, [TEST_CONFIG_FILE]
+        ssh_client, remote_connection.profilerPath, [TEST_CONFIG_FILE]
     )
     if not remote_config_paths:
         raise NoProjectsException(
@@ -369,7 +368,7 @@ def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str)
         if path_key == "performancePath":
             message = "Performance directory does not exist or cannot be accessed"
         else:
-            message = "Report directory does not exist or cannot be accessed"
+            message = "Profiler directory does not exist or cannot be accessed"
 
         logger.error(message)
         raise RemoteConnectionException(
@@ -418,22 +417,22 @@ def get_remote_performance_folders(
 
 
 @remote_exception_handler
-def get_remote_performance_folders(
+def get_remote_profiler_folders(
     remote_connection: RemoteConnection,
 ) -> List[RemoteReportFolder]:
     """Return a list of remote folders containing a config.json file."""
     client = get_client(remote_connection)
     remote_config_paths = find_folders_by_files(
-        client, remote_connection.reportPath, [TEST_CONFIG_FILE]
+        client, remote_connection.profilerPath, [TEST_CONFIG_FILE]
     )
     if not remote_config_paths:
-        error = f"No projects found at {remote_connection.reportPath}"
+        error = f"No projects found at {remote_connection.profilerPath}"
         logger.info(error)
         raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
     remote_folder_data = []
     with client.open_sftp() as sftp:
         for config_path in remote_config_paths:
-            remote_folder = get_remote_performance_folder_from_config_path(
+            remote_folder = get_remote_profiler_folder_from_config_path(
                 sftp, str(Path(config_path).joinpath(TEST_CONFIG_FILE))
             )
             remote_folder_data.append(remote_folder)
@@ -441,7 +440,7 @@ def get_remote_performance_folders(
 
 
 @remote_exception_handler
-def sync_remote_folders(
+def sync_remote_profiler_folders(
     remote_connection: RemoteConnection,
     remote_folder_path: str,
     path_prefix: str,
@@ -452,7 +451,7 @@ def sync_remote_folders(
     client = get_client(remote_connection)
     profiler_folder = Path(remote_folder_path).name
     destination_dir = Path(
-        REPORT_DATA_DIRECTORY, path_prefix, remote_connection.host, profiler_folder
+        REPORT_DATA_DIRECTORY, path_prefix, remote_connection.host, current_app.config["PROFILER_DIRECTORY_NAME"], profiler_folder
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
 
@@ -476,7 +475,7 @@ def sync_remote_performance_folders(
         REPORT_DATA_DIRECTORY,
         path_prefix,
         remote_connection.host,
-        PROFILER_DIRECTORY,
+        current_app.config["PERFORMANCE_DIRECTORY_NAME"],
         profile_folder,
     )
     destination_dir.mkdir(parents=True, exist_ok=True)

@@ -46,10 +46,10 @@ from ttnn_visualizer.sessions import (
     update_instance,
 )
 from ttnn_visualizer.sftp_operations import (
-    sync_remote_folders,
+    sync_remote_profiler_folders,
     read_remote_file,
     check_remote_path_for_reports,
-    get_remote_performance_folders,
+    get_remote_profiler_folders,
     check_remote_path_exists,
     get_remote_performance_folders,
     sync_remote_performance_folders,
@@ -689,10 +689,10 @@ def create_npe_files():
 
 
 @api.route("/remote/profiler", methods=["POST"])
-def get_remote_folders():
+def get_remote_folders_profiler():
     connection = RemoteConnection.model_validate(request.json, strict=False)
     try:
-        remote_folders: List[RemoteReportFolder] = get_remote_performance_folders(
+        remote_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
             RemoteConnection.model_validate(connection, strict=False)
         )
 
@@ -711,7 +711,7 @@ def get_remote_folders():
 
 
 @api.route("/remote/performance", methods=["POST"])
-def get_remote_performance_folders():
+def get_remote_folders_performance():
     request_body = request.get_json()
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
@@ -725,7 +725,7 @@ def get_remote_performance_folders():
         for rf in remote_performance_folders:
             performance_name = Path(rf.remotePath).name
             remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-            local_path = remote_data_directory / current_app.config["PERFORMANCE_DATA_LABEL"] / connection.host / performance_name
+            local_path = remote_data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"] / connection.host / performance_name
             logger.info(f"Checking last synced for {performance_name}")
             rf.lastSynced = read_last_synced_file(str(local_path))
             if not rf.lastSynced:
@@ -799,8 +799,8 @@ def test_remote_folder():
     # Test Directory Configuration
     if not has_failures():
         try:
-            check_remote_path_exists(connection, "reportPath")
-            add_status(ConnectionTestStates.OK.value, "Report folder path exists")
+            check_remote_path_exists(connection, "profilerPath")
+            add_status(ConnectionTestStates.OK.value, "Profiler folder path exists")
         except RemoteConnectionException as e:
             add_status(ConnectionTestStates.FAILED.value, e.message)
 
@@ -880,7 +880,7 @@ def sync_remote_folder():
     try:
         remote_profiler_folder = RemoteReportFolder.model_validate(folder, strict=False)
 
-        sync_remote_folders(
+        sync_remote_profiler_folders(
             connection,
             remote_profiler_folder.remotePath,
             remote_dir,
@@ -939,9 +939,9 @@ def use_remote_folder():
         remote_performance_folder = RemoteReportFolder.model_validate(profile, strict=False)
         performance_name = remote_performance_folder.testName
     data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-    profiler_folder = Path(folder.remotePath).name
+    profiler_name = Path(folder.remotePath).name
 
-    connection_directory = Path(data_directory, connection.host, profiler_folder)
+    connection_directory = Path(data_directory, connection.host, current_app.config["PROFILER_DIRECTORY_NAME"], profiler_name)
 
     if not connection.useRemoteQuerying and not connection_directory.exists():
         return Response(
@@ -956,7 +956,7 @@ def use_remote_folder():
 
     update_instance(
         instance_id=instance_id,
-        profiler_name=profiler_folder,
+        profiler_name=profiler_name,
         performance_name=performance_name,
         remote_connection=connection,
         remote_profiler_folder=folder,

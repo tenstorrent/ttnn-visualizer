@@ -269,7 +269,7 @@ const RemoteSyncConfigurator: FC = () => {
                             }
                         }
                     }}
-                    type='report'
+                    type='profiler'
                 >
                     {!isUsingRemoteQuerying && (
                         <Tooltip content='Sync remote folder'>

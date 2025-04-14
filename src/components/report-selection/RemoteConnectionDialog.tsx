@@ -31,7 +31,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
         name: '',
         host: '',
         port: 22,
-        reportPath: '',
+        profilerPath: '',
         username: '',
     };
     const defaultConnectionTests: ConnectionStatus[] = [
@@ -158,8 +158,8 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 >
                     <InputGroup
                         key='path'
-                        value={connection.reportPath}
-                        onChange={(e) => setConnection({ ...connection, reportPath: e.target.value })}
+                        value={connection.profilerPath}
+                        onChange={(e) => setConnection({ ...connection, profilerPath: e.target.value })}
                     />
                 </FormGroup>
 
