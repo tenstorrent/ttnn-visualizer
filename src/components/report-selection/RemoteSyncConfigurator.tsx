@@ -263,9 +263,7 @@ const RemoteSyncConfigurator: FC = () => {
                             );
 
                             if (response.status === 200) {
-                                const fileName = folder.testName;
-
-                                updateReportSelection(fileName);
+                                updateReportSelection(folder.testName);
                             }
                         }
                     }}

@@ -374,15 +374,17 @@ def get_operation_buffers(operation_id, session: Instance):
 @api.route("/profiler", methods=["GET"])
 @with_session
 def get_profiler_data_list(session: Instance):
-    is_remote = True if session.remote_connection else False
-    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
+    # Doesn't handle remote at the moment
+    # is_remote = True if session.remote_connection else False
+    # config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
+    config_key = 'LOCAL_DATA_DIRECTORY'
     data_directory = Path(current_app.config[config_key])
 
-    if is_remote:
-        connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
-        path = data_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
-    else:
-        path = data_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
+    # if is_remote:
+    #     connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
+    #     path = data_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
+    # else:
+    path = data_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
 
     if not path.exists():
         path.mkdir(parents=True, exist_ok=True)
@@ -486,15 +488,17 @@ def delete_performance_report(performance_name, session: Instance):
 @api.route("/performance", methods=["GET"])
 @with_session
 def get_performance_data_list(session: Instance):
-    is_remote = True if session.remote_connection else False
-    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
+    # Doesn't handle remote at the moment
+    # is_remote = True if session.remote_connection else False
+    # config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
+    config_key = 'LOCAL_DATA_DIRECTORY'
     data_directory = Path(current_app.config[config_key])
 
-    if is_remote:
-        connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
-        path = data_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-    else:
-        path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+    # if is_remote:
+    #     connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
+    #     path = data_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+    # else:
+    path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
 
     if not path.exists():
         path.mkdir(parents=True, exist_ok=True)
@@ -991,9 +995,10 @@ def update_current_instance():
             profiler_name=update_data["active_report"].get("profiler_name"),
             performance_name=update_data["active_report"].get("performance_name"),
             npe_name=update_data["active_report"].get("npe_name"),
-            remote_connection=update_data.get("remote_connection"),
-            remote_profiler_folder=update_data.get("remote_profiler_folder"),
-            remote_performance_folder=update_data.get("remote_performance_folder"),
+            # Doesn't handle remote at the moment
+            remote_connection=None,
+            remote_profiler_folder=None,
+            remote_performance_folder=None,
         )
 
         return Response(status=HTTPStatus.OK)

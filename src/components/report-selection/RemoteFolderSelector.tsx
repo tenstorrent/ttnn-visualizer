@@ -9,7 +9,6 @@ import { FC, type PropsWithChildren } from 'react';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemoteConnection from '../../hooks/useRemote';
-import { isEqual } from '../../functions/math';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
@@ -66,7 +65,7 @@ const remoteFolderRenderer =
             return null;
         }
 
-        const { lastSynced, lastModified } = folder;
+        const { lastSynced, lastModified, testName } = folder;
         const lastSyncedDate = lastSynced ? formatter.format(new Date(lastSynced)) : 'Never';
 
         let statusIcon = (
@@ -107,7 +106,7 @@ const remoteFolderRenderer =
         return (
             <MenuItem
                 className='remote-folder-item'
-                active={isEqual(selectedFolder, folder)}
+                active={selectedFolder?.testName === testName}
                 disabled={modifiers.disabled}
                 key={`${formatRemoteFolderName(folder, type, connection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
