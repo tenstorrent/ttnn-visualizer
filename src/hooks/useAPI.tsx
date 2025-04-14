@@ -342,13 +342,16 @@ const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
     });
 };
 
-export const useOperationsList = () =>
-    useQuery<OperationDescription[], AxiosError>({
+export const useOperationsList = () => {
+    const activeProfilerReport = useAtomValue(activeReportAtom);
+
+    return useQuery<OperationDescription[], AxiosError>({
         queryFn: () => fetchOperations(),
-        queryKey: ['get-operations'],
+        queryKey: ['get-operations', activeProfilerReport],
         retry: false,
         staleTime: Infinity,
     });
+};
 
 export const useOperationListRange = (): NumberRange | null => {
     const response = useOperationsList();
@@ -601,7 +604,9 @@ export const usePerformanceRange = (): NumberRange | null => {
 
 // Not currently used
 export const useReportMeta = () => {
-    return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
+    const activeProfilerReport = useAtomValue(activeReportAtom);
+
+    return useQuery<ReportMetaData, AxiosError>(['get-report-config', activeProfilerReport], fetchReportMeta);
 };
 
 export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
@@ -648,16 +653,23 @@ export const fetchTensors = async (): Promise<Tensor[]> => {
     return [defaultTensorData];
 };
 
-export const useTensors = () =>
-    useQuery<Tensor[], AxiosError>({
+export const useTensors = () => {
+    const activeProfilerReport = useAtomValue(activeReportAtom);
+
+    return useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(),
-        queryKey: ['get-tensors'],
+        queryKey: ['get-tensors', activeProfilerReport],
         retry: false,
         staleTime: Infinity,
     });
+};
 
 export const useDevices = () => {
-    return useQuery<DeviceData[], AxiosError>('get-devices', fetchDevices, { staleTime: Infinity });
+    const activeProfilerReport = useAtomValue(activeReportAtom);
+
+    return useQuery<DeviceData[], AxiosError>(['get-devices', activeProfilerReport], fetchDevices, {
+        staleTime: Infinity,
+    });
 };
 
 export const fetchNextUseOfBuffer = async (address: number | null, consumers: number[]): Promise<BufferData> => {
@@ -702,9 +714,11 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
 };
 
 export const useDeviceLog = () => {
+    const activePerformanceReport = useAtomValue(activePerformanceTraceAtom);
+
     return useQuery({
         queryFn: () => fetchDeviceLogRaw(),
-        queryKey: 'get-device-log-raw',
+        queryKey: ['get-device-log-raw', activePerformanceReport],
         staleTime: Infinity,
     });
 };
