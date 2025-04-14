@@ -18,7 +18,6 @@ const ActiveTransferDetails = ({
     highlightedTransfer: NoCTransfer | null;
     setHighlightedTransfer: (transfer: NoCTransfer | null) => void;
     congestionData: LinkUtilization[];
-    // congestionData: [number, number, NoCID, number][]; // [src, dst, congestion, demand]
 }) => {
     return (
         <div className='side-data'>
