@@ -36,7 +36,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     };
     const defaultConnectionTests: ConnectionStatus[] = [
         { status: ConnectionTestStates.IDLE, message: 'Test connection' },
-        { status: ConnectionTestStates.IDLE, message: 'Test report folder path' },
+        { status: ConnectionTestStates.IDLE, message: 'Test profiler folder path' },
     ];
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
@@ -62,7 +62,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
         setIsTestingconnection(true);
 
         const sshStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing connection' };
-        const reportFolderStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing report folder path' };
+        const reportFolderStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing profiler folder path' };
         const performanceFolderStatus = {
             status: ConnectionTestStates.PROGRESS,
             message: 'Testing performance folder path',
@@ -77,7 +77,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
             // TODO: Look at error handling
             setConnectionTests([
                 { status: ConnectionTestStates.FAILED, message: 'Connection failed' },
-                { status: ConnectionTestStates.FAILED, message: 'Report folder path failed' },
+                { status: ConnectionTestStates.FAILED, message: 'Profiler folder path failed' },
             ]);
         } finally {
             setIsTestingconnection(false);
@@ -153,8 +153,8 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
 
                 <FormGroup
-                    label='Report folder path'
-                    subLabel='Path to the remote folder with the report e.g. "$HOME/work/ll-sw"'
+                    label='Profiler folder path'
+                    subLabel='Path to a remote folder with profiler reports e.g. "$HOME/work/ll-sw"'
                 >
                     <InputGroup
                         key='path'
@@ -165,7 +165,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                 <FormGroup
                     label='Performance folder path (optional)'
-                    subLabel='Path to the remote folder with the performance data  e.g. "$HOME/perf/env-123"'
+                    subLabel='Path to a remote folder with performance reports e.g. "$HOME/perf/env-123"'
                 >
                     <InputGroup
                         key='path'

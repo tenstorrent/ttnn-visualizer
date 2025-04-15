@@ -32,11 +32,11 @@ The final output should be a folder including at least a `config.json` and a `db
 
 <img width="909" alt="Screenshot 2024-12-13 at 12 29 24 PM" src="https://github.com/user-attachments/assets/ab31892a-2779-4fe1-9ad5-0f35f8329f9a" />
 
-### Performance traces
+### Performance reports
 
-TT-NN Visualizer supports the reading of TT-Metalium performance traces. The expected output should be a folder containing `profile_log_device.csv`, another csv with the performance results, e.g. `ops_perf_results_2024_12_11_11_09_16.csv`, and a `tracy_profile_log_host.tracy` file.
+TT-NN Visualizer supports the reading of TT-Metalium performance reports. The expected output should be a folder containing `profile_log_device.csv`, another csv with the performance results, e.g. `ops_perf_results_2024_12_11_11_09_16.csv`, and a `tracy_profile_log_host.tracy` file.
 
-Consult the TT-Metalium documentation on [how to generate a performance trace](https://github.com/tenstorrent/tt-perf-report?tab=readme-ov-file#generating-performance-traces).
+Consult the TT-Metalium documentation on [how to generate a performance report](https://github.com/tenstorrent/tt-perf-report?tab=readme-ov-file#generating-performance-traces).
 
 <img width="916" alt="Screenshot 2024-12-13 at 12 29 44 PM" src="https://github.com/user-attachments/assets/8209f500-7913-41dc-8952-c1307e7720c3" />
 

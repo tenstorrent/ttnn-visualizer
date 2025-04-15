@@ -31,7 +31,7 @@ const RemoteSyncConfigurator: FC = () => {
     const setReportLocation = useSetAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
-    const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceReportAtom);
+    const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
     const [isRemoteOffline, setIsRemoteOffline] = useState(false);
 
     const [isFetching, setIsFetching] = useState(false);
@@ -51,8 +51,8 @@ const RemoteSyncConfigurator: FC = () => {
     );
     const [isSyncingPerformanceFolder, setIsSyncingPerformanceFolder] = useState(false);
     const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(
-        activePerformanceTrace
-            ? remotePerformanceFolderList.find((folder) => folder.testName.includes(activePerformanceTrace))
+        activePerformanceReport
+            ? remotePerformanceFolderList.find((folder) => folder.testName.includes(activePerformanceReport))
             : remotePerformanceFolderList[0],
     );
 
@@ -126,15 +126,15 @@ const RemoteSyncConfigurator: FC = () => {
         setReportLocation('remote');
         setSelectedDevice(DEFAULT_DEVICE_ID);
         setActiveProfilerReport(fileName);
-        createToastNotification('Active report data', fileName);
+        createToastNotification('Active profiler report', fileName);
     };
 
     const updatePerformanceSelection = (fileName: string) => {
         queryClient.clear();
         setReportLocation('remote');
         setSelectedDevice(DEFAULT_DEVICE_ID);
-        setActivePerformanceTrace(fileName);
-        createToastNotification('Active performance data', fileName);
+        setActivePerformanceReport(fileName);
+        createToastNotification('Active performance report', fileName);
     };
 
     return (
@@ -248,8 +248,8 @@ const RemoteSyncConfigurator: FC = () => {
             </FormGroup>
 
             <FormGroup
-                label={<h3>Report folder</h3>}
-                subLabel='Select the report folder you wish to view'
+                label={<h3>Profiler report</h3>}
+                subLabel='Select a profiler report'
             >
                 <RemoteFolderSelector
                     remoteFolder={selectedReportFolder}
@@ -349,8 +349,8 @@ const RemoteSyncConfigurator: FC = () => {
 
             {remote.persistentState.selectedConnection?.performancePath && (
                 <FormGroup
-                    label={<h3>Performance data folder</h3>}
-                    subLabel='Select the performance folder you wish to view'
+                    label={<h3>Performance folder</h3>}
+                    subLabel='Select a performance report'
                 >
                     <RemoteFolderSelector
                         remoteFolder={selectedPerformanceFolder}

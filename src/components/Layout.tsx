@@ -26,17 +26,17 @@ const BounceIn = cssTransition({
 function Layout() {
     const appVersion = import.meta.env.APP_VERSION;
     const setActiveProfilerReport = useSetAtom(activeProfilerReportAtom);
-    const setActivePerformanceTrace = useSetAtom(activePerformanceReportAtom);
+    const setActivePerformanceReport = useSetAtom(activePerformanceReportAtom);
     const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
     const { data: session } = useSession();
 
     useEffect(() => {
         if (session?.active_report) {
             setActiveProfilerReport(session.active_report?.profiler_name ?? null);
-            setActivePerformanceTrace(session.active_report?.performance_name ?? null);
+            setActivePerformanceReport(session.active_report?.performance_name ?? null);
             setActiveNpe(session.active_report?.npe_name ?? null);
         }
-    }, [session, setActiveProfilerReport, setActivePerformanceTrace, setActiveNpe]);
+    }, [session, setActiveProfilerReport, setActivePerformanceReport, setActiveNpe]);
 
     return (
         <div className={Classes.DARK}>

@@ -956,7 +956,7 @@ def use_remote_folder():
     remote_path = f"{Path(data_directory).name}/{connection.host}/{connection_directory.name}"
 
     instance_id = request.args.get("instanceId")
-    current_app.logger.info(f"Setting active report for {instance_id} - {remote_path}")
+    current_app.logger.info(f"Setting active reports for {instance_id} - {remote_path}")
 
     update_instance(
         instance_id=instance_id,

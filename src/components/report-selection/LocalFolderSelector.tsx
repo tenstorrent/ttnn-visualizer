@@ -76,7 +76,7 @@ const LocalFolderOptions: FC = () => {
     const setReportLocation = useSetAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
-    const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceReportAtom);
+    const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
 
     const {
         uploadLocalFolder,
@@ -133,7 +133,7 @@ const LocalFolderOptions: FC = () => {
             setReportLocation('local');
             setSelectedDevice(DEFAULT_DEVICE_ID);
             setActiveProfilerReport(fileName);
-            createToastNotification('Active report', fileName);
+            createToastNotification('Active profiler report', fileName);
         }
 
         queryClient.clear();
@@ -169,8 +169,8 @@ const LocalFolderOptions: FC = () => {
             const fileName = getReportName(files);
             setPerformanceDataUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
-            setActivePerformanceTrace(fileName);
-            createToastNotification('Active performance trace', fileName);
+            setActivePerformanceReport(fileName);
+            createToastNotification('Active performance report', fileName);
         }
 
         queryClient.clear();
@@ -196,12 +196,16 @@ const LocalFolderOptions: FC = () => {
 
     const handleSelectProfiler = async (item: string) => {
         await updateTabSession({ ...session, active_report: { profiler_name: item } });
+
+        createToastNotification('Active profiler report', item);
         setActiveProfilerReport(item);
     };
 
     const handleDeleteProfiler = async (folder: string) => {
         await deleteProfiler(folder);
         await queryClient.invalidateQueries([PROFILER_FOLDER_QUERY_KEY]);
+
+        createToastNotification(`Profiler report deleted`, folder);
 
         if (activeProfilerReport === folder) {
             setActiveProfilerReport(null);
@@ -212,15 +216,19 @@ const LocalFolderOptions: FC = () => {
 
     const handleSelectPerformance = async (item: string) => {
         await updateTabSession({ ...session, active_report: { performance_name: item } });
-        setActivePerformanceTrace(item);
+
+        createToastNotification('Active performance report', item);
+        setActivePerformanceReport(item);
     };
 
     const handleDeletePerformance = async (folder: string) => {
         await deletePerformance(folder);
         await queryClient.invalidateQueries([PERFORMANCE_FOLDER_QUERY_KEY]);
 
-        if (activePerformanceTrace === folder) {
-            setActivePerformanceTrace(null);
+        createToastNotification(`Performance report deleted`, folder);
+
+        if (activePerformanceReport === folder) {
+            setActivePerformanceReport(null);
             setPerformanceDataUploadLabel('Choose directory...');
             setPerformanceFolder(undefined);
         }
@@ -244,8 +252,8 @@ const LocalFolderOptions: FC = () => {
 
             <div>
                 <FormGroup
-                    label={<h3>Report folder</h3>}
-                    subLabel='Select a performance trace from the list below'
+                    label={<h3>Profiler folder</h3>}
+                    subLabel='Select a profiler report'
                 >
                     <LocalFolderPicker
                         items={reportFolderList}
@@ -255,7 +263,7 @@ const LocalFolderOptions: FC = () => {
                     />
                 </FormGroup>
 
-                <FormGroup subLabel='Select a local directory containing a report'>
+                <FormGroup subLabel='Upload a local profiler report'>
                     <div className='buttons-container'>
                         <label
                             className='bp5-file-input'
@@ -295,18 +303,18 @@ const LocalFolderOptions: FC = () => {
                 </FormGroup>
 
                 <FormGroup
-                    label={<h3>Performance data folder</h3>}
-                    subLabel='Select a performance trace from the list below'
+                    label={<h3>Performance folder</h3>}
+                    subLabel='Select a performance report'
                 >
                     <LocalFolderPicker
                         items={perfFolderList}
-                        value={perfFolderList?.includes(activePerformanceTrace) ? activePerformanceTrace : null}
+                        value={perfFolderList?.includes(activePerformanceReport) ? activePerformanceReport : null}
                         handleSelect={handleSelectPerformance}
                         handleDelete={handleDeletePerformance}
                     />
                 </FormGroup>
 
-                <FormGroup subLabel='Upload a local directory containing performance data'>
+                <FormGroup subLabel='Upload a local performance report'>
                     <div className='buttons-container'>
                         <label
                             className='bp5-file-input'
