@@ -28,7 +28,7 @@ const LocalFolderPicker = ({ items, value, handleSelect, handleDelete }: LocalFo
                 <MenuItem
                     text={`/${folder}`}
                     roleStructure='listoption'
-                    active={modifiers.active}
+                    active={folder === value}
                     disabled={modifiers.disabled}
                     key={folder}
                     onClick={handleClick}
