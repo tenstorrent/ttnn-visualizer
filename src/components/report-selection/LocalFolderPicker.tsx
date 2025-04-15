@@ -65,7 +65,7 @@ const LocalFolderPicker = ({ items, value, handleSelect, handleDelete }: LocalFo
         >
             <Button
                 className='folder-picker-button'
-                text={value ?? 'Select a report...'}
+                text={value ? `/${value}` : 'Select a report...'}
                 disabled={isDisabled || !session}
                 alignText='start'
                 icon={IconNames.FOLDER_OPEN}

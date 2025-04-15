@@ -15,7 +15,6 @@ const formatter = new Intl.DateTimeFormat('en-US', {
     timeStyle: 'short',
 });
 
-const MAX_REPORT_NAME_LENGTH = 50;
 type FolderTypes = 'performance' | 'profiler';
 
 const formatRemoteFolderName = (
@@ -36,12 +35,6 @@ const formatRemoteFolderName = (
     const pathToReplace = paths[type]!;
 
     return folder.remotePath.toLowerCase().replace(pathToReplace.toLowerCase(), '');
-};
-
-const getTestName = (folder: RemoteFolder) => {
-    return folder.testName.length > MAX_REPORT_NAME_LENGTH
-        ? `${folder.testName.slice(0, MAX_REPORT_NAME_LENGTH)}...`
-        : folder.testName;
 };
 
 const filterFolders =
@@ -96,12 +89,7 @@ const remoteFolderRenderer =
             }
         }
 
-        const getLabelElement = () => (
-            <>
-                <span className='test-name'>{getTestName(folder)}</span>
-                {!isUsingRemoteQuerying && statusIcon}
-            </>
-        );
+        const getLabelElement = () => !isUsingRemoteQuerying && statusIcon;
 
         return (
             <MenuItem
