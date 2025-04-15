@@ -53,7 +53,6 @@ function Layout() {
                         href={ROUTES.HOME}
                         className='title'
                     >
-                        {/* <h1>TT-NN Visualizer</h1> */}
                         <h1>
                             <img
                                 width={250}
