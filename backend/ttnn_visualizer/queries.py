@@ -36,15 +36,15 @@ class LocalQueryRunner:
         if connection:
             self.connection = connection
         else:
-            if not session or not session.report_path:
+            if not session or not session.profiler_path:
                 raise ValueError("Report path must be provided for local queries")
-            db_path = str(session.report_path)
+            db_path = str(session.profiler_path)
             if not Path(db_path).exists():
                 raise DatabaseFileNotFoundException(
                     f"Database not found at path: {db_path}"
                 )
             self.connection = sqlite3.connect(
-                session.report_path, isolation_level=None, timeout=30
+                session.profiler_path, isolation_level=None, timeout=30
             )
 
     def execute_query(self, query: str, params: Optional[List] = None) -> List:
@@ -72,7 +72,7 @@ class RemoteQueryRunner:
         self.ssh_client = self._get_ssh_client(self.session.remote_connection)
         self.sqlite_binary = self.session.remote_connection.sqliteBinaryPath
         self.remote_db_path = str(
-            Path(self.session.remote_folder.remotePath, "db.sqlite")
+            Path(self.session.remote_profiler_folder.remotePath, "db.sqlite")
         )
 
     def _validate_session(self):
@@ -82,8 +82,8 @@ class RemoteQueryRunner:
         if (
             not self.session.remote_connection
             or not self.session.remote_connection.sqliteBinaryPath
-            or not self.session.remote_folder
-            or not self.session.remote_folder.remotePath
+            or not self.session.remote_profiler_folder
+            or not self.session.remote_profiler_folder.remotePath
         ):
             raise ValueError(
                 "Remote connections require remote path and sqliteBinaryPath"

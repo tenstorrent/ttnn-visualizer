@@ -8,19 +8,19 @@ import { useNavigate } from 'react-router';
 import { useAtomValue } from 'jotai';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/MainNavigation.scss';
-import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
 
 function MainNavigation() {
     const navigate = useNavigate();
-    const activeReport = useAtomValue(activeReportAtom);
-    const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
     const handleNavigate = (path: string) => {
         navigate(path);
     };
 
-    const hasActiveReport = !!activeReport;
-    const hasActiveProfile = !!activePerformanceTrace;
+    const hasActiveProfiler = !!activeProfilerReport;
+    const hasActivePerf = !!activePerformanceReport;
 
     return (
         <Navbar className='navbar'>
@@ -40,7 +40,7 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.OPERATIONS)}
                     active={hasMatchingPath(ROUTES.OPERATIONS)}
                     icon={IconNames.CUBE}
-                    disabled={!hasActiveReport}
+                    disabled={!hasActiveProfiler}
                     variant='minimal'
                     size='large'
                     className='operations-button'
@@ -51,7 +51,7 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.TENSORS)}
                     active={hasMatchingPath(ROUTES.TENSORS)}
                     icon={IconNames.FLOW_LINEAR}
-                    disabled={!hasActiveReport}
+                    disabled={!hasActiveProfiler}
                     variant='minimal'
                     size='large'
                     className='tensors-button'
@@ -62,7 +62,7 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.BUFFERS)}
                     active={window.location.pathname === ROUTES.BUFFERS}
                     icon={IconNames.SMALL_SQUARE}
-                    disabled={!hasActiveReport}
+                    disabled={!hasActiveProfiler}
                     variant='minimal'
                     size='large'
                     className='buffers-button'
@@ -73,7 +73,7 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.GRAPHTREE)}
                     active={window.location.pathname === ROUTES.GRAPHTREE}
                     icon={IconNames.GRAPH}
-                    disabled={!hasActiveReport}
+                    disabled={!hasActiveProfiler}
                     variant='minimal'
                     size='large'
                     className='graph-button'
@@ -84,7 +84,7 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.PERFORMANCE)}
                     active={window.location.pathname === ROUTES.PERFORMANCE}
                     icon={IconNames.LIGHTNING}
-                    disabled={!hasActiveProfile}
+                    disabled={!hasActivePerf}
                     variant='minimal'
                     size='large'
                     className='performance-button'

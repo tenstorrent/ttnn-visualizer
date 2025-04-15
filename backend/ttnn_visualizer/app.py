@@ -154,8 +154,8 @@ def open_browser(host, port, instance_id=None):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="A tool for visualizing the Tenstorrent Neural Network model (TT-NN)")
-    parser.add_argument("--report-path", type=str, help="Specify a report path", default=None)
-    parser.add_argument("--profiler-path", help="Specify a profiler path", default=None)
+    parser.add_argument("--profiler-path", type=str, help="Specify a profiler path", default=None)
+    parser.add_argument("--performance-path", help="Specify a performance path", default=None)
     return parser.parse_args()
 
 
@@ -169,13 +169,13 @@ def main():
     args = parse_args()
     instance_id = None
 
-    if args.report_path or args.profiler_path:
+    if args.profiler_path or args.performance_path:
         app = create_app()
         app.app_context().push()
         try:
             session = create_instance_from_local_paths(
-                report_path=args.report_path,
                 profiler_path=args.profiler_path,
+                performance_path=args.performance_path,
             )
         except InvalidReportPath:
             sys.exit("Invalid report path")

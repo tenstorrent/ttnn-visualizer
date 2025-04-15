@@ -12,7 +12,12 @@ import { useQueryClient } from 'react-query';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemote from '../../hooks/useRemote';
-import { activePerformanceTraceAtom, activeReportAtom, reportLocationAtom, selectedDeviceAtom } from '../../store/app';
+import {
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
+    reportLocationAtom,
+    selectedDeviceAtom,
+} from '../../store/app';
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
@@ -25,8 +30,8 @@ const RemoteSyncConfigurator: FC = () => {
 
     const setReportLocation = useSetAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
-    const [activeReport, setActiveReport] = useAtom(activeReportAtom);
-    const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceTraceAtom);
+    const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
+    const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
     const [isRemoteOffline, setIsRemoteOffline] = useState(false);
 
     const [isFetching, setIsFetching] = useState(false);
@@ -36,7 +41,9 @@ const RemoteSyncConfigurator: FC = () => {
     );
     const [isSyncingReportFolder, setIsSyncingReportFolder] = useState(false);
     const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(
-        activeReport ? reportFolderList.find((folder) => folder.testName.includes(activeReport)) : reportFolderList[0],
+        activeProfilerReport
+            ? reportFolderList.find((folder) => folder.testName.includes(activeProfilerReport))
+            : reportFolderList[0],
     );
 
     const [remotePerformanceFolderList, setRemotePerformanceFolders] = useState<RemoteFolder[]>(
@@ -44,8 +51,8 @@ const RemoteSyncConfigurator: FC = () => {
     );
     const [isSyncingPerformanceFolder, setIsSyncingPerformanceFolder] = useState(false);
     const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(
-        activePerformanceTrace
-            ? remotePerformanceFolderList.find((folder) => folder.testName.includes(activePerformanceTrace))
+        activePerformanceReport
+            ? remotePerformanceFolderList.find((folder) => folder.testName.includes(activePerformanceReport))
             : remotePerformanceFolderList[0],
     );
 
@@ -118,16 +125,16 @@ const RemoteSyncConfigurator: FC = () => {
         queryClient.clear();
         setReportLocation('remote');
         setSelectedDevice(DEFAULT_DEVICE_ID);
-        setActiveReport(fileName);
-        createToastNotification('Active report data', fileName);
+        setActiveProfilerReport(fileName);
+        createToastNotification('Active profiler report', fileName);
     };
 
     const updatePerformanceSelection = (fileName: string) => {
         queryClient.clear();
         setReportLocation('remote');
         setSelectedDevice(DEFAULT_DEVICE_ID);
-        setActivePerformanceTrace(fileName);
-        createToastNotification('Active performance data', fileName);
+        setActivePerformanceReport(fileName);
+        createToastNotification('Active performance report', fileName);
     };
 
     return (
@@ -241,8 +248,8 @@ const RemoteSyncConfigurator: FC = () => {
             </FormGroup>
 
             <FormGroup
-                label={<h3>Report folder</h3>}
-                subLabel='Select the report folder you wish to view'
+                label={<h3>Profiler report</h3>}
+                subLabel='Select a profiler report'
             >
                 <RemoteFolderSelector
                     remoteFolder={selectedReportFolder}
@@ -263,13 +270,11 @@ const RemoteSyncConfigurator: FC = () => {
                             );
 
                             if (response.status === 200) {
-                                const fileName = folder.testName;
-
-                                updateReportSelection(fileName);
+                                updateReportSelection(folder.testName);
                             }
                         }
                     }}
-                    type='report'
+                    type='profiler'
                 >
                     {!isUsingRemoteQuerying && (
                         <Tooltip content='Sync remote folder'>
@@ -344,8 +349,8 @@ const RemoteSyncConfigurator: FC = () => {
 
             {remote.persistentState.selectedConnection?.performancePath && (
                 <FormGroup
-                    label={<h3>Performance data folder</h3>}
-                    subLabel='Select the performance folder you wish to view'
+                    label={<h3>Performance report</h3>}
+                    subLabel='Select a performance report'
                 >
                     <RemoteFolderSelector
                         remoteFolder={selectedPerformanceFolder}

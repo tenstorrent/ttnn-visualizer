@@ -36,12 +36,12 @@ def validate_files(files, required_files, pattern=None):
     return True
 
 
-def extract_report_name(files):
+def extract_profiler_name(files):
     """Extract the report name from the first file."""
     if not files:
         return None
-    unsplit_report_name = str(files[0].filename)
-    return unsplit_report_name.split("/")[0]
+    unsplit_profiler_name = str(files[0].filename)
+    return unsplit_profiler_name.split("/")[0]
 
 def extract_npe_name(files):
     if not files:
@@ -54,16 +54,14 @@ def extract_npe_name(files):
 def save_uploaded_files(
     files,
     target_directory,
-    report_name=None,
+    profiler_name=None,
 ):
     """
     Save uploaded files to the target directory.
 
     :param files: List of files to be saved.
     :param target_directory: The base directory for saving the files.
-    :param report_name: The report name to use for the directory.
-    :param modify_path: Optional function to modify the file path before saving.
-    :param flat_structure: If True, saves files directly under the report_name directory without subdirectories.
+    :param profiler_name: The report name to use for the directory.
     """
     for file in files:
         current_file_name = str(file.filename)

@@ -36,13 +36,6 @@ def with_session(func):
         session_query_data = get_or_create_instance(instance_id=instance_id)
         session = session_query_data.to_pydantic()
 
-        if not session.active_report:
-            current_app.logger.error(
-                f"No active report exists for instanceId {instance_id}, returning 404"
-            )
-            # Raise 404 if report_path is missing or does not exist
-            abort(404)
-
         kwargs["session"] = session
         return func(*args, **kwargs)
 

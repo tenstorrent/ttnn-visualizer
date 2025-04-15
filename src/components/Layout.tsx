@@ -5,11 +5,11 @@
 import { Outlet } from 'react-router-dom';
 import { Classes } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
-import { useAtom } from 'jotai';
+import { useSetAtom } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
 import { useEffect } from 'react';
-import { activeNpeOpTraceAtom, activePerformanceTraceAtom, activeReportAtom } from '../store/app';
+import { activeNpeOpTraceAtom, activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
 import { useSession } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
@@ -25,18 +25,18 @@ const BounceIn = cssTransition({
 
 function Layout() {
     const appVersion = import.meta.env.APP_VERSION;
-    const [activeReport, setActiveReport] = useAtom(activeReportAtom);
-    const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceTraceAtom);
-    const [activeNpe, setActiveNpe] = useAtom(activeNpeOpTraceAtom);
-    const { data: session } = useSession(activeReport, activePerformanceTrace, activeNpe);
+    const setActiveProfilerReport = useSetAtom(activeProfilerReportAtom);
+    const setActivePerformanceReport = useSetAtom(activePerformanceReportAtom);
+    const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
+    const { data: session } = useSession();
 
     useEffect(() => {
         if (session?.active_report) {
-            setActiveReport(session.active_report?.report_name ?? null);
-            setActivePerformanceTrace(session.active_report?.profile_name ?? null);
+            setActiveProfilerReport(session.active_report?.profiler_name ?? null);
+            setActivePerformanceReport(session.active_report?.performance_name ?? null);
             setActiveNpe(session.active_report?.npe_name ?? null);
         }
-    }, [session, setActiveReport, setActivePerformanceTrace, setActiveNpe]);
+    }, [session, setActiveProfilerReport, setActivePerformanceReport, setActiveNpe]);
 
     return (
         <div className={Classes.DARK}>
