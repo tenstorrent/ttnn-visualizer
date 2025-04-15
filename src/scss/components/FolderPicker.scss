@@ -19,7 +19,8 @@
 
 .folder-picker-button {
     .bp5-button-text {
-        overflow: hidden;
+        white-space: nowrap;
         text-overflow: ellipsis;
+        overflow: hidden;
     }
 }
