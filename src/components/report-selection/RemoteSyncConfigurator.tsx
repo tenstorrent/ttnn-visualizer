@@ -349,7 +349,7 @@ const RemoteSyncConfigurator: FC = () => {
 
             {remote.persistentState.selectedConnection?.performancePath && (
                 <FormGroup
-                    label={<h3>Performance folder</h3>}
+                    label={<h3>Performance report</h3>}
                     subLabel='Select a performance report'
                 >
                     <RemoteFolderSelector
