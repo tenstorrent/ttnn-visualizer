@@ -12,8 +12,8 @@ import { TAB_IDS } from '../definitions/BufferSummary';
 type ReportLocation = 'local' | 'remote' | null;
 
 export const reportLocationAtom = atom<ReportLocation>(null);
-export const activeReportAtom = atom<string | null>(null);
-export const activePerformanceTraceAtom = atom<string | null>(null);
+export const activeProfilerReportAtom = atom<string | null>(null);
+export const activePerformanceReportAtom = atom<string | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
 export const showHexAtom = atomWithStorage<boolean>('showHex', false);
 export const showMemoryRegionsAtom = atomWithStorage<boolean>('showMemoryRegions', true);

@@ -10,7 +10,12 @@ import 'styles/components/OldFolderPicker.scss';
 import { useQueryClient } from 'react-query';
 import { useAtom, useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
-import { activePerformanceTraceAtom, activeReportAtom, reportLocationAtom, selectedDeviceAtom } from '../../store/app';
+import {
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
+    reportLocationAtom,
+    selectedDeviceAtom,
+} from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification from '../../functions/createToastNotification';
@@ -70,8 +75,8 @@ const LocalFolderOptions: FC = () => {
     const queryClient = useQueryClient();
     const setReportLocation = useSetAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
-    const [activeReport, setActiveReport] = useAtom(activeReportAtom);
-    const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceTraceAtom);
+    const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
+    const [activePerformanceTrace, setActivePerformanceTrace] = useAtom(activePerformanceReportAtom);
 
     const {
         uploadLocalFolder,
@@ -127,7 +132,7 @@ const LocalFolderOptions: FC = () => {
             setProfilerUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
             setSelectedDevice(DEFAULT_DEVICE_ID);
-            setActiveReport(fileName);
+            setActiveProfilerReport(fileName);
             createToastNotification('Active report', fileName);
         }
 
@@ -191,15 +196,15 @@ const LocalFolderOptions: FC = () => {
 
     const handleSelectProfiler = async (item: string) => {
         await updateTabSession({ ...session, active_report: { profiler_name: item } });
-        setActiveReport(item);
+        setActiveProfilerReport(item);
     };
 
     const handleDeleteProfiler = async (folder: string) => {
         await deleteProfiler(folder);
         await queryClient.invalidateQueries([PROFILER_FOLDER_QUERY_KEY]);
 
-        if (activeReport === folder) {
-            setActiveReport(null);
+        if (activeProfilerReport === folder) {
+            setActiveProfilerReport(null);
             setProfilerUploadLabel('Choose directory...');
             setProfilerFolder(undefined);
         }
@@ -244,7 +249,7 @@ const LocalFolderOptions: FC = () => {
                 >
                     <LocalFolderPicker
                         items={reportFolderList}
-                        value={reportFolderList?.includes(activeReport) ? activeReport : null}
+                        value={reportFolderList?.includes(activeProfilerReport) ? activeProfilerReport : null}
                         handleSelect={handleSelectProfiler}
                         handleDelete={handleDeleteProfiler}
                     />

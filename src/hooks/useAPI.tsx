@@ -29,8 +29,8 @@ import { PerfTableRow } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import {
     activeNpeOpTraceAtom,
-    activePerformanceTraceAtom,
-    activeReportAtom,
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
@@ -343,7 +343,7 @@ const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
 };
 
 export const useOperationsList = () => {
-    const activeProfilerReport = useAtomValue(activeReportAtom);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<OperationDescription[], AxiosError>({
         queryFn: () => fetchOperations(),
@@ -604,7 +604,7 @@ export const usePerformanceRange = (): NumberRange | null => {
 
 // Not currently used
 export const useReportMeta = () => {
-    const activeProfilerReport = useAtomValue(activeReportAtom);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<ReportMetaData, AxiosError>(['get-report-config', activeProfilerReport], fetchReportMeta);
 };
@@ -654,7 +654,7 @@ export const fetchTensors = async (): Promise<Tensor[]> => {
 };
 
 export const useTensors = () => {
-    const activeProfilerReport = useAtomValue(activeReportAtom);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(),
@@ -665,7 +665,7 @@ export const useTensors = () => {
 };
 
 export const useDevices = () => {
-    const activeProfilerReport = useAtomValue(activeReportAtom);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<DeviceData[], AxiosError>(['get-devices', activeProfilerReport], fetchDevices, {
         staleTime: Infinity,
@@ -714,7 +714,7 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
 };
 
 export const useDeviceLog = () => {
-    const activePerformanceReport = useAtomValue(activePerformanceTraceAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
     return useQuery({
         queryFn: () => fetchDeviceLogRaw(),
@@ -753,13 +753,13 @@ export const usePerformanceReport = (name?: string | null) => {
 };
 
 export const useSession = () => {
-    const activeReport = useAtomValue(activeReportAtom);
-    const activeProfilerReport = useAtomValue(activePerformanceTraceAtom);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeNpe = useAtomValue(activeNpeOpTraceAtom);
 
     return useQuery({
         queryFn: () => fetchTabSession(),
-        queryKey: ['get-session', activeReport, activeProfilerReport, activeNpe],
+        queryKey: ['get-session', activeProfilerReport, activePerformanceReport, activeNpe],
         initialData: null,
     });
 };

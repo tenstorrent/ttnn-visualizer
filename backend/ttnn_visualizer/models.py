@@ -179,7 +179,7 @@ class StatusMessage(SerializeableModel):
     message: str
 
 
-class ActiveReport(SerializeableModel):
+class ActiveReports(SerializeableModel):
     profiler_name: Optional[str] = None
     performance_name: Optional[str] = None
     npe_name: Optional[str] = None
@@ -197,7 +197,7 @@ class Instance(BaseModel):
     profiler_path: Optional[str] = None
     performance_path: Optional[str] = None
     npe_path: Optional[str] = None
-    active_report: Optional[ActiveReport] = None
+    active_report: Optional[ActiveReports] = None
     remote_connection: Optional[RemoteConnection] = None
     remote_profiler_folder: Optional[RemoteReportFolder] = None
     remote_performance_folder: Optional[RemoteReportFolder] = None
@@ -260,7 +260,7 @@ class InstanceTable(db.Model):
                 str(self.npe_path) if self.npe_path is not None else None
             ),
             active_report=(
-                (ActiveReport(**self.active_report) if self.active_report else None)
+                (ActiveReports(**self.active_report) if self.active_report else None)
                 if isinstance(self.active_report, dict)
                 else None
             ),

@@ -9,8 +9,8 @@ import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
 import {
-    activePerformanceTraceAtom,
-    activeReportAtom,
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
     operationRangeAtom,
     performanceRangeAtom,
     selectedOperationRangeAtom,
@@ -27,8 +27,8 @@ function FooterInfobar() {
     const selectedRange = useAtomValue(selectedOperationRangeAtom);
     const operationRange = useAtomValue(operationRangeAtom);
     const performanceRange = useAtomValue(performanceRangeAtom);
-    const activeReport = useAtomValue(activeReportAtom);
-    const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const location = useLocation();
 
     const useGetDeviceOperationListPerfResult = useGetDeviceOperationListPerf();
@@ -56,42 +56,42 @@ function FooterInfobar() {
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
             <div className='current-data'>
                 <div className='active-reports'>
-                    {activeReport &&
-                        (activeReport.length > MAX_TITLE_LENGTH ? (
+                    {activeProfilerReport &&
+                        (activeProfilerReport.length > MAX_TITLE_LENGTH ? (
                             <Tooltip
-                                content={activeReport}
+                                content={activeProfilerReport}
                                 className={classNames('title', {
-                                    'is-lengthy': activeReport.length > MAX_TITLE_LENGTH,
+                                    'is-lengthy': activeProfilerReport.length > MAX_TITLE_LENGTH,
                                 })}
                             >
                                 <span>
-                                    <strong>Report:</strong> {activeReport}
+                                    <strong>Report:</strong> {activeProfilerReport}
                                 </span>
                             </Tooltip>
                         ) : (
                             <span>
-                                <strong>Report:</strong> {activeReport}
+                                <strong>Report:</strong> {activeProfilerReport}
                             </span>
                         ))}
 
-                    {activePerformanceTrace &&
-                        (activePerformanceTrace.length > MAX_TITLE_LENGTH ? (
+                    {activePerformanceReport &&
+                        (activePerformanceReport.length > MAX_TITLE_LENGTH ? (
                             <Tooltip
-                                content={activePerformanceTrace}
+                                content={activePerformanceReport}
                                 className={classNames('title', {
-                                    'is-lengthy': activePerformanceTrace.length > MAX_TITLE_LENGTH,
+                                    'is-lengthy': activePerformanceReport.length > MAX_TITLE_LENGTH,
                                 })}
                             >
                                 <span>
-                                    <strong>Performance:</strong> {activePerformanceTrace}
+                                    <strong>Performance:</strong> {activePerformanceReport}
                                 </span>
                             </Tooltip>
                         ) : (
                             <span>
-                                <strong>Performance:</strong> {activePerformanceTrace}
+                                <strong>Performance:</strong> {activePerformanceReport}
                             </span>
                         ))}
-                    {activeReport && activePerformanceTrace && (
+                    {activeProfilerReport && activePerformanceReport && (
                         <span>
                             {isInSync ? (
                                 <strong>
