@@ -153,7 +153,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
 
                 <FormGroup
-                    label='Profiler folder path'
+                    label='Profiler report folder path'
                     subLabel='Path to a remote folder containing profiler reports e.g. "$HOME/work/ll-sw"'
                 >
                     <InputGroup
@@ -164,7 +164,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
 
                 <FormGroup
-                    label='Performance folder path (optional)'
+                    label='Performance report folder path (optional)'
                     subLabel='Path to a remote folder containing performance reports e.g. "$HOME/perf/env-123"'
                 >
                     <InputGroup
