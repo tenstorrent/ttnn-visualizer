@@ -342,6 +342,21 @@ const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
     });
 };
 
+const fetchClusterDescription = async () => {
+    const { data } = await axiosInstance.get<string>('/api/cluster-descriptor');
+    return data;
+};
+
+export const useGetClusterDescription = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery({
+        queryFn: () => fetchClusterDescription(),
+        queryKey: ['get-cluster-description', activeProfilerReport],
+        initialData: null,
+    });
+};
+
 export const useOperationsList = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Outlet } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { Classes } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { useSetAtom } from 'jotai';
@@ -14,6 +14,9 @@ import MainNavigation from './MainNavigation';
 import { useSession } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
 import FooterInfobar from './FooterInfobar';
+import ClusterRenderer from './cluster/ClusterRenderer';
+import { ModalAwareOutlet } from '../libs/ModalAwareOutlet';
+import { routeObjectList } from '../definitions/RouteObjectList';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -29,6 +32,8 @@ function Layout() {
     const setActivePerformanceReport = useSetAtom(activePerformanceReportAtom);
     const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
     const { data: session } = useSession();
+    const location = useLocation();
+    const state = location.state as { background?: Location };
 
     useEffect(() => {
         if (session?.active_report) {
@@ -61,8 +66,8 @@ function Layout() {
             </header>
 
             <main>
-                <Outlet />
-
+                <ModalAwareOutlet routes={routeObjectList} />
+                {location.pathname === ROUTES.CLUSTER && state?.background && <ClusterRenderer />}
                 <ToastContainer
                     position='top-right'
                     autoClose={false}
