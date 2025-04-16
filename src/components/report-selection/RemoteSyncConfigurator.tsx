@@ -126,7 +126,7 @@ const RemoteSyncConfigurator: FC = () => {
         setReportLocation('remote');
         setSelectedDevice(DEFAULT_DEVICE_ID);
         setActiveProfilerReport(fileName);
-        createToastNotification('Active profiler report', fileName);
+        createToastNotification('Active memory report', fileName);
     };
 
     const updatePerformanceSelection = (fileName: string) => {
@@ -248,8 +248,8 @@ const RemoteSyncConfigurator: FC = () => {
             </FormGroup>
 
             <FormGroup
-                label={<h3>Profiler report</h3>}
-                subLabel='Select a profiler report'
+                label={<h3>Memory report</h3>}
+                subLabel='Select a memory report'
             >
                 <RemoteFolderSelector
                     remoteFolder={selectedReportFolder}

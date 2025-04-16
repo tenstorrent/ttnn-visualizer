@@ -36,7 +36,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     };
     const defaultConnectionTests: ConnectionStatus[] = [
         { status: ConnectionTestStates.IDLE, message: 'Test connection' },
-        { status: ConnectionTestStates.IDLE, message: 'Test profiler folder path' },
+        { status: ConnectionTestStates.IDLE, message: 'Test memory folder path' },
     ];
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
@@ -62,7 +62,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
         setIsTestingconnection(true);
 
         const sshStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing connection' };
-        const reportFolderStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing profiler folder path' };
+        const reportFolderStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing memory folder path' };
         const performanceFolderStatus = {
             status: ConnectionTestStates.PROGRESS,
             message: 'Testing performance folder path',
@@ -77,7 +77,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
             // TODO: Look at error handling
             setConnectionTests([
                 { status: ConnectionTestStates.FAILED, message: 'Connection failed' },
-                { status: ConnectionTestStates.FAILED, message: 'Profiler folder path failed' },
+                { status: ConnectionTestStates.FAILED, message: 'Memory folder path failed' },
             ]);
         } finally {
             setIsTestingconnection(false);
@@ -153,8 +153,8 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
 
                 <FormGroup
-                    label='Profiler report folder path'
-                    subLabel='Path to a remote folder containing profiler reports e.g. "$HOME/work/ll-sw"'
+                    label='Memory report folder path'
+                    subLabel='Path to a remote folder containing memory reports e.g. "$HOME/work/ll-sw"'
                 >
                     <InputGroup
                         key='path'

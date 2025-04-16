@@ -133,7 +133,7 @@ const LocalFolderOptions: FC = () => {
             setReportLocation('local');
             setSelectedDevice(DEFAULT_DEVICE_ID);
             setActiveProfilerReport(fileName);
-            createToastNotification('Active profiler report', fileName);
+            createToastNotification('Active memory report', fileName);
         }
 
         queryClient.clear();
@@ -197,7 +197,7 @@ const LocalFolderOptions: FC = () => {
     const handleSelectProfiler = async (item: string) => {
         await updateTabSession({ ...session, active_report: { profiler_name: item } });
 
-        createToastNotification('Active profiler report', item);
+        createToastNotification('Active memory report', item);
         setActiveProfilerReport(item);
     };
 
@@ -205,7 +205,7 @@ const LocalFolderOptions: FC = () => {
         await deleteProfiler(folder);
         await queryClient.invalidateQueries([PROFILER_FOLDER_QUERY_KEY]);
 
-        createToastNotification(`Profiler report deleted`, folder);
+        createToastNotification(`Memory report deleted`, folder);
 
         if (activeProfilerReport === folder) {
             setActiveProfilerReport(null);
@@ -252,8 +252,8 @@ const LocalFolderOptions: FC = () => {
 
             <div>
                 <FormGroup
-                    label={<h3>Profiler report</h3>}
-                    subLabel='Select a profiler report'
+                    label={<h3>Memory report</h3>}
+                    subLabel='Select a memory report'
                 >
                     <LocalFolderPicker
                         items={reportFolderList}
@@ -263,7 +263,7 @@ const LocalFolderOptions: FC = () => {
                     />
                 </FormGroup>
 
-                <FormGroup subLabel='Upload a local profiler report'>
+                <FormGroup subLabel='Upload a local memory report'>
                     <div className='buttons-container'>
                         <label
                             className='bp5-file-input'
