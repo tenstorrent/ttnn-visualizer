@@ -295,7 +295,7 @@ const fetchDevices = async () => {
 //     });
 // };
 
-const fetchPerformanceDataReport = async (name?: string | null): Promise<PerfTableRow[]> => {
+const fetchPerformanceReport = async (name?: string | null): Promise<PerfTableRow[]> => {
     const { data } = await axiosInstance.get<PerfTableRow[]>(`/api/performance/perf-results/report`, {
         params: { name },
     });
@@ -733,7 +733,7 @@ export const useDeviceLog = () => {
 
 export const usePerformanceReport = (name?: string | null) => {
     const response = useQuery({
-        queryFn: () => fetchPerformanceDataReport(name),
+        queryFn: () => fetchPerformanceReport(name),
         queryKey: ['get-performance-data-report', name],
         staleTime: Infinity,
     });

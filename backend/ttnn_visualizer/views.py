@@ -436,6 +436,45 @@ def delete_profiler_report(profiler_name, session: Instance):
     return Response(status=HTTPStatus.NO_CONTENT, response=f"Report deleted successfully: {path}")
 
 
+
+@api.route("/performance", methods=["GET"])
+@with_session
+def get_performance_data_list(session: Instance):
+    is_remote = True if session.remote_connection else False
+    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
+    config_key = 'LOCAL_DATA_DIRECTORY'
+    data_directory = Path(current_app.config[config_key])
+
+    if is_remote:
+        connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
+        path = data_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+    else:
+        path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+
+    if not path.exists():
+        path.mkdir(parents=True, exist_ok=True)
+
+    directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
+
+    valid_dirs = []
+
+    for dir_name in directory_names:
+        dir_path = Path(path) / dir_name
+        files = list(dir_path.glob("**/*"))
+
+        # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
+        if not any(file.name == "profile_log_device.csv" for file in files):
+            continue
+        if not any(file.name == "tracy_profile_log_host.tracy" for file in files):
+            continue
+        if not any(file.name.startswith("ops_perf_results") for file in files):
+            continue
+
+        valid_dirs.append(dir_name)
+
+    return jsonify(valid_dirs)
+
+
 @api.route("/performance/device-log", methods=["GET"])
 @with_session
 def get_performance_data(session: Instance):
@@ -483,45 +522,6 @@ def delete_performance_report(performance_name, session: Instance):
         return Response(status=HTTPStatus.NOT_FOUND, response=f"Report does not exist: {path}")
 
     return Response(status=HTTPStatus.NO_CONTENT, response=f"Report deleted successfully: {path}")
-
-
-@api.route("/performance", methods=["GET"])
-@with_session
-def get_performance_data_list(session: Instance):
-    # Doesn't handle remote at the moment
-    # is_remote = True if session.remote_connection else False
-    # config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    config_key = 'LOCAL_DATA_DIRECTORY'
-    data_directory = Path(current_app.config[config_key])
-
-    # if is_remote:
-    #     connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
-    #     path = data_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-    # else:
-    path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-
-    if not path.exists():
-        path.mkdir(parents=True, exist_ok=True)
-
-    directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
-
-    valid_dirs = []
-
-    for dir_name in directory_names:
-        dir_path = Path(path) / dir_name
-        files = list(dir_path.glob("**/*"))
-
-        # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
-        if not any(file.name == "profile_log_device.csv" for file in files):
-            continue
-        if not any(file.name == "tracy_profile_log_host.tracy" for file in files):
-            continue
-        if not any(file.name.startswith("ops_perf_results") for file in files):
-            continue
-
-        valid_dirs.append(dir_name)
-
-    return jsonify(valid_dirs)
 
 
 @api.route("/performance/perf-results/raw", methods=["GET"])
@@ -804,7 +804,7 @@ def test_remote_folder():
     if not has_failures():
         try:
             check_remote_path_exists(connection, "profilerPath")
-            add_status(ConnectionTestStates.OK.value, "Profiler folder path exists")
+            add_status(ConnectionTestStates.OK.value, "Memory folder path exists")
         except RemoteConnectionException as e:
             add_status(ConnectionTestStates.FAILED.value, e.message)
 
