@@ -53,7 +53,14 @@ function Layout() {
                         href={ROUTES.HOME}
                         className='title'
                     >
-                        <h1>TT-NN Visualizer</h1>
+                        <h1>
+                            <img
+                                width={250}
+                                alt='tenstorrent'
+                                src='https://docs.tenstorrent.com/tt-tm-assets/Logo/Standard%20Lockup/svg/tt_logo_color-orange-whitetext.svg'
+                            />
+                            <span className='visualizer-title'>TT-NN Visualizer</span>
+                        </h1>
                         <sup className='version'>v{appVersion}</sup>
                     </a>
                     <MainNavigation />
