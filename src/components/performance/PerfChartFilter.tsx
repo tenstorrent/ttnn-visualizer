@@ -50,6 +50,18 @@ function PerfChartFilter({ opCodeOptions, selectedOpCodes, updateOpCodes }: Perf
         return 'Select all';
     };
 
+    const getLabelElement = (option: Marker) => (
+        <>
+            <span className='label'>{option.opCode}</span>
+            <div
+                className='memory-color-block'
+                style={{
+                    backgroundColor: option.colour,
+                }}
+            />
+        </>
+    );
+
     return (
         <aside className='op-code-menu-container'>
             <div className='op-code-menu'>
@@ -73,23 +85,17 @@ function PerfChartFilter({ opCodeOptions, selectedOpCodes, updateOpCodes }: Perf
                         key={option.opCode}
                     >
                         <Checkbox
+                            className='woof'
                             checked={selectedOpCodes.map((selected) => selected.opCode).includes(option.opCode)}
                             id={option.opCode}
                             key={option.opCode}
-                            label={option.opCode}
+                            labelElement={getLabelElement(option)}
                             onChange={() => {
                                 const newSelectedOpCodes = selectedOpCodes.includes(option)
                                     ? selectedOpCodes.filter((code) => code !== option)
                                     : [...selectedOpCodes, option];
 
                                 updateOpCodes(newSelectedOpCodes);
-                            }}
-                        />
-
-                        <div
-                            className='memory-color-block'
-                            style={{
-                                backgroundColor: option.colour,
                             }}
                         />
                     </div>

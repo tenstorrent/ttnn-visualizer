@@ -13,7 +13,7 @@ $icon-gap: 8px;
     position: sticky;
     top: 20px;
     left: 0;
-    width: 325px;
+    width: 250px;
     align-self: start;
 
     .op-code-menu {
@@ -37,12 +37,9 @@ $icon-gap: 8px;
 
         .option {
             display: flex;
+            justify-content: space-between;
             gap: 8px;
             padding: 8px 16px 0;
-
-            .memory-color-block {
-                margin-top: 2px;
-            }
 
             &:nth-child(odd) {
                 background-color: color.adjust($list-color, $lightness: -5%);
@@ -55,6 +52,21 @@ $icon-gap: 8px;
             &.select-all {
                 background-color: color.adjust($list-color, $lightness: -20%);
             }
+        }
+    }
+
+    .woof {
+        display: flex;
+        width: 100%;
+        justify-content: space-between;
+        align-items: center;
+        margin-right: 0;
+
+        > .label {
+            max-width: 175px; // Adjust value if we change the width of .op-code-menu-container
+            text-overflow: ellipsis;
+            overflow: hidden;
+            flex-grow: 1;
         }
     }
 }

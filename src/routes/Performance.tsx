@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Helmet } from 'react-helmet-async';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button, Size, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
@@ -16,16 +16,52 @@ import getCoreCount from '../functions/getCoreCount';
 import LocalFolderPicker from '../components/report-selection/LocalFolderPicker';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../store/app';
 import PerfCharts from '../components/performance/PerfCharts';
+import PerfChartFilter from '../components/performance/PerfChartFilter';
+import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
 
 export default function Performance() {
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport();
     const { data: folderList } = usePerfFolderList();
 
+    const opCodeOptions = useMemo(
+        () =>
+            [
+                ...new Set(
+                    perfData?.map((row) => row.raw_op_code).filter((opCode): opCode is string => opCode !== undefined),
+                ).values(),
+            ]
+                .sort()
+                .map((opCode, index) => ({
+                    opCode,
+                    colour: MARKER_COLOURS[index],
+                })),
+        [perfData],
+    );
+
     const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-1');
+    const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
+    const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>(opCodeOptions);
+
     const [comparisonReport, setComparisonReport] = useAtom(comparisonPerformanceReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const { data: comparisonData } = usePerformanceReport(comparisonReport);
+
+    useEffect(() => {
+        setFilteredPerfData(
+            perfData
+                ?.filter((row) =>
+                    selectedOpCodes.length
+                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
+                        : false,
+                )
+                .sort((a, b) => (a.raw_op_code ?? '').localeCompare(b.raw_op_code ?? '')) || [],
+        );
+    }, [selectedOpCodes, perfData]);
+
+    useEffect(() => {
+        setSelectedOpCodes(opCodeOptions);
+    }, [opCodeOptions]);
 
     useClearSelectedBuffer();
 
@@ -91,10 +127,29 @@ export default function Performance() {
                             )}
 
                             {perfData ? (
-                                <PerfCharts
-                                    perfData={perfData}
-                                    maxCores={maxCores}
-                                />
+                                <div className='charts-container'>
+                                    <PerfChartFilter
+                                        opCodeOptions={opCodeOptions}
+                                        selectedOpCodes={selectedOpCodes}
+                                        updateOpCodes={setSelectedOpCodes}
+                                    />
+
+                                    <PerfCharts
+                                        perfData={filteredPerfData}
+                                        maxCores={maxCores}
+                                        opCodeOptions={opCodeOptions}
+                                        selectedOpCodes={selectedOpCodes}
+                                    />
+
+                                    {comparisonData ? (
+                                        <PerfCharts
+                                            perfData={comparisonData}
+                                            maxCores={maxCores}
+                                            opCodeOptions={opCodeOptions}
+                                            selectedOpCodes={selectedOpCodes}
+                                        />
+                                    ) : null}
+                                </div>
                             ) : null}
                         </div>
                     }
