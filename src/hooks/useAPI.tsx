@@ -295,7 +295,7 @@ const fetchDevices = async () => {
 //     });
 // };
 
-const fetchPerformanceReport = async (name?: string | null): Promise<PerfTableRow[]> => {
+export const fetchPerformanceReport = async (name?: string | null): Promise<PerfTableRow[]> => {
     const { data } = await axiosInstance.get<PerfTableRow[]>(`/api/performance/perf-results/report`, {
         params: { name },
     });
@@ -731,11 +731,33 @@ export const useDeviceLog = () => {
 //     });
 // };
 
-export const usePerformanceReport = (name?: string | null) => {
+export const usePerformanceReport = () => {
     const response = useQuery({
-        queryFn: () => fetchPerformanceReport(name),
-        queryKey: ['get-performance-data-report', name],
+        queryFn: () => fetchPerformanceReport(),
+        queryKey: ['get-performance-report'],
         staleTime: Infinity,
+    });
+
+    return useMemo(() => {
+        if (response.data) {
+            const df: PerfTableRow[] = response.data
+                .slice()
+                .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
+
+            response.data = df;
+        }
+
+        return response;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [response.isLoading]);
+};
+
+export const usePerformanceComparisonReport = (name: string | null) => {
+    const response = useQuery({
+        queryFn: () => (name !== null ? fetchPerformanceReport(name) : Promise.resolve([])),
+        queryKey: ['get-performance-comparison-report', name],
+        staleTime: Infinity,
+        enabled: name !== null,
     });
 
     return useMemo(() => {

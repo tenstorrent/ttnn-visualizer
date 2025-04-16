@@ -6,9 +6,9 @@
     display: grid;
     grid-template-columns: 1fr minmax(min-content, 750px) 1fr;
     position: relative;
-    gap: 60px;
+    gap: 30px;
 
-    &.has-comparison {
-        grid-template-columns: 1fr minmax(min-content, 750px) minmax(min-content, 750px);
-    }
+    // &.has-comparison {
+    //     grid-template-columns: 1fr minmax(min-content, 750px) minmax(min-content, 750px);
+    // }
 }

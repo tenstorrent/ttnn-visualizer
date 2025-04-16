@@ -14,11 +14,14 @@ interface PerfChartsProps {
     maxCores: number;
     opCodeOptions: Marker[];
     selectedOpCodes: Marker[];
+    title?: string | null;
 }
 
-const PerfCharts: FC<PerfChartsProps> = ({ perfData, maxCores, opCodeOptions, selectedOpCodes }) => {
+const PerfCharts: FC<PerfChartsProps> = ({ perfData, maxCores, opCodeOptions, selectedOpCodes, title }) => {
     return (
         <div className='charts'>
+            {title ? <h2>{title}</h2> : null}
+
             <PerfOpCountVsRuntimeChart
                 data={perfData}
                 selectedOpCodes={selectedOpCodes}

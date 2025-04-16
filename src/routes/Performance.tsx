@@ -7,7 +7,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Size, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
-import { useDeviceLog, usePerfFolderList, usePerformanceReport } from '../hooks/useAPI';
+import classNames from 'classnames';
+import { useDeviceLog, usePerfFolderList, usePerformanceComparisonReport, usePerformanceReport } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceReport from '../components/performance/PerfReport';
@@ -45,7 +46,7 @@ export default function Performance() {
 
     const [comparisonReport, setComparisonReport] = useAtom(comparisonPerformanceReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const { data: comparisonData } = usePerformanceReport(comparisonReport);
+    const { data: comparisonData } = usePerformanceComparisonReport(comparisonReport);
 
     useEffect(() => {
         setFilteredPerfData(
@@ -127,7 +128,7 @@ export default function Performance() {
                             )}
 
                             {perfData ? (
-                                <div className='charts-container'>
+                                <div className={classNames('charts-container', { 'has-comparison': comparisonData })}>
                                     <PerfChartFilter
                                         opCodeOptions={opCodeOptions}
                                         selectedOpCodes={selectedOpCodes}
@@ -139,6 +140,7 @@ export default function Performance() {
                                         maxCores={maxCores}
                                         opCodeOptions={opCodeOptions}
                                         selectedOpCodes={selectedOpCodes}
+                                        title={comparisonData && activePerformanceReport}
                                     />
 
                                     {comparisonData ? (
@@ -147,6 +149,7 @@ export default function Performance() {
                                             maxCores={maxCores}
                                             opCodeOptions={opCodeOptions}
                                             selectedOpCodes={selectedOpCodes}
+                                            title={comparisonReport}
                                         />
                                     ) : null}
                                 </div>
