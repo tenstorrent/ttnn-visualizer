@@ -4,7 +4,7 @@
 
 import { Helmet } from 'react-helmet-async';
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ButtonVariant, Size, Tab, TabId, Tabs } from '@blueprintjs/core';
+import { Button, ButtonVariant, FormGroup, Size, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import { useDeviceLog, usePerfFolderList, usePerformanceComparisonReport, usePerformanceReport } from '../hooks/useAPI';
@@ -51,6 +51,12 @@ export default function Performance() {
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>(opCodeOptions);
 
     useEffect(() => {
+        if (comparisonReport === activePerformanceReport) {
+            setComparisonReport(null);
+        }
+    }, [comparisonReport, activePerformanceReport, setComparisonReport]);
+
+    useEffect(() => {
         setFilteredComparisonData(
             comparisonData
                 ?.filter((row) =>
@@ -91,6 +97,31 @@ export default function Performance() {
 
             <h1 className='page-title'>Performance analysis</h1>
 
+            {folderList ? (
+                <FormGroup
+                    className='form-group'
+                    label={<h3>Memory report</h3>}
+                    subLabel='Select a memory report'
+                >
+                    <div className='folder-selection'>
+                        <LocalFolderPicker
+                            items={folderList.filter((folder: string) => folder !== activePerformanceReport)}
+                            value={comparisonReport}
+                            handleSelect={(value) => setComparisonReport(value)}
+                        />
+
+                        <Button
+                            className='clear-selection'
+                            variant={ButtonVariant.OUTLINED}
+                            icon={IconNames.CROSS}
+                            onClick={() => setComparisonReport(null)}
+                        />
+                    </div>
+                </FormGroup>
+            ) : (
+                <LoadingSpinner />
+            )}
+
             <Tabs
                 id='performance-tabs'
                 selectedTabId={selectedTabId}
@@ -117,26 +148,6 @@ export default function Performance() {
                             <p>
                                 <strong>Cores:</strong> {maxCores}
                             </p>
-
-                            {folderList ? (
-                                <div className='folder-selection'>
-                                    <LocalFolderPicker
-                                        items={folderList.filter(
-                                            (folder: string) => folder !== activePerformanceReport,
-                                        )}
-                                        value={comparisonReport}
-                                        handleSelect={(value) => setComparisonReport(value)}
-                                    />
-
-                                    <Button
-                                        variant={ButtonVariant.OUTLINED}
-                                        icon={IconNames.CROSS}
-                                        onClick={() => setComparisonReport(null)}
-                                    />
-                                </div>
-                            ) : (
-                                <LoadingSpinner />
-                            )}
 
                             {perfData ? (
                                 <div className='charts-container'>

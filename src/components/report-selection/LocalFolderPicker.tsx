@@ -36,12 +36,14 @@ const LocalFolderPicker = ({ items, value, handleSelect, handleDelete }: LocalFo
                     icon={modifiers.active ? IconNames.FOLDER_OPEN : IconNames.FOLDER_CLOSE}
                 />
 
-                <Button
-                    icon={IconNames.TRASH}
-                    onClick={handleDelete ? () => handleDelete(folder) : undefined}
-                    variant={ButtonVariant.MINIMAL}
-                    intent={Intent.DANGER}
-                />
+                {handleDelete && (
+                    <Button
+                        icon={IconNames.TRASH}
+                        onClick={handleDelete ? () => handleDelete(folder) : undefined}
+                        variant={ButtonVariant.MINIMAL}
+                        intent={Intent.DANGER}
+                    />
+                )}
             </div>
         );
     };

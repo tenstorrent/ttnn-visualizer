@@ -10,9 +10,16 @@
 }
 
 .folder-selection {
-    display: inline-flex;
+    display: flex;
     flex-wrap: nowrap;
-    margin-bottom: 15px;
     width: 250px;
     gap: 5px;
+
+    .folder-picker {
+        flex: 0 1 220px;
+    }
+
+    .clear-selection {
+        flex: 0 0 30px;
+    }
 }
