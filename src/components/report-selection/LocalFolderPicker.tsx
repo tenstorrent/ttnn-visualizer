@@ -70,6 +70,7 @@ const LocalFolderPicker = ({ items, value, handleSelect, handleDelete }: LocalFo
                 alignText='start'
                 icon={IconNames.FOLDER_OPEN}
                 endIcon={IconNames.CARET_DOWN}
+                variant={ButtonVariant.OUTLINED}
                 fill
             />
         </Select>

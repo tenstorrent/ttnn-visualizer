@@ -8,3 +8,11 @@
     position: relative;
     gap: 30px;
 }
+
+.folder-selection {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    margin-bottom: 15px;
+    width: 250px;
+    gap: 5px;
+}

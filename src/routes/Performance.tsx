@@ -4,10 +4,9 @@
 
 import { Helmet } from 'react-helmet-async';
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Size, Tab, TabId, Tabs } from '@blueprintjs/core';
+import { Button, ButtonVariant, Size, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
-import classNames from 'classnames';
 import { useDeviceLog, usePerfFolderList, usePerformanceComparisonReport, usePerformanceReport } from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -120,7 +119,7 @@ export default function Performance() {
                             </p>
 
                             {folderList ? (
-                                <>
+                                <div className='folder-selection'>
                                     <LocalFolderPicker
                                         items={folderList.filter(
                                             (folder: string) => folder !== activePerformanceReport,
@@ -130,16 +129,17 @@ export default function Performance() {
                                     />
 
                                     <Button
+                                        variant={ButtonVariant.OUTLINED}
                                         icon={IconNames.CROSS}
                                         onClick={() => setComparisonReport(null)}
                                     />
-                                </>
+                                </div>
                             ) : (
                                 <LoadingSpinner />
                             )}
 
                             {perfData ? (
-                                <div className={classNames('charts-container')}>
+                                <div className='charts-container'>
                                     <PerfChartFilter
                                         opCodeOptions={opCodeOptions}
                                         selectedOpCodes={selectedOpCodes}
