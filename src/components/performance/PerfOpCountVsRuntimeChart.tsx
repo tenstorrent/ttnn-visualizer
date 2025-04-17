@@ -4,7 +4,7 @@
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { MARKER_COLOURS, Marker, PerfTableRow } from '../../definitions/PerfTable';
+import { Marker, PerfTableRow } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 
@@ -41,7 +41,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, data = [] }: PerfOpCountVs
     const opRuntimeData = useMemo(
         () =>
             opCodes.map(
-                (opCode, index) =>
+                (opCode) =>
                     ({
                         x: ['Runtime %'],
                         y: [
@@ -51,11 +51,11 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, data = [] }: PerfOpCountVs
                         name: '',
                         hovertemplate: `${opCode}<br />%{y:.1%}`,
                         marker: {
-                            color: MARKER_COLOURS[index],
+                            color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
                         },
                     }) as Partial<PlotData>,
             ),
-        [data, opCodes, totalRuntime],
+        [data, opCodes, selectedOpCodes, totalRuntime],
     );
 
     const configuration: PlotConfiguration = {

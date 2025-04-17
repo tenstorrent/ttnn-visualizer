@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react';
 import 'styles/components/PerfChartFilter.scss';
 import { Marker } from '../../definitions/PerfTable';
 
+const MAX_OPTION_LENGTH = 25; // Brittle
+
 interface PerfChartFilterProps {
     opCodeOptions: Marker[];
     selectedOpCodes: Marker[];
@@ -50,17 +52,30 @@ function PerfChartFilter({ opCodeOptions, selectedOpCodes, updateOpCodes }: Perf
         return 'Select all';
     };
 
-    const getLabelElement = (option: Marker) => (
-        <>
-            <span className='label'>{option.opCode}</span>
-            <div
-                className='memory-color-block'
-                style={{
-                    backgroundColor: option.colour,
-                }}
-            />
-        </>
-    );
+    const getLabelElement = (option: Marker) => {
+        return (
+            <>
+                <span className='label'>
+                    {option.opCode.length > MAX_OPTION_LENGTH ? (
+                        <span
+                            className='abbreviated-label'
+                            title={option.opCode}
+                        >
+                            {option.opCode}
+                        </span>
+                    ) : (
+                        option.opCode
+                    )}
+                </span>
+                <div
+                    className='memory-color-block'
+                    style={{
+                        backgroundColor: option.colour,
+                    }}
+                />
+            </>
+        );
+    };
 
     return (
         <aside className='op-code-menu-container'>
@@ -85,7 +100,7 @@ function PerfChartFilter({ opCodeOptions, selectedOpCodes, updateOpCodes }: Perf
                         key={option.opCode}
                     >
                         <Checkbox
-                            className='woof'
+                            className='label-container'
                             checked={selectedOpCodes.map((selected) => selected.opCode).includes(option.opCode)}
                             id={option.opCode}
                             key={option.opCode}

@@ -21,9 +21,15 @@ import PerfChartFilter from '../components/performance/PerfChartFilter';
 import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
 
 export default function Performance() {
+    const [comparisonReport, setComparisonReport] = useAtom(comparisonPerformanceReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport();
+    const { data: comparisonData } = usePerformanceComparisonReport(comparisonReport);
     const { data: folderList } = usePerfFolderList();
+
+    useClearSelectedBuffer();
 
     const opCodeOptions = useMemo(
         () =>
@@ -42,11 +48,20 @@ export default function Performance() {
 
     const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-1');
     const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
+    const [filteredComparisonData, setFilteredComparisonData] = useState<PerfTableRow[]>([]);
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>(opCodeOptions);
 
-    const [comparisonReport, setComparisonReport] = useAtom(comparisonPerformanceReportAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const { data: comparisonData } = usePerformanceComparisonReport(comparisonReport);
+    useEffect(() => {
+        setFilteredComparisonData(
+            comparisonData
+                ?.filter((row) =>
+                    selectedOpCodes.length
+                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
+                        : false,
+                )
+                .sort((a, b) => (a.raw_op_code ?? '').localeCompare(b.raw_op_code ?? '')) || [],
+        );
+    }, [selectedOpCodes, comparisonData]);
 
     useEffect(() => {
         setFilteredPerfData(
@@ -63,8 +78,6 @@ export default function Performance() {
     useEffect(() => {
         setSelectedOpCodes(opCodeOptions);
     }, [opCodeOptions]);
-
-    useClearSelectedBuffer();
 
     if (isLoadingPerformance || isLoadingDeviceLog) {
         return <LoadingSpinner />;
@@ -116,8 +129,6 @@ export default function Performance() {
                                         handleSelect={(value) => setComparisonReport(value)}
                                     />
 
-                                    {comparisonReport && <p>Comparison: {comparisonData?.length ?? 'None'}</p>}
-
                                     <Button
                                         icon={IconNames.CROSS}
                                         onClick={() => setComparisonReport(null)}
@@ -128,7 +139,7 @@ export default function Performance() {
                             )}
 
                             {perfData ? (
-                                <div className={classNames('charts-container', { 'has-comparison': comparisonData })}>
+                                <div className={classNames('charts-container')}>
                                     <PerfChartFilter
                                         opCodeOptions={opCodeOptions}
                                         selectedOpCodes={selectedOpCodes}
@@ -143,9 +154,9 @@ export default function Performance() {
                                         title={comparisonData && activePerformanceReport}
                                     />
 
-                                    {comparisonData ? (
+                                    {comparisonReport ? (
                                         <PerfCharts
-                                            perfData={comparisonData}
+                                            perfData={filteredComparisonData}
                                             maxCores={maxCores}
                                             opCodeOptions={opCodeOptions}
                                             selectedOpCodes={selectedOpCodes}

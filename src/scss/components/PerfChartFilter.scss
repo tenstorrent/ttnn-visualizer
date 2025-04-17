@@ -13,7 +13,6 @@ $icon-gap: 8px;
     position: sticky;
     top: 20px;
     left: 0;
-    width: 250px;
     align-self: start;
 
     .op-code-menu {
@@ -55,18 +54,22 @@ $icon-gap: 8px;
         }
     }
 
-    .woof {
+    .label-container {
         display: flex;
         width: 100%;
         justify-content: space-between;
         align-items: center;
         margin-right: 0;
 
-        > .label {
-            max-width: 175px; // Adjust value if we change the width of .op-code-menu-container
+        .label {
+            max-width: 175px; // Adjust value if we change the width of the menu
             text-overflow: ellipsis;
             overflow: hidden;
             flex-grow: 1;
+        }
+
+        .abbreviated-label {
+            text-decoration: underline dotted;
         }
     }
 }
