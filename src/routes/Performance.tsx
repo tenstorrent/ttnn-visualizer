@@ -24,26 +24,29 @@ export default function Performance() {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
-    const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport();
+    const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport(activePerformanceReport);
     const { data: comparisonData } = usePerformanceComparisonReport(comparisonReport);
     const { data: folderList } = usePerfFolderList();
 
     useClearSelectedBuffer();
 
-    const opCodeOptions = useMemo(
-        () =>
-            [
-                ...new Set(
-                    perfData?.map((row) => row.raw_op_code).filter((opCode): opCode is string => opCode !== undefined),
-                ).values(),
-            ]
-                .sort()
-                .map((opCode, index) => ({
-                    opCode,
-                    colour: MARKER_COLOURS[index],
-                })),
-        [perfData],
-    );
+    const opCodeOptions = useMemo(() => {
+        const opCodes = Array.from(
+            new Set([
+                ...(perfData
+                    ?.map((row) => row.raw_op_code)
+                    .filter((opCode): opCode is string => opCode !== undefined) || []),
+                ...(comparisonData
+                    ?.map((row) => row.raw_op_code)
+                    .filter((opCode): opCode is string => opCode !== undefined) || []),
+            ]),
+        );
+
+        return opCodes.map((opCode, index) => ({
+            opCode,
+            colour: MARKER_COLOURS[index],
+        }));
+    }, [perfData, comparisonData]);
 
     const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-1');
     const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
@@ -100,8 +103,8 @@ export default function Performance() {
             {folderList ? (
                 <FormGroup
                     className='form-group'
-                    label={<h3>Memory report</h3>}
-                    subLabel='Select a memory report'
+                    label={<h3>Compare</h3>}
+                    subLabel='Select a performance report to compare'
                 >
                     <div className='folder-selection'>
                         <LocalFolderPicker

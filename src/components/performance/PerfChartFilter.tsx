@@ -94,27 +94,29 @@ function PerfChartFilter({ opCodeOptions, selectedOpCodes, updateOpCodes }: Perf
                     />
                 </div>
 
-                {opCodeOptions.map((option) => (
-                    <div
-                        className='option'
-                        key={option.opCode}
-                    >
-                        <Checkbox
-                            className='label-container'
-                            checked={selectedOpCodes.map((selected) => selected.opCode).includes(option.opCode)}
-                            id={option.opCode}
+                {opCodeOptions
+                    .sort((a, b) => a.opCode.localeCompare(b.opCode))
+                    .map((option) => (
+                        <div
+                            className='option'
                             key={option.opCode}
-                            labelElement={getLabelElement(option)}
-                            onChange={() => {
-                                const newSelectedOpCodes = selectedOpCodes.includes(option)
-                                    ? selectedOpCodes.filter((code) => code !== option)
-                                    : [...selectedOpCodes, option];
+                        >
+                            <Checkbox
+                                className='label-container'
+                                checked={selectedOpCodes.map((selected) => selected.opCode).includes(option.opCode)}
+                                id={option.opCode}
+                                key={option.opCode}
+                                labelElement={getLabelElement(option)}
+                                onChange={() => {
+                                    const newSelectedOpCodes = selectedOpCodes.includes(option)
+                                        ? selectedOpCodes.filter((code) => code !== option)
+                                        : [...selectedOpCodes, option];
 
-                                updateOpCodes(newSelectedOpCodes);
-                            }}
-                        />
-                    </div>
-                ))}
+                                    updateOpCodes(newSelectedOpCodes);
+                                }}
+                            />
+                        </div>
+                    ))}
             </div>
         </aside>
     );

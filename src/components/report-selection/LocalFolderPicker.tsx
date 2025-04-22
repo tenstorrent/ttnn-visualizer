@@ -9,9 +9,16 @@ interface LocalFolderPickerProps {
     value: string | null;
     handleSelect: (folder: string) => void;
     handleDelete?: (folder: string) => void;
+    defaultLabel?: string;
 }
 
-const LocalFolderPicker = ({ items, value, handleSelect, handleDelete }: LocalFolderPickerProps) => {
+const LocalFolderPicker = ({
+    items,
+    value,
+    handleSelect,
+    handleDelete,
+    defaultLabel = 'Select a report...',
+}: LocalFolderPickerProps) => {
     const { data: session } = useSession();
     const isDisabled = !items || items.length === 0;
 
@@ -67,7 +74,7 @@ const LocalFolderPicker = ({ items, value, handleSelect, handleDelete }: LocalFo
         >
             <Button
                 className='folder-picker-button'
-                text={value ? `/${value}` : 'Select a report...'}
+                text={value ? `/${value}` : defaultLabel}
                 disabled={isDisabled || !session}
                 alignText='start'
                 icon={IconNames.FOLDER_OPEN}

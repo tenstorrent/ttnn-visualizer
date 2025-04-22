@@ -541,8 +541,10 @@ export interface DeviceOperationMapping {
     perfData?: PerfTableRow;
 }
 
+// Unused
 const useProxyPerformanceReport = (): PerfTableRow[] => {
-    const response = usePerformanceReport();
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const response = usePerformanceReport(activePerformanceReport);
 
     return useMemo(() => {
         if (!response.data) {
@@ -731,11 +733,10 @@ export const useDeviceLog = () => {
 //     });
 // };
 
-export const usePerformanceReport = () => {
+export const usePerformanceReport = (name?: string | null) => {
     const response = useQuery({
         queryFn: () => fetchPerformanceReport(),
-        queryKey: ['get-performance-report'],
-        staleTime: Infinity,
+        queryKey: ['get-performance-report', name],
     });
 
     return useMemo(() => {
