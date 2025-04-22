@@ -14,9 +14,15 @@ interface NonFilterablePerfChartsProps {
     perfData: PerfTableRow[];
     maxCores: number;
     opCodeOptions: Marker[];
+    hasComparison?: boolean;
 }
 
-const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({ perfData, maxCores, opCodeOptions }) => {
+const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
+    perfData,
+    maxCores,
+    opCodeOptions,
+    hasComparison,
+}) => {
     const matmulData = useMemo(
         () => perfData.filter((row) => row.raw_op_code.toLowerCase().includes('matmul')),
         [perfData],
@@ -29,11 +35,9 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({ perfData, m
 
     return (
         <div className='charts'>
-            {matmulData.length > 0 ? (
+            {hasComparison && matmulData.length > 0 ? (
                 <>
-                    <h2>
-                        <u>Matmul operations</u>
-                    </h2>
+                    <h2>Matmul operations</h2>
 
                     <PerfCoreCountUtilizationChart
                         data={matmulData}
@@ -50,18 +54,20 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({ perfData, m
                         maxCores={maxCores}
                     />
                 </>
-            ) : (
+            ) : null}
+
+            {hasComparison && !matmulData ? (
                 <>
                     <div className='chart-container dummy-outline' />
                     <div className='chart-container dummy-outline' />
                     <div className='chart-container dummy-outline' />
                 </>
-            )}
+            ) : null}
 
-            <h2>Conv operations</h2>
-
-            {convData.length > 0 ? (
+            {hasComparison && convData.length > 0 ? (
                 <>
+                    <h2>Conv operations</h2>
+
                     <PerfCoreCountUtilizationChart
                         data={convData}
                         maxCores={maxCores}
@@ -77,13 +83,15 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({ perfData, m
                         maxCores={maxCores}
                     />
                 </>
-            ) : (
+            ) : null}
+
+            {hasComparison && !convData ? (
                 <>
                     <div className='chart-container dummy-outline' />
                     <div className='chart-container dummy-outline' />
                     <div className='chart-container dummy-outline' />
                 </>
-            )}
+            ) : null}
 
             <h2>All operations</h2>
 

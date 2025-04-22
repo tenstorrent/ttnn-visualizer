@@ -187,6 +187,7 @@ export default function Performance() {
                                                 perfData={perfData}
                                                 maxCores={maxCores}
                                                 opCodeOptions={opCodeOptions}
+                                                hasComparison={!!comparisonReport}
                                             />
                                         </div>
 
@@ -196,6 +197,7 @@ export default function Performance() {
                                                     perfData={comparisonData}
                                                     maxCores={maxCores}
                                                     opCodeOptions={opCodeOptions}
+                                                    hasComparison
                                                 />
                                             ) : null}
                                         </div>
