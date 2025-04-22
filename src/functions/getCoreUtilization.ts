@@ -14,7 +14,8 @@ function getCoreUtilization(row: PerfTableRow, maxCores: number): number {
         return 0;
     }
 
-    const utilization = (ideal / kernelDuration) * (maxCores / coreCount);
+    const kernelDurationNs = kernelDuration * 1000;
+    const utilization = (ideal / kernelDurationNs) * (maxCores / coreCount);
 
     return isValidNumber(utilization) ? utilization : 0;
 }
