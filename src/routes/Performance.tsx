@@ -18,6 +18,7 @@ import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '..
 import PerfCharts from '../components/performance/PerfCharts';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
 import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
+import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
 
 export default function Performance() {
     const [comparisonReport, setComparisonReport] = useAtom(comparisonPerformanceReportAtom);
@@ -153,31 +154,53 @@ export default function Performance() {
                             </p>
 
                             {perfData ? (
-                                <div className='charts-container'>
-                                    <PerfChartFilter
-                                        opCodeOptions={opCodeOptions}
-                                        selectedOpCodes={selectedOpCodes}
-                                        updateOpCodes={setSelectedOpCodes}
-                                    />
-
-                                    <PerfCharts
-                                        perfData={filteredPerfData}
-                                        maxCores={maxCores}
-                                        opCodeOptions={opCodeOptions}
-                                        selectedOpCodes={selectedOpCodes}
-                                        title={comparisonData && activePerformanceReport}
-                                    />
-
-                                    {comparisonReport ? (
-                                        <PerfCharts
-                                            perfData={filteredComparisonData}
-                                            maxCores={maxCores}
+                                <>
+                                    <div className='charts-container'>
+                                        <PerfChartFilter
                                             opCodeOptions={opCodeOptions}
                                             selectedOpCodes={selectedOpCodes}
-                                            title={comparisonReport}
+                                            updateOpCodes={setSelectedOpCodes}
                                         />
-                                    ) : null}
-                                </div>
+
+                                        <PerfCharts
+                                            filteredPerfData={filteredPerfData}
+                                            maxCores={maxCores}
+                                            selectedOpCodes={selectedOpCodes}
+                                            title={comparisonData && activePerformanceReport}
+                                        />
+
+                                        {comparisonReport ? (
+                                            <PerfCharts
+                                                filteredPerfData={filteredComparisonData}
+                                                maxCores={maxCores}
+                                                selectedOpCodes={selectedOpCodes}
+                                                title={comparisonReport}
+                                            />
+                                        ) : null}
+                                    </div>
+
+                                    <div className='charts-container non-filterable-charts'>
+                                        <span />
+
+                                        <div>
+                                            <NonFilterablePerfCharts
+                                                perfData={perfData}
+                                                maxCores={maxCores}
+                                                opCodeOptions={opCodeOptions}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            {comparisonReport && comparisonData ? (
+                                                <NonFilterablePerfCharts
+                                                    perfData={comparisonData}
+                                                    maxCores={maxCores}
+                                                    opCodeOptions={opCodeOptions}
+                                                />
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                </>
                             ) : null}
                         </div>
                     }

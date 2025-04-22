@@ -51,7 +51,7 @@ function PerfOperationTypesChart({ data = [], opCodes }: PerfOperationTypesChart
 
     return (
         <div className='operation-types-chart'>
-            <h2>Operation Types</h2>
+            <h3>Operation Types</h3>
 
             <Plot
                 className='chart'
