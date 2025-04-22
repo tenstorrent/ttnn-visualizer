@@ -62,7 +62,7 @@ $icon-gap: 8px;
         margin-right: 0;
 
         .label {
-            max-width: 175px; // Adjust value if we change the width of the menu
+            max-width: 175px; // Enforces ellipsis at this size - will likely need to adjust value if we change the width of the menu
             text-overflow: ellipsis;
             overflow: hidden;
             flex-grow: 1;

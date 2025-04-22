@@ -103,7 +103,7 @@ export default function Performance() {
             {folderList ? (
                 <FormGroup
                     className='form-group'
-                    label={<h3>Compare</h3>}
+                    label={<h3 className='label'>Compare</h3>}
                     subLabel='Select a performance report to compare'
                 >
                     <div className='folder-selection'>

@@ -46,7 +46,7 @@ const LocalFolderPicker = ({
                 {handleDelete && (
                     <Button
                         icon={IconNames.TRASH}
-                        onClick={handleDelete ? () => handleDelete(folder) : undefined}
+                        onClick={() => handleDelete(folder)}
                         variant={ButtonVariant.MINIMAL}
                         intent={Intent.DANGER}
                     />

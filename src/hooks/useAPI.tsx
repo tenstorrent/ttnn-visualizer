@@ -295,7 +295,7 @@ const fetchDevices = async () => {
 //     });
 // };
 
-export const fetchPerformanceReport = async (name?: string | null): Promise<PerfTableRow[]> => {
+const fetchPerformanceReport = async (name?: string | null): Promise<PerfTableRow[]> => {
     const { data } = await axiosInstance.get<PerfTableRow[]>(`/api/performance/perf-results/report`, {
         params: { name },
     });
