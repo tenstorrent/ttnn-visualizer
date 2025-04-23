@@ -252,7 +252,8 @@ const LocalFolderOptions: FC = () => {
 
             <div>
                 <FormGroup
-                    label={<h3>Memory report</h3>}
+                    className='form-group'
+                    label={<h3 className='label'>Memory report</h3>}
                     subLabel='Select a memory report'
                 >
                     <LocalFolderPicker
@@ -303,7 +304,8 @@ const LocalFolderOptions: FC = () => {
                 </FormGroup>
 
                 <FormGroup
-                    label={<h3>Performance report</h3>}
+                    className='form-group'
+                    label={<h3 className='label'>Performance report</h3>}
                     subLabel='Select a performance report'
                 >
                     <LocalFolderPicker

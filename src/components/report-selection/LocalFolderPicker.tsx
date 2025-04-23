@@ -9,9 +9,16 @@ interface LocalFolderPickerProps {
     value: string | null;
     handleSelect: (folder: string) => void;
     handleDelete?: (folder: string) => void;
+    defaultLabel?: string;
 }
 
-const LocalFolderPicker = ({ items, value, handleSelect, handleDelete }: LocalFolderPickerProps) => {
+const LocalFolderPicker = ({
+    items,
+    value,
+    handleSelect,
+    handleDelete,
+    defaultLabel = 'Select a report...',
+}: LocalFolderPickerProps) => {
     const { data: session } = useSession();
     const isDisabled = !items || items.length === 0;
 
@@ -36,12 +43,14 @@ const LocalFolderPicker = ({ items, value, handleSelect, handleDelete }: LocalFo
                     icon={modifiers.active ? IconNames.FOLDER_OPEN : IconNames.FOLDER_CLOSE}
                 />
 
-                <Button
-                    icon={IconNames.TRASH}
-                    onClick={handleDelete ? () => handleDelete(folder) : undefined}
-                    variant={ButtonVariant.MINIMAL}
-                    intent={Intent.DANGER}
-                />
+                {handleDelete && (
+                    <Button
+                        icon={IconNames.TRASH}
+                        onClick={() => handleDelete(folder)}
+                        variant={ButtonVariant.MINIMAL}
+                        intent={Intent.DANGER}
+                    />
+                )}
             </div>
         );
     };
@@ -65,11 +74,12 @@ const LocalFolderPicker = ({ items, value, handleSelect, handleDelete }: LocalFo
         >
             <Button
                 className='folder-picker-button'
-                text={value ? `/${value}` : 'Select a report...'}
+                text={value ? `/${value}` : defaultLabel}
                 disabled={isDisabled || !session}
                 alignText='start'
                 icon={IconNames.FOLDER_OPEN}
                 endIcon={IconNames.CARET_DOWN}
+                variant={ButtonVariant.OUTLINED}
                 fill
             />
         </Select>
