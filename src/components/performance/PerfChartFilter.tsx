@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react';
 import 'styles/components/PerfChartFilter.scss';
 import { Marker } from '../../definitions/PerfTable';
 
+const MAX_OPTION_LENGTH = 25; // Brittle
+
 interface PerfChartFilterProps {
     opCodeOptions: Marker[];
     selectedOpCodes: Marker[];
@@ -50,6 +52,31 @@ function PerfChartFilter({ opCodeOptions, selectedOpCodes, updateOpCodes }: Perf
         return 'Select all';
     };
 
+    const getLabelElement = (option: Marker) => {
+        return (
+            <>
+                <span className='label'>
+                    {option.opCode.length > MAX_OPTION_LENGTH ? (
+                        <span
+                            className='abbreviated-label'
+                            title={option.opCode}
+                        >
+                            {option.opCode}
+                        </span>
+                    ) : (
+                        option.opCode
+                    )}
+                </span>
+                <div
+                    className='memory-color-block'
+                    style={{
+                        backgroundColor: option.colour,
+                    }}
+                />
+            </>
+        );
+    };
+
     return (
         <aside className='op-code-menu-container'>
             <div className='op-code-menu'>
@@ -67,33 +94,29 @@ function PerfChartFilter({ opCodeOptions, selectedOpCodes, updateOpCodes }: Perf
                     />
                 </div>
 
-                {opCodeOptions.map((option) => (
-                    <div
-                        className='option'
-                        key={option.opCode}
-                    >
-                        <Checkbox
-                            checked={selectedOpCodes.map((selected) => selected.opCode).includes(option.opCode)}
-                            id={option.opCode}
-                            key={option.opCode}
-                            label={option.opCode}
-                            onChange={() => {
-                                const newSelectedOpCodes = selectedOpCodes.includes(option)
-                                    ? selectedOpCodes.filter((code) => code !== option)
-                                    : [...selectedOpCodes, option];
-
-                                updateOpCodes(newSelectedOpCodes);
-                            }}
-                        />
-
+                {opCodeOptions
+                    .sort((a, b) => a.opCode.localeCompare(b.opCode))
+                    .map((option) => (
                         <div
-                            className='memory-color-block'
-                            style={{
-                                backgroundColor: option.colour,
-                            }}
-                        />
-                    </div>
-                ))}
+                            className='option'
+                            key={option.opCode}
+                        >
+                            <Checkbox
+                                className='label-container'
+                                checked={selectedOpCodes.map((selected) => selected.opCode).includes(option.opCode)}
+                                id={option.opCode}
+                                key={option.opCode}
+                                labelElement={getLabelElement(option)}
+                                onChange={() => {
+                                    const newSelectedOpCodes = selectedOpCodes.includes(option)
+                                        ? selectedOpCodes.filter((code) => code !== option)
+                                        : [...selectedOpCodes, option];
+
+                                    updateOpCodes(newSelectedOpCodes);
+                                }}
+                            />
+                        </div>
+                    ))}
             </div>
         </aside>
     );

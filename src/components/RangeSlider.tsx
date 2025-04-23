@@ -3,11 +3,12 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Button, InputGroup, RangeSlider, Tooltip } from '@blueprintjs/core';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
 import {
+    activePerformanceReportAtom,
     operationRangeAtom,
     performanceRangeAtom,
     selectedOperationRangeAtom,
@@ -30,21 +31,22 @@ import LoadingSpinner from './LoadingSpinner';
 const RANGE_STEP = 25;
 
 function Range() {
-    const { data: operations } = useOperationsList();
-    const { data: perfData } = usePerformanceReport();
-    const location = useLocation();
-    const listPerf = useGetDeviceOperationListPerf();
-    const isInSync = listPerf?.length > 0;
-    const opIdsMap = useOptoPerfIdFiltered();
-    const operationRange = useOperationListRange();
-    const perfRange = usePerformanceRange();
-
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const setOperationRange = useSetAtom(operationRangeAtom);
     const [selectedOperationRange, setSelectedOperationRange] = useAtom(selectedOperationRangeAtom);
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
     const [selectedPerformanceRange, setSelectedPerformanceRange] = useAtom(selectedPerformanceRangeAtom);
     const [isUserOpChange, setIsUserOpChange] = useState(false);
     const [isUserPerfChange, setIsUserPerfChange] = useState(false);
+
+    const { data: operations } = useOperationsList();
+    const { data: perfData } = usePerformanceReport(activePerformanceReport);
+    const location = useLocation();
+    const listPerf = useGetDeviceOperationListPerf();
+    const isInSync = listPerf?.length > 0;
+    const opIdsMap = useOptoPerfIdFiltered();
+    const operationRange = useOperationListRange();
+    const perfRange = usePerformanceRange();
 
     const opMin = operationRange?.[0];
     const opMax = operationRange?.[1];

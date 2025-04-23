@@ -38,6 +38,8 @@
     }
 
     .bp5-button {
+        position: relative;
+
         &.reports-button {
             @include button-styles($tt-reports, $tt-reports-active, 'document-open');
         }
@@ -66,15 +68,26 @@
             @include button-styles($tt-npe, $tt-npe-active, 'random');
         }
 
+        &.cluster-button {
+            @include button-styles($tt-cluster, $tt-cluster-active, 'layout-grid');
+        }
+
+        &.modal {
+            &.bp5-active {
+                cursor: default;
+                pointer-events: none;
+            }
+        }
+
         small {
             font-size: 11px;
             position: absolute;
-            right: 1px;
-            top: 6px;
             border-radius: 4px;
             padding-left: 4px;
             padding-right: 4px;
             background-color: $tt-grey-2;
+            right: 0;
+            top: 0;
         }
     }
 }

@@ -44,7 +44,7 @@ const useRemoteConnection = () => {
         }
 
         const response = await axiosInstance.post<RemoteFolder[]>(
-            `${import.meta.env.VITE_API_ROOT}/remote/folder`,
+            `${import.meta.env.VITE_API_ROOT}/remote/profiler`,
             connection,
         );
 
@@ -55,9 +55,12 @@ const useRemoteConnection = () => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
-        const response = await axiosInstance.post<RemoteFolder[]>(`${import.meta.env.VITE_API_ROOT}/remote/profiles`, {
-            connection,
-        });
+        const response = await axiosInstance.post<RemoteFolder[]>(
+            `${import.meta.env.VITE_API_ROOT}/remote/performance`,
+            {
+                connection,
+            },
+        );
 
         return response.data;
     };
@@ -67,7 +70,7 @@ const useRemoteConnection = () => {
         remoteFolder?: RemoteFolder,
         remoteProfile?: RemoteFolder,
     ) => {
-        if (!connection || !connection.host || !connection.port || !connection.reportPath) {
+        if (!connection || !connection.host || !connection.port || !connection.profilerPath) {
             throw new Error('No connection provided');
         }
 
@@ -108,7 +111,19 @@ const useRemoteConnection = () => {
             setAppConfig('selectedConnection', JSON.stringify(connection ?? null));
         },
         getSavedReportFolders: (connection?: RemoteConnection) =>
-            JSON.parse(getAppConfig(`${connection?.name} - reportFolders`) ?? '[]') as RemoteFolder[],
+            JSON.parse(getAppConfig(`${connection?.name} - reportFolders`) ?? '[]').map((folder: RemoteConnection) => {
+                const { reportPath, ...rest } = folder;
+
+                // reportPath is deprecated - use profilerPath instead
+                if (folder.profilerPath) {
+                    return {
+                        ...rest,
+                        profilerPath: reportPath || rest.profilerPath,
+                    };
+                }
+
+                return rest;
+            }) as RemoteFolder[],
 
         setSavedReportFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
             setAppConfig(`${connection?.name} - reportFolders`, JSON.stringify(folders));

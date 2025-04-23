@@ -31,12 +31,12 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
         name: '',
         host: '',
         port: 22,
-        reportPath: '',
+        profilerPath: '',
         username: '',
     };
     const defaultConnectionTests: ConnectionStatus[] = [
         { status: ConnectionTestStates.IDLE, message: 'Test connection' },
-        { status: ConnectionTestStates.IDLE, message: 'Test report folder path' },
+        { status: ConnectionTestStates.IDLE, message: 'Test memory report folder path' },
     ];
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
@@ -62,10 +62,13 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
         setIsTestingconnection(true);
 
         const sshStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing connection' };
-        const reportFolderStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing report folder path' };
+        const reportFolderStatus = {
+            status: ConnectionTestStates.PROGRESS,
+            message: 'Testing memory report folder path',
+        };
         const performanceFolderStatus = {
             status: ConnectionTestStates.PROGRESS,
-            message: 'Testing performance folder path',
+            message: 'Testing performance report folder path',
         };
 
         setConnectionTests([sshStatus, reportFolderStatus, performanceFolderStatus]);
@@ -77,7 +80,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
             // TODO: Look at error handling
             setConnectionTests([
                 { status: ConnectionTestStates.FAILED, message: 'Connection failed' },
-                { status: ConnectionTestStates.FAILED, message: 'Report folder path failed' },
+                { status: ConnectionTestStates.FAILED, message: 'Memory report folder path failed' },
             ]);
         } finally {
             setIsTestingconnection(false);
@@ -153,19 +156,19 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
 
                 <FormGroup
-                    label='Report folder path'
-                    subLabel='Path to the remote folder with the report e.g. "$HOME/work/ll-sw"'
+                    label='Memory report folder path'
+                    subLabel='Path to a remote folder containing memory reports e.g. "$HOME/work/profiler-reports/"'
                 >
                     <InputGroup
                         key='path'
-                        value={connection.reportPath}
-                        onChange={(e) => setConnection({ ...connection, reportPath: e.target.value })}
+                        value={connection.profilerPath}
+                        onChange={(e) => setConnection({ ...connection, profilerPath: e.target.value })}
                     />
                 </FormGroup>
 
                 <FormGroup
-                    label='Performance folder path (optional)'
-                    subLabel='Path to the remote folder with the performance data  e.g. "$HOME/perf/env-123"'
+                    label='Performance report folder path (optional)'
+                    subLabel='Path to a remote folder containing performance reports e.g. "$HOME/perf/perf-reports/"'
                 >
                     <InputGroup
                         key='path'
