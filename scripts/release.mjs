@@ -32,4 +32,6 @@ console.log(`Updated pyproject.toml to version ${newVersion}`);
 execSync(`git add package.json pyproject.toml`, { stdio: 'inherit' });
 execSync(`git commit -m "v${newVersion}"`, { stdio: 'inherit' });
 execSync(`git tag v${newVersion}`, { stdio: 'inherit' });
+execSync(`git push origin v${newVersion}`, { stdio: 'inherit' });
+
 console.log(`Committed and tagged as v${newVersion}`);
