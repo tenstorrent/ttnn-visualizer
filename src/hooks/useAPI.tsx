@@ -379,7 +379,7 @@ export const useOperationListRange = (): NumberRange | null => {
     );
 };
 
-export const fetchNpeOpTrace = async () => {
+const fetchNpeOpTrace = async () => {
     const response = await axiosInstance.get<NPEData>('/api/npe');
     return response?.data;
 };
