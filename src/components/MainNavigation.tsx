@@ -10,6 +10,7 @@ import { useLocation } from 'react-router-dom';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/MainNavigation.scss';
 import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
+import { useGetClusterDescription } from '../hooks/useAPI';
 
 function MainNavigation() {
     const navigate = useNavigate();
@@ -20,19 +21,18 @@ function MainNavigation() {
     const handleNavigate = (path: string) => {
         navigate(path);
     };
-    /** NOT NEEDED ATM
-     const handleOpenModal = (path: string) => {
-     navigate(path, { state: { background: location } });
-     };
 
-     const clusterData = useGetClusterDescription();
+    const handleOpenModal = (path: string) => {
+        navigate(path, { state: { background: location } });
+    };
 
-     */
+    const clusterData = useGetClusterDescription();
+
     const hasActiveProfiler = !!activeProfilerReport;
     const hasActivePerf = !!activePerformanceReport;
     return (
         <Navbar className='navbar'>
-            <Navbar.Group align={Alignment.RIGHT}>
+            <Navbar.Group align={Alignment.END}>
                 <Button
                     text='Reports'
                     onClick={() => handleNavigate(ROUTES.HOME)}
@@ -109,16 +109,16 @@ function MainNavigation() {
                 >
                     <small>beta</small>
                 </Button>
-                {/* <Button */}
-                {/*    text='Topology' */}
-                {/*    onClick={() => handleOpenModal(ROUTES.CLUSTER)} */}
-                {/*    active={hasMatchingPath(ROUTES.CLUSTER)} */}
-                {/*    disabled={clusterData.data === null} */}
-                {/*    icon={IconNames.LayoutGrid} */}
-                {/*    variant='minimal' */}
-                {/*    size='large' */}
-                {/*    className='cluster-button modal' */}
-                {/* /> */}
+                <Button
+                    text='Topology'
+                    onClick={() => handleOpenModal(ROUTES.CLUSTER)}
+                    active={hasMatchingPath(ROUTES.CLUSTER)}
+                    disabled={clusterData.data === null}
+                    icon={IconNames.LayoutGrid}
+                    variant='minimal'
+                    size='large'
+                    className='cluster-button modal'
+                />
             </Navbar.Group>
         </Navbar>
     );
