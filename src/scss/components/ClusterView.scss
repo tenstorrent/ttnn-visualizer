@@ -1,0 +1,96 @@
+.cluster-view-renderer {
+    position: absolute;
+    top: 80px;
+    left: 0;
+    background-color: #000a;
+    width: 100%;
+    height: calc(100% - 80px);
+    bottom: 0;
+    z-index: 10;
+    padding: 10px;
+
+    .cluster-view-header {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-end;
+        margin: 0;
+    }
+}
+
+.cluster-view-wrap {
+    width: 100%;
+    height: calc(100vh - 200px);
+    display: flex;
+    place-items: flex-start center;
+    justify-content: center;
+    margin-top: 20px;
+
+    .cluster {
+        overflow-y: auto;
+        max-height: calc(100vh - 200px);
+        scrollbar-gutter: stable;
+        padding-right: 15px;
+        align-items: start;
+        align-content: start;
+
+        .chip {
+            background-color: #646464;
+            display: grid;
+            gap: 5px;
+            position: relative;
+
+            .chip-id {
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 100%;
+                height: 100%;
+                font-size: 25px;
+                text-align: right;
+                pointer-events: none;
+            }
+
+            .mmio {
+                grid-column: 3;
+                grid-row: 3;
+                border: 1px solid #f80;
+                font-size: 10px;
+                color: #fff;
+                text-align: center;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                gap: 5px;
+            }
+        }
+    }
+
+    .eth {
+        border-color: #99c4ff;
+        border-width: 1px;
+        border-style: solid;
+        font-size: 10px;
+        color: #fff;
+        text-align: center;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+
+        &.eth-position-top {
+            border-top-color: transparent;
+        }
+
+        &.eth-position-bottom {
+            border-bottom-color: transparent;
+        }
+
+        &.eth-position-left {
+            border-left-color: transparent;
+        }
+
+        &.eth-position-right {
+            border-right-color: transparent;
+        }
+    }
+}
