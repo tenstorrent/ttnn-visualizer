@@ -33,6 +33,8 @@
         padding-right: 15px;
         align-items: start;
         align-content: start;
+        display: grid;
+        gap: 5px;
 
         .chip {
             background-color: #646464;

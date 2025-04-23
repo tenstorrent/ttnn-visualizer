@@ -93,8 +93,6 @@ function ClusterRenderer() {
                 <div
                     className='cluster'
                     style={{
-                        display: 'grid',
-                        gap: '5px',
                         gridTemplateColumns: `repeat(${totalCols || 0}, ${clusterChipSize}px)`,
                     }}
                 >
@@ -160,6 +158,7 @@ function ClusterRenderer() {
                                         return (
                                             <div
                                                 title={`${uid}`}
+                                                key={uid}
                                                 className={`eth eth-position-${position}`}
                                                 style={{
                                                     gridColumn: x,
