@@ -6,12 +6,15 @@ import { Alignment, Button, Navbar } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useAtomValue } from 'jotai';
+import { useLocation } from 'react-router-dom';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/MainNavigation.scss';
 import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
+import { useGetClusterDescription } from '../hooks/useAPI';
 
 function MainNavigation() {
     const navigate = useNavigate();
+    const location = useLocation();
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
@@ -19,12 +22,17 @@ function MainNavigation() {
         navigate(path);
     };
 
+    const handleOpenModal = (path: string) => {
+        navigate(path, { state: { background: location } });
+    };
+
+    const clusterData = useGetClusterDescription();
+
     const hasActiveProfiler = !!activeProfilerReport;
     const hasActivePerf = !!activePerformanceReport;
-
     return (
         <Navbar className='navbar'>
-            <Navbar.Group align={Alignment.RIGHT}>
+            <Navbar.Group align={Alignment.END}>
                 <Button
                     text='Reports'
                     onClick={() => handleNavigate(ROUTES.HOME)}
@@ -60,7 +68,7 @@ function MainNavigation() {
                 <Button
                     text='Buffers'
                     onClick={() => handleNavigate(ROUTES.BUFFERS)}
-                    active={window.location.pathname === ROUTES.BUFFERS}
+                    active={hasMatchingPath(ROUTES.BUFFERS)}
                     icon={IconNames.SMALL_SQUARE}
                     disabled={!hasActiveProfiler}
                     variant='minimal'
@@ -71,7 +79,7 @@ function MainNavigation() {
                 <Button
                     text='Graph'
                     onClick={() => handleNavigate(ROUTES.GRAPHTREE)}
-                    active={window.location.pathname === ROUTES.GRAPHTREE}
+                    active={hasMatchingPath(ROUTES.GRAPHTREE)}
                     icon={IconNames.GRAPH}
                     disabled={!hasActiveProfiler}
                     variant='minimal'
@@ -82,7 +90,7 @@ function MainNavigation() {
                 <Button
                     text='Performance'
                     onClick={() => handleNavigate(ROUTES.PERFORMANCE)}
-                    active={window.location.pathname === ROUTES.PERFORMANCE}
+                    active={hasMatchingPath(ROUTES.PERFORMANCE)}
                     icon={IconNames.LIGHTNING}
                     disabled={!hasActivePerf}
                     variant='minimal'
@@ -93,7 +101,7 @@ function MainNavigation() {
                 <Button
                     text='NPE'
                     onClick={() => handleNavigate(ROUTES.NPE)}
-                    active={window.location.pathname === ROUTES.NPE}
+                    active={hasMatchingPath(ROUTES.NPE)}
                     icon={IconNames.Random}
                     variant='minimal'
                     size='large'
@@ -101,13 +109,36 @@ function MainNavigation() {
                 >
                     <small>beta</small>
                 </Button>
+                <Button
+                    text='Topology'
+                    onClick={() => handleOpenModal(ROUTES.CLUSTER)}
+                    active={hasMatchingPath(ROUTES.CLUSTER)}
+                    disabled={clusterData.data === null}
+                    icon={IconNames.LayoutGrid}
+                    variant='minimal'
+                    size='large'
+                    className='cluster-button modal'
+                />
             </Navbar.Group>
         </Navbar>
     );
-}
 
-function hasMatchingPath(path: string) {
-    return window.location.pathname === path;
+    function hasMatchingPath(path: string) {
+        if (location.pathname === path) {
+            return true;
+        }
+        if (location.pathname.includes(path) && path !== ROUTES.HOME) {
+            return true;
+        }
+        if (location.state?.background.pathname === path) {
+            return true;
+        }
+        if (location.state?.background.pathname.includes(path) && path !== ROUTES.HOME) {
+            return true;
+        }
+
+        return false;
+    }
 }
 
 export default MainNavigation;

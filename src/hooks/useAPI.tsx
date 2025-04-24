@@ -37,6 +37,7 @@ import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { NPEData } from '../model/NPEModel';
+import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -339,6 +340,21 @@ const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
             complete: (deviceLog) => resolve({ deviceMeta, deviceLog }),
             error: (error: Error) => reject(error),
         });
+    });
+};
+
+const fetchClusterDescription = async (): Promise<ClusterModel> => {
+    const { data } = await axiosInstance.get<ClusterModel>('/api/cluster-descriptor');
+    return data;
+};
+
+export const useGetClusterDescription = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery({
+        queryFn: () => fetchClusterDescription(),
+        queryKey: ['get-cluster-description', activeProfilerReport],
+        initialData: null,
     });
 };
 
@@ -786,14 +802,14 @@ export const useSession = () => {
         initialData: null,
     });
 };
-export const useArchitecture = (arch: DeviceArchitecture) => {
+export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
     switch (arch) {
         case DeviceArchitecture.WORMHOLE:
-            return archWormhole;
+            return archWormhole as ChipDesign;
         case DeviceArchitecture.BLACKHOLE:
-            return archBlackhole;
+            return archBlackhole as ChipDesign;
         default:
-            throw new Error(`Unknown architecture: ${arch}`);
+            return {} as ChipDesign;
     }
 };
 

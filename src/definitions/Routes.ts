@@ -11,6 +11,7 @@ const ROUTES = Object.freeze({
     GRAPHTREE: '/graphtree',
     PERFORMANCE: '/performance',
     NPE: '/npe',
+    CLUSTER: '/cluster',
 });
 
 export default ROUTES;
