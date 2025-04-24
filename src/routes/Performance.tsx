@@ -143,7 +143,6 @@ export default function Performance() {
                 <Tab
                     id='tab-2'
                     title='Charts'
-                    className='woofle'
                     icon={IconNames.TIMELINE_AREA_CHART}
                     panel={
                         <div className='chart-tab'>

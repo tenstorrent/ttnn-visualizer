@@ -71,11 +71,11 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                             />
                         </>
                     ) : (
-                        <div className='no-data'>
-                            <div className='chart-container dummy-chart' />
-                            <div className='chart-container dummy-chart' />
-                            <div className='chart-container dummy-chart' />
-                        </div>
+                        <>
+                            <DummyChart />
+                            <DummyChart />
+                            <DummyChart />
+                        </>
                     )}
                 </>
             )}
@@ -102,11 +102,11 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                             />
                         </>
                     ) : (
-                        <div className='no-data'>
+                        <>
                             <DummyChart />
                             <DummyChart />
                             <DummyChart />
-                        </div>
+                        </>
                     )}
                 </>
             )}
