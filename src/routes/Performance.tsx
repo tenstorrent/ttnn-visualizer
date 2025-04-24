@@ -143,6 +143,7 @@ export default function Performance() {
                 <Tab
                     id='tab-2'
                     title='Charts'
+                    className='woofle'
                     icon={IconNames.TIMELINE_AREA_CHART}
                     panel={
                         <div className='chart-tab'>
@@ -184,20 +185,20 @@ export default function Performance() {
 
                                         <div>
                                             <NonFilterablePerfCharts
-                                                perfData={perfData}
+                                                chartData={perfData}
+                                                secondaryData={comparisonData}
                                                 maxCores={maxCores}
                                                 opCodeOptions={opCodeOptions}
-                                                hasComparison={!!comparisonReport}
                                             />
                                         </div>
 
                                         <div>
                                             {comparisonReport && comparisonData ? (
                                                 <NonFilterablePerfCharts
-                                                    perfData={comparisonData}
+                                                    chartData={comparisonData}
+                                                    secondaryData={perfData}
                                                     maxCores={maxCores}
                                                     opCodeOptions={opCodeOptions}
-                                                    hasComparison
                                                 />
                                             ) : null}
                                         </div>

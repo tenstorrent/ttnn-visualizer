@@ -9,94 +9,111 @@ import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationC
 import { Marker, PerfTableRow } from '../../definitions/PerfTable';
 import PerfOperationTypesChart from './PerfOperationTypesChart';
 import 'styles/components/PerfCharts.scss';
+import DummyChart from './DummyChart';
 
 interface NonFilterablePerfChartsProps {
-    perfData: PerfTableRow[];
+    chartData: PerfTableRow[];
+    secondaryData?: PerfTableRow[];
     maxCores: number;
     opCodeOptions: Marker[];
-    hasComparison?: boolean;
 }
 
 const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
-    perfData,
+    chartData,
+    secondaryData = [],
     maxCores,
     opCodeOptions,
-    hasComparison,
 }) => {
     const matmulData = useMemo(
-        () => perfData.filter((row) => row.raw_op_code.toLowerCase().includes('matmul')),
-        [perfData],
+        () => chartData.filter((row) => row.raw_op_code.toLowerCase().includes('matmul')),
+        [chartData],
     );
 
     const convData = useMemo(
-        () => perfData.filter((row) => row.raw_op_code.toLowerCase().includes('conv')),
-        [perfData],
+        () => chartData.filter((row) => row.raw_op_code.toLowerCase().includes('conv')),
+        [chartData],
     );
+
+    const secondaryMatmulData = useMemo(
+        () => secondaryData.filter((row) => row.raw_op_code.toLowerCase().includes('matmul')),
+        [secondaryData],
+    );
+
+    const secondaryConvData = useMemo(
+        () => secondaryData.filter((row) => row.raw_op_code.toLowerCase().includes('conv')),
+        [secondaryData],
+    );
+
+    const hasMatmulData = matmulData.length > 0 || secondaryMatmulData.length > 0;
+    const hasConvData = convData.length > 0 || secondaryConvData.length > 0;
 
     return (
         <div className='charts'>
-            {hasComparison && matmulData.length > 0 ? (
+            {hasMatmulData && (
                 <>
                     <h2>Matmul operations</h2>
 
-                    <PerfCoreCountUtilizationChart
-                        data={matmulData}
-                        maxCores={maxCores}
-                    />
+                    {matmulData.length > 0 ? (
+                        <>
+                            <PerfCoreCountUtilizationChart
+                                data={matmulData}
+                                maxCores={maxCores}
+                            />
 
-                    <PerfOperationKernelUtilizationChart
-                        data={matmulData}
-                        maxCores={maxCores}
-                    />
+                            <PerfOperationKernelUtilizationChart
+                                data={matmulData}
+                                maxCores={maxCores}
+                            />
 
-                    <PerfKernelDurationUtilizationChart
-                        data={matmulData}
-                        maxCores={maxCores}
-                    />
+                            <PerfKernelDurationUtilizationChart
+                                data={matmulData}
+                                maxCores={maxCores}
+                            />
+                        </>
+                    ) : (
+                        <div className='no-data'>
+                            <div className='chart-container dummy-chart' />
+                            <div className='chart-container dummy-chart' />
+                            <div className='chart-container dummy-chart' />
+                        </div>
+                    )}
                 </>
-            ) : null}
+            )}
 
-            {hasComparison && !matmulData ? (
-                <>
-                    <div className='chart-container dummy-outline' />
-                    <div className='chart-container dummy-outline' />
-                    <div className='chart-container dummy-outline' />
-                </>
-            ) : null}
-
-            {hasComparison && convData.length > 0 ? (
+            {hasConvData && (
                 <>
                     <h2>Conv operations</h2>
 
-                    <PerfCoreCountUtilizationChart
-                        data={convData}
-                        maxCores={maxCores}
-                    />
+                    {convData.length > 0 ? (
+                        <>
+                            <PerfCoreCountUtilizationChart
+                                data={convData}
+                                maxCores={maxCores}
+                            />
 
-                    <PerfOperationKernelUtilizationChart
-                        data={convData}
-                        maxCores={maxCores}
-                    />
+                            <PerfOperationKernelUtilizationChart
+                                data={convData}
+                                maxCores={maxCores}
+                            />
 
-                    <PerfKernelDurationUtilizationChart
-                        data={convData}
-                        maxCores={maxCores}
-                    />
+                            <PerfKernelDurationUtilizationChart
+                                data={convData}
+                                maxCores={maxCores}
+                            />
+                        </>
+                    ) : (
+                        <div className='no-data'>
+                            <DummyChart />
+                            <DummyChart />
+                            <DummyChart />
+                        </div>
+                    )}
                 </>
-            ) : null}
-
-            {hasComparison && !convData ? (
-                <>
-                    <div className='chart-container dummy-outline' />
-                    <div className='chart-container dummy-outline' />
-                    <div className='chart-container dummy-outline' />
-                </>
-            ) : null}
+            )}
 
             <h2>All operations</h2>
-
             <PerfOperationTypesChart
-                data={perfData}
+                data={chartData}
                 opCodes={opCodeOptions}
             />
         </div>
