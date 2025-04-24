@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Button, Collapse, Icon, NumberRange, Tooltip } from '@blueprintjs/core';
+import { Button, Collapse, NumberRange, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
@@ -15,7 +15,7 @@ import {
     performanceRangeAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
-import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
+import SyncStatus from './SyncStatus';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
@@ -31,9 +31,6 @@ function FooterInfobar() {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const location = useLocation();
 
-    const useGetDeviceOperationListPerfResult = useGetDeviceOperationListPerf();
-
-    const isInSync = useGetDeviceOperationListPerfResult.length > 0;
     const isOperationDetails = location.pathname.includes(`${ROUTES.OPERATIONS}/`);
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
     const isNPE = location.pathname.includes(`${ROUTES.NPE}`);
@@ -91,27 +88,7 @@ function FooterInfobar() {
                                 <strong>Performance:</strong> {activePerformanceReport}
                             </span>
                         ))}
-                    {activeProfilerReport && activePerformanceReport && (
-                        <span>
-                            {isInSync ? (
-                                <strong>
-                                    <Icon
-                                        icon={IconNames.TickCircle}
-                                        className='intent-ok'
-                                    />{' '}
-                                    Profiler and perf reports synchronised
-                                </strong>
-                            ) : (
-                                <strong>
-                                    <Icon
-                                        icon={IconNames.ISSUE}
-                                        className='intent-not-ok'
-                                    />{' '}
-                                    Profiler and perf reports can&apos;t be synchronized
-                                </strong>
-                            )}
-                        </span>
-                    )}
+                    {activeProfilerReport && activePerformanceReport && <SyncStatus />}
                 </div>
 
                 {(operationRange || performanceRange) && (
@@ -132,13 +109,15 @@ function FooterInfobar() {
                 )}
             </div>
 
-            <Collapse
-                className='slider-container'
-                isOpen={sliderIsOpen}
-                keepChildrenMounted
-            >
-                <Range />
-            </Collapse>
+            {(operationRange || performanceRange) && (
+                <Collapse
+                    className='slider-container'
+                    isOpen={sliderIsOpen}
+                    keepChildrenMounted
+                >
+                    <Range />
+                </Collapse>
+            )}
         </footer>
     );
 }
