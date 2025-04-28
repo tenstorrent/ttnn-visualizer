@@ -11,18 +11,18 @@ import 'styles/components/PerfCharts.scss';
 
 interface PerfChartsProps {
     filteredPerfData: PerfTableRow[];
+    comparisonData?: PerfTableRow[][];
     maxCores: number;
     selectedOpCodes: Marker[];
-    title?: string | null;
 }
 
-const PerfCharts: FC<PerfChartsProps> = ({ filteredPerfData, maxCores, selectedOpCodes, title }) => {
+const PerfCharts: FC<PerfChartsProps> = ({ filteredPerfData, comparisonData, maxCores, selectedOpCodes }) => {
+    const data = [filteredPerfData, ...(comparisonData || [])].filter((set) => set.length > 0);
+
     return (
         <div className='charts'>
-            {title ? <h2>{title}</h2> : null}
-
             <PerfOpCountVsRuntimeChart
-                data={filteredPerfData}
+                datasets={data}
                 selectedOpCodes={selectedOpCodes}
             />
 

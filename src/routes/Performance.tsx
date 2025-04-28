@@ -164,19 +164,19 @@ export default function Performance() {
 
                                         <PerfCharts
                                             filteredPerfData={filteredPerfData}
+                                            comparisonData={[filteredComparisonData]}
                                             maxCores={maxCores}
                                             selectedOpCodes={selectedOpCodes}
-                                            title={comparisonData && activePerformanceReport}
                                         />
 
-                                        {comparisonReport ? (
+                                        {/* {comparisonReport ? (
                                             <PerfCharts
                                                 filteredPerfData={filteredComparisonData}
                                                 maxCores={maxCores}
                                                 selectedOpCodes={selectedOpCodes}
                                                 title={comparisonReport}
                                             />
-                                        ) : null}
+                                        ) : null} */}
                                     </div>
 
                                     <div className='charts-container non-filterable-charts'>
@@ -191,7 +191,7 @@ export default function Performance() {
                                             />
                                         </div>
 
-                                        <div>
+                                        {/* <div>
                                             {comparisonReport && comparisonData ? (
                                                 <NonFilterablePerfCharts
                                                     chartData={comparisonData}
@@ -200,7 +200,7 @@ export default function Performance() {
                                                     opCodeOptions={opCodeOptions}
                                                 />
                                             ) : null}
-                                        </div>
+                                        </div> */}
                                     </div>
                                 </>
                             ) : null}
