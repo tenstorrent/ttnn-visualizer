@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 // orange and blue
 const PRIMARY_COLOURS = ['#E27414', '#008BF8'];
 

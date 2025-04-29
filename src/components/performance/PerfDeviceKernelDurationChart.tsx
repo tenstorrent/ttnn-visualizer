@@ -56,7 +56,7 @@ function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurati
     return (
         <PerfChart
             title='Device Kernel Duration vs Core Count'
-            chartData={[...chartData]}
+            chartData={chartData}
             configuration={configuration}
         />
     );

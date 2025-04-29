@@ -181,17 +181,6 @@ export default function Performance() {
                                                 opCodeOptions={opCodeOptions}
                                             />
                                         </div>
-
-                                        {/* <div>
-                                            {comparisonReport && comparisonData ? (
-                                                <NonFilterablePerfCharts
-                                                    chartData={comparisonData}
-                                                    secondaryData={perfData}
-                                                    maxCores={maxCores}
-                                                    opCodeOptions={opCodeOptions}
-                                                />
-                                            ) : null}
-                                        </div> */}
                                     </div>
                                 </>
                             ) : null}

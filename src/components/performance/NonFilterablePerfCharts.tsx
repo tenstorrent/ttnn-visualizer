@@ -40,7 +40,7 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
         <div className='charts'>
             <h2>Matmul operations</h2>
 
-            {matmulData.length > 0 ? (
+            {matmulData.filter((data) => data.length).length > 0 ? (
                 <>
                     <PerfCoreCountUtilizationChart
                         datasets={matmulData}
@@ -58,16 +58,12 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                     />
                 </>
             ) : (
-                <>
-                    <DummyChart />
-                    <DummyChart />
-                    <DummyChart />
-                </>
+                <DummyChart />
             )}
 
             <h2>Conv operations</h2>
 
-            {convData.length > 0 ? (
+            {convData.filter((data) => data.length).length > 0 ? (
                 <>
                     <PerfCoreCountUtilizationChart
                         datasets={convData}
@@ -85,11 +81,7 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                     />
                 </>
             ) : (
-                <>
-                    <DummyChart />
-                    <DummyChart />
-                    <DummyChart />
-                </>
+                <DummyChart />
             )}
 
             <h2>All operations</h2>
