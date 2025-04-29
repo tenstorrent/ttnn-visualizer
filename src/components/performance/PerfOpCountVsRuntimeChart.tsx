@@ -2,13 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
 import { Marker, PerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import getPlotLabel from '../../functions/getPlotLabel';
 
 interface PerfOpCountVsRuntimeChartProps {
     selectedOpCodes: Marker[];
@@ -24,11 +25,6 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
         [flattenedData],
     );
 
-    const getLabel = useCallback(
-        (dataIndex: number) => (dataIndex !== 0 ? comparisonReport : perfReport),
-        [comparisonReport, perfReport],
-    );
-
     const opCountData = useMemo(
         () =>
             datasets.map((data, dataIndex) =>
@@ -38,7 +34,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                             x: [`Op Count ${datasets.length > 1 ? `(${dataIndex + 1})` : ''}`],
                             y: [data.filter((row) => row.raw_op_code === opCode).length / data.length],
                             type: 'bar',
-                            name: getLabel(dataIndex),
+                            name: getPlotLabel(dataIndex, perfReport, comparisonReport),
                             hovertemplate: `${opCode}<br />%{y:.1%}`,
                             marker: {
                                 color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
@@ -46,7 +42,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                         }) as Partial<PlotData>,
                 ),
             ),
-        [datasets, opCodes, selectedOpCodes, getLabel],
+        [datasets, opCodes, selectedOpCodes, perfReport, comparisonReport],
     );
 
     const opRuntimeData = useMemo(
@@ -61,7 +57,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                                     data.reduce(getRuntimeLength, 0),
                             ],
                             type: 'bar',
-                            name: getLabel(dataIndex),
+                            name: getPlotLabel(dataIndex, perfReport, comparisonReport),
                             hovertemplate: `${opCode}<br />%{y:.1%}`,
                             marker: {
                                 color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
@@ -69,7 +65,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                         }) as Partial<PlotData>,
                 ),
             ),
-        [datasets, opCodes, selectedOpCodes, getLabel],
+        [datasets, opCodes, selectedOpCodes, perfReport, comparisonReport],
     );
 
     const configuration: PlotConfiguration = {

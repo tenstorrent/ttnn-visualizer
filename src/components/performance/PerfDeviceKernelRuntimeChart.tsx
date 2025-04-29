@@ -4,38 +4,56 @@
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
+import { useAtomValue } from 'jotai';
 import { PerfTableRow } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import getPlotLabel from '../../functions/getPlotLabel';
+import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import { getCoreCountColour, getDurationColour } from '../../definitions/PerformancePlotColours';
 
 interface PerfDeviceKernelRuntimeChartProps {
     maxCores: number;
-    data?: PerfTableRow[];
+    datasets?: PerfTableRow[][];
 }
 
-function PerfDeviceKernelRuntimeChart({ maxCores, data = [] }: PerfDeviceKernelRuntimeChartProps) {
+function PerfDeviceKernelRuntimeChart({ maxCores, datasets = [] }: PerfDeviceKernelRuntimeChartProps) {
+    const perfReport = useAtomValue(activePerformanceReportAtom);
+    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+    const maxDataSize = datasets.reduce((max, data) => Math.max(max, data?.length || 0), 0);
+
     const chartDataCoreCount = useMemo(
         () =>
-            ({
+            datasets.map((data, dataIndex) => ({
                 x: data?.map((_row, index) => index + 1),
                 y: data?.map((row) => row.cores),
                 type: 'bar',
                 hovertemplate: `Operation: %{x}<br />Cores: %{y}`,
-                name: '',
-            }) as Partial<PlotData>,
-        [data],
+                name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                showlegend: true,
+                legendgroup: `group${dataIndex}`,
+                marker: {
+                    color: getCoreCountColour(dataIndex),
+                },
+            })) as Partial<PlotData>[],
+        [datasets, perfReport, comparisonReport],
     );
 
     const chartDataDuration = useMemo(
         () =>
-            ({
+            datasets.map((data, dataIndex) => ({
                 x: data?.map((_row, index) => index + 1),
                 y: data?.map((row) => row.device_time),
                 yaxis: 'y2',
                 hovertemplate: `Operation: %{x}<br />Device Kernel Duration: %{y} ns`,
-                name: '',
-            }) as Partial<PlotData>,
-        [data],
+                name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                showlegend: true,
+                legendgroup: `group${dataIndex}`,
+                marker: {
+                    color: getDurationColour(dataIndex),
+                },
+            })) as Partial<PlotData>[],
+        [datasets, perfReport, comparisonReport],
     );
 
     const configuration: PlotConfiguration = {
@@ -45,9 +63,10 @@ function PerfDeviceKernelRuntimeChart({ maxCores, data = [] }: PerfDeviceKernelR
             b: 50,
             t: 0,
         },
+        showLegend: true,
         xAxis: {
             title: { text: 'Operation' },
-            range: [0, data?.length ?? 0],
+            range: [0, maxDataSize],
         },
         yAxis: {
             title: { text: 'Core Count' },
@@ -65,7 +84,7 @@ function PerfDeviceKernelRuntimeChart({ maxCores, data = [] }: PerfDeviceKernelR
     return (
         <PerfChart
             title='Core Count + Device Kernel Runtime'
-            chartData={[chartDataCoreCount, chartDataDuration]}
+            chartData={[...chartDataCoreCount, ...chartDataDuration]}
             configuration={configuration}
         />
     );

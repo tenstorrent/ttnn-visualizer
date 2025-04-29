@@ -86,6 +86,7 @@ export interface PlotConfiguration {
         b: number;
         t: number;
     };
+    showLegend?: boolean;
     title?: string;
     gridColour?: string;
     bgColour?: string;

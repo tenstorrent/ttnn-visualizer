@@ -27,7 +27,7 @@ const PerfCharts: FC<PerfChartsProps> = ({ filteredPerfData, comparisonData, max
             />
 
             <PerfDeviceKernelRuntimeChart
-                data={filteredPerfData}
+                datasets={data}
                 maxCores={maxCores}
             />
 
