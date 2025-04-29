@@ -27,8 +27,6 @@ function PerfChart({ chartData, configuration, title }: PerfChartProps) {
             orientation: 'h',
             font: {
                 family: 'sans-serif',
-                size: 12,
-                color: '#000',
             },
             bgcolor: '#E2E2E2',
             bordercolor: '#FFFFFF',

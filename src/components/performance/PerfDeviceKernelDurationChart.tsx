@@ -4,32 +4,41 @@
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
+import { useAtomValue } from 'jotai';
 import { PerfTableRow } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import getPlotLabel from '../../functions/getPlotLabel';
+import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfDeviceKernelDurationChartProps {
-    data?: PerfTableRow[];
+    datasets?: PerfTableRow[][];
 }
 
-function PerfDeviceKernelDurationChart({ data = [] }: PerfDeviceKernelDurationChartProps) {
+function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurationChartProps) {
+    const perfReport = useAtomValue(activePerformanceReportAtom);
+    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+
     const chartData = useMemo(
         () =>
-            ({
+            datasets.map((data, dataIndex) => ({
                 x: data?.map((row) => row.cores),
                 y: data?.map((row) => row.device_time),
                 mode: 'markers',
                 type: 'scatter',
-                name: '',
+                name: getPlotLabel(dataIndex, perfReport, comparisonReport),
                 marker: {
                     size: 10,
+                    color: getPrimaryDataColours(dataIndex),
                 },
                 hovertemplate: `Cores: %{x}<br />Device Kernel Duration: %{y} ns`,
-            }) as Partial<PlotData>,
-        [data],
+            })) as Partial<PlotData>[],
+        [datasets, comparisonReport, perfReport],
     );
 
     const configuration: PlotConfiguration = {
+        showLegend: true,
         xAxis: {
             title: {
                 text: 'Core Count',
@@ -47,7 +56,7 @@ function PerfDeviceKernelDurationChart({ data = [] }: PerfDeviceKernelDurationCh
     return (
         <PerfChart
             title='Device Kernel Duration vs Core Count'
-            chartData={[chartData]}
+            chartData={[...chartData]}
             configuration={configuration}
         />
     );

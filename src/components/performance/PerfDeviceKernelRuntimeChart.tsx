@@ -10,7 +10,7 @@ import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
-import { getCoreCountColour, getDurationColour } from '../../definitions/PerformancePlotColours';
+import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfDeviceKernelRuntimeChartProps {
     maxCores: number;
@@ -33,7 +33,7 @@ function PerfDeviceKernelRuntimeChart({ maxCores, datasets = [] }: PerfDeviceKer
                 showlegend: true,
                 legendgroup: `group${dataIndex}`,
                 marker: {
-                    color: getCoreCountColour(dataIndex),
+                    color: getPrimaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
         [datasets, perfReport, comparisonReport],
@@ -50,7 +50,7 @@ function PerfDeviceKernelRuntimeChart({ maxCores, datasets = [] }: PerfDeviceKer
                 showlegend: true,
                 legendgroup: `group${dataIndex}`,
                 marker: {
-                    color: getDurationColour(dataIndex),
+                    color: getSecondaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
         [datasets, perfReport, comparisonReport],

@@ -31,7 +31,7 @@ const PerfCharts: FC<PerfChartsProps> = ({ filteredPerfData, comparisonData, max
                 maxCores={maxCores}
             />
 
-            <PerfDeviceKernelDurationChart data={filteredPerfData} />
+            <PerfDeviceKernelDurationChart datasets={data} />
         </div>
     );
 };

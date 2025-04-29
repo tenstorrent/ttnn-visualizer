@@ -168,15 +168,6 @@ export default function Performance() {
                                             maxCores={maxCores}
                                             selectedOpCodes={selectedOpCodes}
                                         />
-
-                                        {/* {comparisonReport ? (
-                                            <PerfCharts
-                                                filteredPerfData={filteredComparisonData}
-                                                maxCores={maxCores}
-                                                selectedOpCodes={selectedOpCodes}
-                                                title={comparisonReport}
-                                            />
-                                        ) : null} */}
                                     </div>
 
                                     <div className='charts-container non-filterable-charts'>
@@ -185,7 +176,7 @@ export default function Performance() {
                                         <div>
                                             <NonFilterablePerfCharts
                                                 chartData={perfData}
-                                                secondaryData={comparisonData}
+                                                secondaryData={[comparisonData || []]}
                                                 maxCores={maxCores}
                                                 opCodeOptions={opCodeOptions}
                                             />

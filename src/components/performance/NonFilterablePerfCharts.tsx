@@ -4,16 +4,15 @@
 
 import { FC, useMemo } from 'react';
 import PerfCoreCountUtilizationChart from './PerfCoreCountUtilizationChart';
-import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';
-import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationChart';
 import { Marker, PerfTableRow } from '../../definitions/PerfTable';
 import PerfOperationTypesChart from './PerfOperationTypesChart';
 import 'styles/components/PerfCharts.scss';
 import DummyChart from './DummyChart';
+import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';
 
 interface NonFilterablePerfChartsProps {
     chartData: PerfTableRow[];
-    secondaryData?: PerfTableRow[];
+    secondaryData?: PerfTableRow[][];
     maxCores: number;
     opCodeOptions: Marker[];
 }
@@ -24,28 +23,20 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
     maxCores,
     opCodeOptions,
 }) => {
+    const datasets = [chartData, ...(secondaryData || [])].filter((set) => set.length > 0);
+
     const matmulData = useMemo(
-        () => chartData.filter((row) => row.raw_op_code.toLowerCase().includes('matmul')),
-        [chartData],
+        () => datasets.map((set) => set.filter((row) => row.raw_op_code.toLowerCase().includes('matmul'))),
+        [datasets],
     );
 
     const convData = useMemo(
-        () => chartData.filter((row) => row.raw_op_code.toLowerCase().includes('conv')),
-        [chartData],
+        () => datasets.map((set) => set.filter((row) => row.raw_op_code.toLowerCase().includes('conv'))),
+        [datasets],
     );
 
-    const secondaryMatmulData = useMemo(
-        () => secondaryData.filter((row) => row.raw_op_code.toLowerCase().includes('matmul')),
-        [secondaryData],
-    );
-
-    const secondaryConvData = useMemo(
-        () => secondaryData.filter((row) => row.raw_op_code.toLowerCase().includes('conv')),
-        [secondaryData],
-    );
-
-    const hasMatmulData = matmulData.length > 0 || secondaryMatmulData.length > 0;
-    const hasConvData = convData.length > 0 || secondaryConvData.length > 0;
+    const hasMatmulData = matmulData.length > 0;
+    const hasConvData = convData.length > 0;
 
     return (
         <div className='charts'>
@@ -56,19 +47,20 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                     {matmulData.length > 0 ? (
                         <>
                             <PerfCoreCountUtilizationChart
-                                data={matmulData}
+                                datasets={matmulData}
                                 maxCores={maxCores}
                             />
 
                             <PerfOperationKernelUtilizationChart
-                                data={matmulData}
+                                datasets={matmulData}
                                 maxCores={maxCores}
                             />
 
+                            {/*
                             <PerfKernelDurationUtilizationChart
                                 data={matmulData}
                                 maxCores={maxCores}
-                            />
+                            /> */}
                         </>
                     ) : (
                         <>
@@ -87,11 +79,11 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                     {convData.length > 0 ? (
                         <>
                             <PerfCoreCountUtilizationChart
-                                data={convData}
+                                datasets={convData}
                                 maxCores={maxCores}
                             />
 
-                            <PerfOperationKernelUtilizationChart
+                            {/* <PerfOperationKernelUtilizationChart
                                 data={convData}
                                 maxCores={maxCores}
                             />
@@ -99,7 +91,7 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                             <PerfKernelDurationUtilizationChart
                                 data={convData}
                                 maxCores={maxCores}
-                            />
+                            /> */}
                         </>
                     ) : (
                         <>
