@@ -9,6 +9,7 @@ import PerfOperationTypesChart from './PerfOperationTypesChart';
 import 'styles/components/PerfCharts.scss';
 import DummyChart from './DummyChart';
 import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';
+import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationChart';
 
 interface NonFilterablePerfChartsProps {
     chartData: PerfTableRow[];
@@ -35,71 +36,59 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
         [datasets],
     );
 
-    const hasMatmulData = matmulData.length > 0;
-    const hasConvData = convData.length > 0;
-
     return (
         <div className='charts'>
-            {hasMatmulData && (
+            <h2>Matmul operations</h2>
+
+            {matmulData.length > 0 ? (
                 <>
-                    <h2>Matmul operations</h2>
+                    <PerfCoreCountUtilizationChart
+                        datasets={matmulData}
+                        maxCores={maxCores}
+                    />
 
-                    {matmulData.length > 0 ? (
-                        <>
-                            <PerfCoreCountUtilizationChart
-                                datasets={matmulData}
-                                maxCores={maxCores}
-                            />
+                    <PerfOperationKernelUtilizationChart
+                        datasets={matmulData}
+                        maxCores={maxCores}
+                    />
 
-                            <PerfOperationKernelUtilizationChart
-                                datasets={matmulData}
-                                maxCores={maxCores}
-                            />
-
-                            {/*
-                            <PerfKernelDurationUtilizationChart
-                                data={matmulData}
-                                maxCores={maxCores}
-                            /> */}
-                        </>
-                    ) : (
-                        <>
-                            <DummyChart />
-                            <DummyChart />
-                            <DummyChart />
-                        </>
-                    )}
+                    <PerfKernelDurationUtilizationChart
+                        datasets={matmulData}
+                        maxCores={maxCores}
+                    />
+                </>
+            ) : (
+                <>
+                    <DummyChart />
+                    <DummyChart />
+                    <DummyChart />
                 </>
             )}
 
-            {hasConvData && (
+            <h2>Conv operations</h2>
+
+            {convData.length > 0 ? (
                 <>
-                    <h2>Conv operations</h2>
+                    <PerfCoreCountUtilizationChart
+                        datasets={convData}
+                        maxCores={maxCores}
+                    />
 
-                    {convData.length > 0 ? (
-                        <>
-                            <PerfCoreCountUtilizationChart
-                                datasets={convData}
-                                maxCores={maxCores}
-                            />
+                    <PerfOperationKernelUtilizationChart
+                        datasets={convData}
+                        maxCores={maxCores}
+                    />
 
-                            {/* <PerfOperationKernelUtilizationChart
-                                data={convData}
-                                maxCores={maxCores}
-                            />
-
-                            <PerfKernelDurationUtilizationChart
-                                data={convData}
-                                maxCores={maxCores}
-                            /> */}
-                        </>
-                    ) : (
-                        <>
-                            <DummyChart />
-                            <DummyChart />
-                            <DummyChart />
-                        </>
-                    )}
+                    <PerfKernelDurationUtilizationChart
+                        datasets={convData}
+                        maxCores={maxCores}
+                    />
+                </>
+            ) : (
+                <>
+                    <DummyChart />
+                    <DummyChart />
+                    <DummyChart />
                 </>
             )}
 
