@@ -28,8 +28,8 @@ function PerfChart({ chartData, configuration, title }: PerfChartProps) {
             font: {
                 family: 'sans-serif',
             },
-            bgcolor: '#E2E2E2',
-            bordercolor: '#FFFFFF',
+            bgcolor: '#dee2e6', // tt-grey-7
+            bordercolor: '#fff', // tt-white
             borderwidth: 2,
             x: 0.5,
             y: -0.25,
