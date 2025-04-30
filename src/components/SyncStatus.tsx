@@ -1,4 +1,4 @@
-import { Icon } from '@blueprintjs/core';
+import { Icon, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
 
@@ -12,7 +12,7 @@ const SyncStatus = () => {
                 <strong>
                     <Icon
                         icon={IconNames.TickCircle}
-                        className='intent-ok'
+                        intent={Intent.SUCCESS}
                     />{' '}
                     Profiler and perf reports synchronised
                 </strong>
@@ -20,7 +20,7 @@ const SyncStatus = () => {
                 <strong>
                     <Icon
                         icon={IconNames.ISSUE}
-                        className='intent-not-ok'
+                        intent={Intent.DANGER}
                     />{' '}
                     Profiler and perf reports can&apos;t be synchronized
                 </strong>
