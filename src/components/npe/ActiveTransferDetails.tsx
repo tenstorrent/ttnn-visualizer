@@ -14,7 +14,7 @@ const ActiveTransferDetails = ({
 }: {
     groupedTransfersByNoCID: Record<NoCID, NoCTransfer[]>;
     selectedNode: { index: number; coords: number[] } | null;
-    showActiveTransfers: (route: [number, number, NoCID, number] | null, index?: number) => void;
+    showActiveTransfers: (route: LinkUtilization | null, index?: number) => void;
     highlightedTransfer: NoCTransfer | null;
     setHighlightedTransfer: (transfer: NoCTransfer | null) => void;
     congestionData: LinkUtilization[];
@@ -84,9 +84,18 @@ const ActiveTransferDetails = ({
                                         </div>
                                         <div>{formatSize(transfer.total_bytes)}B</div>
                                         <div>{transfer.noc_event_type}</div>
+
                                         <div>
-                                            injection rate: <strong>{transfer.injection_rate.toFixed(2)}</strong>{' '}
-                                            bytes/cycle
+                                            {transfer.route.map((route, index) => (
+                                                <div
+                                                    key={`route${index}`}
+                                                    className='route'
+                                                >
+                                                    {/* {route.device_id} - {route.noc_type} */}
+                                                    injection rate: {route.injection_rate.toFixed(2)} bytes/cycle
+                                                </div>
+                                            ))}
+                                            {/* injection rate: <strong>{transfer.injection_rate.toFixed(2)}</strong>{' '} */}
                                         </div>
                                     </div>
                                 ))}

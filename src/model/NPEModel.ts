@@ -1,3 +1,5 @@
+import { ClusterCoordinates } from './ClusterModel';
+
 export interface CommonInfo {
     congestion_model_name: string;
     cycles_per_timestep: number;
@@ -71,6 +73,7 @@ export const NPE_KPI_METADATA = {
 
 type row = number;
 type col = number;
+type device_id = number;
 type NoCTransferId = number;
 export type NoCType = 'NOC0' | 'NOC1';
 
@@ -85,21 +88,35 @@ export enum NoCID {
     NOC1_OUT = 'NOC1_OUT',
 }
 
-export type LinkUtilization = [row: number, col: number, noc_id: NoCID, demand: number];
-export type NoCRoute = [row: number, col: number, noc_id: NoCID];
-export type NPE_COORDINATES = [row: number, col: number];
+export type LinkUtilization = [device_id: number, row: number, col: number, noc_id: NoCID, demand: number];
+export type NoCLink = [device_id: number, row: number, col: number, noc_id: NoCID];
+export type NPE_COORDINATES = [device_id: number, row: number, col: number];
 
-export interface NoCTransfer {
-    id: NoCTransferId;
-    src: [row, col];
-    dst: [[row, col]];
+export interface NoCRoute {
+    device_id: number;
+    src: [device_id, row, col];
+    dst: [[device_id, row, col]];
     total_bytes: number;
     noc_event_type: '';
     noc_type: NoCType;
     injection_rate: number;
     start_cycle: number;
     end_cycle: number;
+    links: NoCLink[];
+}
+
+export interface NoCTransfer {
+    id: NoCTransferId;
+    src: [device_id, row, col];
+    dst: [[device_id, row, col]];
+    total_bytes: number;
+    noc_event_type: '';
+    start_cycle: number;
+    end_cycle: number;
     route: NoCRoute[];
+    // noc_type: NoCType;
+    // injection_rate: number;
+    // route: NoCLink[];
 }
 
 export interface TimestepData {
@@ -115,12 +132,15 @@ export interface NPEData {
     common_info: CommonInfo;
     noc_transfers: NoCTransfer[];
     timestep_data: TimestepData[];
+    chips: {
+        [key: device_id]: ClusterCoordinates;
+    };
 }
 
 export enum NPE_LINK {
+    CHIP_ID, // future iteration
     Y,
     X,
     NOC_ID,
     DEMAND,
-    CHIP_ID, // future iteration
 }

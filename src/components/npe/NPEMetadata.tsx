@@ -9,12 +9,18 @@ interface NPEMetadataProps {
 
 const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
     const formatMetadataValue = (key: keyof CommonInfo, value: string | number) => {
+        if (!NPE_KPI_METADATA[key]) {
+            return null;
+        }
         const kpi = NPE_KPI_METADATA[key] as NPE_KPI;
         const unit = kpi.units;
         const decimals = kpi.decimals !== undefined ? kpi.decimals : 2;
         return `${typeof value === 'number' ? Number(value).toFixed(decimals) : value} ${unit}`;
     };
     const formatMetadataLabel = (key: keyof CommonInfo) => {
+        if (!NPE_KPI_METADATA[key]) {
+            return null;
+        }
         const { label } = NPE_KPI_METADATA[key];
         const { description } = NPE_KPI_METADATA[key];
         return <Tooltip content={description}>{label ? `${label}: ` : key}</Tooltip>;

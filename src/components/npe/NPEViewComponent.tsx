@@ -9,6 +9,7 @@ import React, { JSX, useEffect, useMemo, useState } from 'react';
 import { Button, ButtonGroup, Intent, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
+import { Fragment } from 'react/jsx-runtime';
 import { LinkUtilization, NPEData, NPE_COORDINATES, NPE_LINK, NoCID, NoCTransfer } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import { NODE_SIZE, calculateLinkCongestionColor, getLinkPoints, getRouteColor, resetRouteColors } from './drawingApi';
@@ -30,8 +31,6 @@ const PLAYBACK_SPEED = 1;
 const PLAYBACK_SPEED_2X = 2;
 
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
-    const width = npeData.common_info.num_cols;
-    const height = npeData.common_info.num_rows;
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [selectedTimestep, setSelectedTimestep] = useState<number>(0);
     const links = npeData.timestep_data[selectedTimestep];
@@ -40,7 +39,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
     const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
-
+    const { chips } = npeData;
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
 
     const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
@@ -49,8 +48,13 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
+    // const width = npeData.common_info.num_cols;
+    // const height = npeData.common_info.num_rows;
 
-    const { cores, dram, eth, pcie } = useNodeType(npeData.common_info.device_name as DeviceArchitecture);
+    const { architecture, cores, dram, eth, pcie } = useNodeType(npeData.common_info.device_name as DeviceArchitecture);
+    const width = architecture.grid.x_size;
+    const height = architecture.grid.y_size;
+
     const getNodeType = (location: number[]): JSX.Element => {
         const [y, x] = location;
         if (cores.some((loc) => loc[0] === y && loc[1] === x)) {
@@ -90,48 +94,96 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return getLinkPoints(noc.nocId, getRouteColor(noc.transfer));
         });
     };
-    // coords, [NoCID]
+
     const transferListSelectionRendering = useMemo(() => {
-        return selectedTransferList.reduce(
-            (list: Array<Array<Array<{ transfer: number; nocId: NoCID }>>>, transfer) => {
-                transfer.route.forEach(([row, col]) => {
+        const selectedNoCsByDevice: Map<number, Array<Array<Array<{ transfer: number; nocId: NoCID }>>>> = new Map<
+            number,
+            Array<Array<Array<{ transfer: number; nocId: NoCID }>>>
+        >();
+        selectedTransferList.forEach((transfer) => {
+            transfer.route.forEach((route) => {
+                route.links.forEach((link) => {
+                    const [deviceId, row, col] = link;
+                    // console.log('link', link);
+                    if (!selectedNoCsByDevice.get(deviceId)) {
+                        selectedNoCsByDevice.set(deviceId, []);
+                    }
+                    const list = selectedNoCsByDevice.get(deviceId)!;
+
                     list[row] = list[row] || [];
                     list[row][col] = list[row][col] || [];
-                    const routes = transfer.route.filter((r) => r[NPE_LINK.Y] === row && r[NPE_LINK.X] === col);
-                    routes?.forEach((route) => {
-                        list[row][col].push({
-                            transfer: transfer.id,
-                            nocId: route[NPE_LINK.NOC_ID],
-                        });
+                    list[row][col].push({
+                        transfer: transfer.id,
+                        nocId: link[NPE_LINK.NOC_ID],
                     });
                 });
-                return list;
-            },
-            [],
-        );
+            });
+        });
+        return selectedNoCsByDevice;
+        //
+        // return selectedTransferList.reduce(
+        //     (list: Array<Array<Array<{ transfer: number; nocId: NoCID }>>>, transfer) => {
+        //        transfer.route.forEach((route) => {
+        //                     route.links.forEach((link) => {
+        //                         const [device_id, row, col] = link;
+        //                         console.log('link', link);
+        //                         list[row] = list[row] || [];
+        //                         list[row][col] = list[row][col] || [];
+        //
+        //                         const routes = transfer.route.filter((r) => r[NPE_LINK.Y] === row && r[NPE_LINK.X] === col);
+        //                         routes?.forEach((route) => {
+        //                             route.links.forEach((link) =>
+        //                             {
+        //                                 list[row][col].push({
+        //                                     transfer: transfer.id,
+        //                                     nocId: route[NPE_LINK.NOC_ID],
+        //                                 });
+        //                             })
+        //                         });
+        //                     });
+        //                 });
+        //                 return list;
+        //     },
+        //     [],
+        // );
     }, [selectedTransferList]);
 
     const groupedTransfersByNoCID = useMemo<Record<NoCID, NoCTransfer[]>>(() => {
+        // this should be groupped by deviceId
         if (!selectedNode?.coords) {
             return {} as Record<NoCID, NoCTransfer[]>;
         }
 
-        const [targetRow, targetCol] = selectedNode.coords;
+        const [targetDeviceID, targetRow, targetCol] = selectedNode.coords;
         const groups: Record<NoCID, NoCTransfer[]> = {} as Record<NoCID, NoCTransfer[]>;
 
         selectedTransferList.forEach((transfer) => {
-            const matchingRoutes = transfer.route.filter(([row, col]) => row === targetRow && col === targetCol);
-
-            if (matchingRoutes.length) {
-                matchingRoutes.forEach((matchingRoute) => {
-                    const nocId = matchingRoute[2];
-                    if (!groups[nocId]) {
-                        groups[nocId] = [];
+            transfer.route.forEach((route) => {
+                route.links.forEach((link) => {
+                    const [deviceId, row, col] = link;
+                    if (targetRow === row && targetCol === col && targetDeviceID === deviceId) {
+                        const nocId = link[NPE_LINK.NOC_ID];
+                        if (!groups[nocId]) {
+                            groups[nocId] = [];
+                        }
+                        groups[nocId].push(transfer);
                     }
-                    groups[nocId].push(transfer);
                 });
-            }
+            });
         });
+        // selectedTransferList.forEach((transfer) => {
+        //     const matchingRoutes = transfer.route.filter(([row, col]) => row === targetRow && col === targetCol);
+        //
+        //     if (matchingRoutes.length) {
+        //         matchingRoutes.forEach((matchingRoute) => {
+        //             const nocId = matchingRoute[NPE_LINK.NOC_ID];
+        //             if (!groups[nocId]) {
+        //                 groups[nocId] = [];
+        //             }
+        //             groups[nocId].push(transfer);
+        //         });
+        //     }
+        // });
 
         return groups;
     }, [selectedTransferList, selectedNode]);
@@ -186,9 +238,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedNode(null);
         setSelectedTransferList([]);
     };
-    const showActiveTransfers = (route: LinkUtilization | null, index?: number) => {
+    const showActiveTransfers = (linkUtilizationData: LinkUtilization | null, index?: number) => {
+        // console.log('showActiveTransfers', linkUtilizationData);
         hideAllTransfers();
-        if (route === null) {
+        if (linkUtilizationData === null) {
             setSelectedTransferList([]);
             setSelectedNode(null);
             return;
@@ -199,7 +252,15 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return;
         }
         if (index !== undefined) {
-            setSelectedNode({ index, coords: [route[NPE_LINK.Y], route[NPE_LINK.X]] });
+            // console.log('index is good, setSelectedNode', index);
+            setSelectedNode({
+                index,
+                coords: [
+                    linkUtilizationData[NPE_LINK.CHIP_ID],
+                    linkUtilizationData[NPE_LINK.Y],
+                    linkUtilizationData[NPE_LINK.X],
+                ],
+            });
         }
 
         onPause();
@@ -207,18 +268,29 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
             .map((transferId) => {
                 const transfer = npeData.noc_transfers.find((tr) => tr.id === transferId);
-                if (transfer) {
-                    if (
-                        transfer.route.some(
-                            (r) => r[NPE_LINK.Y] === route[NPE_LINK.Y] && r[NPE_LINK.X] === route[NPE_LINK.X],
-                        )
-                    ) {
-                        return transfer;
-                    }
+
+                const routes = transfer?.route
+                    ?.map((r) => {
+                        if (
+                            r.links.some(
+                                (link) =>
+                                    link[NPE_LINK.Y] === linkUtilizationData[NPE_LINK.Y] &&
+                                    link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X],
+                            )
+                        ) {
+                            return r;
+                        }
+                        return null;
+                    })
+                    .filter((r) => r !== null);
+
+                if (routes && routes.length > 0) {
+                    return transfer;
                 }
-                return null;
+                return undefined;
             })
-            .filter((tr) => tr !== null);
+            .filter((tr) => tr !== undefined);
+
         setSelectedTransferList(activeTransfers as NoCTransfer[]);
     };
 
@@ -319,6 +391,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 />
             </div>
             <div className='split-grid'>
+                {/* TODO: ACTUALLY this should render based on chips section */}
                 <div className='chip'>
                     <div
                         className='tensix-grid empty'
@@ -362,8 +435,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                         key={`${transfer.id}-src-${index}`}
                                         className='tensix src-dst src'
                                         style={{
-                                            gridColumn: transfer.src[1] + 1,
-                                            gridRow: transfer.src[0] + 1,
+                                            gridColumn: transfer.src[NPE_LINK.X] + 1,
+                                            gridRow: transfer.src[NPE_LINK.Y] + 1,
                                             opacity: getOriginOpacity(transfer),
                                         }}
                                     />
@@ -375,8 +448,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             key={`${transfer.id}-dst-${index}-${dst[0]}-${dst[1]}`}
                                             className={classNames('tensix src-dst', classname)}
                                             style={{
-                                                gridColumn: dst[1] + 1,
-                                                gridRow: dst[0] + 1,
+                                                gridColumn: dst[NPE_LINK.X] + 1,
+                                                gridRow: dst[NPE_LINK.Y] + 1,
                                                 opacity: getOriginOpacity(transfer),
                                             }}
                                         />
@@ -408,7 +481,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     width={SVG_SIZE}
                                     height={SVG_SIZE}
                                     data={[
-                                        getLinkPoints(route[2], calculateLinkCongestionColor(route[NPE_LINK.DEMAND])),
+                                        getLinkPoints(
+                                            route[NPE_LINK.NOC_ID],
+                                            calculateLinkCongestionColor(route[NPE_LINK.DEMAND]),
+                                        ),
                                     ]}
                                     isMulticolor={false}
                                 />
@@ -418,6 +494,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             </button>
                         ))}
                     </div>
+
+                    {/* TODO: this shoudl be rendering each device separate */}
                     <div
                         className='tensix-grid transfers'
                         style={{
@@ -425,36 +503,42 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                         }}
                     >
-                        {transferListSelectionRendering.map((row, rowIndex) =>
-                            row.map((transfersForNoc, colIndex) => (
-                                <div
-                                    key={`selected-transfer-${rowIndex}-${colIndex}`}
-                                    className={
-                                        selectedNode?.coords[NPE_LINK.Y] === rowIndex &&
-                                        selectedNode?.coords[NPE_LINK.X] === colIndex
-                                            ? 'selected tensix no-click'
-                                            : 'tensix no-click'
-                                    }
-                                    style={{
-                                        gridColumn: colIndex + 1,
-                                        gridRow: rowIndex + 1,
-                                    }}
-                                >
-                                    <div className='transfer-render-ctn'>
-                                        {/* TENSIX TRANSFERS */}
-                                        <TensixTransferRenderer
+                        {Array.from(transferListSelectionRendering.entries()).map(([deviceId, list]) => (
+                            <Fragment key={`device-${deviceId}`}>
+                                {list.map((row, rowIndex) =>
+                                    row.map((transfersForNoc, colIndex) => (
+                                        <div
+                                            key={`selected-transfer-${rowIndex}-${colIndex}`}
+                                            className={
+                                                selectedNode?.coords[NPE_LINK.Y] === rowIndex &&
+                                                selectedNode?.coords[NPE_LINK.X] === colIndex
+                                                    ? 'selected tensix no-click'
+                                                    : 'tensix no-click'
+                                            }
                                             style={{
-                                                ...(highlightedTransfer !== null ? { opacity: 0.25 } : { opacity: 1 }),
+                                                gridColumn: colIndex + 1,
+                                                gridRow: rowIndex + 1,
                                             }}
-                                            width={SVG_SIZE}
-                                            height={SVG_SIZE}
-                                            data={getLines(transfersForNoc)}
-                                            isMulticolor
-                                        />
-                                    </div>
-                                </div>
-                            )),
-                        )}
+                                        >
+                                            <div className='transfer-render-ctn'>
+                                                {/* TENSIX TRANSFERS */}
+                                                <TensixTransferRenderer
+                                                    style={{
+                                                        ...(highlightedTransfer !== null
+                                                            ? { opacity: 0.25 }
+                                                            : { opacity: 1 }),
+                                                    }}
+                                                    width={SVG_SIZE}
+                                                    height={SVG_SIZE}
+                                                    data={getLines(transfersForNoc)}
+                                                    isMulticolor
+                                                />
+                                            </div>
+                                        </div>
+                                    )),
+                                )}
+                            </Fragment>
+                        ))}
                     </div>
                     {highlightedTransfer !== null && (
                         <div
@@ -464,29 +548,29 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                             }}
                         >
-                            {highlightedTransfer?.route.map((point) => (
-                                <div
-                                    key={`${point[NPE_LINK.Y]}-${point[NPE_LINK.X]}-${point[NPE_LINK.NOC_ID]}`}
-                                    className='tensix'
-                                    style={{
-                                        position: 'relative',
-                                        gridColumn: point[NPE_LINK.X] + 1,
-                                        gridRow: point[NPE_LINK.Y] + 1,
-                                    }}
-                                >
-                                    <div className='transfer-render-ctn'>
-                                        {/* HIGHLIGHTED TRANSFER */}
-                                        <TensixTransferRenderer
-                                            width={SVG_SIZE}
-                                            height={SVG_SIZE}
-                                            data={getLines([
-                                                { transfer: highlightedTransfer.id, nocId: point[NPE_LINK.NOC_ID] },
-                                            ])}
-                                            isMulticolor={false}
-                                        />
-                                    </div>
-                                </div>
-                            ))}
+                            {/* {highlightedTransfer?.route.map((point) => ( */}
+                            {/*    <div */}
+                            {/*        key={`${point[NPE_LINK.Y]}-${point[NPE_LINK.X]}-${point[NPE_LINK.NOC_ID]}`} */}
+                            {/*        className='tensix' */}
+                            {/*        style={{ */}
+                            {/*            position: 'relative', */}
+                            {/*            gridColumn: point[NPE_LINK.X] + 1, */}
+                            {/*            gridRow: point[NPE_LINK.Y] + 1, */}
+                            {/*        }} */}
+                            {/*    > */}
+                            {/*        <div className='transfer-render-ctn'> */}
+                            {/*            /!* HIGHLIGHTED TRANSFER *!/ */}
+                            {/*            <TensixTransferRenderer */}
+                            {/*                width={SVG_SIZE} */}
+                            {/*                height={SVG_SIZE} */}
+                            {/*                data={getLines([ */}
+                            {/*                    { transfer: highlightedTransfer.id, nocId: point[NPE_LINK.NOC_ID] }, */}
+                            {/*                ])} */}
+                            {/*                isMulticolor={false} */}
+                            {/*            /> */}
+                            {/*        </div> */}
+                            {/*    </div> */}
+                            {/* ))} */}
                         </div>
                     )}
                 </div>
