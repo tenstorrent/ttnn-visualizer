@@ -6,10 +6,10 @@ import { FC, useMemo } from 'react';
 import PerfCoreCountUtilizationChart from './PerfCoreCountUtilizationChart';
 import { Marker, PerfTableRow } from '../../definitions/PerfTable';
 import PerfOperationTypesChart from './PerfOperationTypesChart';
-import 'styles/components/PerfCharts.scss';
-import DummyChart from './DummyChart';
+import SkeletalChart from './SkeletalChart';
 import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';
 import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationChart';
+import 'styles/components/PerfCharts.scss';
 
 interface NonFilterablePerfChartsProps {
     chartData: PerfTableRow[];
@@ -58,7 +58,7 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                     />
                 </>
             ) : (
-                <DummyChart />
+                <SkeletalChart />
             )}
 
             <h2>Conv operations</h2>
@@ -81,7 +81,7 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                     />
                 </>
             ) : (
-                <DummyChart />
+                <SkeletalChart />
             )}
 
             <h2>All operations</h2>
