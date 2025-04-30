@@ -164,19 +164,10 @@ export default function Performance() {
 
                                         <PerfCharts
                                             filteredPerfData={filteredPerfData}
+                                            comparisonData={[filteredComparisonData]}
                                             maxCores={maxCores}
                                             selectedOpCodes={selectedOpCodes}
-                                            title={comparisonData && activePerformanceReport}
                                         />
-
-                                        {comparisonReport ? (
-                                            <PerfCharts
-                                                filteredPerfData={filteredComparisonData}
-                                                maxCores={maxCores}
-                                                selectedOpCodes={selectedOpCodes}
-                                                title={comparisonReport}
-                                            />
-                                        ) : null}
                                     </div>
 
                                     <div className='charts-container non-filterable-charts'>
@@ -185,21 +176,10 @@ export default function Performance() {
                                         <div>
                                             <NonFilterablePerfCharts
                                                 chartData={perfData}
-                                                secondaryData={comparisonData}
+                                                secondaryData={[comparisonData || []]}
                                                 maxCores={maxCores}
                                                 opCodeOptions={opCodeOptions}
                                             />
-                                        </div>
-
-                                        <div>
-                                            {comparisonReport && comparisonData ? (
-                                                <NonFilterablePerfCharts
-                                                    chartData={comparisonData}
-                                                    secondaryData={perfData}
-                                                    maxCores={maxCores}
-                                                    opCodeOptions={opCodeOptions}
-                                                />
-                                            ) : null}
                                         </div>
                                     </div>
                                 </>
