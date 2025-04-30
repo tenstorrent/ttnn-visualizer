@@ -31,6 +31,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
                 type: 'bar',
                 hovertemplate: `Operation: %{x}<br />Cores: %{y}`,
                 name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getPrimaryDataColours(dataIndex),
                 },
@@ -46,6 +47,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
                 yaxis: 'y2',
                 hovertemplate: `Operation: %{x}<br />Utilization: %{y}`,
                 name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getSecondaryDataColours(dataIndex),
                 },
