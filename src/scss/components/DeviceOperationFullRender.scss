@@ -42,8 +42,9 @@
 .device-operations-full-render {
     position: relative;
 
+    // Debugging class
     .device-id {
-        color: $tt-orange;
+        color: #ff8c00;
         font-weight: lighter;
         font-size: 12px;
     }

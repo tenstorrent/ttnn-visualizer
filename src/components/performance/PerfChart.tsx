@@ -22,7 +22,19 @@ function PerfChart({ chartData, configuration, title }: PerfChartProps) {
         autosize: true,
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        showlegend: false,
+        showlegend: configuration.showLegend || false,
+        legend: {
+            orientation: 'h',
+            font: {
+                family: 'sans-serif',
+            },
+            bgcolor: '#dee2e6', // tt-grey-7
+            bordercolor: '#fff', // tt-white
+            borderwidth: 2,
+            x: 0.5,
+            y: -0.25,
+            xanchor: 'center',
+        },
         margin: {
             l: 50,
             r: 0,

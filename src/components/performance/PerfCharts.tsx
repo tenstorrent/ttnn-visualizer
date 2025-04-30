@@ -5,58 +5,33 @@
 import { FC } from 'react';
 import PerfDeviceKernelDurationChart from './PerfDeviceKernelDurationChart';
 import PerfDeviceKernelRuntimeChart from './PerfDeviceKernelRuntimeChart';
-import PerfCoreCountUtilizationChart from './PerfCoreCountUtilizationChart';
-import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';
-import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationChart';
-import PerfOperationTypesChart from './PerfOperationTypesChart';
 import PerfOpCountVsRuntimeChart from './PerfOpCountVsRuntimeChart';
 import { Marker, PerfTableRow } from '../../definitions/PerfTable';
 import 'styles/components/PerfCharts.scss';
 
 interface PerfChartsProps {
-    perfData: PerfTableRow[];
+    filteredPerfData: PerfTableRow[];
+    comparisonData?: PerfTableRow[][];
     maxCores: number;
-    opCodeOptions: Marker[];
     selectedOpCodes: Marker[];
-    title?: string | null;
 }
 
-const PerfCharts: FC<PerfChartsProps> = ({ perfData, maxCores, opCodeOptions, selectedOpCodes, title }) => {
+const PerfCharts: FC<PerfChartsProps> = ({ filteredPerfData, comparisonData, maxCores, selectedOpCodes }) => {
+    const data = [filteredPerfData, ...(comparisonData || [])].filter((set) => set.length > 0);
+
     return (
         <div className='charts'>
-            {title ? <h2>{title}</h2> : null}
-
             <PerfOpCountVsRuntimeChart
-                data={perfData}
+                datasets={data}
                 selectedOpCodes={selectedOpCodes}
             />
 
             <PerfDeviceKernelRuntimeChart
-                data={perfData}
+                datasets={data}
                 maxCores={maxCores}
             />
 
-            <PerfDeviceKernelDurationChart data={perfData} />
-
-            <PerfCoreCountUtilizationChart
-                data={perfData}
-                maxCores={maxCores}
-            />
-
-            <PerfOperationKernelUtilizationChart
-                data={perfData}
-                maxCores={maxCores}
-            />
-
-            <PerfKernelDurationUtilizationChart
-                data={perfData}
-                maxCores={maxCores}
-            />
-
-            <PerfOperationTypesChart
-                data={perfData}
-                opCodes={opCodeOptions}
-            />
+            <PerfDeviceKernelDurationChart datasets={data} />
         </div>
     );
 };
