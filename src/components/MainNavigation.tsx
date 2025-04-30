@@ -130,10 +130,10 @@ function MainNavigation() {
         if (location.pathname.includes(path) && path !== ROUTES.HOME) {
             return true;
         }
-        if (location.state?.background.pathname === path) {
+        if (location?.state?.background?.pathname === path) {
             return true;
         }
-        if (location.state?.background.pathname.includes(path) && path !== ROUTES.HOME) {
+        if (location?.state?.background?.pathname.includes(path) && path !== ROUTES.HOME) {
             return true;
         }
 
