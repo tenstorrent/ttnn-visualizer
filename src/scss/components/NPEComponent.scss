@@ -131,10 +131,9 @@
         gap: 5px;
         overflow: auto;
         scrollbar-gutter: stable;
-        max-height: 80vh;
 
         &.details-open {
-            max-width: 50%;
+            max-width: calc(100% - 250px);
         }
     }
 

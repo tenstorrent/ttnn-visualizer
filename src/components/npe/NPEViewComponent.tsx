@@ -14,7 +14,6 @@ import { LinkUtilization, NPEData, NPE_COORDINATES, NPE_LINK, NoCID, NoCTransfer
 import TensixTransferRenderer from './TensixTransferRenderer';
 import { NODE_SIZE, calculateLinkCongestionColor, getLinkPoints, getRouteColor, resetRouteColors } from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
-import NPEMetadata from './NPEMetadata';
 import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
@@ -40,11 +39,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
     const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
-    let totalCols = 0;
+    let totalColsChips = 0;
+    const [zoom, setZoom] = useState<number>(0.75);
     const chips = Object.entries(npeData.chips).map(([ClusterChipId, coords]) => {
-        totalCols = Math.max(totalCols, coords[CLUSTER_COORDS.X]);
+        totalColsChips = Math.max(totalColsChips, coords[CLUSTER_COORDS.X]);
         return {
-            id: ClusterChipId,
+            id: parseInt(ClusterChipId, 10),
             coords,
         };
     });
@@ -296,10 +296,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
     return (
         <div className='npe'>
-            <NPEMetadata
-                info={npeData.common_info}
-                numTransfers={transfers.length}
-            />
+            {/* <NPEMetadata */}
+            {/*    info={npeData.common_info} */}
+            {/*    numTransfers={transfers.length} */}
+            {/* /> */}
             <div className='header'>
                 <ButtonGroup className='npe-controls'>
                     <Button
@@ -330,6 +330,20 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         checked={isShowingAllTransfers}
                         onChange={() => (isShowingAllTransfers ? hideAllTransfers() : showAllTransfers())}
                     />
+                    |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                    <label>
+                        Zoom
+                        <Slider
+                            aria-label='zoom'
+                            min={0.1}
+                            max={2}
+                            stepSize={0.1}
+                            labelStepSize={1}
+                            value={zoom}
+                            onChange={(value: number) => setZoom(value)}
+                            labelRenderer={(value) => `${value.toFixed(1)}`}
+                        />
+                    </label>
                 </ButtonGroup>
                 <div style={{ position: 'relative', width: `${switchwidth}px` }}>
                     <Slider
@@ -358,7 +372,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         'details-open': selectedNode !== null,
                     })}
                     style={{
-                        gridTemplateColumns: `repeat(${totalCols || 0}, ${520}px)`,
+                        gridTemplateColumns: `repeat(${totalColsChips || 0}, ${(TENSIX_SIZE + 1) * width}px)`,
+                        zoom,
                     }}
                 >
                     {chips.map((clusterChip) => {
@@ -407,7 +422,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 >
                                     {transfers.map((transfer, index) => (
                                         <>
-                                            {transfer.src && (
+                                            {transfer.src && clusterChip.id === transfer.src[NPE_LINK.CHIP_ID] && (
                                                 <div
                                                     key={`${transfer.id}-src-${index}`}
                                                     className='tensix src-dst src'
@@ -421,7 +436,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             {transfer.dst.map((dst) => {
                                                 const classname =
                                                     transfer.src?.toString() === dst.toString() ? 'both' : 'dst';
-                                                if (parseInt(clusterChip.id, 10) === dst[NPE_LINK.CHIP_ID]) {
+                                                if (clusterChip.id === dst[NPE_LINK.CHIP_ID]) {
                                                     return (
                                                         <div
                                                             key={`${transfer.id}-dst-${index}-${dst[NPE_LINK.Y]}-${dst[NPE_LINK.X]}`}
@@ -439,19 +454,19 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                         </>
                                     ))}
 
-                                    {links?.link_demand.map((route, index) => {
-                                        if (route[NPE_LINK.CHIP_ID] === parseInt(clusterChip.id, 10)) {
+                                    {links?.link_demand.map((linkUtilization, index) => {
+                                        if (linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id) {
                                             return (
                                                 <button
                                                     type='button'
-                                                    key={`${index}-${route[NPE_LINK.Y]}-${route[NPE_LINK.X]}-${route[NPE_LINK.NOC_ID]}`}
-                                                    className={`tensix ${route[NPE_LINK.Y]}-${route[NPE_LINK.X]}`}
+                                                    key={`${index}-${linkUtilization[NPE_LINK.Y]}-${linkUtilization[NPE_LINK.X]}-${linkUtilization[NPE_LINK.NOC_ID]}`}
+                                                    className={`tensix ${linkUtilization[NPE_LINK.Y]}-${linkUtilization[NPE_LINK.X]}`}
                                                     style={{
                                                         position: 'relative',
-                                                        gridColumn: route[NPE_LINK.X] + 1,
-                                                        gridRow: route[NPE_LINK.Y] + 1,
+                                                        gridColumn: linkUtilization[NPE_LINK.X] + 1,
+                                                        gridRow: linkUtilization[NPE_LINK.Y] + 1,
                                                     }}
-                                                    onClick={() => showActiveTransfers(route, index)}
+                                                    onClick={() => showActiveTransfers(linkUtilization, index)}
                                                 >
                                                     {/* // TENSIX CONGESTION */}
                                                     <TensixTransferRenderer
@@ -466,14 +481,16 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                         height={SVG_SIZE}
                                                         data={[
                                                             getLinkPoints(
-                                                                route[NPE_LINK.NOC_ID],
-                                                                calculateLinkCongestionColor(route[NPE_LINK.DEMAND]),
+                                                                linkUtilization[NPE_LINK.NOC_ID],
+                                                                calculateLinkCongestionColor(
+                                                                    linkUtilization[NPE_LINK.DEMAND],
+                                                                ),
                                                             ),
                                                         ]}
                                                         isMulticolor={false}
                                                     />
                                                     <div style={{ fontSize: '9px', position: 'absolute', top: 0 }}>
-                                                        {route[NPE_LINK.Y]}-{route[NPE_LINK.X]}
+                                                        {linkUtilization[NPE_LINK.Y]}-{linkUtilization[NPE_LINK.X]}
                                                     </div>
                                                 </button>
                                             );
@@ -489,52 +506,48 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                         gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                                     }}
                                 >
-                                    {/* {Array.from(transferListSelectionRendering.entries()).map(([deviceId, list]) => ( */}
-
-                                    {transferListSelectionRendering
-                                        .get(parseInt(clusterChip.id, 10))
-                                        ?.map((row, rowIndex) => {
-                                            return (
-                                                <Fragment key={`device-${clusterChip.id}`}>
-                                                    {row.map((transfersForNoc, colIndex) => {
-                                                        return (
-                                                            <div
-                                                                key={`selected-transfer-${rowIndex}-${colIndex}`}
-                                                                className={
-                                                                    selectedNode?.coords[NPE_LINK.Y] === rowIndex &&
-                                                                    selectedNode?.coords[NPE_LINK.X] === colIndex
-                                                                        ? 'selected tensix no-click' +
-                                                                          `row${rowIndex} ` +
-                                                                          `col${colIndex} `
-                                                                        : 'tensix no-click' +
-                                                                          `row${rowIndex} ` +
-                                                                          `col${colIndex} `
-                                                                }
-                                                                style={{
-                                                                    gridColumn: colIndex + 1,
-                                                                    gridRow: rowIndex + 1,
-                                                                }}
-                                                            >
-                                                                <div className='transfer-render-ctn'>
-                                                                    {/* TENSIX TRANSFERS */}
-                                                                    <TensixTransferRenderer
-                                                                        style={{
-                                                                            ...(highlightedTransfer !== null
-                                                                                ? { opacity: 0.25 }
-                                                                                : { opacity: 1 }),
-                                                                        }}
-                                                                        width={SVG_SIZE}
-                                                                        height={SVG_SIZE}
-                                                                        data={getLines(transfersForNoc)}
-                                                                        isMulticolor
-                                                                    />
-                                                                </div>
+                                    {transferListSelectionRendering.get(clusterChip.id)?.map((row, rowIndex) => {
+                                        return (
+                                            <Fragment key={`device-${clusterChip.id}-row-${rowIndex}`}>
+                                                {row.map((transfersForNoc, colIndex) => {
+                                                    return (
+                                                        <div
+                                                            key={`selected-transfer-${rowIndex}-${colIndex}`}
+                                                            className={
+                                                                selectedNode?.coords[NPE_LINK.Y] === rowIndex &&
+                                                                selectedNode?.coords[NPE_LINK.X] === colIndex
+                                                                    ? 'selected tensix no-click' +
+                                                                      `row${rowIndex} ` +
+                                                                      `col${colIndex} `
+                                                                    : 'tensix no-click' +
+                                                                      `row${rowIndex} ` +
+                                                                      `col${colIndex} `
+                                                            }
+                                                            style={{
+                                                                gridColumn: colIndex + 1,
+                                                                gridRow: rowIndex + 1,
+                                                            }}
+                                                        >
+                                                            <div className='transfer-render-ctn'>
+                                                                {/* TENSIX TRANSFERS */}
+                                                                <TensixTransferRenderer
+                                                                    style={{
+                                                                        ...(highlightedTransfer !== null
+                                                                            ? { opacity: 0.25 }
+                                                                            : { opacity: 1 }),
+                                                                    }}
+                                                                    width={SVG_SIZE}
+                                                                    height={SVG_SIZE}
+                                                                    data={getLines(transfersForNoc)}
+                                                                    isMulticolor
+                                                                />
                                                             </div>
-                                                        );
-                                                    })}
-                                                </Fragment>
-                                            );
-                                        })}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </Fragment>
+                                        );
+                                    })}
                                 </div>
                                 {highlightedTransfer !== null && (
                                     <div
@@ -544,29 +557,39 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                                         }}
                                     >
-                                        {/* {highlightedTransfer?.route.map((point) => ( */}
-                                        {/*    <div */}
-                                        {/*        key={`${point[NPE_LINK.Y]}-${point[NPE_LINK.X]}-${point[NPE_LINK.NOC_ID]}`} */}
-                                        {/*        className='tensix' */}
-                                        {/*        style={{ */}
-                                        {/*            position: 'relative', */}
-                                        {/*            gridColumn: point[NPE_LINK.X] + 1, */}
-                                        {/*            gridRow: point[NPE_LINK.Y] + 1, */}
-                                        {/*        }} */}
-                                        {/*    > */}
-                                        {/*        <div className='transfer-render-ctn'> */}
-                                        {/*            /!* HIGHLIGHTED TRANSFER *!/ */}
-                                        {/*            <TensixTransferRenderer */}
-                                        {/*                width={SVG_SIZE} */}
-                                        {/*                height={SVG_SIZE} */}
-                                        {/*                data={getLines([ */}
-                                        {/*                    { transfer: highlightedTransfer.id, nocId: point[NPE_LINK.NOC_ID] }, */}
-                                        {/*                ])} */}
-                                        {/*                isMulticolor={false} */}
-                                        {/*            /> */}
-                                        {/*        </div> */}
-                                        {/*    </div> */}
-                                        {/* ))} */}
+                                        {highlightedTransfer?.route.map((route) =>
+                                            route.links.map((link) => {
+                                                if (link[NPE_LINK.CHIP_ID] === clusterChip.id) {
+                                                    return (
+                                                        <div
+                                                            key={`${link[NPE_LINK.Y]}-${link[NPE_LINK.X]}-${link[NPE_LINK.NOC_ID]}`}
+                                                            className='tensix'
+                                                            style={{
+                                                                position: 'relative',
+                                                                gridColumn: link[NPE_LINK.X] + 1,
+                                                                gridRow: link[NPE_LINK.Y] + 1,
+                                                            }}
+                                                        >
+                                                            <div className='transfer-render-ctn'>
+                                                                {/* HIGHLIGHTED TRANSFER */}
+                                                                <TensixTransferRenderer
+                                                                    width={SVG_SIZE}
+                                                                    height={SVG_SIZE}
+                                                                    data={getLines([
+                                                                        {
+                                                                            transfer: highlightedTransfer.id,
+                                                                            nocId: link[NPE_LINK.NOC_ID],
+                                                                        },
+                                                                    ])}
+                                                                    isMulticolor={false}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            }),
+                                        )}
                                     </div>
                                 )}
                             </div>
