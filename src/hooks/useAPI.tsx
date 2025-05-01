@@ -362,7 +362,7 @@ export const useOperationsList = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<OperationDescription[], AxiosError>({
-        queryFn: () => fetchOperations(),
+        queryFn: () => (activeProfilerReport !== null ? fetchOperations() : Promise.resolve([])),
         queryKey: ['get-operations', activeProfilerReport],
         retry: false,
         staleTime: Infinity,
@@ -373,7 +373,7 @@ export const useOperationListRange = (): NumberRange | null => {
     const response = useOperationsList();
 
     return useMemo(
-        () => (response.data ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
+        () => (response?.data?.length ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [response.isLoading],
     );
@@ -606,7 +606,8 @@ export const useOptoPerfIdFiltered = () => {
 };
 
 export const usePerformanceRange = (): NumberRange | null => {
-    const { data: perfData } = usePerformanceReport();
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const { data: perfData } = usePerformanceReport(activePerformanceReport);
 
     return useMemo(
         () =>
@@ -674,18 +675,23 @@ export const fetchTensors = async (): Promise<Tensor[]> => {
 export const useTensors = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery<Tensor[], AxiosError>({
+    const response = useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(),
         queryKey: ['get-tensors', activeProfilerReport],
         retry: false,
         staleTime: Infinity,
     });
+
+    return response;
 };
 
 export const useDevices = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery<DeviceData[], AxiosError>(['get-devices', activeProfilerReport], fetchDevices, {
+    return useQuery<DeviceData[], AxiosError>({
+        queryFn: () => (activeProfilerReport !== null ? fetchDevices() : Promise.resolve([])),
+        queryKey: ['get-devices', activeProfilerReport],
+        retry: false,
         staleTime: Infinity,
     });
 };
@@ -749,10 +755,11 @@ export const useDeviceLog = () => {
 //     });
 // };
 
-export const usePerformanceReport = (name?: string | null) => {
+export const usePerformanceReport = (name: string | null) => {
     const response = useQuery({
-        queryFn: () => fetchPerformanceReport(),
+        queryFn: () => (name !== null ? fetchPerformanceReport(name) : Promise.resolve([])),
         queryKey: ['get-performance-report', name],
+        enabled: name !== null,
     });
 
     return useMemo(() => {
