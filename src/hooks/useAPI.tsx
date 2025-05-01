@@ -675,14 +675,12 @@ export const fetchTensors = async (): Promise<Tensor[]> => {
 export const useTensors = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    const response = useQuery<Tensor[], AxiosError>({
+    return useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(),
         queryKey: ['get-tensors', activeProfilerReport],
         retry: false,
         staleTime: Infinity,
     });
-
-    return response;
 };
 
 export const useDevices = () => {
