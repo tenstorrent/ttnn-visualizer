@@ -53,6 +53,7 @@
         right: 0;
         top: 110px;
         gap: 5px;
+        background-color: #343434dd;
 
         .title {
             margin-top: 0;
@@ -125,9 +126,21 @@
         min-height: 10px;
     }
 
+    .chip-cluster-wrap {
+        display: grid;
+        gap: 5px;
+        overflow: auto;
+        scrollbar-gutter: stable;
+        max-height: 80vh;
+
+        &.details-open {
+            max-width: 50%;
+        }
+    }
+
     .chip {
-        margin: 20px;
         position: relative;
+        border: 1.5px solid $tt-grey-5;
     }
 
     .tensix-grid {

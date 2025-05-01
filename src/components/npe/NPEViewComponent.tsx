@@ -18,6 +18,7 @@ import NPEMetadata from './NPEMetadata';
 import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
+import { CLUSTER_COORDS } from '../../model/ClusterModel';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -39,7 +40,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
     const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
-    const { chips } = npeData;
+    let totalCols = 0;
+    const chips = Object.entries(npeData.chips).map(([ClusterChipId, coords]) => {
+        totalCols = Math.max(totalCols, coords[CLUSTER_COORDS.X]);
+        return {
+            id: ClusterChipId,
+            coords,
+        };
+    });
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
 
     const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
@@ -96,7 +104,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     };
 
     const transferListSelectionRendering = useMemo(() => {
-        const selectedNoCsByDevice: Map<number, Array<Array<Array<{ transfer: number; nocId: NoCID }>>>> = new Map<
+        const selectedNoCByDevice: Map<number, Array<Array<Array<{ transfer: number; nocId: NoCID }>>>> = new Map<
             number,
             Array<Array<Array<{ transfer: number; nocId: NoCID }>>>
         >();
@@ -104,11 +112,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             transfer.route.forEach((route) => {
                 route.links.forEach((link) => {
                     const [deviceId, row, col] = link;
-                    // console.log('link', link);
-                    if (!selectedNoCsByDevice.get(deviceId)) {
-                        selectedNoCsByDevice.set(deviceId, []);
-                    }
-                    const list = selectedNoCsByDevice.get(deviceId)!;
+                    const list = selectedNoCByDevice.get(deviceId) || [];
 
                     list[row] = list[row] || [];
                     list[row][col] = list[row][col] || [];
@@ -116,40 +120,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         transfer: transfer.id,
                         nocId: link[NPE_LINK.NOC_ID],
                     });
+                    selectedNoCByDevice.set(deviceId, list);
                 });
             });
         });
-        return selectedNoCsByDevice;
-        //
-        // return selectedTransferList.reduce(
-        //     (list: Array<Array<Array<{ transfer: number; nocId: NoCID }>>>, transfer) => {
-        //        transfer.route.forEach((route) => {
-        //                     route.links.forEach((link) => {
-        //                         const [device_id, row, col] = link;
-        //                         console.log('link', link);
-        //                         list[row] = list[row] || [];
-        //                         list[row][col] = list[row][col] || [];
-        //
-        //                         const routes = transfer.route.filter((r) => r[NPE_LINK.Y] === row && r[NPE_LINK.X] === col);
-        //                         routes?.forEach((route) => {
-        //                             route.links.forEach((link) =>
-        //                             {
-        //                                 list[row][col].push({
-        //                                     transfer: transfer.id,
-        //                                     nocId: route[NPE_LINK.NOC_ID],
-        //                                 });
-        //                             })
-        //                         });
-        //                     });
-        //                 });
-        //                 return list;
-        //     },
-        //     [],
-        // );
+        return selectedNoCByDevice;
     }, [selectedTransferList]);
 
     const groupedTransfersByNoCID = useMemo<Record<NoCID, NoCTransfer[]>>(() => {
-        // this should be groupped by deviceId
         if (!selectedNode?.coords) {
             return {} as Record<NoCID, NoCTransfer[]>;
         }
@@ -171,20 +149,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 });
             });
         });
-        // selectedTransferList.forEach((transfer) => {
-        //     const matchingRoutes = transfer.route.filter(([row, col]) => row === targetRow && col === targetCol);
-        //
-        //     if (matchingRoutes.length) {
-        //         matchingRoutes.forEach((matchingRoute) => {
-        //             const nocId = matchingRoute[NPE_LINK.NOC_ID];
-        //             if (!groups[nocId]) {
-        //                 groups[nocId] = [];
-        //             }
-        //             groups[nocId].push(transfer);
-        //         });
-        //     }
-        // });
-
         return groups;
     }, [selectedTransferList, selectedNode]);
 
@@ -239,7 +203,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedTransferList([]);
     };
     const showActiveTransfers = (linkUtilizationData: LinkUtilization | null, index?: number) => {
-        // console.log('showActiveTransfers', linkUtilizationData);
         hideAllTransfers();
         if (linkUtilizationData === null) {
             setSelectedTransferList([]);
@@ -252,7 +215,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return;
         }
         if (index !== undefined) {
-            // console.log('index is good, setSelectedNode', index);
             setSelectedNode({
                 index,
                 coords: [
@@ -391,190 +353,226 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 />
             </div>
             <div className='split-grid'>
-                {/* TODO: ACTUALLY this should render based on chips section */}
-                <div className='chip'>
-                    <div
-                        className='tensix-grid empty'
-                        style={{
-                            display: 'grid',
-                            gridTemplateColumns: `repeat(${width || 0}, ${TENSIX_SIZE}px)`,
-                            gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
-                        }}
-                    >
-                        {Array.from({ length: width }).map((_, x) =>
-                            Array.from({ length: height }).map((__, y) => (
-                                // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
-                                <div
-                                    className='tensix empty-tensix'
-                                    onClick={() => showActiveTransfers(null)}
-                                    style={{
-                                        gridColumn: x + 1,
-                                        gridRow: y + 1,
-                                        width: `${TENSIX_SIZE}px`,
-                                        height: `${TENSIX_SIZE}px`,
-                                    }}
-                                    key={`${x}-${y}`}
-                                >
-                                    {getNodeType([y, x])}
-                                </div>
-                            )),
-                        )}
-                    </div>
-                    <div
-                        className='tensix-grid congestion'
-                        style={{
-                            display: 'grid',
-                            gridTemplateColumns: `repeat(${width || 0}, ${TENSIX_SIZE}px)`,
-                            gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
-                        }}
-                    >
-                        {transfers.map((transfer, index) => (
-                            <>
-                                {transfer.src && (
-                                    <div
-                                        key={`${transfer.id}-src-${index}`}
-                                        className='tensix src-dst src'
-                                        style={{
-                                            gridColumn: transfer.src[NPE_LINK.X] + 1,
-                                            gridRow: transfer.src[NPE_LINK.Y] + 1,
-                                            opacity: getOriginOpacity(transfer),
-                                        }}
-                                    />
-                                )}
-                                {transfer.dst.map((dst) => {
-                                    const classname = transfer.src?.toString() === dst.toString() ? 'both' : 'dst';
-                                    return (
-                                        <div
-                                            key={`${transfer.id}-dst-${index}-${dst[0]}-${dst[1]}`}
-                                            className={classNames('tensix src-dst', classname)}
-                                            style={{
-                                                gridColumn: dst[NPE_LINK.X] + 1,
-                                                gridRow: dst[NPE_LINK.Y] + 1,
-                                                opacity: getOriginOpacity(transfer),
-                                            }}
-                                        />
-                                    );
-                                })}
-                            </>
-                        ))}
-
-                        {links?.link_demand.map((route, index) => (
-                            <button
-                                type='button'
-                                key={`${index}-${route[NPE_LINK.Y]}-${route[NPE_LINK.X]}-${route[NPE_LINK.NOC_ID]}`}
-                                className='tensix'
+                <div
+                    className={classNames('chip-cluster-wrap', {
+                        'details-open': selectedNode !== null,
+                    })}
+                    style={{
+                        gridTemplateColumns: `repeat(${totalCols || 0}, ${520}px)`,
+                    }}
+                >
+                    {chips.map((clusterChip) => {
+                        return (
+                            <div
+                                className='chip'
                                 style={{
-                                    position: 'relative',
-                                    gridColumn: route[NPE_LINK.X] + 1,
-                                    gridRow: route[NPE_LINK.Y] + 1,
+                                    gridColumn: clusterChip.coords[CLUSTER_COORDS.X] + 1,
+                                    gridRow: clusterChip.coords[CLUSTER_COORDS.Y] + 1,
                                 }}
-                                onClick={() => showActiveTransfers(route, index)}
                             >
-                                {/* // TENSIX CONGESTION */}
-                                <TensixTransferRenderer
+                                <div
+                                    className='tensix-grid empty'
                                     style={{
-                                        opacity:
-                                            highlightedTransfer !== null || selectedTransferList.length !== 0
-                                                ? 0.15
-                                                : 1,
+                                        display: 'grid',
+                                        gridTemplateColumns: `repeat(${width || 0}, ${TENSIX_SIZE}px)`,
+                                        gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                                     }}
-                                    width={SVG_SIZE}
-                                    height={SVG_SIZE}
-                                    data={[
-                                        getLinkPoints(
-                                            route[NPE_LINK.NOC_ID],
-                                            calculateLinkCongestionColor(route[NPE_LINK.DEMAND]),
-                                        ),
-                                    ]}
-                                    isMulticolor={false}
-                                />
-                                <div style={{ fontSize: '9px', position: 'absolute', top: 0 }}>
-                                    {route[NPE_LINK.Y]}-{route[NPE_LINK.X]}
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* TODO: this shoudl be rendering each device separate */}
-                    <div
-                        className='tensix-grid transfers'
-                        style={{
-                            gridTemplateColumns: `repeat(${width || 0}, ${TENSIX_SIZE}px)`,
-                            gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
-                        }}
-                    >
-                        {Array.from(transferListSelectionRendering.entries()).map(([deviceId, list]) => (
-                            <Fragment key={`device-${deviceId}`}>
-                                {list.map((row, rowIndex) =>
-                                    row.map((transfersForNoc, colIndex) => (
-                                        <div
-                                            key={`selected-transfer-${rowIndex}-${colIndex}`}
-                                            className={
-                                                selectedNode?.coords[NPE_LINK.Y] === rowIndex &&
-                                                selectedNode?.coords[NPE_LINK.X] === colIndex
-                                                    ? 'selected tensix no-click'
-                                                    : 'tensix no-click'
-                                            }
-                                            style={{
-                                                gridColumn: colIndex + 1,
-                                                gridRow: rowIndex + 1,
-                                            }}
-                                        >
-                                            <div className='transfer-render-ctn'>
-                                                {/* TENSIX TRANSFERS */}
-                                                <TensixTransferRenderer
-                                                    style={{
-                                                        ...(highlightedTransfer !== null
-                                                            ? { opacity: 0.25 }
-                                                            : { opacity: 1 }),
-                                                    }}
-                                                    width={SVG_SIZE}
-                                                    height={SVG_SIZE}
-                                                    data={getLines(transfersForNoc)}
-                                                    isMulticolor
-                                                />
+                                >
+                                    {Array.from({ length: width }).map((_, x) =>
+                                        Array.from({ length: height }).map((__, y) => (
+                                            // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
+                                            <div
+                                                className='tensix empty-tensix'
+                                                onClick={() => showActiveTransfers(null)}
+                                                style={{
+                                                    gridColumn: x + 1,
+                                                    gridRow: y + 1,
+                                                    width: `${TENSIX_SIZE}px`,
+                                                    height: `${TENSIX_SIZE}px`,
+                                                }}
+                                                key={`${x}-${y}`}
+                                            >
+                                                {getNodeType([y, x])}
                                             </div>
-                                        </div>
-                                    )),
-                                )}
-                            </Fragment>
-                        ))}
-                    </div>
-                    {highlightedTransfer !== null && (
-                        <div
-                            className='tensix-grid transfer-single'
-                            style={{
-                                gridTemplateColumns: `repeat(${width || 0}, ${TENSIX_SIZE}px)`,
-                                gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
-                            }}
-                        >
-                            {/* {highlightedTransfer?.route.map((point) => ( */}
-                            {/*    <div */}
-                            {/*        key={`${point[NPE_LINK.Y]}-${point[NPE_LINK.X]}-${point[NPE_LINK.NOC_ID]}`} */}
-                            {/*        className='tensix' */}
-                            {/*        style={{ */}
-                            {/*            position: 'relative', */}
-                            {/*            gridColumn: point[NPE_LINK.X] + 1, */}
-                            {/*            gridRow: point[NPE_LINK.Y] + 1, */}
-                            {/*        }} */}
-                            {/*    > */}
-                            {/*        <div className='transfer-render-ctn'> */}
-                            {/*            /!* HIGHLIGHTED TRANSFER *!/ */}
-                            {/*            <TensixTransferRenderer */}
-                            {/*                width={SVG_SIZE} */}
-                            {/*                height={SVG_SIZE} */}
-                            {/*                data={getLines([ */}
-                            {/*                    { transfer: highlightedTransfer.id, nocId: point[NPE_LINK.NOC_ID] }, */}
-                            {/*                ])} */}
-                            {/*                isMulticolor={false} */}
-                            {/*            /> */}
-                            {/*        </div> */}
-                            {/*    </div> */}
-                            {/* ))} */}
-                        </div>
-                    )}
-                </div>
+                                        )),
+                                    )}
+                                </div>
+                                <div
+                                    className='tensix-grid congestion'
+                                    style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: `repeat(${width || 0}, ${TENSIX_SIZE}px)`,
+                                        gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
+                                    }}
+                                >
+                                    {transfers.map((transfer, index) => (
+                                        <>
+                                            {transfer.src && (
+                                                <div
+                                                    key={`${transfer.id}-src-${index}`}
+                                                    className='tensix src-dst src'
+                                                    style={{
+                                                        gridColumn: transfer.src[NPE_LINK.X] + 1,
+                                                        gridRow: transfer.src[NPE_LINK.Y] + 1,
+                                                        opacity: getOriginOpacity(transfer),
+                                                    }}
+                                                />
+                                            )}
+                                            {transfer.dst.map((dst) => {
+                                                const classname =
+                                                    transfer.src?.toString() === dst.toString() ? 'both' : 'dst';
+                                                if (parseInt(clusterChip.id, 10) === dst[NPE_LINK.CHIP_ID]) {
+                                                    return (
+                                                        <div
+                                                            key={`${transfer.id}-dst-${index}-${dst[NPE_LINK.Y]}-${dst[NPE_LINK.X]}`}
+                                                            className={classNames('tensix src-dst', classname)}
+                                                            style={{
+                                                                gridColumn: dst[NPE_LINK.X] + 1,
+                                                                gridRow: dst[NPE_LINK.Y] + 1,
+                                                                opacity: getOriginOpacity(transfer),
+                                                            }}
+                                                        />
+                                                    );
+                                                }
+                                                return null;
+                                            })}
+                                        </>
+                                    ))}
 
+                                    {links?.link_demand.map((route, index) => {
+                                        if (route[NPE_LINK.CHIP_ID] === parseInt(clusterChip.id, 10)) {
+                                            return (
+                                                <button
+                                                    type='button'
+                                                    key={`${index}-${route[NPE_LINK.Y]}-${route[NPE_LINK.X]}-${route[NPE_LINK.NOC_ID]}`}
+                                                    className={`tensix ${route[NPE_LINK.Y]}-${route[NPE_LINK.X]}`}
+                                                    style={{
+                                                        position: 'relative',
+                                                        gridColumn: route[NPE_LINK.X] + 1,
+                                                        gridRow: route[NPE_LINK.Y] + 1,
+                                                    }}
+                                                    onClick={() => showActiveTransfers(route, index)}
+                                                >
+                                                    {/* // TENSIX CONGESTION */}
+                                                    <TensixTransferRenderer
+                                                        style={{
+                                                            opacity:
+                                                                highlightedTransfer !== null ||
+                                                                selectedTransferList.length !== 0
+                                                                    ? 0.15
+                                                                    : 1,
+                                                        }}
+                                                        width={SVG_SIZE}
+                                                        height={SVG_SIZE}
+                                                        data={[
+                                                            getLinkPoints(
+                                                                route[NPE_LINK.NOC_ID],
+                                                                calculateLinkCongestionColor(route[NPE_LINK.DEMAND]),
+                                                            ),
+                                                        ]}
+                                                        isMulticolor={false}
+                                                    />
+                                                    <div style={{ fontSize: '9px', position: 'absolute', top: 0 }}>
+                                                        {route[NPE_LINK.Y]}-{route[NPE_LINK.X]}
+                                                    </div>
+                                                </button>
+                                            );
+                                        }
+                                        return null;
+                                    })}
+                                </div>
+
+                                <div
+                                    className='tensix-grid transfers'
+                                    style={{
+                                        gridTemplateColumns: `repeat(${width || 0}, ${TENSIX_SIZE}px)`,
+                                        gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
+                                    }}
+                                >
+                                    {/* {Array.from(transferListSelectionRendering.entries()).map(([deviceId, list]) => ( */}
+
+                                    {transferListSelectionRendering
+                                        .get(parseInt(clusterChip.id, 10))
+                                        ?.map((row, rowIndex) => {
+                                            return (
+                                                <Fragment key={`device-${clusterChip.id}`}>
+                                                    {row.map((transfersForNoc, colIndex) => {
+                                                        return (
+                                                            <div
+                                                                key={`selected-transfer-${rowIndex}-${colIndex}`}
+                                                                className={
+                                                                    selectedNode?.coords[NPE_LINK.Y] === rowIndex &&
+                                                                    selectedNode?.coords[NPE_LINK.X] === colIndex
+                                                                        ? 'selected tensix no-click' +
+                                                                          `row${rowIndex} ` +
+                                                                          `col${colIndex} `
+                                                                        : 'tensix no-click' +
+                                                                          `row${rowIndex} ` +
+                                                                          `col${colIndex} `
+                                                                }
+                                                                style={{
+                                                                    gridColumn: colIndex + 1,
+                                                                    gridRow: rowIndex + 1,
+                                                                }}
+                                                            >
+                                                                <div className='transfer-render-ctn'>
+                                                                    {/* TENSIX TRANSFERS */}
+                                                                    <TensixTransferRenderer
+                                                                        style={{
+                                                                            ...(highlightedTransfer !== null
+                                                                                ? { opacity: 0.25 }
+                                                                                : { opacity: 1 }),
+                                                                        }}
+                                                                        width={SVG_SIZE}
+                                                                        height={SVG_SIZE}
+                                                                        data={getLines(transfersForNoc)}
+                                                                        isMulticolor
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </Fragment>
+                                            );
+                                        })}
+                                </div>
+                                {highlightedTransfer !== null && (
+                                    <div
+                                        className='tensix-grid transfer-single'
+                                        style={{
+                                            gridTemplateColumns: `repeat(${width || 0}, ${TENSIX_SIZE}px)`,
+                                            gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
+                                        }}
+                                    >
+                                        {/* {highlightedTransfer?.route.map((point) => ( */}
+                                        {/*    <div */}
+                                        {/*        key={`${point[NPE_LINK.Y]}-${point[NPE_LINK.X]}-${point[NPE_LINK.NOC_ID]}`} */}
+                                        {/*        className='tensix' */}
+                                        {/*        style={{ */}
+                                        {/*            position: 'relative', */}
+                                        {/*            gridColumn: point[NPE_LINK.X] + 1, */}
+                                        {/*            gridRow: point[NPE_LINK.Y] + 1, */}
+                                        {/*        }} */}
+                                        {/*    > */}
+                                        {/*        <div className='transfer-render-ctn'> */}
+                                        {/*            /!* HIGHLIGHTED TRANSFER *!/ */}
+                                        {/*            <TensixTransferRenderer */}
+                                        {/*                width={SVG_SIZE} */}
+                                        {/*                height={SVG_SIZE} */}
+                                        {/*                data={getLines([ */}
+                                        {/*                    { transfer: highlightedTransfer.id, nocId: point[NPE_LINK.NOC_ID] }, */}
+                                        {/*                ])} */}
+                                        {/*                isMulticolor={false} */}
+                                        {/*            /> */}
+                                        {/*        </div> */}
+                                        {/*    </div> */}
+                                        {/* ))} */}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
                 <ActiveTransferDetails
                     groupedTransfersByNoCID={groupedTransfersByNoCID}
                     selectedNode={selectedNode}
