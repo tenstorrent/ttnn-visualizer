@@ -11,6 +11,7 @@ $dark-primary-background-base: $tt-purple-shade;
 $dark-primary-intent-color: $tt-purple;
 $dark-warning-background-base: $tt-yellow;
 $dark-danger-background-base: $tt-red-accent;
+$dark-success-intent-color: $green4; // from BlueprintJS
 
 @use '@blueprintjs/core/src/blueprint.scss' with (
     $dark-button-background-color: $dark-button-background-base,
@@ -33,9 +34,9 @@ $dark-danger-background-base: $tt-red-accent;
                 color.adjust($dark-primary-background-base, $lightness: -10%),
             ),
             'success': (
+                $green4,
                 $green3,
                 $green2,
-                $green1,
             ),
             'warning': (
                 $dark-warning-background-base,
@@ -50,13 +51,13 @@ $dark-danger-background-base: $tt-red-accent;
         ),
     $pt-intent-colors: (
         'primary': $dark-primary-intent-color,
-        'success': $tt-green,
+        'success': $dark-success-intent-color,
         'warning': $dark-warning-background-base,
         'danger': $dark-danger-background-base,
     ),
     $pt-dark-intent-text-colors: (
         'primary': $dark-primary-intent-color,
-        'success': $tt-green,
+        'success': $dark-success-intent-color,
         'warning': $dark-warning-background-base,
         'danger': $dark-danger-background-base,
     ),
@@ -124,12 +125,4 @@ $dark-danger-background-base: $tt-red-accent;
             }
         }
     }
-}
-
-.intent-ok {
-    color: $tt-ok;
-}
-
-.intent-not-ok {
-    color: $tt-not-ok;
 }

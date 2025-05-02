@@ -4,16 +4,16 @@
 
 import { FC, useMemo } from 'react';
 import PerfCoreCountUtilizationChart from './PerfCoreCountUtilizationChart';
-import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';
-import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationChart';
 import { Marker, PerfTableRow } from '../../definitions/PerfTable';
 import PerfOperationTypesChart from './PerfOperationTypesChart';
+import SkeletalChart from './SkeletalChart';
+import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';
+import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationChart';
 import 'styles/components/PerfCharts.scss';
-import DummyChart from './DummyChart';
 
 interface NonFilterablePerfChartsProps {
     chartData: PerfTableRow[];
-    secondaryData?: PerfTableRow[];
+    secondaryData?: PerfTableRow[][];
     maxCores: number;
     opCodeOptions: Marker[];
 }
@@ -24,91 +24,64 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
     maxCores,
     opCodeOptions,
 }) => {
+    const datasets = [chartData, ...(secondaryData || [])].filter((set) => set.length > 0);
+
     const matmulData = useMemo(
-        () => chartData.filter((row) => row.raw_op_code.toLowerCase().includes('matmul')),
-        [chartData],
+        () => datasets.map((set) => set.filter((row) => row.raw_op_code.toLowerCase().includes('matmul'))),
+        [datasets],
     );
 
     const convData = useMemo(
-        () => chartData.filter((row) => row.raw_op_code.toLowerCase().includes('conv')),
-        [chartData],
+        () => datasets.map((set) => set.filter((row) => row.raw_op_code.toLowerCase().includes('conv'))),
+        [datasets],
     );
-
-    const secondaryMatmulData = useMemo(
-        () => secondaryData.filter((row) => row.raw_op_code.toLowerCase().includes('matmul')),
-        [secondaryData],
-    );
-
-    const secondaryConvData = useMemo(
-        () => secondaryData.filter((row) => row.raw_op_code.toLowerCase().includes('conv')),
-        [secondaryData],
-    );
-
-    const hasMatmulData = matmulData.length > 0 || secondaryMatmulData.length > 0;
-    const hasConvData = convData.length > 0 || secondaryConvData.length > 0;
 
     return (
         <div className='charts'>
-            {hasMatmulData && (
+            <h2>Matmul operations</h2>
+
+            {matmulData.filter((data) => data.length).length > 0 ? (
                 <>
-                    <h2>Matmul operations</h2>
+                    <PerfCoreCountUtilizationChart
+                        datasets={matmulData}
+                        maxCores={maxCores}
+                    />
 
-                    {matmulData.length > 0 ? (
-                        <>
-                            <PerfCoreCountUtilizationChart
-                                data={matmulData}
-                                maxCores={maxCores}
-                            />
+                    <PerfOperationKernelUtilizationChart
+                        datasets={matmulData}
+                        maxCores={maxCores}
+                    />
 
-                            <PerfOperationKernelUtilizationChart
-                                data={matmulData}
-                                maxCores={maxCores}
-                            />
-
-                            <PerfKernelDurationUtilizationChart
-                                data={matmulData}
-                                maxCores={maxCores}
-                            />
-                        </>
-                    ) : (
-                        <>
-                            <DummyChart />
-                            <DummyChart />
-                            <DummyChart />
-                        </>
-                    )}
+                    <PerfKernelDurationUtilizationChart
+                        datasets={matmulData}
+                        maxCores={maxCores}
+                    />
                 </>
+            ) : (
+                <SkeletalChart />
             )}
 
-            {hasConvData && (
+            <h2>Conv operations</h2>
+
+            {convData.filter((data) => data.length).length > 0 ? (
                 <>
-                    <h2>Conv operations</h2>
+                    <PerfCoreCountUtilizationChart
+                        datasets={convData}
+                        maxCores={maxCores}
+                    />
 
-                    {convData.length > 0 ? (
-                        <>
-                            <PerfCoreCountUtilizationChart
-                                data={convData}
-                                maxCores={maxCores}
-                            />
+                    <PerfOperationKernelUtilizationChart
+                        datasets={convData}
+                        maxCores={maxCores}
+                    />
 
-                            <PerfOperationKernelUtilizationChart
-                                data={convData}
-                                maxCores={maxCores}
-                            />
-
-                            <PerfKernelDurationUtilizationChart
-                                data={convData}
-                                maxCores={maxCores}
-                            />
-                        </>
-                    ) : (
-                        <>
-                            <DummyChart />
-                            <DummyChart />
-                            <DummyChart />
-                        </>
-                    )}
+                    <PerfKernelDurationUtilizationChart
+                        datasets={convData}
+                        maxCores={maxCores}
+                    />
                 </>
+            ) : (
+                <SkeletalChart />
             )}
 
             <h2>All operations</h2>

@@ -4,39 +4,55 @@
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
+import { useAtomValue } from 'jotai';
 import { PerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
+import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import getPlotLabel from '../../functions/getPlotLabel';
+import getMaxArrayLength from '../../functions/getMaxArrayLength';
+import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfCoreCountUtilizationChartProps {
-    data?: PerfTableRow[];
+    datasets?: PerfTableRow[][];
     maxCores: number;
 }
 
-function PerfCoreCountUtilizationChart({ data, maxCores }: PerfCoreCountUtilizationChartProps) {
+function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCountUtilizationChartProps) {
+    const perfReport = useAtomValue(activePerformanceReportAtom);
+    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+
     const chartDataDuration = useMemo(
         () =>
-            ({
+            datasets.map((data, dataIndex) => ({
                 x: data?.map((_row, index) => index + 1),
                 y: data?.map((row) => row.cores),
                 type: 'bar',
                 hovertemplate: `Operation: %{x}<br />Cores: %{y}`,
-                name: '',
-            }) as Partial<PlotData>,
-        [data],
+                name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                legendgroup: `group${dataIndex}`,
+                marker: {
+                    color: getPrimaryDataColours(dataIndex),
+                },
+            })) as Partial<PlotData>[],
+        [datasets, perfReport, comparisonReport],
     );
 
     const chartDataUtilization = useMemo(
         () =>
-            ({
+            datasets.map((data, dataIndex) => ({
                 x: data?.map((_row, index) => index + 1),
                 y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
                 yaxis: 'y2',
                 hovertemplate: `Operation: %{x}<br />Utilization: %{y}`,
-                name: '',
-            }) as Partial<PlotData>,
-        [data, maxCores],
+                name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                legendgroup: `group${dataIndex}`,
+                marker: {
+                    color: getSecondaryDataColours(dataIndex),
+                },
+            })) as Partial<PlotData>[],
+        [datasets, perfReport, comparisonReport, maxCores],
     );
 
     const configuration: PlotConfiguration = {
@@ -46,9 +62,10 @@ function PerfCoreCountUtilizationChart({ data, maxCores }: PerfCoreCountUtilizat
             b: 50,
             t: 0,
         },
+        showLegend: true,
         xAxis: {
             title: { text: 'Operation' },
-            range: [0, data?.length ?? 0],
+            range: [0, getMaxArrayLength(datasets)],
         },
         yAxis: {
             title: { text: 'Core Count' },
@@ -67,7 +84,7 @@ function PerfCoreCountUtilizationChart({ data, maxCores }: PerfCoreCountUtilizat
     return (
         <PerfChart
             title='Core Count + Utilization'
-            chartData={[chartDataDuration, chartDataUtilization]}
+            chartData={[...chartDataDuration, ...chartDataUtilization]}
             configuration={configuration}
         />
     );

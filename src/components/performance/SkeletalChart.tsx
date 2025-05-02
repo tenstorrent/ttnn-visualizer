@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
-import 'styles/components/DummyChart.scss';
+import 'styles/components/SkeletalChart.scss';
 
-const DummyChart = () => {
+const SkeletalChart = () => {
     return (
         <div className='dummy-chart-container'>
             <div className='title' />
@@ -62,4 +62,4 @@ const DummyChart = () => {
     );
 };
 
-export default DummyChart;
+export default SkeletalChart;
