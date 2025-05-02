@@ -86,16 +86,9 @@ const ActiveTransferDetails = ({
                                         <div>{transfer.noc_event_type}</div>
 
                                         <div>
-                                            {transfer.route.map((route, index) => (
-                                                <div
-                                                    key={`route${index}`}
-                                                    className='route'
-                                                >
-                                                    {/* {route.device_id} - {route.noc_type} */}
-                                                    injection rate: {route.injection_rate.toFixed(2)} bytes/cycle
-                                                </div>
-                                            ))}
-                                            {/* injection rate: <strong>{transfer.injection_rate.toFixed(2)}</strong>{' '} */}
+                                            <div className='route'>
+                                                {transfer.route[0].injection_rate.toFixed(2)} b/cycle
+                                            </div>
                                         </div>
                                     </div>
                                 ))}

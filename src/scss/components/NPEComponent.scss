@@ -69,6 +69,7 @@
     .side-data {
         display: inline-flex;
         flex-direction: column;
+        max-width: 300px;
 
         h3 {
             display: flex;
@@ -100,7 +101,7 @@
 
         .local-transfer {
             display: inline-flex;
-            flex-direction: row;
+            flex-flow: row wrap;
             gap: 5px;
             align-content: center;
             align-items: center;
@@ -133,7 +134,7 @@
         scrollbar-gutter: stable;
 
         &.details-open {
-            max-width: calc(100% - 250px);
+            max-width: calc(100% - 300px);
         }
     }
 
