@@ -65,7 +65,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
         showLegend: true,
         xAxis: {
             title: { text: 'Operation' },
-            range: [0, getAxisUpperRange(datasets, !!comparisonReport)],
+            range: [0, getAxisUpperRange(datasets)],
         },
         yAxis: {
             title: { text: 'Core Count' },
