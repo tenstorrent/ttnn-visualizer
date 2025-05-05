@@ -9,7 +9,7 @@ import { PerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
-import getMaxArrayLength from '../../functions/getMaxArrayLength';
+import { getAxisUpperRange } from '../../functions/perfFunctions';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
@@ -66,7 +66,7 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
         },
         showLegend: true,
         xAxis: {
-            range: [0, getMaxArrayLength(datasets)],
+            range: [0, getAxisUpperRange(datasets, !!comparisonReport)],
             title: {
                 text: 'Operation',
             },

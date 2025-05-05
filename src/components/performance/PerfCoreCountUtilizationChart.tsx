@@ -11,7 +11,7 @@ import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
-import getMaxArrayLength from '../../functions/getMaxArrayLength';
+import { getAxisUpperRange } from '../../functions/perfFunctions';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfCoreCountUtilizationChartProps {
@@ -65,7 +65,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
         showLegend: true,
         xAxis: {
             title: { text: 'Operation' },
-            range: [0, getMaxArrayLength(datasets)],
+            range: [0, getAxisUpperRange(datasets, !!comparisonReport)],
         },
         yAxis: {
             title: { text: 'Core Count' },
