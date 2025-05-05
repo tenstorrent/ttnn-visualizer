@@ -361,3 +361,8 @@ export function getOperationDetails(operations: OperationDescription[], id: numb
 
     return matchingOp ? `${matchingOp.name} (${matchingOp.operationFileIdentifier})` : '';
 }
+
+export function getAxisUpperRange(arrays: Array<unknown[]>, hasComparisonReport: boolean): number {
+    // If a comparison report is provided, add 1 to the max length to avoid data being cut off when plotting the grouped bars
+    return Math.max(...arrays.map((arr) => arr.length), 0) + (hasComparisonReport ? 1 : 0);
+}
