@@ -29,7 +29,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
                 x: data?.map((_row, index) => index + 1),
                 y: data?.map((row) => row.cores),
                 type: 'bar',
-                hovertemplate: `Operation: %{x}<br />Cores: %{y}`,
+                hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Cores: %{y}<extra></extra>`,
                 name: getPlotLabel(dataIndex, perfReport, comparisonReport),
                 legendgroup: `group${dataIndex}`,
                 marker: {
@@ -45,7 +45,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
                 x: data?.map((_row, index) => index + 1),
                 y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
                 yaxis: 'y2',
-                hovertemplate: `Operation: %{x}<br />Utilization: %{y}`,
+                hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Utilization: %{y}<extra></extra>`,
                 name: getPlotLabel(dataIndex, perfReport, comparisonReport),
                 legendgroup: `group${dataIndex}`,
                 marker: {
