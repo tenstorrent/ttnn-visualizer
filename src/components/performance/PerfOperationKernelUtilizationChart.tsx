@@ -66,7 +66,7 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
         },
         showLegend: true,
         xAxis: {
-            range: [0, getMaxArrayLength(datasets)],
+            range: [0, getMaxArrayLength(datasets, comparisonReport)],
             title: {
                 text: 'Operation',
             },
