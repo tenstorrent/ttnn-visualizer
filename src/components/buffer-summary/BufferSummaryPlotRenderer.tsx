@@ -29,7 +29,7 @@ import isValidNumber from '../../functions/isValidNumber';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import {
     renderMemoryLayoutAtom,
-    scrollPositionAtom,
+    scrollPositionsAtom,
     selectedDeviceAtom,
     showBufferSummaryZoomedAtom,
     showHexAtom,
@@ -60,7 +60,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const scrollElementRef = useRef(null);
     const { data: operations } = useOperationsList();
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
-    const [scrollPositions, setScrollPositions] = useAtom(scrollPositionAtom);
+    const [scrollPositions, setScrollPositions] = useAtom(scrollPositionsAtom);
     const navigate = useNavigate();
 
     const l1StartMarker = useGetL1StartMarker();
@@ -146,7 +146,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
         const offsetIndex = scrollPositions?.[ScrollLocations.BUFFER_SUMMARY].index || 0;
 
         if (offsetIndex > 0) {
-            virtualizer.scrollToIndex(offsetIndex, { align: 'start' }); // start seems to align best with the centre
+            virtualizer.scrollToIndex(offsetIndex, { align: 'start' }); // start seems to align best with the centre of the list
             setHasScrolledFromTop(true);
             setScrollPositions(
                 (currentValue): ScrollPositions => ({
