@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import React, { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
+import React, { UIEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
@@ -29,7 +29,6 @@ import isValidNumber from '../../functions/isValidNumber';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import {
     renderMemoryLayoutAtom,
-    scrollPositionsAtom,
     selectedDeviceAtom,
     showBufferSummaryZoomedAtom,
     showHexAtom,
@@ -37,7 +36,8 @@ import {
 } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
-import { ScrollLocations, ScrollPositions } from '../../definitions/ScrollPositions';
+import { ScrollLocations } from '../../definitions/ScrollPositions';
+import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -60,7 +60,6 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const scrollElementRef = useRef(null);
     const { data: operations } = useOperationsList();
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
-    const [scrollPositions, setScrollPositions] = useAtom(scrollPositionsAtom);
     const navigate = useNavigate();
 
     const l1StartMarker = useGetL1StartMarker();
@@ -105,6 +104,8 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     });
     const virtualItems = virtualizer.getVirtualItems();
 
+    const { updateScrollPosition } = useRestoreScrollPosition(virtualizer, ScrollLocations.BUFFER_SUMMARY);
+
     const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
         const el = event.currentTarget;
 
@@ -114,24 +115,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
 
     const handleNavigateToOperation = (event: React.MouseEvent<HTMLAnchorElement>, path: string, index: number) => {
         event.preventDefault();
-
-        setScrollPositions((currentValue): ScrollPositions => {
-            const updatedPosition = {
-                [ScrollLocations.BUFFER_SUMMARY]: {
-                    index,
-                },
-            };
-
-            if (!currentValue) {
-                return updatedPosition;
-            }
-
-            return {
-                ...currentValue,
-                ...updatedPosition,
-            };
-        });
-
+        updateScrollPosition(index);
         navigate(path);
     };
 
@@ -141,21 +125,6 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
               { color: L1_START_MARKER_COLOR, address: l1StartMarker, label: '' },
           ]
         : [];
-
-    useEffect(() => {
-        const offsetIndex = scrollPositions?.[ScrollLocations.BUFFER_SUMMARY].index || 0;
-
-        if (offsetIndex > 0) {
-            virtualizer.scrollToIndex(offsetIndex, { align: 'start' }); // start seems to align best with the centre of the list
-            setHasScrolledFromTop(true);
-            setScrollPositions(
-                (currentValue): ScrollPositions => ({
-                    ...currentValue,
-                    [ScrollLocations.BUFFER_SUMMARY]: { index: 0 },
-                }),
-            );
-        }
-    }, [virtualizer, scrollPositions, setScrollPositions]);
 
     return buffersByOperation && !isLoadingDevices && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
