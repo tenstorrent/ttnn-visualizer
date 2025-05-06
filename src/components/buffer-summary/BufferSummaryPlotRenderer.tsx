@@ -2,11 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import React, { UIEvent, useMemo, useRef, useState } from 'react';
+import React, { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAtom, useAtomValue } from 'jotai';
 import {
     BufferSummaryAxisConfiguration,
@@ -29,6 +29,7 @@ import isValidNumber from '../../functions/isValidNumber';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import {
     renderMemoryLayoutAtom,
+    scrollPositionAtom,
     selectedDeviceAtom,
     showBufferSummaryZoomedAtom,
     showHexAtom,
@@ -36,6 +37,7 @@ import {
 } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
+import { ScrollLocations, ScrollPositions } from '../../definitions/ScrollPositions';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -58,6 +60,8 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const scrollElementRef = useRef(null);
     const { data: operations } = useOperationsList();
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
+    const [scrollPositions, setScrollPositions] = useAtom(scrollPositionAtom);
+    const navigate = useNavigate();
 
     const l1StartMarker = useGetL1StartMarker();
     const l1SmallMarker = useGetL1SmallMarker();
@@ -108,12 +112,50 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
         setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
     };
 
+    const handleNavigateToOperation = (event: React.MouseEvent<HTMLAnchorElement>, path: string, index: number) => {
+        event.preventDefault();
+
+        setScrollPositions((currentValue): ScrollPositions => {
+            const updatedPosition = {
+                [ScrollLocations.BUFFER_SUMMARY]: {
+                    index,
+                },
+            };
+
+            if (!currentValue) {
+                return updatedPosition;
+            }
+
+            return {
+                ...currentValue,
+                ...updatedPosition,
+            };
+        });
+
+        navigate(path);
+    };
+
     const memoryRegionsMarkers = showMemoryRegions
         ? [
               { color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker, label: 'L1 SMALL' },
               { color: L1_START_MARKER_COLOR, address: l1StartMarker, label: '' },
           ]
         : [];
+
+    useEffect(() => {
+        const offsetIndex = scrollPositions?.[ScrollLocations.BUFFER_SUMMARY].index || 0;
+
+        if (offsetIndex > 0) {
+            virtualizer.scrollToIndex(offsetIndex, { align: 'start' }); // start seems to align best with the centre
+            setHasScrolledFromTop(true);
+            setScrollPositions(
+                (currentValue): ScrollPositions => ({
+                    ...currentValue,
+                    [ScrollLocations.BUFFER_SUMMARY]: { index: 0 },
+                }),
+            );
+        }
+    }, [virtualizer, scrollPositions, setScrollPositions]);
 
     return buffersByOperation && !isLoadingDevices && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
@@ -214,7 +256,6 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                                 >
                                     <BufferSummaryRow
                                         buffers={operation.buffers}
-                                        // operationId={operation.id}
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
@@ -225,9 +266,18 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                                         content={`${operation.id} ${operation.name} (${operations?.find((op) => op.id === operation.id)?.operationFileIdentifier})`}
                                         className='y-axis-tick'
                                     >
-                                        <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
+                                        <a
+                                            href={`${ROUTES.OPERATIONS}/${operation.id}`}
+                                            onClick={(event) =>
+                                                handleNavigateToOperation(
+                                                    event,
+                                                    `${ROUTES.OPERATIONS}/${operation.id}`,
+                                                    virtualRow.index,
+                                                )
+                                            }
+                                        >
                                             {operation.id}&nbsp;{operation.name}
-                                        </Link>
+                                        </a>
                                     </Tooltip>
                                 </div>
                             );
