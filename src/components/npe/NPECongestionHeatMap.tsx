@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { calculateLinkCongestionColor } from './drawingApi';
-import { TimestepData } from '../../model/NPEModel';
+import { NPE_LINK, TimestepData } from '../../model/NPEModel';
 
 interface NPEHeatMapProps {
     timestepList: TimestepData[];
@@ -18,7 +18,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
     const congestionMapPerTimestamp = useMemo(() => {
         return {
             worst: timestepList.map((timestep) => {
-                const value = Math.max(-1, ...timestep.link_demand.map((route) => route[3]));
+                const value = Math.max(-1, ...timestep.link_demand.map((linkUtil) => linkUtil[NPE_LINK.DEMAND]));
                 const color = calculateLinkCongestionColor(value);
                 return { value, color };
             }),
@@ -89,7 +89,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                                 />{' '}
                                 Max Demand:{' '}
                                 {congestionMapPerTimestamp.worst[hoveredIndex].value > -1
-                                    ? `${congestionMapPerTimestamp.worst[hoveredIndex].value.toFixed(2)} %`
+                                    ? `${congestionMapPerTimestamp.worst[hoveredIndex].value.toFixed(3)} %`
                                     : 'N/A'}
                             </div>
                             <div>
@@ -101,7 +101,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                                         backgroundColor: congestionMapPerTimestamp.utilization[hoveredIndex].color,
                                     }}
                                 />
-                                {` Avg Utilization: ${congestionMapPerTimestamp.utilization[hoveredIndex].value.toFixed(2)} %`}
+                                {` Avg Utilization: ${congestionMapPerTimestamp.utilization[hoveredIndex].value.toFixed(3)} %`}
                             </div>
                             <div>
                                 <span
@@ -112,7 +112,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                                         backgroundColor: congestionMapPerTimestamp.demand[hoveredIndex].color,
                                     }}
                                 />
-                                {` Avg Demand: ${congestionMapPerTimestamp.demand[hoveredIndex].value.toFixed(2)} %`}
+                                {` Avg Demand: ${congestionMapPerTimestamp.demand[hoveredIndex].value.toFixed(3)} %`}
                             </div>
                         </div>
                     ),
