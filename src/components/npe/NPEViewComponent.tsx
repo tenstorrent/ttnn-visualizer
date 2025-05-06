@@ -18,6 +18,7 @@ import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import { CLUSTER_COORDS } from '../../model/ClusterModel';
+import NPEMetadata from './NPEMetadata';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -59,22 +60,22 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     // const width = npeData.common_info.num_cols;
     // const height = npeData.common_info.num_rows;
 
-    const { architecture, cores, dram, eth, pcie } = useNodeType(npeData.common_info.device_name as DeviceArchitecture);
-    const width = architecture.grid.x_size;
-    const height = architecture.grid.y_size;
+    const { architecture, cores, dram, eth, pcie } = useNodeType(npeData.common_info.arch as DeviceArchitecture);
+    const width = architecture.grid?.x_size || 10;
+    const height = architecture.grid?.y_size || 12;
 
     const getNodeType = (location: number[]): JSX.Element => {
         const [y, x] = location;
-        if (cores.some((loc) => loc[0] === y && loc[1] === x)) {
+        if (cores?.some((loc) => loc[0] === y && loc[1] === x)) {
             return <div className='node-type-label node-type-c'>T</div>;
         }
-        if (dram.some((loc) => loc[0] === y && loc[1] === x)) {
+        if (dram?.some((loc) => loc[0] === y && loc[1] === x)) {
             return <div className='node-type-label node-type-d'>d</div>;
         }
-        if (eth.some((loc) => loc[0] === y && loc[1] === x)) {
+        if (eth?.some((loc) => loc[0] === y && loc[1] === x)) {
             return <div className='node-type-label node-type-e'>e</div>;
         }
-        if (pcie.some((loc) => loc[0] === y && loc[1] === x)) {
+        if (pcie?.some((loc) => loc[0] === y && loc[1] === x)) {
             return <div className='node-type-label node-type-p'>p</div>;
         }
         return <div className='node-type-label' />;
@@ -296,10 +297,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
     return (
         <div className='npe'>
-            {/* <NPEMetadata */}
-            {/*    info={npeData.common_info} */}
-            {/*    numTransfers={transfers.length} */}
-            {/* /> */}
+            <NPEMetadata
+                info={npeData.common_info}
+                numTransfers={transfers.length}
+            />
             <div className='header'>
                 <ButtonGroup className='npe-controls'>
                     <Button

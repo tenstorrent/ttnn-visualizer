@@ -18,7 +18,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
     const congestionMapPerTimestamp = useMemo(() => {
         return {
             worst: timestepList.map((timestep) => {
-                const value = Math.max(-1, ...timestep.link_demand.map((linkUtil) => linkUtil[NPE_LINK.DEMAND]));
+                const value = Math.max(-1, ...timestep.link_demand.map((linkData) => linkData[NPE_LINK.DEMAND]));
                 const color = calculateLinkCongestionColor(value);
                 return { value, color };
             }),

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Tooltip } from '@blueprintjs/core';
 import { CommonInfo, NPE_KPI, NPE_KPI_METADATA } from '../../model/NPEModel';
+import Collapsible from '../Collapsible';
 
 interface NPEMetadataProps {
     info?: CommonInfo;
@@ -8,6 +9,9 @@ interface NPEMetadataProps {
 }
 
 const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
+    const hasKey = (key: keyof CommonInfo) => {
+        return NPE_KPI_METADATA[key] !== undefined;
+    };
     const formatMetadataValue = (key: keyof CommonInfo, value: string | number) => {
         if (!NPE_KPI_METADATA[key]) {
             return null;
@@ -28,20 +32,30 @@ const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
 
     return (
         <div className='metadata'>
-            <div>
-                <h3 className='title'>Summary Table</h3>
-                {info &&
-                    (Object.keys(info) as (keyof CommonInfo)[]).map((key) => (
-                        <div key={key}>
-                            <span>{formatMetadataLabel(key)}: </span>
-                            <span>{formatMetadataValue(key, info[key])}</span>
-                        </div>
-                    ))}
-            </div>
-            <div>
-                <span>Active transfers:</span>
-                <span>{numTransfers}</span>
-            </div>
+            <Collapsible
+                label={<h3 className='title'>Run summary</h3>}
+                isOpen
+            >
+                <div>
+                    {info &&
+                        (Object.keys(info) as (keyof CommonInfo)[]).map((key) => {
+                            if (hasKey(key) && info[key] !== undefined) {
+                                return (
+                                    <div key={key}>
+                                        <span>{formatMetadataLabel(key)}: </span>
+                                        <span>{formatMetadataValue(key, info[key])}</span>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })}
+                </div>
+                <hr />
+                <div>
+                    <span>Active transfers:</span>
+                    <span>{numTransfers}</span>
+                </div>
+            </Collapsible>
         </div>
     );
 };

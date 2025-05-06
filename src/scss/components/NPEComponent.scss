@@ -43,6 +43,7 @@
     }
 
     .metadata {
+        min-width: 300px;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
@@ -50,10 +51,24 @@
         padding: 10px;
         border-bottom: 1px solid $tt-slate;
         position: absolute;
-        right: 0;
-        top: 110px;
+        right: 20px;
+        top: -100px;
         gap: 5px;
         background-color: #343434dd;
+        z-index: 10;
+
+        .collapsible-component {
+            width: 100%;
+        }
+
+        .collapsible-controls {
+            button {
+                width: 100%;
+                display: flex;
+                justify-content: space-between;
+                padding-left: 0;
+            }
+        }
 
         .title {
             margin-top: 0;
