@@ -7,7 +7,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, ButtonVariant, FormGroup, Size, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
-import { useDeviceLog, usePerfFolderList, usePerformanceComparisonReport, usePerformanceReport } from '../hooks/useAPI';
+import {
+    useDeviceLog,
+    usePerfFolderList,
+    usePerformanceComparisonReport,
+    usePerformanceRange,
+    usePerformanceReport,
+} from '../hooks/useAPI';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceReport from '../components/performance/PerfReport';
@@ -27,12 +33,13 @@ import NonFilterablePerfCharts from '../components/performance/NonFilterablePerf
 export default function Performance() {
     const [comparisonReport, setComparisonReport] = useAtom(comparisonPerformanceReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const selectedRange = useAtomValue(selectedPerformanceRangeAtom);
+    const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
 
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport(activePerformanceReport);
     const { data: comparisonData } = usePerformanceComparisonReport(comparisonReport);
     const { data: folderList } = usePerfFolderList();
+    const perfRange = usePerformanceRange();
 
     useClearSelectedBuffer();
 
@@ -59,11 +66,19 @@ export default function Performance() {
     const [filteredComparisonData, setFilteredComparisonData] = useState<PerfTableRow[]>([]);
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>(opCodeOptions);
 
+    // Clear comparison report if users switches active perf report to the comparison report
     useEffect(() => {
         if (comparisonReport === activePerformanceReport) {
             setComparisonReport(null);
         }
     }, [comparisonReport, activePerformanceReport, setComparisonReport]);
+
+    // If a comparison report is selected, clear the selected range as we don't currently support ranges for comparison
+    useEffect(() => {
+        if (comparisonReport && perfRange) {
+            setSelectedRange([perfRange[0], perfRange[1]]);
+        }
+    }, [comparisonReport, setSelectedRange, perfRange]);
 
     useEffect(() => {
         setFilteredComparisonData(
