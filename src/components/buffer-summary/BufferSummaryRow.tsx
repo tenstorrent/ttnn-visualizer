@@ -6,6 +6,7 @@ import 'styles/components/BufferSummaryRow.scss';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useAtom } from 'jotai/index';
+import classNames from 'classnames';
 import { Buffer, Tensor } from '../../model/APIData';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatSize, toHex, toReadableShape, toReadableType } from '../../functions/math';
@@ -19,6 +20,7 @@ interface BufferSummaryRowProps {
     memoryEnd: number;
     memoryPadding: number;
     tensorList: Map<number, Tensor>;
+    className?: string;
 }
 
 const SCALE = 100;
@@ -26,7 +28,14 @@ const CANVAS_WIDTH = 1200;
 const CANVAS_HEIGHT = 20;
 const TARGET_SCALE = (CANVAS_WIDTH / SCALE) * 100;
 
-const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tensorList }: BufferSummaryRowProps) => {
+const BufferSummaryRow = ({
+    buffers,
+    memoryStart,
+    memoryEnd,
+    memoryPadding,
+    tensorList,
+    className = '',
+}: BufferSummaryRowProps) => {
     const computedMemorySize = memoryEnd - memoryStart;
     const computedPadding = (memoryPadding / computedMemorySize) * SCALE;
 
@@ -181,9 +190,9 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
                 </Tooltip>
             )}
             <div
-                className='buffer-summary-row'
+                className={classNames('buffer-summary-row', className)}
                 style={{
-                    margin: memoryStart > 0 ? `0 ${computedPadding}%` : '0',
+                    padding: memoryStart > 0 ? `0 ${computedPadding}%` : '0',
                 }}
             >
                 <canvas
