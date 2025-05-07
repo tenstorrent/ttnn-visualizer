@@ -815,7 +815,7 @@ export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
             return archBlackhole as ChipDesign;
         default:
             // eslint-disable-next-line no-console
-            console.log(`Unsupported arch: ${arch}`);
+            console.error(`Unsupported arch: ${arch}`);
             return {} as ChipDesign;
     }
 };

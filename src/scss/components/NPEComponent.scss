@@ -85,7 +85,9 @@
     .side-data {
         display: inline-flex;
         flex-direction: column;
-        max-width: 300px;
+        max-width: 380px;
+        padding-left: 10px;
+        border-left: 1px solid $tt-slate;
 
         h3 {
             display: flex;

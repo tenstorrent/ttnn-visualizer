@@ -122,9 +122,6 @@ export interface NoCTransfer {
     start_cycle: number;
     end_cycle: number;
     route: NoCRoute[];
-    // noc_type: NoCType;
-    // injection_rate: number;
-    // route: NoCLink[];
 }
 
 export interface TimestepData {
