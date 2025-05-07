@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { UIEvent, useMemo, useRef, useState } from 'react';
+import React, { UIEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
@@ -53,6 +53,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [activeRow, setActiveRow] = useState<number | null>(null);
+
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const deviceId = useAtomValue(selectedDeviceAtom) || 0;
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
