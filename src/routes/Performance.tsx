@@ -67,25 +67,21 @@ export default function Performance() {
 
     useEffect(() => {
         setFilteredComparisonData(
-            comparisonData
-                ?.filter((row) =>
-                    selectedOpCodes.length
-                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
-                        : false,
-                )
-                .sort((a, b) => (a.raw_op_code ?? '').localeCompare(b.raw_op_code ?? '')) || [],
+            comparisonData?.filter((row) =>
+                selectedOpCodes.length
+                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
+                    : false,
+            ) || [],
         );
     }, [selectedOpCodes, comparisonData]);
 
     useEffect(() => {
         setFilteredPerfData(
-            perfData
-                ?.filter((row) =>
-                    selectedOpCodes.length
-                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
-                        : false,
-                )
-                .sort((a, b) => (a.raw_op_code ?? '').localeCompare(b.raw_op_code ?? '')) || [],
+            perfData?.filter((row) =>
+                selectedOpCodes.length
+                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
+                    : false,
+            ) || [],
         );
     }, [selectedOpCodes, perfData]);
 

@@ -6,7 +6,7 @@ import React, { UIEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAtom, useAtomValue } from 'jotai';
 import {
     BufferSummaryAxisConfiguration,
@@ -36,6 +36,8 @@ import {
 } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
+import { ScrollLocations } from '../../definitions/ScrollPositions';
+import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -50,6 +52,8 @@ interface BufferSummaryPlotRendererProps {
 function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }: BufferSummaryPlotRendererProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const [activeRow, setActiveRow] = useState<number | null>(null);
+
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const deviceId = useAtomValue(selectedDeviceAtom) || 0;
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
@@ -58,6 +62,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const scrollElementRef = useRef(null);
     const { data: operations } = useOperationsList();
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
+    const navigate = useNavigate();
 
     const l1StartMarker = useGetL1StartMarker();
     const l1SmallMarker = useGetL1SmallMarker();
@@ -101,11 +106,19 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     });
     const virtualItems = virtualizer.getVirtualItems();
 
+    const { updateScrollPosition } = useRestoreScrollPosition(virtualizer, ScrollLocations.BUFFER_SUMMARY);
+
     const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
         const el = event.currentTarget;
 
         setHasScrolledFromTop(!(el.scrollTop < OPERATION_EL_HEIGHT / 2));
         setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
+    };
+
+    const handleNavigateToOperation = (event: React.MouseEvent<HTMLAnchorElement>, path: string, index: number) => {
+        event.preventDefault();
+        updateScrollPosition(index);
+        navigate(path);
     };
 
     const memoryRegionsMarkers = showMemoryRegions
@@ -211,10 +224,12 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                                     key={virtualRow.key}
                                     data-index={virtualRow.index}
                                     ref={virtualizer.measureElement}
+                                    onMouseEnter={() => setActiveRow(operation.id)}
+                                    onMouseLeave={() => setActiveRow(null)}
                                 >
                                     <BufferSummaryRow
+                                        className={classNames({ 'is-active': operation.id === activeRow })}
                                         buffers={operation.buffers}
-                                        // operationId={operation.id}
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
@@ -225,9 +240,18 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                                         content={`${operation.id} ${operation.name} (${operations?.find((op) => op.id === operation.id)?.operationFileIdentifier})`}
                                         className='y-axis-tick'
                                     >
-                                        <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
+                                        <a
+                                            href={`${ROUTES.OPERATIONS}/${operation.id}`}
+                                            onClick={(event) =>
+                                                handleNavigateToOperation(
+                                                    event,
+                                                    `${ROUTES.OPERATIONS}/${operation.id}`,
+                                                    virtualRow.index,
+                                                )
+                                            }
+                                        >
                                             {operation.id}&nbsp;{operation.name}
-                                        </Link>
+                                        </a>
                                     </Tooltip>
                                 </div>
                             );
