@@ -9,6 +9,7 @@ interface EmptyChipRendererProps {
     eth?: number[][];
     pcie?: number[][];
     showActiveTransfers: (arg: null) => void;
+    isAnnotatingCores: boolean;
     TENSIX_SIZE: number;
 }
 
@@ -21,6 +22,7 @@ export const EmptyChipRenderer: React.FC<EmptyChipRendererProps> = ({
     eth,
     pcie,
     showActiveTransfers,
+    isAnnotatingCores,
     TENSIX_SIZE,
 }: EmptyChipRendererProps) => {
     const getNodeType = (location: number[]): JSX.Element => {
@@ -65,7 +67,7 @@ export const EmptyChipRenderer: React.FC<EmptyChipRendererProps> = ({
                         }}
                         key={`${x}-${y}`}
                     >
-                        {getNodeType([y, x])}
+                        {isAnnotatingCores ? getNodeType([y, x]) : ''}
                     </div>
                 )),
             )}

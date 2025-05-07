@@ -52,6 +52,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         };
     });
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
+    const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
 
     const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
     useEffect(() => {
@@ -310,6 +311,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         checked={isShowingAllTransfers}
                         onChange={() => (isShowingAllTransfers ? hideAllTransfers() : showAllTransfers())}
                     />
+                    <Switch
+                        label='Annotate cores'
+                        checked={isAnnotatingCores}
+                        onChange={() => setIsAnnotatingCores(!isAnnotatingCores)}
+                    />
                     |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                     <label>
                         Zoom
@@ -374,6 +380,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     eth={eth}
                                     pcie={pcie}
                                     showActiveTransfers={showActiveTransfers}
+                                    isAnnotatingCores={isAnnotatingCores}
                                     TENSIX_SIZE={TENSIX_SIZE}
                                 />
                                 <div

@@ -1,6 +1,7 @@
 import { ClusterCoordinates } from './ClusterModel';
 
 export interface CommonInfo {
+    version: string;
     arch: string;
     congestion_model_name: string;
     cycles_per_timestep: number;
@@ -21,6 +22,7 @@ export interface NPE_KPI {
 }
 
 export const NPE_KPI_METADATA = {
+    version: null,
     arch: {
         units: '',
         label: 'Architecture',

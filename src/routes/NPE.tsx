@@ -10,6 +10,19 @@ import { useNpe } from '../hooks/useAPI';
 import { activeNpeOpTraceAtom } from '../store/app';
 import { NPEData } from '../model/NPEModel';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { semverParse } from '../functions/semverParse';
+
+const NPE_DATA_VERSION = '1.0.0';
+
+const NPE_REPO_URL = (
+    <a
+        target='_blank'
+        href='https://github.com/tenstorrent/tt-npe'
+        rel='noreferrer'
+    >
+        tt-npe
+    </a>
+);
 
 const NPE: React.FC = () => {
     const npeFileName = useAtomValue(activeNpeOpTraceAtom);
@@ -29,15 +42,29 @@ const NPE: React.FC = () => {
                 isValidNpeData(npeData) ? (
                     <NPEView npeData={npeData} />
                 ) : (
-                    'Invalid NPE data'
+                    <>
+                        <p>
+                            Invalid NPE data or version. Current supported version is {NPE_DATA_VERSION} got&nbsp;
+                            {npeData.common_info.version || 'null'};
+                        </p>
+                        <p>
+                            Use {NPE_REPO_URL} to generate new NPE dataset
+                            {matchNpeDataVersion(npeData.common_info.version) ? (
+                                <>
+                                    {' '}
+                                    or install an older version of the visualizer{' '}
+                                    <pre>
+                                        pip install ttnn-visualizer=={matchNpeDataVersion(npeData.common_info.version)}
+                                    </pre>
+                                </>
+                            ) : null}
+                        </p>
+                    </>
                 )
             ) : (
                 <>
                     <p>Please upload a NPE file for analysis.</p>
-                    <p>
-                        See <a href='https://github.com/tenstorrent/tt-npe'>tt-npe</a> for details on how to generate
-                        NPE files.
-                    </p>
+                    <p>See {NPE_REPO_URL} for details on how to generate NPE files.</p>
                 </>
             )}
         </>
@@ -52,8 +79,28 @@ const isValidNpeData = (data: NPEData): boolean => {
     if (!hasAllKeys) {
         return false;
     }
+    const version = semverParse(data.common_info.version);
+    if (!version) {
+        return false;
+    }
+    const expectedVersion = semverParse(NPE_DATA_VERSION);
+
+    if (version?.major !== expectedVersion?.major) {
+        return false;
+    }
 
     return true;
+};
+
+const matchNpeDataVersion = (version: string) => {
+    const parsedVersion = semverParse(version);
+    switch (parsedVersion) {
+        case null:
+        case undefined:
+            return '0.32.3';
+        default:
+            return '';
+    }
 };
 
 export default NPE;
