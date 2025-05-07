@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import React, { UIEvent, useMemo, useRef, useState } from 'react';
+import { UIEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
@@ -50,6 +50,7 @@ interface BufferSummaryPlotRendererProps {
 function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }: BufferSummaryPlotRendererProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const [activeRow, setActiveRow] = useState<number | null>(null);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const deviceId = useAtomValue(selectedDeviceAtom) || 0;
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
@@ -211,10 +212,12 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                                     key={virtualRow.key}
                                     data-index={virtualRow.index}
                                     ref={virtualizer.measureElement}
+                                    onMouseEnter={() => setActiveRow(operation.id)}
+                                    onMouseLeave={() => setActiveRow(null)}
                                 >
                                     <BufferSummaryRow
+                                        className={classNames({ 'is-active': operation.id === activeRow })}
                                         buffers={operation.buffers}
-                                        // operationId={operation.id}
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
