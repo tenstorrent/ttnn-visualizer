@@ -5,11 +5,11 @@ export interface SemVer {
     prerelease?: string;
 }
 
-export const semverParse = (version: string): SemVer | null => {
-    const regex = /^(\d+)\.(\d+)\.(\d+)(?:-([\w.-]+))?$/;
+export const semverParse = (version: string | undefined): SemVer | null => {
     if (!version) {
         return null;
     }
+    const regex = /^(\d+)\.(\d+)\.(\d+)(?:-([\w.-]+))?$/;
     const match = version.match(regex);
 
     if (!match) {
