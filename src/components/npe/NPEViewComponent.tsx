@@ -5,20 +5,22 @@
 
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
-import React, { JSX, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button, ButtonGroup, Intent, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
 import { LinkUtilization, NPEData, NPE_COORDINATES, NPE_LINK, NoCID, NoCTransfer } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
-import { NODE_SIZE, calculateLinkCongestionColor, getLinkPoints, getRouteColor, resetRouteColors } from './drawingApi';
+import { NODE_SIZE, calculateLinkCongestionColor, getLines, getLinkPoints, resetRouteColors } from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
 import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import { CLUSTER_COORDS } from '../../model/ClusterModel';
 import NPEMetadata from './NPEMetadata';
+import { EmptyChipRenderer } from './EmptyChipRenderer';
+import { RouteOriginsRenderer } from './RouteOriginsRenderer';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -64,23 +66,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const width = architecture.grid?.x_size || 10;
     const height = architecture.grid?.y_size || 12;
 
-    const getNodeType = (location: number[]): JSX.Element => {
-        const [y, x] = location;
-        if (cores?.some((loc) => loc[0] === y && loc[1] === x)) {
-            return <div className='node-type-label node-type-c'>T</div>;
-        }
-        if (dram?.some((loc) => loc[0] === y && loc[1] === x)) {
-            return <div className='node-type-label node-type-d'>d</div>;
-        }
-        if (eth?.some((loc) => loc[0] === y && loc[1] === x)) {
-            return <div className='node-type-label node-type-e'>e</div>;
-        }
-        if (pcie?.some((loc) => loc[0] === y && loc[1] === x)) {
-            return <div className='node-type-label node-type-p'>p</div>;
-        }
-        return <div className='node-type-label' />;
-    };
-
     useEffect(() => {
         resetRouteColors();
         if (isShowingAllTransfers) {
@@ -97,12 +82,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setHighlightedTransfer(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [npeData]);
-
-    const getLines = (nocs: Array<{ transfer: number; nocId: NoCID }>) => {
-        return nocs.map((noc) => {
-            return getLinkPoints(noc.nocId, getRouteColor(noc.transfer));
-        });
-    };
 
     const transferListSelectionRendering = useMemo(() => {
         const selectedNoCByDevice: Map<number, Array<Array<Array<{ transfer: number; nocId: NoCID }>>>> = new Map<
@@ -291,7 +270,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return 0.15;
         }
 
-        return 1;
+        return 0.5;
     };
 
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
@@ -386,33 +365,17 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     gridRow: clusterChip.coords[CLUSTER_COORDS.Y] + 1,
                                 }}
                             >
-                                <div
-                                    className='tensix-grid empty'
-                                    style={{
-                                        display: 'grid',
-                                        gridTemplateColumns: `repeat(${width || 0}, ${TENSIX_SIZE}px)`,
-                                        gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
-                                    }}
-                                >
-                                    {Array.from({ length: width }).map((_, x) =>
-                                        Array.from({ length: height }).map((__, y) => (
-                                            // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
-                                            <div
-                                                className='tensix empty-tensix'
-                                                onClick={() => showActiveTransfers(null)}
-                                                style={{
-                                                    gridColumn: x + 1,
-                                                    gridRow: y + 1,
-                                                    width: `${TENSIX_SIZE}px`,
-                                                    height: `${TENSIX_SIZE}px`,
-                                                }}
-                                                key={`${x}-${y}`}
-                                            >
-                                                {getNodeType([y, x])}
-                                            </div>
-                                        )),
-                                    )}
-                                </div>
+                                <EmptyChipRenderer
+                                    id={clusterChip.id}
+                                    width={width}
+                                    height={height}
+                                    cores={cores}
+                                    dram={dram}
+                                    eth={eth}
+                                    pcie={pcie}
+                                    showActiveTransfers={showActiveTransfers}
+                                    TENSIX_SIZE={TENSIX_SIZE}
+                                />
                                 <div
                                     className='tensix-grid congestion'
                                     style={{
@@ -422,37 +385,13 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     }}
                                 >
                                     {transfers.map((transfer, index) => (
-                                        <>
-                                            {transfer.src && clusterChip.id === transfer.src[NPE_LINK.CHIP_ID] && (
-                                                <div
-                                                    key={`${transfer.id}-src-${index}`}
-                                                    className='tensix src-dst src'
-                                                    style={{
-                                                        gridColumn: transfer.src[NPE_LINK.X] + 1,
-                                                        gridRow: transfer.src[NPE_LINK.Y] + 1,
-                                                        opacity: getOriginOpacity(transfer),
-                                                    }}
-                                                />
-                                            )}
-                                            {transfer.dst.map((dst) => {
-                                                const classname =
-                                                    transfer.src?.toString() === dst.toString() ? 'both' : 'dst';
-                                                if (clusterChip.id === dst[NPE_LINK.CHIP_ID]) {
-                                                    return (
-                                                        <div
-                                                            key={`${transfer.id}-dst-${index}-${dst[NPE_LINK.Y]}-${dst[NPE_LINK.X]}`}
-                                                            className={classNames('tensix src-dst', classname)}
-                                                            style={{
-                                                                gridColumn: dst[NPE_LINK.X] + 1,
-                                                                gridRow: dst[NPE_LINK.Y] + 1,
-                                                                opacity: getOriginOpacity(transfer),
-                                                            }}
-                                                        />
-                                                    );
-                                                }
-                                                return null;
-                                            })}
-                                        </>
+                                        <RouteOriginsRenderer
+                                            key={`${transfer.id}-${index}`}
+                                            transfer={transfer}
+                                            clusterChip={clusterChip}
+                                            index={index}
+                                            getOriginOpacity={getOriginOpacity}
+                                        />
                                     ))}
 
                                     {links?.link_demand.map((linkUtilization, index) => {
@@ -517,12 +456,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                             className={
                                                                 selectedNode?.coords[NPE_LINK.Y] === rowIndex &&
                                                                 selectedNode?.coords[NPE_LINK.X] === colIndex
-                                                                    ? 'selected tensix no-click' +
-                                                                      `row${rowIndex} ` +
-                                                                      `col${colIndex} `
-                                                                    : 'tensix no-click' +
-                                                                      `row${rowIndex} ` +
-                                                                      `col${colIndex} `
+                                                                    ? 'selected tensix no-click'
+                                                                    : 'tensix no-click'
                                                             }
                                                             style={{
                                                                 gridColumn: colIndex + 1,

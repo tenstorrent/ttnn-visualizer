@@ -181,6 +181,17 @@
         display: grid;
         gap: 1px;
 
+        .chip-id {
+            font-size: 100px;
+            opacity: 0.5;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: $tt-grey-5;
+            text-align: center;
+        }
+
         .tensix {
             display: flex;
             flex-direction: column;
@@ -235,20 +246,20 @@
             }
 
             &.src {
-                border: 1px solid $highlight-src;
-                inset: 1px;
+                border: 2px solid $highlight-src;
+                inset: 2px;
             }
 
             &.dst {
-                border: 1px solid $highlight-dst;
-                inset: 1px;
+                border: 2px solid $highlight-dst;
+                inset: 2px;
             }
 
             &.both {
                 $dash-size: 10deg;
 
-                inset: 1px;
-                border: 1px solid transparent;
+                inset: 2px;
+                border: 2px solid transparent;
                 border-image: repeating-conic-gradient(
                         $highlight-src 0deg,
                         $highlight-src $dash-size,
