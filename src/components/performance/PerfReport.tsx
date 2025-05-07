@@ -4,12 +4,10 @@
 
 import { FC, Fragment, useMemo, useState } from 'react';
 import classNames from 'classnames';
-import { useAtomValue } from 'jotai';
 import { Button, ButtonVariant, Icon, MenuItem, Size, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { MultiSelect } from '@blueprintjs/select';
 import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
-import { selectedPerformanceRangeAtom } from '../../store/app';
 import 'styles/components/PerfReport.scss';
 import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
 import { calcHighDispatchOps, formatCell } from '../../functions/perfFunctions';
@@ -87,7 +85,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
-    const selectedRange = useAtomValue(selectedPerformanceRangeAtom);
     const opIdsMap = useOptoPerfIdFiltered();
     const { data: operations } = useOperationsList();
 
@@ -117,13 +114,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
     }, [data, opIdsMap]);
 
     const tableFields: PerfTableRow[] = useMemo(() => {
-        let filteredRows =
-            selectedRange && processedRows.length > 0
-                ? processedRows.filter((row) => {
-                      const rowId = parseInt(row?.id, 10);
-                      return rowId >= selectedRange[0] && rowId <= selectedRange[1];
-                  })
-                : processedRows;
+        let filteredRows = processedRows;
 
         if (areFiltersActive(filters) && filterableColumnKeys) {
             filteredRows = filteredRows.filter((row) => {
@@ -161,7 +152,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
         })) as TypedPerfTableRow[];
 
         return sortTableFields(parsedRows);
-    }, [processedRows, selectedRange, sortTableFields, filters, filterableColumnKeys, activeFilters]);
+    }, [processedRows, sortTableFields, filters, filterableColumnKeys, activeFilters]);
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
