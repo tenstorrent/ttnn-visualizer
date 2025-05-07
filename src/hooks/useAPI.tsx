@@ -814,6 +814,8 @@ export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
         case DeviceArchitecture.BLACKHOLE:
             return archBlackhole as ChipDesign;
         default:
+            // eslint-disable-next-line no-console
+            console.error(`Unsupported arch: ${arch}`);
             return {} as ChipDesign;
     }
 };
@@ -837,7 +839,7 @@ export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; siz
 export const useNodeType = (arch: DeviceArchitecture) => {
     const architecture = useArchitecture(arch);
     const cores = useMemo(() => {
-        return architecture.functional_workers.map((loc) => {
+        return architecture.functional_workers?.map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -846,7 +848,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const dram = useMemo(() => {
-        return architecture.dram.flat().map((loc) => {
+        return architecture.dram?.flat().map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -855,7 +857,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const eth = useMemo(() => {
-        return architecture.eth.flat().map((loc) => {
+        return architecture.eth?.flat().map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -864,7 +866,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const pcie = useMemo(() => {
-        return architecture.pcie.map((loc) => {
+        return architecture.pcie?.map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -872,7 +874,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
         });
     }, [architecture]);
 
-    return { cores, dram, eth, pcie };
+    return { architecture, cores, dram, eth, pcie };
 };
 
 export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';
