@@ -362,7 +362,7 @@ export function getOperationDetails(operations: OperationDescription[], id: numb
     return matchingOp ? `${matchingOp.name} (${matchingOp.operationFileIdentifier})` : '';
 }
 
-export function getAxisUpperRange(arrays: Array<unknown[]>, hasComparisonReport: boolean): number {
-    // If a comparison report is provided, add 1 to the max length to avoid data being cut off when plotting the grouped bars
-    return Math.max(...arrays.map((arr) => arr.length), 0) + (hasComparisonReport ? 1 : 0);
+export function getAxisUpperRange(arrays: Array<unknown[]>): number {
+    // Adds + 1 to avoid cutting off the last plotted element in some cases and to create some space on the right side of the chart data
+    return Math.max(...arrays.map((arr) => arr.length), 0) + 1;
 }

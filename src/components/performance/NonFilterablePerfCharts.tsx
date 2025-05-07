@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { FC, useMemo } from 'react';
+import { useAtomValue } from 'jotai';
 import PerfCoreCountUtilizationChart from './PerfCoreCountUtilizationChart';
 import { Marker, PerfTableRow } from '../../definitions/PerfTable';
 import PerfOperationTypesChart from './PerfOperationTypesChart';
@@ -10,6 +11,7 @@ import SkeletalChart from './SkeletalChart';
 import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';
 import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationChart';
 import 'styles/components/PerfCharts.scss';
+import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
 
 interface NonFilterablePerfChartsProps {
     chartData: PerfTableRow[];
@@ -24,6 +26,9 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
     maxCores,
     opCodeOptions,
 }) => {
+    const performanceReport = useAtomValue(activePerformanceReportAtom);
+    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+
     const datasets = [chartData, ...(secondaryData || [])].filter((set) => set.length > 0);
 
     const matmulData = useMemo(
@@ -85,10 +90,25 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
             )}
 
             <h2>All operations</h2>
-            <PerfOperationTypesChart
-                data={chartData}
-                opCodes={opCodeOptions}
-            />
+            <div className='operation-types-charts'>
+                {performanceReport && (
+                    <PerfOperationTypesChart
+                        className='flex-chart'
+                        reportTitle={comparisonReport ? performanceReport : ''}
+                        data={chartData}
+                        opCodes={opCodeOptions}
+                    />
+                )}
+
+                {comparisonReport && (
+                    <PerfOperationTypesChart
+                        className='flex-chart'
+                        reportTitle={performanceReport ? comparisonReport : ''}
+                        data={secondaryData[0]}
+                        opCodes={opCodeOptions}
+                    />
+                )}
+            </div>
         </div>
     );
 };
