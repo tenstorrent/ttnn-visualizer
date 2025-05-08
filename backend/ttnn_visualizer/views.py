@@ -1029,7 +1029,7 @@ def get_npe_data(session: Instance):
 
     if compressed_path.exists():
        with open(compressed_path, "rb") as file:
-            compressed_data= file.read()
+            compressed_data = file.read()
             uncompressed_data = zstd.uncompress(compressed_data)
             npe_data = json.loads(uncompressed_data)
     else:
