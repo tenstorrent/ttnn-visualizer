@@ -21,7 +21,8 @@
     "release:patch": "node scripts/release.mjs -patch",
     "release:minor": "node scripts/release.mjs -minor",
     "release:major": "node scripts/release.mjs -major",
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
