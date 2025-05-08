@@ -4,6 +4,7 @@
 
 from pathlib import Path
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -43,20 +44,12 @@ def extract_profiler_name(files):
     unsplit_profiler_name = str(files[0].filename)
     return unsplit_profiler_name.split("/")[0]
 
+
 def extract_npe_name(files):
     if not files:
         return None
 
-    filename = files[0].filename
-
-    if filename.endswith('.json'):
-        npe_name = filename.rstrip('.json')
-    elif filename.endswith('.npeviz.zst'):
-        npe_name = filename.rstrip('.npeviz.zst')
-    else:
-        raise ValueError(f"Unsupported file type: {filename}")
-
-    return npe_name
+    return re.sub(r"\.(json|npeviz\.zst)$", "", files[0].filename)
 
 
 def save_uploaded_files(
