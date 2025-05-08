@@ -47,8 +47,16 @@ def extract_npe_name(files):
     if not files:
         return None
 
-    file_path = Path(files[0].filename)
-    return file_path.stem
+    filename = files[0].filename
+
+    if filename.endswith('.json'):
+        npe_name = filename.rstrip('.json')
+    elif filename.endswith('.npeviz.zst'):
+        npe_name = filename.rstrip('.npeviz.zst')
+    else:
+        raise ValueError(f"Unsupported file type: {filename}")
+
+    return npe_name
 
 
 def save_uploaded_files(
