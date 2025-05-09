@@ -482,6 +482,8 @@ class OpsPerformanceQueries:
 
         # Find the latest file with the correct prefix
         perf_files = list(
+            performance_path.glob(f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}.csv")
+        ) + list(
             performance_path.glob(f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}_*.csv")
         )
         if not perf_files:
