@@ -217,9 +217,11 @@ const fetchAllBuffers = async (bufferType: BufferType | null): Promise<Buffer[]>
 };
 
 const useGetAllBuffers = (bufferType: BufferType | null) => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
     return useQuery<Buffer[], AxiosError>({
         queryFn: () => fetchAllBuffers(bufferType),
-        queryKey: ['fetch-all-buffers', bufferType],
+        queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
         staleTime: Infinity,
     });
 };
@@ -718,10 +720,11 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
 
 export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     const range = useAtomValue(selectedOperationRangeAtom);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     const response = useQuery({
         queryFn: () => fetchBuffersByOperation(bufferType),
-        queryKey: ['fetch-all-buffers', bufferType],
+        queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
         staleTime: Infinity,
     });
 
