@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { Mock, afterEach, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
@@ -8,12 +8,10 @@ import { QueryProvider } from './helpers/queryClientProvider';
 import { useGetClusterDescription } from '../src/hooks/useAPI';
 import clusterDescription from './data/clusterDescription.json';
 import MainNavigation from '../src/components/MainNavigation';
+import getButtonWithText from './helpers/getButtonWithText';
 
-afterEach(() => {
-    cleanup();
-    vi.resetModules();
-    vi.clearAllMocks();
-});
+// Scrub the markup after each test
+afterEach(cleanup);
 
 // Mark the useGetClusterDescription as a mock function
 vi.mock('../src/hooks/useAPI.tsx', () => ({
@@ -34,16 +32,14 @@ it('Main Navigation disables specific options by default', () => {
         </QueryProvider>,
     );
 
-    const buttons = screen.getAllByRole('button');
-
-    expect(buttons[0]).toBeEnabled(); // Reports
-    expect(buttons[1]).toBeDisabled(); // Operations
-    expect(buttons[2]).toBeDisabled(); // Tensors
-    expect(buttons[3]).toBeDisabled(); // Buffers
-    expect(buttons[4]).toBeDisabled(); // Graph
-    expect(buttons[5]).toBeDisabled(); // Performance
-    expect(buttons[6]).toBeEnabled(); // NPE
-    expect(buttons[7]).toBeDisabled(); // Topology
+    expect(getButtonWithText('reports')).toBeEnabled();
+    expect(getButtonWithText('operations')).toBeDisabled();
+    expect(getButtonWithText('tensors')).toBeDisabled();
+    expect(getButtonWithText('buffers')).toBeDisabled();
+    expect(getButtonWithText('graph')).toBeDisabled();
+    expect(getButtonWithText('performance')).toBeDisabled();
+    expect(getButtonWithText('npe')).toBeEnabled();
+    expect(getButtonWithText('topology')).toBeDisabled();
 });
 
 it('Main Navigation enables specific options when there is an active memory report', () => {
@@ -59,16 +55,14 @@ it('Main Navigation enables specific options when there is an active memory repo
         </QueryProvider>,
     );
 
-    const buttons = screen.getAllByRole('button');
-
-    expect(buttons[0]).toBeEnabled(); // Reports
-    expect(buttons[1]).toBeEnabled(); // Operations
-    expect(buttons[2]).toBeEnabled(); // Tensors
-    expect(buttons[3]).toBeEnabled(); // Buffers
-    expect(buttons[4]).toBeEnabled(); // Graph
-    expect(buttons[5]).toBeDisabled(); // Performance
-    expect(buttons[6]).toBeEnabled(); // NPE
-    expect(buttons[7]).toBeEnabled(); // Topology
+    expect(getButtonWithText('reports')).toBeEnabled();
+    expect(getButtonWithText('operations')).toBeEnabled();
+    expect(getButtonWithText('tensors')).toBeEnabled();
+    expect(getButtonWithText('buffers')).toBeEnabled();
+    expect(getButtonWithText('graph')).toBeEnabled();
+    expect(getButtonWithText('performance')).toBeDisabled();
+    expect(getButtonWithText('npe')).toBeEnabled();
+    expect(getButtonWithText('topology')).toBeEnabled();
 });
 
 it('Main Navigation enables specific options when there is an active performance report', () => {
@@ -84,14 +78,12 @@ it('Main Navigation enables specific options when there is an active performance
         </QueryProvider>,
     );
 
-    const buttons = screen.getAllByRole('button');
-
-    expect(buttons[0]).toBeEnabled(); // Reports
-    expect(buttons[1]).toBeDisabled(); // Operations
-    expect(buttons[2]).toBeDisabled(); // Tensors
-    expect(buttons[3]).toBeDisabled(); // Buffers
-    expect(buttons[4]).toBeDisabled(); // Graph
-    expect(buttons[5]).toBeEnabled(); // Performance
-    expect(buttons[6]).toBeEnabled(); // NPE
-    expect(buttons[7]).toBeDisabled(); // Topology
+    expect(getButtonWithText('reports')).toBeEnabled();
+    expect(getButtonWithText('operations')).toBeDisabled();
+    expect(getButtonWithText('tensors')).toBeDisabled();
+    expect(getButtonWithText('buffers')).toBeDisabled();
+    expect(getButtonWithText('graph')).toBeDisabled();
+    expect(getButtonWithText('performance')).toBeEnabled();
+    expect(getButtonWithText('npe')).toBeEnabled();
+    expect(getButtonWithText('topology')).toBeDisabled();
 });
