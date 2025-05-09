@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List
 import shutil
 
+import zstd
 from flask import Blueprint
 from flask import request, current_app
 
@@ -672,10 +673,10 @@ def create_npe_files():
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
     for file in files:
-        if not file.filename.endswith(".json"):
+        if not file.filename.endswith(".json") and not file.filename.endswith('.npeviz.zst'):
             return StatusMessage(
                 status=ConnectionTestStates.FAILED,
-                message="NPE requires a valid JSON file",
+                message="NPE requires a valid .json or .npeviz.zst file",
             ).model_dump()
 
     npe_name = extract_npe_name(files)
@@ -1019,13 +1020,20 @@ def get_npe_data(session: Instance):
         logger.error("NPE path is not set in the session.")
         return Response(status=HTTPStatus.NOT_FOUND)
 
-    npe_file = Path(f"{session.npe_path}/{session.active_report.npe_name}.json")
+    compressed_path = Path(f"{session.npe_path}/{session.active_report.npe_name}.npeviz.zst")
+    uncompressed_path = Path(f"{session.npe_path}/{session.active_report.npe_name}.json")
 
-    if not npe_file.exists():
-        logger.error(f"NPE file does not exist: {npe_file}")
+    if not compressed_path.exists() and not uncompressed_path.exists():
+        logger.error(f"NPE file does not exist: {compressed_path} / {uncompressed_path}")
         return Response(status=HTTPStatus.NOT_FOUND)
 
-    with open(npe_file, "r") as file:
-        npe_data = json.load(file)
+    if compressed_path.exists():
+       with open(compressed_path, "rb") as file:
+            compressed_data = file.read()
+            uncompressed_data = zstd.uncompress(compressed_data)
+            npe_data = json.loads(uncompressed_data)
+    else:
+        with open(uncompressed_path, "r") as file:
+            npe_data = json.load(file)
 
     return jsonify(npe_data)
