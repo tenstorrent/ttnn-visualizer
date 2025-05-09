@@ -1,37 +1,10 @@
-import React from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, expect, it, vi } from 'vitest';
-import { QueryClient, QueryClientProvider } from 'react-query';
 import { MemoryRouter } from 'react-router';
-import { Provider as JotaiProvider, PrimitiveAtom } from 'jotai';
-import { useHydrateAtoms } from 'jotai/utils';
 import { activeProfilerReportAtom } from '../src/store/app';
-
-const queryClient = new QueryClient();
-
-const HydrateAtoms = ({
-    initialValues,
-    children,
-}: {
-    initialValues: [PrimitiveAtom<string | null>, string | null][];
-    children: React.ReactNode;
-}) => {
-    useHydrateAtoms(initialValues);
-    return children;
-};
-
-const TestProvider = ({
-    initialValues,
-    children,
-}: {
-    initialValues: [PrimitiveAtom<string | null>, string | null][];
-    children: React.ReactNode;
-}) => (
-    <JotaiProvider>
-        <HydrateAtoms initialValues={initialValues}>{children}</HydrateAtoms>
-    </JotaiProvider>
-);
+import { AtomProvider } from './helpers/atomProvider';
+import { QueryProvider } from './helpers/queryClientProvider';
 
 afterEach(() => {
     cleanup();
@@ -39,7 +12,7 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
-it('Main Navigation disables select options by default', async () => {
+it('Main Navigation disables specific options by default', async () => {
     // Mock useAPI hook BEFORE import
     vi.doMock('../src/hooks/useAPI.tsx', () => ({
         useGetClusterDescription: vi.fn(() => ({
@@ -51,13 +24,13 @@ it('Main Navigation disables select options by default', async () => {
     const { default: MainNavigation } = await import('../src/components/MainNavigation');
 
     render(
-        <QueryClientProvider client={queryClient}>
+        <QueryProvider>
             <MemoryRouter>
-                <TestProvider initialValues={[[activeProfilerReportAtom, null]]}>
+                <AtomProvider initialValues={[[activeProfilerReportAtom, null]]}>
                     <MainNavigation />
-                </TestProvider>
+                </AtomProvider>
             </MemoryRouter>
-        </QueryClientProvider>,
+        </QueryProvider>,
     );
 
     const buttons = screen.getAllByRole('button');

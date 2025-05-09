@@ -1,38 +1,11 @@
-import React from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, expect, it, vi } from 'vitest';
-import { QueryClient, QueryClientProvider } from 'react-query';
 import { MemoryRouter } from 'react-router';
-import { Provider as JotaiProvider, PrimitiveAtom } from 'jotai';
-import { useHydrateAtoms } from 'jotai/utils';
 import { activeProfilerReportAtom } from '../src/store/app';
 import clusterDesc from './data/clusterDescription.json';
-
-const queryClient = new QueryClient();
-
-const HydrateAtoms = ({
-    initialValues,
-    children,
-}: {
-    initialValues: [PrimitiveAtom<string | null>, string | null][];
-    children: React.ReactNode;
-}) => {
-    useHydrateAtoms(initialValues);
-    return children;
-};
-
-const TestProvider = ({
-    initialValues,
-    children,
-}: {
-    initialValues: [PrimitiveAtom<string | null>, string | null][];
-    children: React.ReactNode;
-}) => (
-    <JotaiProvider>
-        <HydrateAtoms initialValues={initialValues}>{children}</HydrateAtoms>
-    </JotaiProvider>
-);
+import { AtomProvider } from './helpers/atomProvider';
+import { QueryProvider } from './helpers/queryClientProvider';
 
 afterEach(() => {
     cleanup();
@@ -40,7 +13,7 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
-it('Main Navigation enables select options when there is an active profiler report', async () => {
+it('Main Navigation enables specific options when there is an active memory report', async () => {
     vi.doMock('../src/hooks/useAPI.tsx', () => ({
         useGetClusterDescription: vi.fn(() => ({
             data: clusterDesc,
@@ -50,13 +23,13 @@ it('Main Navigation enables select options when there is an active profiler repo
     const { default: MainNavigation } = await import('../src/components/MainNavigation');
 
     render(
-        <QueryClientProvider client={queryClient}>
+        <QueryProvider>
             <MemoryRouter>
-                <TestProvider initialValues={[[activeProfilerReportAtom, 'test']]}>
+                <AtomProvider initialValues={[[activeProfilerReportAtom, 'test']]}>
                     <MainNavigation />
-                </TestProvider>
+                </AtomProvider>
             </MemoryRouter>
-        </QueryClientProvider>,
+        </QueryProvider>,
     );
 
     const buttons = screen.getAllByRole('button');
