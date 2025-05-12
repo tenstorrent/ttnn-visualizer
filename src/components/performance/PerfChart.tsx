@@ -109,15 +109,13 @@ function PerfChart({ chartData, configuration, title }: PerfChartProps) {
         <div className={classNames('chart-container', { 'legend-instructions': configuration.showLegend })}>
             <h3>{title}</h3>
 
-            <div>
-                <Plot
-                    className='chart'
-                    data={chartData}
-                    layout={layout}
-                    config={config}
-                    useResizeHandler
-                />
-            </div>
+            <Plot
+                className='chart'
+                data={chartData}
+                layout={layout}
+                config={config}
+                useResizeHandler
+            />
         </div>
     );
 }
