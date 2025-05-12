@@ -59,7 +59,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                     onClick={() => navigate(`${ROUTES.GRAPHTREE}/${operationId}`)}
                     variant='outlined'
                     className='graph-button'
-                    text='Operations graph'
+                    text='Inspect node'
                 />
 
                 <Tooltip
