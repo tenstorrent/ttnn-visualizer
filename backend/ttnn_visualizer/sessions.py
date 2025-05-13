@@ -276,7 +276,7 @@ def init_sessions(app):
 
 
 def create_random_instance_id():
-    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=45))
 
 
 def create_instance_from_local_paths(profiler_path, performance_path):
