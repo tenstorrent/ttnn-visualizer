@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def validate_files(files, required_files, pattern=None):
+def validate_files(files, required_files, pattern=None, folder_name=None):
     """Validate uploaded files against required file names and an optional pattern."""
     found_files = set()
 
@@ -19,7 +19,7 @@ def validate_files(files, required_files, pattern=None):
             pattern and file_path.name.startswith(pattern)
         ):
             found_files.add(file_path.name)
-            if len(file_path.parents) != 2:
+            if not folder_name and len(file_path.parents) != 2:
                 logger.warning(
                     f"File {file.filename} is not under a single parent folder."
                 )
@@ -54,14 +54,14 @@ def extract_npe_name(files):
 def save_uploaded_files(
     files,
     target_directory,
-    profiler_name=None,
+    folder_name=None,
 ):
     """
     Save uploaded files to the target directory.
 
     :param files: List of files to be saved.
     :param target_directory: The base directory for saving the files.
-    :param profiler_name: The report name to use for the directory.
+    :param folder_name: The name to use for the directory.
     """
     for file in files:
         current_file_name = str(file.filename)
@@ -69,7 +69,10 @@ def save_uploaded_files(
 
         file_path = Path(current_file_name)
 
-        destination_file = Path(target_directory).joinpath(str(file_path))
+        if folder_name:
+            destination_file = Path(target_directory) / folder_name / str(file_path)
+        else:
+            destination_file = Path(target_directory) / str(file_path)
 
         logger.info(f"Writing file to {destination_file}")
 
