@@ -1029,3 +1029,12 @@ def get_npe_data(session: Instance):
         npe_data = json.load(file)
 
     return jsonify(npe_data)
+
+
+@api.route("/config.js", methods=["GET"])
+def config_js():
+    config = {
+        "SERVER_MODE": current_app.config["SERVER_MODE"],
+    }
+    js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(config)};"
+    return Response(js, mimetype="application/javascript")
