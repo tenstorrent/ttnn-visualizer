@@ -53,7 +53,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [activeRow, setActiveRow] = useState<number | null>(null);
-    const [showDeallocationReport, setShowDeallocationReport] = useState(false);
+    const [showDeallocationReport, setShowDeallocationReport] = useState(true);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const deviceId = useAtomValue(selectedDeviceAtom) || 0;
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
@@ -167,7 +167,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                     }}
                 />
                 <Switch
-                    label='Mark tensors that are not deallocated'
+                    label='Mark late tensor deallocations'
                     checked={showDeallocationReport}
                     onChange={() => {
                         setShowDeallocationReport(!showDeallocationReport);

@@ -191,7 +191,6 @@ function BufferSummaryPlotRendererDRAM({
                                                 memoryEnd={isZoomedIn ? zoomedMemoryOptions[index].end : MEMORY_SIZE}
                                                 memoryPadding={zoomedMemoryOptions[index].padding}
                                                 tensorList={tensorListByOperation.get(operation.id)!}
-                                                tensorDeallocationReport={[]}
                                             />
 
                                             <Tooltip
