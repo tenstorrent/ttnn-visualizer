@@ -13,6 +13,7 @@ import { formatSize, toHex, toReadableShape, toReadableType } from '../../functi
 import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { getDimmedColour } from '../../functions/colour';
+import { TensorDeallocationReport } from '../../model/BufferSummary';
 
 interface BufferSummaryRowProps {
     buffers: Buffer[];
@@ -21,6 +22,7 @@ interface BufferSummaryRowProps {
     memoryPadding: number;
     tensorList: Map<number, Tensor>;
     className?: string;
+    tensorDeallocationReport: TensorDeallocationReport[];
 }
 
 const SCALE = 100;
@@ -35,6 +37,7 @@ const BufferSummaryRow = ({
     memoryPadding,
     tensorList,
     className = '',
+    tensorDeallocationReport,
 }: BufferSummaryRowProps) => {
     const computedMemorySize = memoryEnd - memoryStart;
     const computedPadding = (memoryPadding / computedMemorySize) * SCALE;
@@ -52,9 +55,13 @@ const BufferSummaryRow = ({
             const tensor = tensorList.get(buffer.address);
             const color = (tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address)) || 'black';
             const dimmedColor = getDimmedColour(color);
-            return { position, size, tensor, color, dimmedColor, buffer };
+            let notDeallocated = false;
+            if (tensorDeallocationReport.some((el) => el.address === buffer.address)) {
+                notDeallocated = true;
+            }
+            return { position, size, tensor, color, dimmedColor, buffer, notDeallocated };
         });
-    }, [buffers, computedMemorySize, memoryStart, tensorList]);
+    }, [buffers, computedMemorySize, memoryStart, tensorList, tensorDeallocationReport]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -63,7 +70,7 @@ const BufferSummaryRow = ({
             if (ctx) {
                 ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-                interactivityList.forEach(({ color, position, size, buffer, dimmedColor, tensor }) => {
+                interactivityList.forEach(({ color, position, size, buffer, dimmedColor, tensor, notDeallocated }) => {
                     let activeColor = color;
 
                     if (selectedTensor && selectedTensor === tensor?.id) {
@@ -76,6 +83,29 @@ const BufferSummaryRow = ({
 
                     ctx.fillStyle = activeColor;
                     ctx.fillRect(position, 1, size, CANVAS_HEIGHT);
+
+                    if (notDeallocated) {
+                        ctx.strokeStyle = '#000000';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(position, 1, size, CANVAS_HEIGHT - 2);
+
+                        ctx.save();
+
+                        ctx.beginPath();
+                        ctx.rect(position, 1, size, CANVAS_HEIGHT - 1);
+                        ctx.clip();
+
+                        const spacing = 10;
+
+                        for (let x = position - CANVAS_HEIGHT; x < position + size; x += spacing) {
+                            ctx.beginPath();
+                            ctx.moveTo(x, 1);
+                            ctx.lineTo(x + CANVAS_HEIGHT, CANVAS_HEIGHT);
+                            ctx.stroke();
+                        }
+
+                        ctx.restore();
+                    }
                 });
             }
         }

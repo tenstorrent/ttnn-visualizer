@@ -26,7 +26,7 @@ import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/Routes';
 import isValidNumber from '../../functions/isValidNumber';
-import { TensorsByOperationByAddress } from '../../model/BufferSummary';
+import { TensorDeallocationReport, TensorsByOperationByAddress } from '../../model/BufferSummary';
 import {
     renderMemoryLayoutAtom,
     selectedDeviceAtom,
@@ -53,7 +53,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [activeRow, setActiveRow] = useState<number | null>(null);
-
+    const [showDeallocationReport, setShowDeallocationReport] = useState(false);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const deviceId = useAtomValue(selectedDeviceAtom) || 0;
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
@@ -71,6 +71,34 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
             buffersByOperation && buffersByOperation.length >= 0 ? buffersByOperation.length : PLACEHOLDER_ARRAY_SIZE,
         [buffersByOperation],
     );
+
+    const nondeallocatedTensorsByOperationId = useMemo(() => {
+        const result = new Map<number, TensorDeallocationReport[]>();
+        if (showDeallocationReport) {
+            tensorListByOperation.forEach((tensorsMap, operationId) => {
+                tensorsMap.forEach((tensor, address) => {
+                    if (tensor.id && tensor.consumers && tensor.consumers.length > 0) {
+                        const lastConsumerOperationId = Math.max(...tensor.consumers);
+                        if (lastConsumerOperationId < operationId) {
+                            if (!result.has(operationId)) {
+                                result.set(operationId, []);
+                            }
+                            const list: TensorDeallocationReport[] = result.get(operationId)!;
+                            list.push({
+                                id: tensor.id,
+                                address,
+                                consumerName: '',
+                                lastConsumerOperationId,
+                                lastOperationId: operationId,
+                            });
+                            result.set(operationId, list);
+                        }
+                    }
+                });
+            });
+        }
+        return result;
+    }, [tensorListByOperation, showDeallocationReport]);
 
     const getMemorySize = () =>
         !isLoadingDevices && devices ? devices[deviceId]?.worker_l1_size : L1_DEFAULT_MEMORY_SIZE;
@@ -136,6 +164,13 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                     checked={isZoomedIn}
                     onChange={() => {
                         setIsZoomedIn(!isZoomedIn);
+                    }}
+                />
+                <Switch
+                    label='Mark tensors that are not deallocated'
+                    checked={showDeallocationReport}
+                    onChange={() => {
+                        setShowDeallocationReport(!showDeallocationReport);
                     }}
                 />
 
@@ -234,6 +269,9 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
                                         tensorList={tensorListByOperation.get(operation.id)!}
+                                        tensorDeallocationReport={
+                                            nondeallocatedTensorsByOperationId.get(operation.id) || []
+                                        }
                                     />
 
                                     <Tooltip
