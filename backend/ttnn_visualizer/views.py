@@ -424,7 +424,7 @@ def delete_profiler_report(profiler_name, session: Instance):
     else:
         path = data_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / profiler_name
 
-    if session.active_report.profiler_name == profiler_name:
+    if session.active_report and session.active_report.profiler_name == profiler_name:
         instance_id = request.args.get("instanceId")
         update_instance(instance_id=instance_id,profiler_name="")
 
@@ -512,7 +512,7 @@ def delete_performance_report(performance_name, session: Instance):
     else:
         path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"] / performance_name
 
-    if session.active_report.performance_name == performance_name:
+    if session.active_report and session.active_report.performance_name == performance_name:
         instance_id = request.args.get("instanceId")
         update_instance(instance_id=instance_id,performance_name="")
 
