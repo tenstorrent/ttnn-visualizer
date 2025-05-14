@@ -9,6 +9,7 @@ import { useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
 import {
     activePerformanceReportAtom,
+    comparisonPerformanceReportAtom,
     operationRangeAtom,
     performanceRangeAtom,
     selectedOperationRangeAtom,
@@ -36,6 +37,7 @@ function Range() {
     const [selectedOperationRange, setSelectedOperationRange] = useAtom(selectedOperationRangeAtom);
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
     const [selectedPerformanceRange, setSelectedPerformanceRange] = useAtom(selectedPerformanceRangeAtom);
+    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
     const [isUserOpChange, setIsUserOpChange] = useState(false);
     const [isUserPerfChange, setIsUserPerfChange] = useState(false);
 
@@ -192,7 +194,7 @@ function Range() {
                                 min={perfMin}
                                 max={perfMax}
                                 labelStepSize={getStepSize(perfMax)}
-                                disabled={!isPerformanceRoute}
+                                disabled={!isPerformanceRoute || !!comparisonReport}
                                 labelRenderer={(id, options) =>
                                     getPerformanceLabel(id, perfData, options?.isHandleTooltip)
                                 }

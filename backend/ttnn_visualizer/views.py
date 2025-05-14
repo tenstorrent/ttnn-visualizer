@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List
 import shutil
 
+import zstd
 from flask import Blueprint
 from flask import request, current_app
 
@@ -424,7 +425,7 @@ def delete_profiler_report(profiler_name, session: Instance):
     else:
         path = data_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / profiler_name
 
-    if session.active_report.profiler_name == profiler_name:
+    if session.active_report and session.active_report.profiler_name == profiler_name:
         instance_id = request.args.get("instanceId")
         update_instance(instance_id=instance_id,profiler_name="")
 
@@ -512,7 +513,7 @@ def delete_performance_report(performance_name, session: Instance):
     else:
         path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"] / performance_name
 
-    if session.active_report.performance_name == performance_name:
+    if session.active_report and session.active_report.performance_name == performance_name:
         instance_id = request.args.get("instanceId")
         update_instance(instance_id=instance_id,performance_name="")
 
@@ -592,9 +593,10 @@ def get_devices(session: Instance):
 @api.route("/local/upload/profiler", methods=["POST"])
 def create_profiler_files():
     files = request.files.getlist("files")
+    folder_name = request.form.get("folderName") # Optional folder name
     profiler_directory = current_app.config["LOCAL_DATA_DIRECTORY"] / current_app.config["PROFILER_DIRECTORY_NAME"]
 
-    if not validate_files(files, {"db.sqlite", "config.json"}):
+    if not validate_files(files, {"db.sqlite", "config.json"}, folder_name=folder_name):
         return StatusMessage(
             status=ConnectionTestStates.FAILED,
             message="Invalid project directory.",
@@ -603,10 +605,14 @@ def create_profiler_files():
     if not profiler_directory.exists():
         profiler_directory.mkdir(parents=True, exist_ok=True)
 
-    profiler_name = extract_profiler_name(files)
+    if folder_name:
+        profiler_name = folder_name
+    else:
+        profiler_name = extract_profiler_name(files)
+
     logger.info(f"Writing report files to {profiler_directory}/{profiler_name}")
 
-    save_uploaded_files(files, profiler_directory, profiler_name)
+    save_uploaded_files(files, profiler_directory, folder_name)
 
     instance_id = request.args.get("instanceId")
     update_instance(instance_id=instance_id, profiler_name=profiler_name, clear_remote=True)
@@ -619,46 +625,41 @@ def create_profiler_files():
 @api.route("/local/upload/performance", methods=["POST"])
 def create_profile_files():
     files = request.files.getlist("files")
+    folder_name = request.form.get("folderName") # Optional folder name
     data_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
-    instance_id = request.args.get("instanceId")
 
     if not validate_files(
         files,
         {"profile_log_device.csv", "tracy_profile_log_host.tracy"},
         pattern="ops_perf_results",
+        folder_name=folder_name,
     ):
         return StatusMessage(
             status=ConnectionTestStates.FAILED,
             message="Invalid project directory.",
         ).model_dump()
 
-    logger.info(f"Writing profile files to {data_directory} / {current_app.config['PERFORMANCE_DIRECTORY_NAME']}")
-
-    # Construct the base directory with profiler_name first
     target_directory = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-    target_directory.mkdir(parents=True, exist_ok=True)
 
-    if files:
-        first_file_path = Path(files[0].filename)
-        profiler_folder_name = first_file_path.parts[0]
+    if not target_directory.exists():
+        target_directory.mkdir(parents=True, exist_ok=True)
+
+    if folder_name:
+        performance_name = folder_name
     else:
-        profiler_folder_name = None
+        performance_name = extract_profiler_name(files)
 
-    updated_files = []
-    for file in files:
-        original_path = Path(file.filename)
-        updated_path = target_directory / original_path
-        updated_path.parent.mkdir(parents=True, exist_ok=True)
-        file.filename = str(updated_path)
-        updated_files.append(file)
+    logger.info(f"Writing performance files to {target_directory}/{performance_name}")
 
     save_uploaded_files(
-        updated_files,
-        str(data_directory),
+        files,
+        target_directory,
+        folder_name
     )
 
+    instance_id = request.args.get("instanceId")
     update_instance(
-        instance_id=instance_id, performance_name=profiler_folder_name, clear_remote=True
+        instance_id=instance_id, performance_name=performance_name, clear_remote=True
     )
 
     return StatusMessage(
@@ -672,17 +673,17 @@ def create_npe_files():
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
     for file in files:
-        if not file.filename.endswith(".json"):
+        if not file.filename.endswith(".json") and not file.filename.endswith('.npeviz.zst'):
             return StatusMessage(
                 status=ConnectionTestStates.FAILED,
-                message="NPE requires a valid JSON file",
+                message="NPE requires a valid .json or .npeviz.zst file",
             ).model_dump()
 
     npe_name = extract_npe_name(files)
     target_directory = data_directory / current_app.config["NPE_DIRECTORY_NAME"]
     target_directory.mkdir(parents=True, exist_ok=True)
 
-    save_uploaded_files(files, target_directory, npe_name)
+    save_uploaded_files(files, target_directory)
 
     instance_id = request.args.get("instanceId")
     update_instance(instance_id=instance_id, npe_name=npe_name, clear_remote=True)
@@ -1019,13 +1020,20 @@ def get_npe_data(session: Instance):
         logger.error("NPE path is not set in the session.")
         return Response(status=HTTPStatus.NOT_FOUND)
 
-    npe_file = Path(f"{session.npe_path}/{session.active_report.npe_name}.json")
+    compressed_path = Path(f"{session.npe_path}/{session.active_report.npe_name}.npeviz.zst")
+    uncompressed_path = Path(f"{session.npe_path}/{session.active_report.npe_name}.json")
 
-    if not npe_file.exists():
-        logger.error(f"NPE file does not exist: {npe_file}")
+    if not compressed_path.exists() and not uncompressed_path.exists():
+        logger.error(f"NPE file does not exist: {compressed_path} / {uncompressed_path}")
         return Response(status=HTTPStatus.NOT_FOUND)
 
-    with open(npe_file, "r") as file:
-        npe_data = json.load(file)
+    if compressed_path.exists():
+       with open(compressed_path, "rb") as file:
+            compressed_data = file.read()
+            uncompressed_data = zstd.uncompress(compressed_data)
+            npe_data = json.loads(uncompressed_data)
+    else:
+        with open(uncompressed_path, "r") as file:
+            npe_data = json.load(file)
 
     return jsonify(npe_data)

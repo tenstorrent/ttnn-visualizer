@@ -6,12 +6,14 @@ import 'styles/components/BufferSummaryRow.scss';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useAtom } from 'jotai/index';
+import classNames from 'classnames';
 import { Buffer, Tensor } from '../../model/APIData';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatSize, toHex, toReadableShape, toReadableType } from '../../functions/math';
 import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { getDimmedColour } from '../../functions/colour';
+import { TensorDeallocationReport } from '../../model/BufferSummary';
 
 interface BufferSummaryRowProps {
     buffers: Buffer[];
@@ -19,6 +21,8 @@ interface BufferSummaryRowProps {
     memoryEnd: number;
     memoryPadding: number;
     tensorList: Map<number, Tensor>;
+    className?: string;
+    tensorDeallocationReport?: TensorDeallocationReport[];
 }
 
 const SCALE = 100;
@@ -26,7 +30,15 @@ const CANVAS_WIDTH = 1200;
 const CANVAS_HEIGHT = 20;
 const TARGET_SCALE = (CANVAS_WIDTH / SCALE) * 100;
 
-const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tensorList }: BufferSummaryRowProps) => {
+const BufferSummaryRow = ({
+    buffers,
+    memoryStart,
+    memoryEnd,
+    memoryPadding,
+    tensorList,
+    className = '',
+    tensorDeallocationReport = [],
+}: BufferSummaryRowProps) => {
     const computedMemorySize = memoryEnd - memoryStart;
     const computedPadding = (memoryPadding / computedMemorySize) * SCALE;
 
@@ -43,9 +55,13 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
             const tensor = tensorList.get(buffer.address);
             const color = (tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address)) || 'black';
             const dimmedColor = getDimmedColour(color);
-            return { position, size, tensor, color, dimmedColor, buffer };
+            let notDeallocated = false;
+            if (tensorDeallocationReport?.some((el) => el.address === buffer.address)) {
+                notDeallocated = true;
+            }
+            return { position, size, tensor, color, dimmedColor, buffer, notDeallocated };
         });
-    }, [buffers, computedMemorySize, memoryStart, tensorList]);
+    }, [buffers, computedMemorySize, memoryStart, tensorList, tensorDeallocationReport]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -54,7 +70,7 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
             if (ctx) {
                 ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-                interactivityList.forEach(({ color, position, size, buffer, dimmedColor, tensor }) => {
+                interactivityList.forEach(({ color, position, size, buffer, dimmedColor, tensor, notDeallocated }) => {
                     let activeColor = color;
 
                     if (selectedTensor && selectedTensor === tensor?.id) {
@@ -67,6 +83,29 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
 
                     ctx.fillStyle = activeColor;
                     ctx.fillRect(position, 1, size, CANVAS_HEIGHT);
+
+                    if (notDeallocated) {
+                        ctx.strokeStyle = '#000000';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(position, 1, size, CANVAS_HEIGHT - 2);
+
+                        ctx.save();
+
+                        ctx.beginPath();
+                        ctx.rect(position, 1, size, CANVAS_HEIGHT - 1);
+                        ctx.clip();
+
+                        const spacing = 10;
+
+                        for (let x = position - CANVAS_HEIGHT; x < position + size; x += spacing) {
+                            ctx.beginPath();
+                            ctx.moveTo(x, 1);
+                            ctx.lineTo(x + CANVAS_HEIGHT, CANVAS_HEIGHT);
+                            ctx.stroke();
+                        }
+
+                        ctx.restore();
+                    }
                 });
             }
         }
@@ -181,9 +220,9 @@ const BufferSummaryRow = ({ buffers, memoryStart, memoryEnd, memoryPadding, tens
                 </Tooltip>
             )}
             <div
-                className='buffer-summary-row'
+                className={classNames('buffer-summary-row', className)}
                 style={{
-                    margin: memoryStart > 0 ? `0 ${computedPadding}%` : '0',
+                    padding: memoryStart > 0 ? `0 ${computedPadding}%` : '0',
                 }}
             >
                 <canvas

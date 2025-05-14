@@ -109,7 +109,7 @@ function FooterInfobar() {
                 )}
             </div>
 
-            {(operationRange || performanceRange) && (
+            {(activeProfilerReport || activePerformanceReport) && (
                 <Collapse
                     className='slider-container'
                     isOpen={sliderIsOpen}

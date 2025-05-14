@@ -217,9 +217,11 @@ const fetchAllBuffers = async (bufferType: BufferType | null): Promise<Buffer[]>
 };
 
 const useGetAllBuffers = (bufferType: BufferType | null) => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
     return useQuery<Buffer[], AxiosError>({
         queryFn: () => fetchAllBuffers(bufferType),
-        queryKey: ['fetch-all-buffers', bufferType],
+        queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
         staleTime: Infinity,
     });
 };
@@ -362,7 +364,7 @@ export const useOperationsList = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<OperationDescription[], AxiosError>({
-        queryFn: () => fetchOperations(),
+        queryFn: () => (activeProfilerReport !== null ? fetchOperations() : Promise.resolve([])),
         queryKey: ['get-operations', activeProfilerReport],
         retry: false,
         staleTime: Infinity,
@@ -373,7 +375,7 @@ export const useOperationListRange = (): NumberRange | null => {
     const response = useOperationsList();
 
     return useMemo(
-        () => (response.data ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
+        () => (response?.data?.length ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [response.isLoading],
     );
@@ -606,7 +608,8 @@ export const useOptoPerfIdFiltered = () => {
 };
 
 export const usePerformanceRange = (): NumberRange | null => {
-    const { data: perfData } = usePerformanceReport();
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const { data: perfData } = usePerformanceReport(activePerformanceReport);
 
     return useMemo(
         () =>
@@ -685,7 +688,10 @@ export const useTensors = () => {
 export const useDevices = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery<DeviceData[], AxiosError>(['get-devices', activeProfilerReport], fetchDevices, {
+    return useQuery<DeviceData[], AxiosError>({
+        queryFn: () => (activeProfilerReport !== null ? fetchDevices() : Promise.resolve([])),
+        queryKey: ['get-devices', activeProfilerReport],
+        retry: false,
         staleTime: Infinity,
     });
 };
@@ -714,10 +720,11 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
 
 export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     const range = useAtomValue(selectedOperationRangeAtom);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     const response = useQuery({
         queryFn: () => fetchBuffersByOperation(bufferType),
-        queryKey: ['fetch-all-buffers', bufferType],
+        queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
         staleTime: Infinity,
     });
 
@@ -749,10 +756,11 @@ export const useDeviceLog = () => {
 //     });
 // };
 
-export const usePerformanceReport = (name?: string | null) => {
+export const usePerformanceReport = (name: string | null) => {
     const response = useQuery({
-        queryFn: () => fetchPerformanceReport(),
+        queryFn: () => (name !== null ? fetchPerformanceReport(name) : Promise.resolve([])),
         queryKey: ['get-performance-report', name],
+        enabled: name !== null,
     });
 
     return useMemo(() => {
@@ -809,6 +817,8 @@ export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
         case DeviceArchitecture.BLACKHOLE:
             return archBlackhole as ChipDesign;
         default:
+            // eslint-disable-next-line no-console
+            console.error(`Unsupported arch: ${arch}`);
             return {} as ChipDesign;
     }
 };
@@ -832,7 +842,7 @@ export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; siz
 export const useNodeType = (arch: DeviceArchitecture) => {
     const architecture = useArchitecture(arch);
     const cores = useMemo(() => {
-        return architecture.functional_workers.map((loc) => {
+        return architecture.functional_workers?.map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -841,7 +851,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const dram = useMemo(() => {
-        return architecture.dram.flat().map((loc) => {
+        return architecture.dram?.flat().map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -850,7 +860,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const eth = useMemo(() => {
-        return architecture.eth.flat().map((loc) => {
+        return architecture.eth?.flat().map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -859,7 +869,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const pcie = useMemo(() => {
-        return architecture.pcie.map((loc) => {
+        return architecture.pcie?.map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -867,7 +877,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
         });
     }, [architecture]);
 
-    return { cores, dram, eth, pcie };
+    return { architecture, cores, dram, eth, pcie };
 };
 
 export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';

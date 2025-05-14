@@ -1,7 +1,7 @@
 [project]
 name = "ttnn_visualizer"
 authors = []
-version = "0.32.0"
+version = "0.34.0"
 description = "TT-NN Visualizer"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,7 +22,8 @@ dependencies = [
     "sqlalchemy==2.0.34",
     "PyYAML==6.0.2",
     "python-dotenv==1.0.1",
-    "tt-perf-report==1.0.6"
+    "tt-perf-report==1.0.6",
+    "zstd==1.5.7.0"
 ]
 
 classifiers = [

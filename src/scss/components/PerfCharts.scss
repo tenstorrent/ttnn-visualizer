@@ -23,3 +23,13 @@
         flex: 0 0 30px;
     }
 }
+
+.operation-types-charts {
+    display: flex;
+    gap: 10px;
+
+    .flex-chart {
+        flex-basis: 50%;
+        flex-grow: 1;
+    }
+}
