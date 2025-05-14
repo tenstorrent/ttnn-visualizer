@@ -12,6 +12,7 @@ import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizatio
 import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationChart';
 import 'styles/components/PerfCharts.scss';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import PerfDeviceTimeChart from './PerfDeviceTimeChart';
 
 interface NonFilterablePerfChartsProps {
     chartData: PerfTableRow[];
@@ -52,6 +53,8 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                         maxCores={maxCores}
                     />
 
+                    <PerfDeviceTimeChart datasets={matmulData} />
+
                     <PerfOperationKernelUtilizationChart
                         datasets={matmulData}
                         maxCores={maxCores}
@@ -74,6 +77,8 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                         datasets={convData}
                         maxCores={maxCores}
                     />
+
+                    <PerfDeviceTimeChart datasets={convData} />
 
                     <PerfOperationKernelUtilizationChart
                         datasets={convData}

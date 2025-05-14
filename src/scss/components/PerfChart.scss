@@ -12,4 +12,13 @@
         width: 100%;
         height: 450px;
     }
+
+    &.legend-instructions {
+        &::after {
+            content: 'Toggle datasets by clicking on legend items';
+            display: block;
+            font-style: italic;
+            font-size: 12px;
+        }
+    }
 }
