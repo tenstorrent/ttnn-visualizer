@@ -17,7 +17,11 @@ export const getOrCreateInstanceId = () => {
         sessionStorage.setItem('instanceId', instanceId);
     }
     if (!instanceId) {
-        instanceId = Math.random().toString(36).substring(2, 15);
+        instanceId =
+            Math.random().toString(36).substring(2, 15) +
+            Math.random().toString(36).substring(2, 15) +
+            Math.random().toString(36).substring(2, 15) +
+            Math.random().toString(36).substring(2, 15);
         sessionStorage.setItem('instanceId', instanceId);
     }
     return instanceId;

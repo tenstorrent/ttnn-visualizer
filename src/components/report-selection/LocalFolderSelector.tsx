@@ -96,12 +96,6 @@ const LocalFolderOptions: FC = () => {
     const [performanceFolder, setPerformanceFolder] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
-    /**
-     * This is a temporrary solution until we support Safari
-     */
-    const ua = navigator.userAgent.toLowerCase();
-    const isSafari = ua.includes('safari') && !ua.includes('chrome') && !ua.includes('android');
-
     const handleReportDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) {
             return;
@@ -235,125 +229,105 @@ const LocalFolderOptions: FC = () => {
     };
 
     return (
-        <>
-            {isSafari && (
-                <>
-                    <h3>
-                        <Icon
-                            icon={IconNames.WARNING_SIGN}
-                            size={20}
-                            intent={Intent.WARNING}
-                        />{' '}
-                        This functionality is not supported in safari browser
-                    </h3>
-                    <p>Please use Chrome or Firefox to upload a local report </p>
-                </>
-            )}
+        <div>
+            <FormGroup
+                className='form-group'
+                label={<h3 className='label'>Memory report</h3>}
+                subLabel='Select a memory report'
+            >
+                <LocalFolderPicker
+                    items={reportFolderList}
+                    value={reportFolderList?.includes(activeProfilerReport) ? activeProfilerReport : null}
+                    handleSelect={handleSelectProfiler}
+                    handleDelete={handleDeleteProfiler}
+                />
+            </FormGroup>
 
-            <div>
-                <FormGroup
-                    className='form-group'
-                    label={<h3 className='label'>Memory report</h3>}
-                    subLabel='Select a memory report'
-                >
-                    <LocalFolderPicker
-                        items={reportFolderList}
-                        value={reportFolderList?.includes(activeProfilerReport) ? activeProfilerReport : null}
-                        handleSelect={handleSelectProfiler}
-                        handleDelete={handleDeleteProfiler}
-                    />
-                </FormGroup>
+            <FormGroup subLabel='Upload a local memory report'>
+                <div className='buttons-container'>
+                    <label
+                        className='bp5-file-input'
+                        htmlFor='local-upload'
+                    >
+                        <input
+                            id='local-upload'
+                            type='file'
+                            multiple
+                            /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
+                            // eslint-disable-next-line react/no-unknown-property
+                            directory=''
+                            webkitdirectory=''
+                            onChange={handleReportDirectoryOpen}
+                        />
+                        <span className='bp5-file-upload-input'>{profilerUploadLabel}</span>
+                    </label>
 
-                <FormGroup subLabel='Upload a local memory report'>
-                    <div className='buttons-container'>
-                        <label
-                            className='bp5-file-input'
-                            htmlFor='local-upload'
-                        >
-                            <input
-                                id='local-upload'
-                                type='file'
-                                multiple
-                                /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
-                                // eslint-disable-next-line react/no-unknown-property
-                                directory=''
-                                webkitdirectory=''
-                                disabled={isSafari}
-                                onChange={handleReportDirectoryOpen}
+                    <FileStatusOverlay />
+
+                    {profilerFolder && !isUploadingReport && (
+                        <div className={`verify-connection-item status-${ConnectionTestStates[profilerFolder.status]}`}>
+                            <Icon
+                                className='connection-status-icon'
+                                icon={ICON_MAP[profilerFolder.status]}
+                                size={20}
+                                intent={INTENT_MAP[profilerFolder.status]}
                             />
-                            <span className='bp5-file-upload-input'>{profilerUploadLabel}</span>
-                        </label>
 
-                        <FileStatusOverlay />
+                            <span className='connection-status-text'>{profilerFolder.message}</span>
+                        </div>
+                    )}
+                </div>
+            </FormGroup>
 
-                        {profilerFolder && !isUploadingReport && (
-                            <div
-                                className={`verify-connection-item status-${ConnectionTestStates[profilerFolder.status]}`}
-                            >
-                                <Icon
-                                    className='connection-status-icon'
-                                    icon={ICON_MAP[profilerFolder.status]}
-                                    size={20}
-                                    intent={INTENT_MAP[profilerFolder.status]}
-                                />
+            <FormGroup
+                className='form-group'
+                label={<h3 className='label'>Performance report</h3>}
+                subLabel='Select a performance report'
+            >
+                <LocalFolderPicker
+                    items={perfFolderList}
+                    value={perfFolderList?.includes(activePerformanceReport) ? activePerformanceReport : null}
+                    handleSelect={handleSelectPerformance}
+                    handleDelete={handleDeletePerformance}
+                />
+            </FormGroup>
 
-                                <span className='connection-status-text'>{profilerFolder.message}</span>
-                            </div>
-                        )}
-                    </div>
-                </FormGroup>
+            <FormGroup subLabel='Upload a local performance report'>
+                <div className='buttons-container'>
+                    <label
+                        className='bp5-file-input'
+                        htmlFor='local-performance-upload'
+                    >
+                        <input
+                            id='local-performance-upload'
+                            type='file'
+                            multiple
+                            /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
+                            // eslint-disable-next-line react/no-unknown-property
+                            directory=''
+                            webkitdirectory=''
+                            onChange={handlePerformanceDirectoryOpen}
+                        />
+                        <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
+                    </label>
 
-                <FormGroup
-                    className='form-group'
-                    label={<h3 className='label'>Performance report</h3>}
-                    subLabel='Select a performance report'
-                >
-                    <LocalFolderPicker
-                        items={perfFolderList}
-                        value={perfFolderList?.includes(activePerformanceReport) ? activePerformanceReport : null}
-                        handleSelect={handleSelectPerformance}
-                        handleDelete={handleDeletePerformance}
-                    />
-                </FormGroup>
-
-                <FormGroup subLabel='Upload a local performance report'>
-                    <div className='buttons-container'>
-                        <label
-                            className='bp5-file-input'
-                            htmlFor='local-performance-upload'
+                    {performanceFolder && !isUploadingPerformance && (
+                        <div
+                            className={`verify-connection-item status-${ConnectionTestStates[performanceFolder.status]}`}
                         >
-                            <input
-                                id='local-performance-upload'
-                                type='file'
-                                multiple
-                                /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
-                                // eslint-disable-next-line react/no-unknown-property
-                                directory=''
-                                webkitdirectory=''
-                                disabled={isSafari}
-                                onChange={handlePerformanceDirectoryOpen}
+                            <Icon
+                                className='connection-status-icon'
+                                icon={ICON_MAP[performanceFolder.status]}
+                                size={20}
+                                intent={INTENT_MAP[performanceFolder.status]}
                             />
-                            <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
-                        </label>
 
-                        {performanceFolder && !isUploadingPerformance && (
-                            <div
-                                className={`verify-connection-item status-${ConnectionTestStates[performanceFolder.status]}`}
-                            >
-                                <Icon
-                                    className='connection-status-icon'
-                                    icon={ICON_MAP[performanceFolder.status]}
-                                    size={20}
-                                    intent={INTENT_MAP[performanceFolder.status]}
-                                />
-
-                                <span className='connection-status-text'>{performanceFolder.message}</span>
-                            </div>
-                        )}
-                    </div>
-                </FormGroup>
-            </div>
-        </>
+                            <span className='connection-status-text'>{performanceFolder.message}</span>
+                        </div>
+                    )}
+                </div>
+            </FormGroup>
+        </div>
     );
 };
 
