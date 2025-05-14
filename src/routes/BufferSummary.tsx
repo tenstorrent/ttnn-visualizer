@@ -144,10 +144,10 @@ function BufferSummary() {
 
 // TODO: Refactor to optimise historical tensor lookup
 function createTensorsByOperationByIdList(operations?: Operation[], buffersByOperation?: BuffersByOperationData[]) {
-    const tensorsByOperationById: TensorsByOperationByAddress = new Map();
+    const tensorsByOperationByAddress: TensorsByOperationByAddress = new Map();
 
     if (!operations || !buffersByOperation) {
-        return tensorsByOperationById;
+        return tensorsByOperationByAddress;
     }
 
     buffersByOperation.forEach((operation) => {
@@ -182,10 +182,10 @@ function createTensorsByOperationByIdList(operations?: Operation[], buffersByOpe
             }
         }
 
-        tensorsByOperationById.set(operation.id, tensorsByBufferAddress);
+        tensorsByOperationByAddress.set(operation.id, tensorsByBufferAddress);
     });
 
-    return tensorsByOperationById;
+    return tensorsByOperationByAddress;
 }
 
 export default BufferSummary;
