@@ -14,6 +14,7 @@ import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { getDimmedColour } from '../../functions/colour';
 import { TensorDeallocationReport } from '../../model/BufferSummary';
+import { TensorMemoryLayout } from '../../functions/parseMemoryConfig';
 
 interface BufferSummaryRowProps {
     buffers: Buffer[];
@@ -21,6 +22,7 @@ interface BufferSummaryRowProps {
     memoryEnd: number;
     memoryPadding: number;
     tensorList: Map<number, Tensor>;
+    showMemoryLayout: boolean;
     className?: string;
     tensorDeallocationReport?: TensorDeallocationReport[];
 }
@@ -38,6 +40,7 @@ const BufferSummaryRow = ({
     tensorList,
     className = '',
     tensorDeallocationReport = [],
+    showMemoryLayout,
 }: BufferSummaryRowProps) => {
     const computedMemorySize = memoryEnd - memoryStart;
     const computedPadding = (memoryPadding / computedMemorySize) * SCALE;
@@ -46,6 +49,7 @@ const BufferSummaryRow = ({
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
     const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
+
     const { createToast, resetToasts } = useBufferFocus();
 
     const interactivityList = useMemo(() => {
@@ -65,13 +69,19 @@ const BufferSummaryRow = ({
 
     useEffect(() => {
         const canvas = canvasRef.current;
+
         if (canvas) {
             const ctx = canvas.getContext('2d');
+
             if (ctx) {
                 ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
                 interactivityList.forEach(({ color, position, size, buffer, dimmedColor, tensor, notDeallocated }) => {
                     let activeColor = color;
+                    const tensorMemoryLayout = tensor?.memory_config?.memory_layout;
+                    const originalColour = tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address);
+                    const currentColour =
+                        (selectedTensor && selectedTensor !== tensor?.id ? dimmedColor : originalColour) ?? '#000';
 
                     if (selectedTensor && selectedTensor === tensor?.id) {
                         activeColor = color;
@@ -83,6 +93,17 @@ const BufferSummaryRow = ({
 
                     ctx.fillStyle = activeColor;
                     ctx.fillRect(position, 1, size, CANVAS_HEIGHT);
+
+                    if (showMemoryLayout && tensorMemoryLayout && !notDeallocated) {
+                        const svgPattern =
+                            tensorMemoryLayout &&
+                            currentColour &&
+                            getBackgroundPattern(tensorMemoryLayout, currentColour);
+
+                        if (svgPattern) {
+                            // Add pattern to canvas here
+                        }
+                    }
 
                     if (notDeallocated) {
                         ctx.strokeStyle = '#000000';
@@ -109,7 +130,7 @@ const BufferSummaryRow = ({
                 });
             }
         }
-    }, [interactivityList, selectedAddress, selectedTensor]);
+    }, [interactivityList, selectedAddress, selectedTensor, showMemoryLayout]);
 
     const findBufferForInteraction = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
@@ -134,6 +155,7 @@ const BufferSummaryRow = ({
             clearFocusedBuffer();
         }
     };
+
     const clearFocusedBuffer = () => {
         resetToasts();
     };
@@ -238,5 +260,29 @@ const BufferSummaryRow = ({
         </>
     );
 };
+
+const FG_COLOUR = 'rgba(0, 0, 0, 0.7)';
+
+function getBackgroundPattern(layout: TensorMemoryLayout, colour: string): string | null {
+    let pattern: string | null = null;
+
+    if (layout === TensorMemoryLayout.INTERLEAVED) {
+        pattern = `<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4px" height="4px" fill="${colour}" fill-opacity="1"></rect><circle cx="2" cy="2" r="1.2360774464742066" opacity="0.3" fill="${FG_COLOUR}"></circle></svg>`;
+    }
+
+    if (layout === TensorMemoryLayout.BLOCK_SHARDED) {
+        pattern = `<svg xmlns="http://www.w3.org/2000/svg" width="6" height="6"><rect width="6px" height="6px" fill="${colour}" fill-opacity="1"></rect><path d="M3,0L3,6M0,3L6,3" opacity="0.2" stroke="${FG_COLOUR}" stroke-width="0.9800398407955466px"></path></svg>`;
+    }
+
+    if (layout === TensorMemoryLayout.HEIGHT_SHARDED) {
+        pattern = `<svg xmlns="http://www.w3.org/2000/svg" width="6" height="6"><rect width="6px" height="6px" fill="${colour}" fill-opacity="1"></rect><path d="M3,0L3,6" opacity="0.2" stroke="${FG_COLOUR}" stroke-width="1.7999999999999998px"></path></svg>`;
+    }
+
+    if (layout === TensorMemoryLayout.WIDTH_SHARDED) {
+        pattern = `<svg xmlns="http://www.w3.org/2000/svg" width="6" height="6"><rect width="6px" height="6px" fill="${colour}" fill-opacity="1"></rect><path d="M0,3L6,3" opacity="0.2" stroke="${FG_COLOUR}" stroke-width="1.7999999999999998px"></path></svg>`;
+    }
+
+    return pattern;
+}
 
 export default BufferSummaryRow;
