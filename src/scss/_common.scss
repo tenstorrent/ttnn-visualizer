@@ -126,6 +126,10 @@ $row-background: $tt-grey-2;
         margin-right: 10px;
 
         &.js-plotly-plot {
+            .main-svg:last-child {
+                overflow: visible;
+            }
+
             .xaxislayer-above {
                 // Fixes the issue where the first x-axis tick is not visible (thanks Plotly)
                 .xtick:first-child text {
@@ -199,4 +203,10 @@ $row-background: $tt-grey-2;
 // Padding to offest content from the FooterInfobar
 .data-padding {
     padding-bottom: 20px;
+}
+
+.form-group {
+    .label {
+        margin: 0;
+    }
 }

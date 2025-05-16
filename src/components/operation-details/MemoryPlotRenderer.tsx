@@ -4,9 +4,9 @@
 
 import React, { CSSProperties, useMemo, useState } from 'react';
 import Plot from 'react-plotly.js';
-import { Config, Layout, PlotData } from 'plotly.js';
+import { Config, Layout, PlotData, Shape } from 'plotly.js';
 import { useAtomValue } from 'jotai';
-import { PlotConfiguration, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
+import { PlotConfiguration, PlotMarker, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
 import { selectedAddressAtom, showHexAtom } from '../../store/app';
 import { getDimmedColour, getLightlyDimmedColour } from '../../functions/colour';
 
@@ -20,6 +20,7 @@ export interface MemoryPlotRendererProps {
     className?: string;
     configuration: PlotConfiguration;
     style?: CSSProperties;
+    markers?: PlotMarker[];
 }
 
 const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
@@ -32,6 +33,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     plotZoomRange,
     configuration,
     style,
+    markers,
 }) => {
     const showHex = useAtomValue(showHexAtom);
     const chartData = useMemo(() => chartDataList.flat(), [chartDataList]);
@@ -43,6 +45,31 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
 
     const range = isZoomedIn ? plotZoomRange : [0, memorySize];
     const tickFormat = showHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: 'd' };
+
+    const markerLines: Partial<Shape>[] =
+        markers?.map((marker: PlotMarker) => ({
+            type: 'line',
+            xref: 'x',
+            yref: 'paper',
+            x0: marker.address,
+            x1: marker.address,
+            y0: -0.1,
+            y1: 1.1,
+            line: {
+                color: marker.color,
+                width: 2,
+                dash: 'solid',
+            },
+
+            label: {
+                text: marker.label,
+                textposition: 'bottom left',
+                font: {
+                    size: 8,
+                    color: marker.color,
+                },
+            },
+        })) || [];
 
     const layout: Partial<Layout> = {
         autosize: true,
@@ -68,6 +95,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
             fixedrange: true,
             showgrid: false,
             zeroline: false,
+            showticklabels: false,
         },
         margin: configuration.margin,
 
@@ -87,6 +115,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
                     width: 0.5,
                 },
             },
+            ...markerLines,
         ],
         showlegend: false,
         hovermode: 'closest',

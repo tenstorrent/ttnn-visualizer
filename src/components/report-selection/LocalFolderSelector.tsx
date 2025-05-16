@@ -6,15 +6,31 @@ import { FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
-import 'styles/components/FolderPicker.scss';
+import 'styles/components/OldFolderPicker.scss';
 import { useQueryClient } from 'react-query';
-import { useSetAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
-import { activePerformanceTraceAtom, activeReportAtom, reportLocationAtom, selectedDeviceAtom } from '../../store/app';
+import {
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
+    reportLocationAtom,
+    selectedDeviceAtom,
+} from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification from '../../functions/createToastNotification';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
+import {
+    PERFORMANCE_FOLDER_QUERY_KEY,
+    PROFILER_FOLDER_QUERY_KEY,
+    deletePerformance,
+    deleteProfiler,
+    updateTabSession,
+    usePerfFolderList,
+    useReportFolderList,
+    useSession,
+} from '../../hooks/useAPI';
+import LocalFolderPicker from './LocalFolderPicker';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -59,8 +75,8 @@ const LocalFolderOptions: FC = () => {
     const queryClient = useQueryClient();
     const setReportLocation = useSetAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
-    const setActiveReport = useSetAtom(activeReportAtom);
-    const setActivePerformanceTrace = useSetAtom(activePerformanceTraceAtom);
+    const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
+    const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
 
     const {
         uploadLocalFolder,
@@ -69,19 +85,16 @@ const LocalFolderOptions: FC = () => {
         checkRequiredProfilerFiles,
         filterReportFiles,
     } = useLocalConnection();
+    const { data: perfFolderList } = usePerfFolderList();
+    const { data: reportFolderList } = useReportFolderList();
+    const { data: session } = useSession();
 
-    const [folderStatus, setFolderStatus] = useState<ConnectionStatus | undefined>();
+    const [profilerFolder, setProfilerFolder] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
     const [isUploadingPerformance, setIsPerformanceUploading] = useState(false);
-    const [localUploadLabel, setLocalUploadLabel] = useState('Choose directory...');
-    const [performanceFolderStatus, setPerformanceFolderStatus] = useState<ConnectionStatus | undefined>();
+    const [profilerUploadLabel, setProfilerUploadLabel] = useState('Choose directory...');
+    const [performanceFolder, setPerformanceFolder] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
-
-    /**
-     * This is a temporrary solution until we support Safari
-     */
-    const ua = navigator.userAgent.toLowerCase();
-    const isSafari = ua.includes('safari') && !ua.includes('chrome') && !ua.includes('android');
 
     const handleReportDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) {
@@ -92,14 +105,14 @@ const LocalFolderOptions: FC = () => {
         const files = filterReportFiles(unfilteredFiles);
 
         if (!checkRequiredReportFiles(files)) {
-            setFolderStatus(invalidReportStatus);
+            setProfilerFolder(invalidReportStatus);
             return;
         }
 
         let connectionStatus = connectionOkStatus;
 
         setIsUploadingReport(true);
-        setLocalUploadLabel(`${files.length} files selected.`);
+        setProfilerUploadLabel(`${files.length} files selected.`);
 
         const response = await uploadLocalFolder(files);
 
@@ -110,16 +123,16 @@ const LocalFolderOptions: FC = () => {
         } else {
             const fileName = getReportName(files);
 
-            setLocalUploadLabel(`${files.length} files uploaded`);
+            setProfilerUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
             setSelectedDevice(DEFAULT_DEVICE_ID);
-            setActiveReport(fileName);
-            createToastNotification('Active report', fileName);
+            setActiveProfilerReport(fileName);
+            createToastNotification('Active memory report', fileName);
         }
 
         queryClient.clear();
         setIsUploadingReport(false);
-        setFolderStatus(connectionStatus);
+        setProfilerFolder(connectionStatus);
     };
 
     const handlePerformanceDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -131,7 +144,7 @@ const LocalFolderOptions: FC = () => {
         const files = filterReportFiles(unfilteredFiles);
 
         if (!checkRequiredProfilerFiles(files)) {
-            setPerformanceFolderStatus(invalidProfilerStatus);
+            setPerformanceFolder(invalidProfilerStatus);
             return;
         }
 
@@ -150,131 +163,171 @@ const LocalFolderOptions: FC = () => {
             const fileName = getReportName(files);
             setPerformanceDataUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
-            setActivePerformanceTrace(fileName);
-            createToastNotification('Active performance trace', fileName);
+            setActivePerformanceReport(fileName);
+            createToastNotification('Active performance report', fileName);
         }
 
         queryClient.clear();
         setIsPerformanceUploading(false);
-        setPerformanceFolderStatus(connectionStatus);
+        setPerformanceFolder(connectionStatus);
     };
 
     useEffect(() => {
         if (isUploadingReport) {
-            setFolderStatus({
+            setProfilerFolder({
                 status: ConnectionTestStates.PROGRESS,
                 message: 'Files uploading...',
             });
         }
 
         if (isUploadingPerformance) {
-            setPerformanceFolderStatus({
+            setPerformanceFolder({
                 status: ConnectionTestStates.PROGRESS,
                 message: 'Files uploading...',
             });
         }
     }, [isUploadingReport, isUploadingPerformance]);
 
+    const handleSelectProfiler = async (item: string) => {
+        await updateTabSession({ ...session, active_report: { profiler_name: item } });
+
+        createToastNotification('Active memory report', item);
+        setActiveProfilerReport(item);
+    };
+
+    const handleDeleteProfiler = async (folder: string) => {
+        await deleteProfiler(folder);
+        await queryClient.invalidateQueries([PROFILER_FOLDER_QUERY_KEY]);
+
+        createToastNotification(`Memory report deleted`, folder);
+
+        if (activeProfilerReport === folder) {
+            setActiveProfilerReport(null);
+            setProfilerUploadLabel('Choose directory...');
+            setProfilerFolder(undefined);
+        }
+    };
+
+    const handleSelectPerformance = async (item: string) => {
+        await updateTabSession({ ...session, active_report: { performance_name: item } });
+
+        createToastNotification('Active performance report', item);
+        setActivePerformanceReport(item);
+    };
+
+    const handleDeletePerformance = async (folder: string) => {
+        await deletePerformance(folder);
+        await queryClient.invalidateQueries([PERFORMANCE_FOLDER_QUERY_KEY]);
+
+        createToastNotification(`Performance report deleted`, folder);
+
+        if (activePerformanceReport === folder) {
+            setActivePerformanceReport(null);
+            setPerformanceDataUploadLabel('Choose directory...');
+            setPerformanceFolder(undefined);
+        }
+    };
+
     return (
-        <>
-            {isSafari && (
-                <>
-                    <h3>
-                        <Icon
-                            icon={IconNames.WARNING_SIGN}
-                            size={20}
-                            intent={Intent.WARNING}
-                        />{' '}
-                        This functionality is not supported in safari browser
-                    </h3>
-                    <p>Please use Chrome or Firefox to upload a local report </p>
-                </>
-            )}
+        <div>
+            <FormGroup
+                className='form-group'
+                label={<h3 className='label'>Memory report</h3>}
+                subLabel='Select a memory report'
+            >
+                <LocalFolderPicker
+                    items={reportFolderList}
+                    value={reportFolderList?.includes(activeProfilerReport) ? activeProfilerReport : null}
+                    handleSelect={handleSelectProfiler}
+                    handleDelete={handleDeleteProfiler}
+                />
+            </FormGroup>
 
-            <div>
-                <FormGroup
-                    label={<h3>Report folder</h3>}
-                    subLabel='Select a local directory containing a report'
-                >
-                    <div className='buttons-container'>
-                        <label
-                            className='bp5-file-input'
-                            htmlFor='local-upload'
-                        >
-                            <input
-                                id='local-upload'
-                                type='file'
-                                multiple
-                                /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
-                                // eslint-disable-next-line react/no-unknown-property
-                                directory=''
-                                webkitdirectory=''
-                                disabled={isSafari}
-                                onChange={handleReportDirectoryOpen}
+            <FormGroup subLabel='Upload a local memory report'>
+                <div className='buttons-container'>
+                    <label
+                        className='bp5-file-input'
+                        htmlFor='local-upload'
+                    >
+                        <input
+                            id='local-upload'
+                            type='file'
+                            multiple
+                            /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
+                            // eslint-disable-next-line react/no-unknown-property
+                            directory=''
+                            webkitdirectory=''
+                            onChange={handleReportDirectoryOpen}
+                        />
+                        <span className='bp5-file-upload-input'>{profilerUploadLabel}</span>
+                    </label>
+
+                    <FileStatusOverlay />
+
+                    {profilerFolder && !isUploadingReport && (
+                        <div className={`verify-connection-item status-${ConnectionTestStates[profilerFolder.status]}`}>
+                            <Icon
+                                className='connection-status-icon'
+                                icon={ICON_MAP[profilerFolder.status]}
+                                size={20}
+                                intent={INTENT_MAP[profilerFolder.status]}
                             />
-                            <span className='bp5-file-upload-input'>{localUploadLabel}</span>
-                        </label>
 
-                        <FileStatusOverlay />
+                            <span className='connection-status-text'>{profilerFolder.message}</span>
+                        </div>
+                    )}
+                </div>
+            </FormGroup>
 
-                        {folderStatus && !isUploadingReport && (
-                            <div
-                                className={`verify-connection-item status-${ConnectionTestStates[folderStatus.status]}`}
-                            >
-                                <Icon
-                                    className='connection-status-icon'
-                                    icon={ICON_MAP[folderStatus.status]}
-                                    size={20}
-                                    intent={INTENT_MAP[folderStatus.status]}
-                                />
+            <FormGroup
+                className='form-group'
+                label={<h3 className='label'>Performance report</h3>}
+                subLabel='Select a performance report'
+            >
+                <LocalFolderPicker
+                    items={perfFolderList}
+                    value={perfFolderList?.includes(activePerformanceReport) ? activePerformanceReport : null}
+                    handleSelect={handleSelectPerformance}
+                    handleDelete={handleDeletePerformance}
+                />
+            </FormGroup>
 
-                                <span className='connection-status-text'>{folderStatus.message}</span>
-                            </div>
-                        )}
-                    </div>
-                </FormGroup>
+            <FormGroup subLabel='Upload a local performance report'>
+                <div className='buttons-container'>
+                    <label
+                        className='bp5-file-input'
+                        htmlFor='local-performance-upload'
+                    >
+                        <input
+                            id='local-performance-upload'
+                            type='file'
+                            multiple
+                            /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
+                            // eslint-disable-next-line react/no-unknown-property
+                            directory=''
+                            webkitdirectory=''
+                            onChange={handlePerformanceDirectoryOpen}
+                        />
+                        <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
+                    </label>
 
-                <FormGroup
-                    label={<h3>Performance data folder</h3>}
-                    subLabel='Select a local directory containing performance data (optional)'
-                >
-                    <div className='buttons-container'>
-                        <label
-                            className='bp5-file-input'
-                            htmlFor='local-performance-upload'
+                    {performanceFolder && !isUploadingPerformance && (
+                        <div
+                            className={`verify-connection-item status-${ConnectionTestStates[performanceFolder.status]}`}
                         >
-                            <input
-                                id='local-performance-upload'
-                                type='file'
-                                multiple
-                                /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
-                                // eslint-disable-next-line react/no-unknown-property
-                                directory=''
-                                webkitdirectory=''
-                                disabled={isSafari}
-                                onChange={handlePerformanceDirectoryOpen}
+                            <Icon
+                                className='connection-status-icon'
+                                icon={ICON_MAP[performanceFolder.status]}
+                                size={20}
+                                intent={INTENT_MAP[performanceFolder.status]}
                             />
-                            <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
-                        </label>
 
-                        {performanceFolderStatus && !isUploadingPerformance && (
-                            <div
-                                className={`verify-connection-item status-${ConnectionTestStates[performanceFolderStatus.status]}`}
-                            >
-                                <Icon
-                                    className='connection-status-icon'
-                                    icon={ICON_MAP[performanceFolderStatus.status]}
-                                    size={20}
-                                    intent={INTENT_MAP[performanceFolderStatus.status]}
-                                />
-
-                                <span className='connection-status-text'>{performanceFolderStatus.message}</span>
-                            </div>
-                        )}
-                    </div>
-                </FormGroup>
-            </div>
-        </>
+                            <span className='connection-status-text'>{performanceFolder.message}</span>
+                        </div>
+                    )}
+                </div>
+            </FormGroup>
+        </div>
     );
 };
 

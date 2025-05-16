@@ -9,18 +9,19 @@ import time
 from http import HTTPStatus
 from pathlib import Path
 from typing import List
+import shutil
 
-import yaml
-from flask import Blueprint, Response, jsonify
+import zstd
+from flask import Blueprint
 from flask import request, current_app
 
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries, OpsPerformanceReportQueries
 from ttnn_visualizer.decorators import with_session
-from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.file_uploads import (
-    extract_report_name,
+    extract_profiler_name,
     extract_npe_name,
     save_uploaded_files,
     validate_files,
@@ -40,23 +41,24 @@ from ttnn_visualizer.serializers import (
     serialize_buffer_pages,
     serialize_operation_buffers,
     serialize_operations_buffers,
-    serialize_devices,
+    serialize_devices, serialize_buffer,
 )
 from ttnn_visualizer.sessions import (
     update_instance,
 )
 from ttnn_visualizer.sftp_operations import (
-    sync_remote_folders,
+    sync_remote_profiler_folders,
     read_remote_file,
     check_remote_path_for_reports,
-    get_remote_report_folders,
-    check_remote_path_exists,
     get_remote_profiler_folders,
-    sync_remote_profiler_folders,
+    check_remote_path_exists,
+    get_remote_performance_folders,
+    sync_remote_performance_folders,
     get_cluster_desc,
 )
 from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.utils import (
+    get_cluster_descriptor_path,
     read_last_synced_file,
     timer,
 )
@@ -168,12 +170,7 @@ def operation_detail(operation_id, session):
         )
 
 
-@api.route(
-    "operation-history",
-    methods=[
-        "GET",
-    ],
-)
+@api.route("operation-history", methods=["GET"])
 @with_session
 @timer
 def operation_history(session: Instance):
@@ -192,7 +189,7 @@ def operation_history(session: Instance):
         return json.loads(operation_history)
     else:
         operation_history_file = (
-            Path(str(session.report_path)).parent / operation_history_filename
+            Path(str(session.profiler_path)).parent / operation_history_filename
         )
         if not operation_history_file.exists():
             return []
@@ -205,17 +202,17 @@ def operation_history(session: Instance):
 @timer
 def get_config(session: Instance):
     if session.remote_connection and session.remote_connection.useRemoteQuerying:
-        if not session.remote_folder:
+        if not session.remote_profiler_folder:
             return {}
         config = read_remote_file(
             remote_connection=session.remote_connection,
-            remote_path=Path(session.remote_folder.remotePath, "config.json"),
+            remote_path=Path(session.remote_profiler_folder.remotePath, "config.json"),
         )
         if not config:
             return {}
         return config
     else:
-        config_file = Path(str(session.report_path)).parent.joinpath("config.json")
+        config_file = Path(str(session.profiler_path)).parent.joinpath("config.json")
         if not config_file.exists():
             return {}
         with open(config_file, "r") as file:
@@ -306,6 +303,26 @@ def tensor_detail(tensor_id, session: Instance):
         return dataclasses.asdict(tensors[0])
 
 
+@api.route("/buffers", methods=["GET"])
+@with_session
+def get_all_buffers(session: Instance):
+    buffer_type = request.args.get("buffer_type", "")
+    device_id = request.args.get("device_id", None)
+    if buffer_type and str.isdigit(buffer_type):
+        buffer_type = int(buffer_type)
+    else:
+        buffer_type = None
+
+    with DatabaseQueries(session) as db:
+        buffers = list(
+            db.query_buffers(
+                filters={"buffer_type": buffer_type, "device_id": device_id}
+            )
+        )
+        serialized = [serialize_buffer(b) for b in buffers]
+        return jsonify(serialized)
+
+
 @api.route("/operation-buffers", methods=["GET"])
 @with_session
 def get_operations_buffers(session: Instance):
@@ -355,20 +372,124 @@ def get_operation_buffers(operation_id, session: Instance):
         return serialize_operation_buffers(operation, buffers)
 
 
-@api.route("/profiler/device-log", methods=["GET"])
+@api.route("/profiler", methods=["GET"])
 @with_session
-def get_profiler_data(session: Instance):
-    if not session.profiler_path:
+def get_profiler_data_list(session: Instance):
+    # Doesn't handle remote at the moment
+    # is_remote = True if session.remote_connection else False
+    # config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
+    config_key = 'LOCAL_DATA_DIRECTORY'
+    data_directory = Path(current_app.config[config_key])
+
+    # if is_remote:
+    #     connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
+    #     path = data_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
+    # else:
+    path = data_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
+
+    if not path.exists():
+        path.mkdir(parents=True, exist_ok=True)
+
+    directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
+
+    valid_dirs = []
+
+    for dir_name in directory_names:
+        dir_path = Path(path) / dir_name
+        files = list(dir_path.glob("**/*"))
+
+        # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
+        if not any(file.name == "db.sqlite" for file in files):
+            continue
+        if not any(file.name == "config.json" for file in files):
+            continue
+
+        valid_dirs.append(dir_name)
+
+    return jsonify(valid_dirs)
+
+
+@api.route("/profiler/<profiler_name>", methods=["DELETE"])
+@with_session
+def delete_profiler_report(profiler_name, session: Instance):
+    is_remote = bool(session.remote_connection)
+    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
+    data_directory = Path(current_app.config[config_key])
+
+    if not profiler_name:
+        return Response(status=HTTPStatus.BAD_REQUEST, response="Report name is required.")
+
+    if is_remote:
+        connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
+        path = data_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
+    else:
+        path = data_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / profiler_name
+
+    if session.active_report and session.active_report.profiler_name == profiler_name:
+        instance_id = request.args.get("instanceId")
+        update_instance(instance_id=instance_id,profiler_name="")
+
+    if path.exists() and path.is_dir():
+        shutil.rmtree(path)
+    else:
+        return Response(status=HTTPStatus.NOT_FOUND, response=f"Report does not exist: {path}")
+
+    return Response(status=HTTPStatus.NO_CONTENT, response=f"Report deleted successfully: {path}")
+
+
+
+@api.route("/performance", methods=["GET"])
+@with_session
+def get_performance_data_list(session: Instance):
+    is_remote = True if session.remote_connection else False
+    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
+    config_key = 'LOCAL_DATA_DIRECTORY'
+    data_directory = Path(current_app.config[config_key])
+
+    if is_remote:
+        connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
+        path = data_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+    else:
+        path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+
+    if not path.exists():
+        path.mkdir(parents=True, exist_ok=True)
+
+    directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
+
+    valid_dirs = []
+
+    for dir_name in directory_names:
+        dir_path = Path(path) / dir_name
+        files = list(dir_path.glob("**/*"))
+
+        # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
+        if not any(file.name == "profile_log_device.csv" for file in files):
+            continue
+        if not any(file.name == "tracy_profile_log_host.tracy" for file in files):
+            continue
+        if not any(file.name.startswith("ops_perf_results") for file in files):
+            continue
+
+        valid_dirs.append(dir_name)
+
+    return jsonify(valid_dirs)
+
+
+@api.route("/performance/device-log", methods=["GET"])
+@with_session
+def get_performance_data(session: Instance):
+    if not session.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     with DeviceLogProfilerQueries(session) as csv:
         result = csv.get_all_entries(as_dict=True, limit=100)
         return jsonify(result)
 
 
-@api.route("/profiler/perf-results", methods=["GET"])
+@api.route("/performance/perf-results", methods=["GET"])
 @with_session
 def get_profiler_performance_data(session: Instance):
-    if not session.profiler_path:
+    if not session.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     with OpsPerformanceQueries(session) as csv:
         # result = csv.query_by_op_code(op_code="(torch) contiguous", as_dict=True)
@@ -376,10 +497,38 @@ def get_profiler_performance_data(session: Instance):
         return jsonify(result)
 
 
-@api.route("/profiler/perf-results/raw", methods=["GET"])
+@api.route("/performance/<performance_name>", methods=["DELETE"])
 @with_session
-def get_profiler_perf_results_data_raw(session: Instance):
-    if not session.profiler_path:
+def delete_performance_report(performance_name, session: Instance):
+    is_remote = bool(session.remote_connection)
+    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
+    data_directory = Path(current_app.config[config_key])
+
+    if not performance_name:
+        return Response(status=HTTPStatus.BAD_REQUEST, response="Report name is required.")
+
+    if is_remote:
+        connection = RemoteConnection.model_validate(session.remote_connection, strict=False)
+        path = data_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+    else:
+        path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"] / performance_name
+
+    if session.active_report and session.active_report.performance_name == performance_name:
+        instance_id = request.args.get("instanceId")
+        update_instance(instance_id=instance_id,performance_name="")
+
+    if path.exists() and path.is_dir():
+        shutil.rmtree(path)
+    else:
+        return Response(status=HTTPStatus.NOT_FOUND, response=f"Report does not exist: {path}")
+
+    return Response(status=HTTPStatus.NO_CONTENT, response=f"Report deleted successfully: {path}")
+
+
+@api.route("/performance/perf-results/raw", methods=["GET"])
+@with_session
+def get_performance_results_data_raw(session: Instance):
+    if not session.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     content = OpsPerformanceQueries.get_raw_csv(session)
     return Response(
@@ -389,11 +538,18 @@ def get_profiler_perf_results_data_raw(session: Instance):
     )
 
 
-@api.route("/profiler/perf-results/report", methods=["GET"])
+@api.route("/performance/perf-results/report", methods=["GET"])
 @with_session
-def get_profiler_perf_results_report(session: Instance):
-    if not session.profiler_path:
+def get_performance_results_report(session: Instance):
+    if not session.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
+
+    name = request.args.get("name", None)
+    performance_path = Path(session.performance_path)
+    if name:
+        performance_path = performance_path.parent / name
+        session.performance_path = str(performance_path)
+        logger.info(f"************ Profiler path set to {session.performance_path}")
 
     try:
         report = OpsPerformanceReportQueries.generate_report(session)
@@ -403,10 +559,10 @@ def get_profiler_perf_results_report(session: Instance):
     return jsonify(report), 200
 
 
-@api.route("/profiler/device-log/raw", methods=["GET"])
+@api.route("/performance/device-log/raw", methods=["GET"])
 @with_session
-def get_profiler_data_raw(session: Instance):
-    if not session.profiler_path:
+def get_performance_data_raw(session: Instance):
+    if not session.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     content = DeviceLogProfilerQueries.get_raw_csv(session)
     return Response(
@@ -416,10 +572,10 @@ def get_profiler_data_raw(session: Instance):
     )
 
 
-@api.route("/profiler/device-log/zone/<zone>", methods=["GET"])
+@api.route("/performance/device-log/zone/<zone>", methods=["GET"])
 @with_session
 def get_zone_statistics(zone, session: Instance):
-    if not session.profiler_path:
+    if not session.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
     with DeviceLogProfilerQueries(session) as csv:
         result = csv.query_zone_statistics(zone_name=zone, as_dict=True)
@@ -434,72 +590,76 @@ def get_devices(session: Instance):
         return serialize_devices(devices)
 
 
-@api.route("/local/upload/report", methods=["POST"])
-def create_report_files():
+@api.route("/local/upload/profiler", methods=["POST"])
+def create_profiler_files():
     files = request.files.getlist("files")
-    report_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
+    folder_name = request.form.get("folderName") # Optional folder name
+    profiler_directory = current_app.config["LOCAL_DATA_DIRECTORY"] / current_app.config["PROFILER_DIRECTORY_NAME"]
 
-    if not validate_files(files, {"db.sqlite", "config.json"}):
+    if not validate_files(files, {"db.sqlite", "config.json"}, folder_name=folder_name):
         return StatusMessage(
             status=ConnectionTestStates.FAILED,
             message="Invalid project directory.",
         ).model_dump()
 
-    report_name = extract_report_name(files)
-    logger.info(f"Writing report files to {report_directory}/{report_name}")
+    if not profiler_directory.exists():
+        profiler_directory.mkdir(parents=True, exist_ok=True)
 
-    save_uploaded_files(files, report_directory, report_name)
+    if folder_name:
+        profiler_name = folder_name
+    else:
+        profiler_name = extract_profiler_name(files)
+
+    logger.info(f"Writing report files to {profiler_directory}/{profiler_name}")
+
+    save_uploaded_files(files, profiler_directory, folder_name)
 
     instance_id = request.args.get("instanceId")
-    update_instance(instance_id=instance_id, report_name=report_name, clear_remote=True)
+    update_instance(instance_id=instance_id, profiler_name=profiler_name, clear_remote=True)
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
     ).model_dump()
 
-@api.route("/local/upload/profile", methods=["POST"])
+
+@api.route("/local/upload/performance", methods=["POST"])
 def create_profile_files():
     files = request.files.getlist("files")
-    report_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
-    instance_id = request.args.get("instanceId")
+    folder_name = request.form.get("folderName") # Optional folder name
+    data_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
 
     if not validate_files(
         files,
         {"profile_log_device.csv", "tracy_profile_log_host.tracy"},
         pattern="ops_perf_results",
+        folder_name=folder_name,
     ):
         return StatusMessage(
             status=ConnectionTestStates.FAILED,
             message="Invalid project directory.",
         ).model_dump()
 
-    logger.info(f"Writing profile files to {report_directory} / 'profiles'")
+    target_directory = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
 
-    # Construct the base directory with report_name first
-    target_directory = report_directory / "profiles"
-    target_directory.mkdir(parents=True, exist_ok=True)
+    if not target_directory.exists():
+        target_directory.mkdir(parents=True, exist_ok=True)
 
-    if files:
-        first_file_path = Path(files[0].filename)
-        profiler_folder_name = first_file_path.parts[0]
+    if folder_name:
+        performance_name = folder_name
     else:
-        profiler_folder_name = None
+        performance_name = extract_profiler_name(files)
 
-    updated_files = []
-    for file in files:
-        original_path = Path(file.filename)
-        updated_path = target_directory / original_path
-        updated_path.parent.mkdir(parents=True, exist_ok=True)
-        file.filename = str(updated_path)
-        updated_files.append(file)
+    logger.info(f"Writing performance files to {target_directory}/{performance_name}")
 
     save_uploaded_files(
-        updated_files,
-        str(report_directory),
+        files,
+        target_directory,
+        folder_name
     )
 
+    instance_id = request.args.get("instanceId")
     update_instance(
-        instance_id=instance_id, profile_name=profiler_folder_name, clear_remote=True
+        instance_id=instance_id, performance_name=performance_name, clear_remote=True
     )
 
     return StatusMessage(
@@ -510,20 +670,20 @@ def create_profile_files():
 @api.route("/local/upload/npe", methods=["POST"])
 def create_npe_files():
     files = request.files.getlist("files")
-    report_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
+    data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
     for file in files:
-        if not file.filename.endswith(".json"):
+        if not file.filename.endswith(".json") and not file.filename.endswith('.npeviz.zst'):
             return StatusMessage(
                 status=ConnectionTestStates.FAILED,
-                message="NPE requires a valid JSON file",
+                message="NPE requires a valid .json or .npeviz.zst file",
             ).model_dump()
 
     npe_name = extract_npe_name(files)
-    target_directory = report_directory / "npe"
+    target_directory = data_directory / current_app.config["NPE_DIRECTORY_NAME"]
     target_directory.mkdir(parents=True, exist_ok=True)
 
-    save_uploaded_files(files, target_directory, npe_name)
+    save_uploaded_files(files, target_directory)
 
     instance_id = request.args.get("instanceId")
     update_instance(instance_id=instance_id, npe_name=npe_name, clear_remote=True)
@@ -532,22 +692,19 @@ def create_npe_files():
         status=ConnectionTestStates.OK, message="Success"
     ).model_dump()
 
-@api.route("/remote/folder", methods=["POST"])
-def get_remote_folders():
+
+@api.route("/remote/profiler", methods=["POST"])
+def get_remote_folders_profiler():
     connection = RemoteConnection.model_validate(request.json, strict=False)
     try:
-        remote_folders: List[RemoteReportFolder] = get_remote_report_folders(
+        remote_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
             RemoteConnection.model_validate(connection, strict=False)
         )
 
         for rf in remote_folders:
             directory_name = Path(rf.remotePath).name
             remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-            local_path = (
-                Path(remote_data_directory)
-                .joinpath(connection.host)
-                .joinpath(directory_name)
-            )
+            local_path = remote_data_directory / current_app.config["PROFILER_DIRECTORY_NAME"] / connection.host / directory_name
             logger.info(f"Checking last synced for {directory_name}")
             rf.lastSynced = read_last_synced_file(str(local_path))
             if not rf.lastSynced:
@@ -558,33 +715,28 @@ def get_remote_folders():
         return Response(status=e.http_status, response=e.message)
 
 
-@api.route("/remote/profiles", methods=["POST"])
-def get_remote_profile_folders():
+@api.route("/remote/performance", methods=["POST"])
+def get_remote_folders_performance():
     request_body = request.get_json()
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
     )
 
     try:
-        remote_profile_folders: List[RemoteReportFolder] = get_remote_profiler_folders(
+        remote_performance_folders: List[RemoteReportFolder] = get_remote_performance_folders(
             RemoteConnection.model_validate(connection, strict=False)
         )
 
-        for rf in remote_profile_folders:
-            profile_name = Path(rf.remotePath).name
+        for rf in remote_performance_folders:
+            performance_name = Path(rf.remotePath).name
             remote_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-            local_path = (
-                Path(remote_data_directory)
-                .joinpath(connection.host)
-                .joinpath("profiler")
-                .joinpath(profile_name)
-            )
-            logger.info(f"Checking last synced for {profile_name}")
+            local_path = remote_data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"] / connection.host / performance_name
+            logger.info(f"Checking last synced for {performance_name}")
             rf.lastSynced = read_last_synced_file(str(local_path))
             if not rf.lastSynced:
-                logger.info(f"{profile_name} not yet synced")
+                logger.info(f"{performance_name} not yet synced")
 
-        return [r.model_dump() for r in remote_profile_folders]
+        return [r.model_dump() for r in remote_performance_folders]
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
 
@@ -593,27 +745,39 @@ from flask import Response, jsonify
 import yaml
 
 
-@api.route("/cluster_desc", methods=["GET"])
+@api.route("/cluster-descriptor", methods=["GET"])
 @with_session
-def get_cluster_description_file(session: Instance):
-    if not session.remote_connection:
-        return jsonify({"error": "Remote connection not found"}), 404
+def get_cluster_descriptor(session: Instance):
+    if session.remote_connection:
+        try:
+            cluster_desc_file = get_cluster_desc(session.remote_connection)
+            if not cluster_desc_file:
+                return jsonify({"error": "cluster_descriptor.yaml not found"}), 404
+            yaml_data = yaml.safe_load(cluster_desc_file.decode("utf-8"))
+            return jsonify(yaml_data), 200
 
-    try:
-        cluster_desc_file = get_cluster_desc(session.remote_connection)
-        if not cluster_desc_file:
+        except yaml.YAMLError as e:
+            return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
+
+        except RemoteConnectionException as e:
+            return jsonify({"error": e.message}), e.http_status
+
+        except Exception as e:
+            return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+    else:
+        local_path = get_cluster_descriptor_path(session)
+
+        if not local_path:
             return jsonify({"error": "cluster_descriptor.yaml not found"}), 404
-        yaml_data = yaml.safe_load(cluster_desc_file.decode("utf-8"))
-        return jsonify(yaml_data), 200
 
-    except yaml.YAMLError as e:
-        return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
+        try:
+            with open(local_path) as cluster_desc_file:
+                yaml_data = yaml.safe_load(cluster_desc_file)
+                return jsonify(yaml_data), 200
+        except yaml.YAMLError as e:
+            return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
 
-    except RemoteConnectionException as e:
-        return jsonify({"error": e.message}), e.http_status
-
-    except Exception as e:
-        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+    return jsonify({"error": "Cluster descriptor not found"}), 404
 
 
 @api.route("/remote/test", methods=["POST"])
@@ -640,8 +804,8 @@ def test_remote_folder():
     # Test Directory Configuration
     if not has_failures():
         try:
-            check_remote_path_exists(connection, "reportPath")
-            add_status(ConnectionTestStates.OK.value, "Report folder path exists")
+            check_remote_path_exists(connection, "profilerPath")
+            add_status(ConnectionTestStates.OK.value, "Memory folder path exists")
         except RemoteConnectionException as e:
             add_status(ConnectionTestStates.FAILED.value, e.message)
 
@@ -703,7 +867,7 @@ def sync_remote_folder():
     if profile:
         profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
         try:
-            sync_remote_profiler_folders(
+            sync_remote_performance_folders(
                 connection,
                 remote_dir,
                 profile=profile_folder,
@@ -719,19 +883,19 @@ def sync_remote_folder():
             return Response(status=e.http_status, response=e.message)
 
     try:
-        remote_folder = RemoteReportFolder.model_validate(folder, strict=False)
+        remote_profiler_folder = RemoteReportFolder.model_validate(folder, strict=False)
 
-        sync_remote_folders(
+        sync_remote_profiler_folders(
             connection,
-            remote_folder.remotePath,
+            remote_profiler_folder.remotePath,
             remote_dir,
             exclude_patterns=[r"/tensors(/|$)"],
             sid=instance_id,
         )
 
-        remote_folder.lastSynced = int(time.time())
+        remote_profiler_folder.lastSynced = int(time.time())
 
-        return remote_folder.model_dump()
+        return remote_profiler_folder.model_dump()
 
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
@@ -774,15 +938,15 @@ def use_remote_folder():
 
     connection = RemoteConnection.model_validate(connection, strict=False)
     folder = RemoteReportFolder.model_validate(folder, strict=False)
-    profile_name = None
-    remote_profile_folder = None
+    performance_name = None
+    remote_performance_folder = None
     if profile:
-        remote_profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
-        profile_name = remote_profile_folder.testName
-    report_data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-    report_folder = Path(folder.remotePath).name
+        remote_performance_folder = RemoteReportFolder.model_validate(profile, strict=False)
+        performance_name = remote_performance_folder.testName
+    data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
+    profiler_name = Path(folder.remotePath).name
 
-    connection_directory = Path(report_data_directory, connection.host, report_folder)
+    connection_directory = Path(data_directory, connection.host, current_app.config["PROFILER_DIRECTORY_NAME"], profiler_name)
 
     if not connection.useRemoteQuerying and not connection_directory.exists():
         return Response(
@@ -790,18 +954,18 @@ def use_remote_folder():
             response=f"{connection_directory} does not exist.",
         )
 
-    remote_path = f"{Path(report_data_directory).name}/{connection.host}/{connection_directory.name}"
+    remote_path = f"{Path(data_directory).name}/{connection.host}/{connection_directory.name}"
 
     instance_id = request.args.get("instanceId")
-    current_app.logger.info(f"Setting active report for {instance_id} - {remote_path}")
+    current_app.logger.info(f"Setting active reports for {instance_id} - {remote_path}")
 
     update_instance(
         instance_id=instance_id,
-        report_name=report_folder,
-        profile_name=profile_name,
+        profiler_name=profiler_name,
+        performance_name=performance_name,
         remote_connection=connection,
-        remote_folder=folder,
-        remote_profile_folder=remote_profile_folder,
+        remote_profiler_folder=folder,
+        remote_performance_folder=remote_performance_folder,
     )
 
     return Response(status=HTTPStatus.OK)
@@ -818,6 +982,36 @@ def get_instance(session: Instance):
     # Used to gate UI functions if no report is active
     return session.model_dump()
 
+
+@api.route("/session", methods=["PUT"])
+def update_current_instance():
+    try:
+        update_data = request.get_json()
+
+        if not update_data:
+            return Response(status=HTTPStatus.BAD_REQUEST, response="No data provided.")
+
+        update_instance(
+            instance_id=update_data.get("instance_id"),
+            profiler_name=update_data["active_report"].get("profiler_name"),
+            performance_name=update_data["active_report"].get("performance_name"),
+            npe_name=update_data["active_report"].get("npe_name"),
+            # Doesn't handle remote at the moment
+            remote_connection=None,
+            remote_profiler_folder=None,
+            remote_performance_folder=None,
+        )
+
+        return Response(status=HTTPStatus.OK)
+    except Exception as e:
+        logger.error(f"Error updating session: {str(e)}")
+
+        return Response(
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            response="An error occurred while updating the session.",
+        )
+
+
 @api.route("/npe", methods=["GET"])
 @with_session
 @timer
@@ -826,10 +1020,20 @@ def get_npe_data(session: Instance):
         logger.error("NPE path is not set in the session.")
         return Response(status=HTTPStatus.NOT_FOUND)
 
-    npe_file = Path(f"{session.npe_path}/{session.active_report.npe_name}.json")
-    if not npe_file.exists():
-        logger.error(f"NPE file does not exist: {npe_file}")
+    compressed_path = Path(f"{session.npe_path}/{session.active_report.npe_name}.npeviz.zst")
+    uncompressed_path = Path(f"{session.npe_path}/{session.active_report.npe_name}.json")
+
+    if not compressed_path.exists() and not uncompressed_path.exists():
+        logger.error(f"NPE file does not exist: {compressed_path} / {uncompressed_path}")
         return Response(status=HTTPStatus.NOT_FOUND)
-    with open(npe_file, "r") as file:
-        npe_data = json.load(file)
+
+    if compressed_path.exists():
+       with open(compressed_path, "rb") as file:
+            compressed_data = file.read()
+            uncompressed_data = zstd.uncompress(compressed_data)
+            npe_data = json.loads(uncompressed_data)
+    else:
+        with open(uncompressed_path, "r") as file:
+            npe_data = json.load(file)
+
     return jsonify(npe_data)

@@ -131,10 +131,6 @@ $tt-colours: (
     ),
 );
 
-// Contextual colours
-$tt-warning: $tt-yellow;
-$tt-success: $green4;
-
 // Product colours
 $tt-reports: $tt-purple;
 $tt-reports-active: $tt-purple-tint-1;
@@ -150,13 +146,14 @@ $tt-performance: $tt-green;
 $tt-performance-active: $tt-green-tint-1;
 $tt-npe: $tt-blue;
 $tt-npe-active: $tt-blue-tint-2;
+$tt-cluster: $tt-slate-tint-2;
+$tt-cluster-active: $tt-white;
 
-// ?
+// Highlight colour for when a tensix core is selected
 $tt-tensix-active: #fffc00;
-$tt-ok: #32a467; // TODO: Look into these
-$tt-not-ok: #f32b2b; // As above
+
+// Highlight colour for when a tensor is focussed
 $tt-bg-highlight: $tt-slate-accent;
-$tt-orange: #ff8c00;
 
 // core colors
 $c-dram: #7abdcc;

@@ -23,8 +23,12 @@
     "paths": {
         "styles/*": [ "./src/scss/*" ],
         "@blueprintjs": [ "./node_modules/@blueprintjs" ]
-    }
+    },
+    "allowSyntheticDefaultImports": true,
+    "types": [
+      "vitest/importMeta"
+    ],
   },
-  "include": ["vite.config.ts", "src", "package.json"],
+  "include": ["vite.config.ts", "src", "package.json", "tests"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

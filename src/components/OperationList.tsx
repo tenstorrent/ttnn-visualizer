@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Fragment, UIEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -14,13 +14,18 @@ import Collapsible from './Collapsible';
 import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ListView.scss';
-import { DeviceOperationMapping, useGetDeviceOperationListPerf, useOperationsList } from '../hooks/useAPI';
+import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
-import { expandedOperationsAtom, selectedOperationRangeAtom, shouldCollapseAllOperationsAtom } from '../store/app';
+import {
+    activePerformanceReportAtom,
+    expandedOperationsAtom,
+    selectedOperationRangeAtom,
+    shouldCollapseAllOperationsAtom,
+} from '../store/app';
 import { OperationDescription } from '../model/APIData';
 import ListItem from './ListItem';
 import { formatSize } from '../functions/math';
-import { getCoreColour, getOpToOpGapColour } from '../functions/perfFunctions';
+import OperationListPerfData from './OperationListPerfData';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -36,7 +41,6 @@ const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
-    const perfData = useGetDeviceOperationListPerf();
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const [filterQuery, setFilterQuery] = useState('');
@@ -48,6 +52,7 @@ const OperationList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
     const [expandedOperations, setExpandedOperations] = useAtom(expandedOperationsAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
     // TODO: Figure out an initial scroll position based on last used operation
     const virtualizer = useVirtualizer({
@@ -143,9 +148,7 @@ const OperationList = () => {
 
             setFilteredOperationsList(operations);
         }
-
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration, perfData, selectedOperationRange]);
+    }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration, selectedOperationRange]);
 
     useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;
@@ -330,74 +333,10 @@ const OperationList = () => {
                                                 <p className='monospace'>
                                                     Python execution time: {formatSize(operation.duration)} s
                                                 </p>
-                                                <div className='perf-data'>
-                                                    {perfData
-                                                        ?.filter(
-                                                            (perf: DeviceOperationMapping) => perf.id === operation.id,
-                                                        )
-                                                        .map(
-                                                            (perf) =>
-                                                                perf.perfData && (
-                                                                    <Fragment key={perf.id + perf.operationName}>
-                                                                        <strong>{perf.perfData?.raw_op_code}</strong>
-                                                                        <div>
-                                                                            <span
-                                                                                className={classNames(
-                                                                                    'monospace',
-                                                                                    getCoreColour(perf.perfData?.cores),
-                                                                                )}
-                                                                            >
-                                                                                {parseInt(perf.perfData?.cores, 10)}{' '}
-                                                                                core
-                                                                                {parseInt(perf.perfData?.cores, 10) >
-                                                                                    1 && 's'}
-                                                                            </span>
-                                                                            , execution time{' '}
-                                                                            <span className='monospace'>
-                                                                                {formatSize(
-                                                                                    parseFloat(
-                                                                                        perf.perfData?.device_time,
-                                                                                    ),
-                                                                                )}{' '}
-                                                                                µs
-                                                                            </span>{' '}
-                                                                            <span className='monospace'>
-                                                                                (
-                                                                                {formatSize(
-                                                                                    parseFloat(
-                                                                                        perf.perfData?.total_percent,
-                                                                                    ),
-                                                                                )}{' '}
-                                                                                %)
-                                                                            </span>
-                                                                            {perf.perfData?.op_to_op_gap && (
-                                                                                <>
-                                                                                    ,{' '}
-                                                                                    <span
-                                                                                        className={classNames(
-                                                                                            'monospace',
-                                                                                            getOpToOpGapColour(
-                                                                                                perf.perfData
-                                                                                                    .op_to_op_gap,
-                                                                                            ),
-                                                                                        )}
-                                                                                    >
-                                                                                        {formatSize(
-                                                                                            parseFloat(
-                                                                                                perf.perfData
-                                                                                                    .op_to_op_gap,
-                                                                                            ),
-                                                                                        )}{' '}
-                                                                                        µs
-                                                                                    </span>{' '}
-                                                                                    op-to-op gap.
-                                                                                </>
-                                                                            )}
-                                                                        </div>
-                                                                    </Fragment>
-                                                                ),
-                                                        )}
-                                                </div>
+
+                                                {activePerformanceReport && (
+                                                    <OperationListPerfData operation={operation} />
+                                                )}
 
                                                 {operation.arguments && (
                                                     <OperationArguments

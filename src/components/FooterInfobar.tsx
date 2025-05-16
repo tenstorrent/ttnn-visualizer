@@ -3,19 +3,19 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Button, Collapse, Icon, NumberRange, Tooltip } from '@blueprintjs/core';
+import { Button, Collapse, NumberRange, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
 import {
-    activePerformanceTraceAtom,
-    activeReportAtom,
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
     operationRangeAtom,
     performanceRangeAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
-import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
+import SyncStatus from './SyncStatus';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
@@ -27,13 +27,10 @@ function FooterInfobar() {
     const selectedRange = useAtomValue(selectedOperationRangeAtom);
     const operationRange = useAtomValue(operationRangeAtom);
     const performanceRange = useAtomValue(performanceRangeAtom);
-    const activeReport = useAtomValue(activeReportAtom);
-    const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const location = useLocation();
 
-    const useGetDeviceOperationListPerfResult = useGetDeviceOperationListPerf();
-
-    const isInSync = useGetDeviceOperationListPerfResult.length > 0;
     const isOperationDetails = location.pathname.includes(`${ROUTES.OPERATIONS}/`);
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
     const isNPE = location.pathname.includes(`${ROUTES.NPE}`);
@@ -56,62 +53,42 @@ function FooterInfobar() {
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
             <div className='current-data'>
                 <div className='active-reports'>
-                    {activeReport &&
-                        (activeReport.length > MAX_TITLE_LENGTH ? (
+                    {activeProfilerReport &&
+                        (activeProfilerReport.length > MAX_TITLE_LENGTH ? (
                             <Tooltip
-                                content={activeReport}
+                                content={activeProfilerReport}
                                 className={classNames('title', {
-                                    'is-lengthy': activeReport.length > MAX_TITLE_LENGTH,
+                                    'is-lengthy': activeProfilerReport.length > MAX_TITLE_LENGTH,
                                 })}
                             >
                                 <span>
-                                    <strong>Report:</strong> {activeReport}
+                                    <strong>Report:</strong> {activeProfilerReport}
                                 </span>
                             </Tooltip>
                         ) : (
                             <span>
-                                <strong>Report:</strong> {activeReport}
+                                <strong>Report:</strong> {activeProfilerReport}
                             </span>
                         ))}
 
-                    {activePerformanceTrace &&
-                        (activePerformanceTrace.length > MAX_TITLE_LENGTH ? (
+                    {activePerformanceReport &&
+                        (activePerformanceReport.length > MAX_TITLE_LENGTH ? (
                             <Tooltip
-                                content={activePerformanceTrace}
+                                content={activePerformanceReport}
                                 className={classNames('title', {
-                                    'is-lengthy': activePerformanceTrace.length > MAX_TITLE_LENGTH,
+                                    'is-lengthy': activePerformanceReport.length > MAX_TITLE_LENGTH,
                                 })}
                             >
                                 <span>
-                                    <strong>Performance:</strong> {activePerformanceTrace}
+                                    <strong>Performance:</strong> {activePerformanceReport}
                                 </span>
                             </Tooltip>
                         ) : (
                             <span>
-                                <strong>Performance:</strong> {activePerformanceTrace}
+                                <strong>Performance:</strong> {activePerformanceReport}
                             </span>
                         ))}
-                    {activeReport && activePerformanceTrace && (
-                        <span>
-                            {isInSync ? (
-                                <strong>
-                                    <Icon
-                                        icon={IconNames.TickCircle}
-                                        className='intent-ok'
-                                    />{' '}
-                                    Profiler and perf reports synchronised
-                                </strong>
-                            ) : (
-                                <strong>
-                                    <Icon
-                                        icon={IconNames.ISSUE}
-                                        className='intent-not-ok'
-                                    />{' '}
-                                    Profiler and perf reports can&apos;t be synchronized
-                                </strong>
-                            )}
-                        </span>
-                    )}
+                    {activeProfilerReport && activePerformanceReport && <SyncStatus />}
                 </div>
 
                 {(operationRange || performanceRange) && (
@@ -132,13 +109,15 @@ function FooterInfobar() {
                 )}
             </div>
 
-            <Collapse
-                className='slider-container'
-                isOpen={sliderIsOpen}
-                keepChildrenMounted
-            >
-                <Range />
-            </Collapse>
+            {(activeProfilerReport || activePerformanceReport) && (
+                <Collapse
+                    className='slider-container'
+                    isOpen={sliderIsOpen}
+                    keepChildrenMounted
+                >
+                    <Range />
+                </Collapse>
+            )}
         </footer>
     );
 }

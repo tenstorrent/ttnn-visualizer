@@ -27,11 +27,17 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
-import { selectedOperationRangeAtom } from '../store/app';
+import {
+    activeNpeOpTraceAtom,
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
+    selectedOperationRangeAtom,
+} from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { NPEData } from '../model/NPEModel';
+import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -44,9 +50,16 @@ const parseFileOperationIdentifier = (stackTrace: string): string => {
     return '';
 };
 
+// Possibly rename this and related functions to be "Instance"
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
     const response = await axiosInstance.get<TabSession>('/api/session').catch();
+    return response?.data;
+};
+
+export const updateTabSession = async (payload: Partial<TabSession>): Promise<TabSession | null> => {
+    // eslint-disable-next-line promise/valid-params
+    const response = await axiosInstance.put<TabSession>('/api/session', payload).catch();
     return response?.data;
 };
 
@@ -179,7 +192,7 @@ export interface PerformanceData {
     zone_phase: 'begin' | 'end';
 }
 
-const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
+const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
     const params = {
         buffer_type: bufferType,
     };
@@ -189,6 +202,56 @@ const fetchAllBuffers = async (bufferType: BufferType | null): Promise<BuffersBy
     });
 
     return buffers;
+};
+
+const fetchAllBuffers = async (bufferType: BufferType | null): Promise<Buffer[]> => {
+    const params = {
+        buffer_type: bufferType,
+    };
+
+    const { data: buffers } = await axiosInstance.get<Buffer[]>('/api/buffers', {
+        params,
+    });
+
+    return buffers;
+};
+
+const useGetAllBuffers = (bufferType: BufferType | null) => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<Buffer[], AxiosError>({
+        queryFn: () => fetchAllBuffers(bufferType),
+        queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
+        staleTime: Infinity,
+    });
+};
+
+/**
+ * @description returns start address of the first L1 small buffer. this is interim solution until BE can collect to devices table
+ */
+export const useGetL1SmallMarker = (): number => {
+    const { data: buffers } = useGetAllBuffers(BufferType.L1_SMALL);
+
+    return useMemo(() => {
+        const addresses = buffers?.map((buffer) => {
+            return buffer.address;
+        }) || [0];
+        return Math.min(...addresses);
+    }, [buffers]);
+};
+
+/**
+ * @description returns start of a usable memory region for L1. This assumes identical device configuration.
+ */
+export const useGetL1StartMarker = (): number => {
+    const { data: devices } = useDevices();
+
+    return useMemo(() => {
+        if (devices && devices.length > 0) {
+            return devices[0].address_at_first_l1_cb_buffer;
+        }
+        return 0;
+    }, [devices]);
 };
 
 export const fetchOperationBuffers = async (operationId: number) => {
@@ -224,7 +287,7 @@ const fetchDevices = async () => {
 
 // Not currently used
 // const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, string>>> => {
-//     const { data } = await axiosInstance.get<string>('/api/profiler/perf-results/raw');
+//     const { data } = await axiosInstance.get<string>('/api/performance/perf-results/raw');
 
 //     return new Promise((resolve, reject) => {
 //         Papa.parse<Record<string, string>>(data, {
@@ -235,8 +298,10 @@ const fetchDevices = async () => {
 //     });
 // };
 
-const fetchPerformanceDataReport = async (): Promise<PerfTableRow[]> => {
-    const { data } = await axiosInstance.get<PerfTableRow[]>('/api/profiler/perf-results/report');
+const fetchPerformanceReport = async (name?: string | null): Promise<PerfTableRow[]> => {
+    const { data } = await axiosInstance.get<PerfTableRow[]>(`/api/performance/perf-results/report`, {
+        params: { name },
+    });
 
     return data;
 };
@@ -252,7 +317,7 @@ interface FetchDeviceLogRawResult {
 }
 
 const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
-    const { data } = await axiosInstance.get<string>('/api/profiler/device-log/raw');
+    const { data } = await axiosInstance.get<string>('/api/performance/device-log/raw');
 
     function parseArchAndFreq(input: string): MetaData {
         const archMatch = input.match(/ARCH:\s*([\w\d_]+)/);
@@ -280,25 +345,43 @@ const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
     });
 };
 
-export const useOperationsList = () =>
-    useQuery<OperationDescription[], AxiosError>({
-        queryFn: () => fetchOperations(),
-        queryKey: ['get-operations'],
+const fetchClusterDescription = async (): Promise<ClusterModel> => {
+    const { data } = await axiosInstance.get<ClusterModel>('/api/cluster-descriptor');
+    return data;
+};
+
+export const useGetClusterDescription = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery({
+        queryFn: () => fetchClusterDescription(),
+        queryKey: ['get-cluster-description', activeProfilerReport],
+        initialData: null,
+    });
+};
+
+export const useOperationsList = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<OperationDescription[], AxiosError>({
+        queryFn: () => (activeProfilerReport !== null ? fetchOperations() : Promise.resolve([])),
+        queryKey: ['get-operations', activeProfilerReport],
         retry: false,
         staleTime: Infinity,
     });
+};
 
 export const useOperationListRange = (): NumberRange | null => {
     const response = useOperationsList();
 
     return useMemo(
-        () => (response.data ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
+        () => (response?.data?.length ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [response.isLoading],
     );
 };
 
-export const fetchNpeOpTrace = async () => {
+const fetchNpeOpTrace = async () => {
     const response = await axiosInstance.get<NPEData>('/api/npe');
     return response?.data;
 };
@@ -476,8 +559,10 @@ export interface DeviceOperationMapping {
     perfData?: PerfTableRow;
 }
 
+// Unused
 const useProxyPerformanceReport = (): PerfTableRow[] => {
-    const response = usePerformanceReport();
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const response = usePerformanceReport(activePerformanceReport);
 
     return useMemo(() => {
         if (!response.data) {
@@ -523,7 +608,8 @@ export const useOptoPerfIdFiltered = () => {
 };
 
 export const usePerformanceRange = (): NumberRange | null => {
-    const { data: perfData } = usePerformanceReport();
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const { data: perfData } = usePerformanceReport(activePerformanceReport);
 
     return useMemo(
         () =>
@@ -539,7 +625,9 @@ export const usePerformanceRange = (): NumberRange | null => {
 
 // Not currently used
 export const useReportMeta = () => {
-    return useQuery<ReportMetaData, AxiosError>('get-report-config', fetchReportMeta);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<ReportMetaData, AxiosError>(['get-report-config', activeProfilerReport], fetchReportMeta);
 };
 
 export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
@@ -586,16 +674,26 @@ export const fetchTensors = async (): Promise<Tensor[]> => {
     return [defaultTensorData];
 };
 
-export const useTensors = () =>
-    useQuery<Tensor[], AxiosError>({
+export const useTensors = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(),
-        queryKey: ['get-tensors'],
+        queryKey: ['get-tensors', activeProfilerReport],
         retry: false,
         staleTime: Infinity,
     });
+};
 
 export const useDevices = () => {
-    return useQuery<DeviceData[], AxiosError>('get-devices', fetchDevices, { staleTime: Infinity });
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<DeviceData[], AxiosError>({
+        queryFn: () => (activeProfilerReport !== null ? fetchDevices() : Promise.resolve([])),
+        queryKey: ['get-devices', activeProfilerReport],
+        retry: false,
+        staleTime: Infinity,
+    });
 };
 
 export const fetchNextUseOfBuffer = async (address: number | null, consumers: number[]): Promise<BufferData> => {
@@ -622,10 +720,11 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
 
 export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     const range = useAtomValue(selectedOperationRangeAtom);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     const response = useQuery({
-        queryFn: () => fetchAllBuffers(bufferType),
-        queryKey: ['fetch-all-buffers', bufferType],
+        queryFn: () => fetchBuffersByOperation(bufferType),
+        queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
         staleTime: Infinity,
     });
 
@@ -640,9 +739,11 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
 };
 
 export const useDeviceLog = () => {
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+
     return useQuery({
         queryFn: () => fetchDeviceLogRaw(),
-        queryKey: 'get-device-log-raw',
+        queryKey: ['get-device-log-raw', activePerformanceReport],
         staleTime: Infinity,
     });
 };
@@ -655,11 +756,11 @@ export const useDeviceLog = () => {
 //     });
 // };
 
-export const usePerformanceReport = () => {
+export const usePerformanceReport = (name: string | null) => {
     const response = useQuery({
-        queryFn: () => fetchPerformanceDataReport(),
-        queryKey: 'get-performance-data-report',
-        staleTime: Infinity,
+        queryFn: () => (name !== null ? fetchPerformanceReport(name) : Promise.resolve([])),
+        queryKey: ['get-performance-report', name],
+        enabled: name !== null,
     });
 
     return useMemo(() => {
@@ -676,21 +777,49 @@ export const usePerformanceReport = () => {
     }, [response.isLoading]);
 };
 
-export const useSession = (reportName: string | null, profileName: string | null, npeName: string | null) => {
+export const usePerformanceComparisonReport = (name: string | null) => {
+    const response = useQuery({
+        queryFn: () => (name !== null ? fetchPerformanceReport(name) : Promise.resolve([])),
+        queryKey: ['get-performance-comparison-report', name],
+        staleTime: Infinity,
+        enabled: name !== null,
+    });
+
+    return useMemo(() => {
+        if (response.data) {
+            const df: PerfTableRow[] = response.data
+                .slice()
+                .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
+
+            response.data = df;
+        }
+
+        return response;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [response.isLoading, name]);
+};
+
+export const useSession = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const activeNpe = useAtomValue(activeNpeOpTraceAtom);
+
     return useQuery({
         queryFn: () => fetchTabSession(),
-        queryKey: ['get-session', reportName, profileName, npeName],
+        queryKey: ['get-session', activeProfilerReport, activePerformanceReport, activeNpe],
         initialData: null,
     });
 };
-export const useArchitecture = (arch: DeviceArchitecture) => {
+export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
     switch (arch) {
         case DeviceArchitecture.WORMHOLE:
-            return archWormhole;
+            return archWormhole as ChipDesign;
         case DeviceArchitecture.BLACKHOLE:
-            return archBlackhole;
+            return archBlackhole as ChipDesign;
         default:
-            throw new Error(`Unknown architecture: ${arch}`);
+            // eslint-disable-next-line no-console
+            console.error(`Unsupported arch: ${arch}`);
+            return {} as ChipDesign;
     }
 };
 
@@ -713,7 +842,7 @@ export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; siz
 export const useNodeType = (arch: DeviceArchitecture) => {
     const architecture = useArchitecture(arch);
     const cores = useMemo(() => {
-        return architecture.functional_workers.map((loc) => {
+        return architecture.functional_workers?.map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -722,7 +851,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const dram = useMemo(() => {
-        return architecture.dram.flat().map((loc) => {
+        return architecture.dram?.flat().map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -731,7 +860,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const eth = useMemo(() => {
-        return architecture.eth.flat().map((loc) => {
+        return architecture.eth?.flat().map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -740,7 +869,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const pcie = useMemo(() => {
-        return architecture.pcie.map((loc) => {
+        return architecture.pcie?.map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -748,5 +877,47 @@ export const useNodeType = (arch: DeviceArchitecture) => {
         });
     }, [architecture]);
 
-    return { cores, dram, eth, pcie };
+    return { architecture, cores, dram, eth, pcie };
+};
+
+export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';
+
+const fetchReportFolderList = async () => {
+    const { data } = await axiosInstance.get('/api/profiler');
+    return data;
+};
+
+export const deleteProfiler = async (report: string) => {
+    const { data } = await axiosInstance.delete(`/api/profiler/${report}`);
+
+    return data;
+};
+
+export const useReportFolderList = () => {
+    return useQuery({
+        queryFn: () => fetchReportFolderList(),
+        queryKey: [PROFILER_FOLDER_QUERY_KEY],
+        initialData: null,
+    });
+};
+
+export const PERFORMANCE_FOLDER_QUERY_KEY = 'fetch-performance-folder-list';
+
+const fetchPerfFolderList = async () => {
+    const { data } = await axiosInstance.get('/api/performance');
+    return data;
+};
+
+export const deletePerformance = async (report: string) => {
+    const { data } = await axiosInstance.delete(`/api/performance/${report}`);
+
+    return data;
+};
+
+export const usePerfFolderList = () => {
+    return useQuery({
+        queryFn: () => fetchPerfFolderList(),
+        queryKey: [PERFORMANCE_FOLDER_QUERY_KEY],
+        initialData: null,
+    });
 };

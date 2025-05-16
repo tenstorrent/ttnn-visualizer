@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Config, Layout, PlotData } from 'plotly.js';
+import classNames from 'classnames';
 import Plot from 'react-plotly.js';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import 'styles/components/PerfChart.scss';
@@ -22,7 +23,19 @@ function PerfChart({ chartData, configuration, title }: PerfChartProps) {
         autosize: true,
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        showlegend: false,
+        showlegend: configuration.showLegend || false,
+        legend: {
+            orientation: 'h',
+            font: {
+                family: 'sans-serif',
+            },
+            bgcolor: '#dee2e6', // tt-grey-7
+            bordercolor: '#fff', // tt-white
+            borderwidth: 2,
+            x: 0.5,
+            y: -0.25,
+            xanchor: 'center',
+        },
         margin: {
             l: 50,
             r: 0,
@@ -93,7 +106,7 @@ function PerfChart({ chartData, configuration, title }: PerfChartProps) {
     };
 
     return (
-        <div className='chart-container'>
+        <div className={classNames('chart-container', { 'legend-instructions': configuration.showLegend })}>
             <h3>{title}</h3>
 
             <Plot

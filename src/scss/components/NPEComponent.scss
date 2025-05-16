@@ -39,10 +39,12 @@
 
     .split-grid {
         display: flex;
+        align-items: flex-start;
         gap: 10px;
     }
 
     .metadata {
+        min-width: 300px;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
@@ -50,9 +52,29 @@
         padding: 10px;
         border-bottom: 1px solid $tt-slate;
         position: absolute;
-        right: 0;
-        top: 110px;
+        right: 20px;
+        top: -100px;
         gap: 5px;
+        background-color: #343434dd;
+        z-index: 10;
+
+        .collapsible-component {
+            width: 100%;
+        }
+
+        .collapsible-controls {
+            button {
+                width: 100%;
+                display: flex;
+                justify-content: space-between;
+                padding-left: 0;
+            }
+        }
+
+        .title {
+            margin-top: 0;
+            margin-bottom: 6px;
+        }
 
         hr {
             margin-top: 10px;
@@ -63,6 +85,9 @@
     .side-data {
         display: inline-flex;
         flex-direction: column;
+        max-width: 380px;
+        padding-left: 10px;
+        border-left: 1px solid $tt-slate;
 
         h3 {
             display: flex;
@@ -94,7 +119,7 @@
 
         .local-transfer {
             display: inline-flex;
-            flex-direction: row;
+            flex-flow: row wrap;
             gap: 5px;
             align-content: center;
             align-items: center;
@@ -120,9 +145,20 @@
         min-height: 10px;
     }
 
+    .chip-cluster-wrap {
+        display: grid;
+        gap: 5px;
+        overflow: auto;
+        scrollbar-gutter: stable;
+
+        &.details-open {
+            max-width: calc(100% - 300px);
+        }
+    }
+
     .chip {
-        margin: 20px;
         position: relative;
+        border: 1.5px solid $tt-grey-5;
     }
 
     .tensix-grid {
@@ -147,6 +183,17 @@
 
         display: grid;
         gap: 1px;
+
+        .chip-id {
+            font-size: 100px;
+            opacity: 0.5;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: $tt-grey-5;
+            text-align: center;
+        }
 
         .tensix {
             display: flex;
@@ -202,20 +249,20 @@
             }
 
             &.src {
-                border: 1px solid $highlight-src;
-                inset: 1px;
+                border: 2px solid $highlight-src;
+                inset: 2px;
             }
 
             &.dst {
-                border: 1px solid $highlight-dst;
-                inset: 1px;
+                border: 2px solid $highlight-dst;
+                inset: 2px;
             }
 
             &.both {
                 $dash-size: 10deg;
 
-                inset: 1px;
-                border: 1px solid transparent;
+                inset: 2px;
+                border: 2px solid transparent;
                 border-image: repeating-conic-gradient(
                         $highlight-src 0deg,
                         $highlight-src $dash-size,

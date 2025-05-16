@@ -6,25 +6,33 @@ import { Alignment, Button, Navbar } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useAtomValue } from 'jotai';
+import { useLocation } from 'react-router-dom';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/MainNavigation.scss';
-import { activePerformanceTraceAtom, activeReportAtom } from '../store/app';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
+import { useGetClusterDescription } from '../hooks/useAPI';
 
 function MainNavigation() {
     const navigate = useNavigate();
-    const activeReport = useAtomValue(activeReportAtom);
-    const activePerformanceTrace = useAtomValue(activePerformanceTraceAtom);
+    const location = useLocation();
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
     const handleNavigate = (path: string) => {
         navigate(path);
     };
 
-    const hasActiveReport = !!activeReport;
-    const hasActiveProfile = !!activePerformanceTrace;
+    const handleOpenModal = (path: string) => {
+        navigate(path, { state: { background: location } });
+    };
 
+    const clusterData = useGetClusterDescription();
+
+    const hasActiveProfiler = !!activeProfilerReport;
+    const hasActivePerf = !!activePerformanceReport;
     return (
         <Navbar className='navbar'>
-            <Navbar.Group align={Alignment.RIGHT}>
+            <Navbar.Group align={Alignment.END}>
                 <Button
                     text='Reports'
                     onClick={() => handleNavigate(ROUTES.HOME)}
@@ -40,7 +48,7 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.OPERATIONS)}
                     active={hasMatchingPath(ROUTES.OPERATIONS)}
                     icon={IconNames.CUBE}
-                    disabled={!hasActiveReport}
+                    disabled={!hasActiveProfiler}
                     variant='minimal'
                     size='large'
                     className='operations-button'
@@ -51,7 +59,7 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.TENSORS)}
                     active={hasMatchingPath(ROUTES.TENSORS)}
                     icon={IconNames.FLOW_LINEAR}
-                    disabled={!hasActiveReport}
+                    disabled={!hasActiveProfiler}
                     variant='minimal'
                     size='large'
                     className='tensors-button'
@@ -60,9 +68,9 @@ function MainNavigation() {
                 <Button
                     text='Buffers'
                     onClick={() => handleNavigate(ROUTES.BUFFERS)}
-                    active={window.location.pathname === ROUTES.BUFFERS}
+                    active={hasMatchingPath(ROUTES.BUFFERS)}
                     icon={IconNames.SMALL_SQUARE}
-                    disabled={!hasActiveReport}
+                    disabled={!hasActiveProfiler}
                     variant='minimal'
                     size='large'
                     className='buffers-button'
@@ -71,9 +79,9 @@ function MainNavigation() {
                 <Button
                     text='Graph'
                     onClick={() => handleNavigate(ROUTES.GRAPHTREE)}
-                    active={window.location.pathname === ROUTES.GRAPHTREE}
+                    active={hasMatchingPath(ROUTES.GRAPHTREE)}
                     icon={IconNames.GRAPH}
-                    disabled={!hasActiveReport}
+                    disabled={!hasActiveProfiler}
                     variant='minimal'
                     size='large'
                     className='graph-button'
@@ -82,9 +90,9 @@ function MainNavigation() {
                 <Button
                     text='Performance'
                     onClick={() => handleNavigate(ROUTES.PERFORMANCE)}
-                    active={window.location.pathname === ROUTES.PERFORMANCE}
+                    active={hasMatchingPath(ROUTES.PERFORMANCE)}
                     icon={IconNames.LIGHTNING}
-                    disabled={!hasActiveProfile}
+                    disabled={!hasActivePerf}
                     variant='minimal'
                     size='large'
                     className='performance-button'
@@ -93,7 +101,7 @@ function MainNavigation() {
                 <Button
                     text='NPE'
                     onClick={() => handleNavigate(ROUTES.NPE)}
-                    active={window.location.pathname === ROUTES.NPE}
+                    active={hasMatchingPath(ROUTES.NPE)}
                     icon={IconNames.Random}
                     variant='minimal'
                     size='large'
@@ -101,13 +109,36 @@ function MainNavigation() {
                 >
                     <small>beta</small>
                 </Button>
+                <Button
+                    text='Topology'
+                    onClick={() => handleOpenModal(ROUTES.CLUSTER)}
+                    active={hasMatchingPath(ROUTES.CLUSTER)}
+                    disabled={clusterData.data === null}
+                    icon={IconNames.LayoutGrid}
+                    variant='minimal'
+                    size='large'
+                    className='cluster-button modal'
+                />
             </Navbar.Group>
         </Navbar>
     );
-}
 
-function hasMatchingPath(path: string) {
-    return window.location.pathname === path;
+    function hasMatchingPath(path: string) {
+        if (location.pathname === path) {
+            return true;
+        }
+        if (location.pathname.includes(path) && path !== ROUTES.HOME) {
+            return true;
+        }
+        if (location.state?.background?.pathname === path) {
+            return true;
+        }
+        if (location.state?.background?.pathname.includes(path) && path !== ROUTES.HOME) {
+            return true;
+        }
+
+        return false;
+    }
 }
 
 export default MainNavigation;

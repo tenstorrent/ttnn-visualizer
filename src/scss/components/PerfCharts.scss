@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
+.charts-container {
+    display: grid;
+    grid-template-columns: 250px 1fr;
+    position: relative;
+    gap: 30px;
+}
+
+.folder-selection {
+    display: flex;
+    flex-wrap: nowrap;
+    width: 250px;
+    gap: 5px;
+
+    .folder-picker {
+        flex: 0 1 220px;
+    }
+
+    .clear-selection {
+        flex: 0 0 30px;
+    }
+}
+
+.operation-types-charts {
+    display: flex;
+    gap: 10px;
+
+    .flex-chart {
+        flex-basis: 50%;
+        flex-grow: 1;
+    }
+}

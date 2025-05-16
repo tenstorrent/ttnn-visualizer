@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+@use '../definitions/colours' as *;
+
 .chart-container {
     margin-bottom: 60px;
     height: 500px; // TEMP: Stops charts from collapsing on occasion
@@ -9,5 +11,14 @@
     .chart {
         width: 100%;
         height: 450px;
+    }
+
+    &.legend-instructions {
+        &::after {
+            content: 'Toggle datasets by clicking on legend items';
+            display: block;
+            font-style: italic;
+            font-size: 12px;
+        }
     }
 }

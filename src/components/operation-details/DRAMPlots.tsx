@@ -4,7 +4,6 @@
 
 import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
-import { useMemo } from 'react';
 import { MemoryLegendElement } from './MemoryLegendElement';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { isEqual } from '../../functions/math';
@@ -24,6 +23,7 @@ import { MemoryLegendGroup } from './MemoryLegendGroup';
 
 const DRAM_PADDING_RATIO = 0.9998;
 const SPLIT_THRESHOLD_RATIO = 8;
+const EMPTY_CHART: Partial<PlotDataCustom>[] = [];
 
 interface DramPlotProps {
     operationDetails: OperationDetails;
@@ -80,41 +80,43 @@ function DRAMPlots({
     }
 
     const groupedMemoryReport = getGroupedMemoryReport(BufferType.DRAM);
-    const splitPreviousDramData = useMemo(() => splitData(previousDramData), [previousDramData]);
-    const splitDramData = useMemo(() => splitData(dramData), [dramData]);
+    let splitPreviousDramData = splitData(previousDramData);
+    let splitDramData = splitData(dramData);
+    let splitDeltaData = splitData(dramDeltaObject.chartData);
+
+    const zoomedPlotSizes = getZoomedPlotSizes(splitPreviousDramData, splitDramData);
+
+    // Fill empty spaces in split data arrays so their data indexes match zoomedPlotSizes
+    splitPreviousDramData = fillEmptySpaces(zoomedPlotSizes, splitPreviousDramData);
+    splitDramData = fillEmptySpaces(zoomedPlotSizes, splitDramData);
+    splitDeltaData = fillEmptySpaces(zoomedPlotSizes, splitDeltaData);
 
     return (
         <>
             <h3 className='plot-title'>Previous Summarized DRAM Report {dramHasntChanged ? ' (No changes)' : ''}</h3>
             <div className='zoomed-dram-plots'>
-                {zoomedInViewMainMemory && previousDramData.length > 0 ? (
-                    splitPreviousDramData.map((data, index) => {
-                        const firstDataPoint = data[0];
-                        const lastDataPoint = data.at(-1);
-
-                        if (!firstDataPoint.memoryData || !lastDataPoint?.memoryData) {
-                            return null;
-                        }
-
-                        const dramNonContinuousPlotZoomRangeStart =
-                            firstDataPoint.memoryData.address || DRAM_MEMORY_SIZE * DRAM_PADDING_RATIO;
-                        const dramNonContinuousPlotZoomRangeEnd =
-                            lastDataPoint.memoryData.address + lastDataPoint.memoryData.size * (1 / DRAM_PADDING_RATIO);
+                {zoomedInViewMainMemory && zoomedPlotSizes.length > 0 ? (
+                    zoomedPlotSizes.map((data, index) => {
+                        const chartData = splitPreviousDramData[index] ?? EMPTY_CHART;
 
                         if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
                             dramPlotZoomRangeStart = 0;
                             dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
                         }
 
+                        const dramNonContinuousPlotZoomRangeStart = data.min;
+                        const dramNonContinuousPlotZoomRangeEnd = data.max;
+
                         return (
                             <MemoryPlotRenderer
                                 key={index}
                                 className={classNames('dram-memory-renderer', {
-                                    'empty-plot': dramData.length === 0,
+                                    'empty-plot': previousDramData.length === 0,
+                                    'identical-plot': dramHasntChanged,
                                 })}
                                 style={{ flexBasis: calculateWidth(splitPreviousDramData)[index] }}
                                 plotZoomRange={[dramNonContinuousPlotZoomRangeStart, dramNonContinuousPlotZoomRangeEnd]}
-                                chartDataList={[data]}
+                                chartDataList={[chartData]}
                                 isZoomedIn
                                 memorySize={DRAM_MEMORY_SIZE}
                                 onBufferClick={onDramBufferClick}
@@ -145,19 +147,11 @@ function DRAMPlots({
 
             <h3 className='plot-title'>Current Summarized DRAM Report</h3>
             <div className='zoomed-dram-plots'>
-                {zoomedInViewMainMemory && dramData.length > 0 ? (
-                    splitDramData.map((data, index) => {
-                        const firstDataPoint = data[0];
-                        const lastDataPoint = data.at(-1);
-
-                        if (!firstDataPoint.memoryData || !lastDataPoint?.memoryData) {
-                            return null;
-                        }
-
-                        const dramNonContinuousPlotZoomRangeStart =
-                            firstDataPoint.memoryData.address || DRAM_MEMORY_SIZE * DRAM_PADDING_RATIO;
-                        const dramNonContinuousPlotZoomRangeEnd =
-                            lastDataPoint.memoryData.address + lastDataPoint.memoryData.size * (1 / DRAM_PADDING_RATIO);
+                {zoomedInViewMainMemory && zoomedPlotSizes.length > 0 ? (
+                    zoomedPlotSizes.map((data, index) => {
+                        const dramNonContinuousPlotZoomRangeStart = data.min;
+                        const dramNonContinuousPlotZoomRangeEnd = data.max;
+                        const chartData = splitDramData[index] ?? EMPTY_CHART;
 
                         if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
                             dramPlotZoomRangeStart = 0;
@@ -172,7 +166,7 @@ function DRAMPlots({
                                 })}
                                 style={{ flexBasis: calculateWidth(splitPreviousDramData)[index] }}
                                 plotZoomRange={[dramNonContinuousPlotZoomRangeStart, dramNonContinuousPlotZoomRangeEnd]}
-                                chartDataList={[data]}
+                                chartDataList={[chartData]}
                                 isZoomedIn
                                 memorySize={DRAM_MEMORY_SIZE}
                                 onBufferClick={onDramBufferClick}
@@ -202,17 +196,56 @@ function DRAMPlots({
             </div>
 
             <h3 className='plot-title'>DRAM Delta (difference between current and previous operation)</h3>
-            <MemoryPlotRenderer
-                className={classNames('dram-memory-renderer', {
-                    'empty-plot': dramDeltaObject.chartData.length === 0,
-                })}
-                plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
-                chartDataList={[dramDeltaObject.chartData]}
-                isZoomedIn={zoomedInViewMainMemory}
-                memorySize={DRAM_MEMORY_SIZE}
-                onBufferClick={onDramDeltaClick}
-                configuration={DRAMRenderConfiguration}
-            />
+            <div className='zoomed-dram-plots'>
+                {dramDeltaObject.chartData.length > 0 && zoomedInViewMainMemory && splitDeltaData.length > 0 ? (
+                    splitDeltaData.map((data, index) => {
+                        const dramNonContinuousPlotZoomRangeStart = zoomedPlotSizes[index].min;
+                        const dramNonContinuousPlotZoomRangeEnd = zoomedPlotSizes[index].max;
+                        const chartData = data ?? EMPTY_CHART;
+
+                        if (dramPlotZoomRangeEnd < dramPlotZoomRangeStart) {
+                            dramPlotZoomRangeStart = 0;
+                            dramPlotZoomRangeEnd = DRAM_MEMORY_SIZE;
+                        }
+
+                        return (
+                            <MemoryPlotRenderer
+                                key={index}
+                                className={classNames('dram-memory-renderer', {
+                                    'empty-plot': dramData.length === 0,
+                                    'identical-plot': dramHasntChanged,
+                                })}
+                                style={{ flexBasis: calculateWidth(splitPreviousDramData)[index] }}
+                                plotZoomRange={[dramNonContinuousPlotZoomRangeStart, dramNonContinuousPlotZoomRangeEnd]}
+                                chartDataList={[chartData]}
+                                isZoomedIn
+                                memorySize={DRAM_MEMORY_SIZE}
+                                onBufferClick={onDramDeltaClick}
+                                configuration={{
+                                    ...DRAMRenderConfiguration,
+                                    ...getPlotConfig(
+                                        dramNonContinuousPlotZoomRangeStart,
+                                        dramNonContinuousPlotZoomRangeEnd,
+                                    ),
+                                }}
+                            />
+                        );
+                    })
+                ) : (
+                    <MemoryPlotRenderer
+                        className={classNames('dram-memory-renderer', {
+                            'empty-plot': dramData.length === 0,
+                            'identical-plot': dramHasntChanged,
+                        })}
+                        plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
+                        chartDataList={[dramHasntChanged ? EMPTY_CHART : dramData]}
+                        isZoomedIn={zoomedInViewMainMemory}
+                        memorySize={DRAM_MEMORY_SIZE}
+                        onBufferClick={onDramBufferClick}
+                        configuration={DRAMRenderConfiguration}
+                    />
+                )}
+            </div>
 
             <div
                 className={classNames('legend', {
@@ -271,10 +304,11 @@ const splitData = (data: Partial<PlotDataCustom>[]) => {
     let currentArray = [];
 
     for (let i = 0; i < data.length; i++) {
-        const thisPosition = data?.[i]?.x?.[0] as number;
-        const lastPosition = data?.[i - 1]?.x?.[0] as number;
+        const previousPoint = data?.[i - 1]?.memoryData;
+        const thisPosition = (data?.[i]?.memoryData?.address ?? 0) as number;
+        const previousPosition = previousPoint ? previousPoint.address + previousPoint.size : thisPosition;
 
-        if (thisPosition - lastPosition > splitThreshold) {
+        if (thisPosition - previousPosition > splitThreshold) {
             result.push(currentArray);
             currentArray = [];
         }
@@ -305,6 +339,54 @@ const calculateWidth = (data: Partial<PlotDataCustom>[][]) => {
         const percentage = (subArrayWidth / totalWidth) * 100;
 
         return percentage < 20 ? '200px' : `${percentage}%`;
+    });
+};
+
+interface MinMaxPlotSize {
+    min: number;
+    max: number;
+}
+
+const getZoomedPlotSizes = (
+    previousData: Partial<PlotDataCustom>[][],
+    currentData: Partial<PlotDataCustom>[][],
+): MinMaxPlotSize[] => {
+    const minMax: MinMaxPlotSize[] = [];
+    const biggestDataSet = previousData.length > currentData.length ? previousData : currentData;
+
+    biggestDataSet.forEach((dataArray) => {
+        const minStartAddress = Math.min(
+            dataArray[0]?.memoryData?.address || DRAM_MEMORY_SIZE * DRAM_PADDING_RATIO,
+            dataArray.at(-1)?.memoryData?.address || DRAM_MEMORY_SIZE * DRAM_PADDING_RATIO,
+        );
+
+        const maxEndAddress = Math.max(
+            (dataArray.at(-1)?.memoryData?.address ?? 0) +
+                (dataArray.at(-1)?.memoryData?.size ?? 0) * (1 / DRAM_PADDING_RATIO) || 0,
+            (dataArray[0]?.memoryData?.address ?? 0) +
+                (dataArray[0]?.memoryData?.size ?? 0) * (1 / DRAM_PADDING_RATIO) || 0,
+        );
+
+        minMax.push({ min: minStartAddress, max: maxEndAddress });
+    });
+
+    return minMax;
+};
+
+const fillEmptySpaces = (zoomedPlotSizes: MinMaxPlotSize[], splitDataArray: Partial<PlotDataCustom>[][]) => {
+    return zoomedPlotSizes.map((plotSize) => {
+        const matchingIndex = splitDataArray.findIndex((data, index) => {
+            const address = data[index]?.memoryData?.address;
+            const size = data[index]?.memoryData?.size;
+
+            if (!address || !size) {
+                return false;
+            }
+
+            return data.length > 0 && address >= plotSize.min && address + size <= plotSize.max;
+        });
+
+        return matchingIndex !== -1 ? splitDataArray[matchingIndex] : [];
     });
 };
 

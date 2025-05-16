@@ -8,7 +8,6 @@ import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
-import { isEqual } from '../../functions/math';
 import useRemoteConnection from '../../hooks/useRemote';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
@@ -16,28 +15,26 @@ const formatter = new Intl.DateTimeFormat('en-US', {
     timeStyle: 'short',
 });
 
-const MAX_REPORT_NAME_LENGTH = 50;
-type FolderTypes = 'performance' | 'report';
+type FolderTypes = 'performance' | 'profiler';
 
-const formatRemoteFolderName = (folder: RemoteFolder, type: FolderTypes, selectedConnection?: RemoteConnection) => {
+const formatRemoteFolderName = (
+    folder: RemoteFolder,
+    type: FolderTypes,
+    selectedConnection?: RemoteConnection,
+): string => {
     if (!folder || !selectedConnection) {
         return 'n/a';
     }
 
     const paths = {
-        report: selectedConnection.reportPath,
+        // report: selectedConnection.reportPath, // Deprecated - use profiler and profilerPath
+        profiler: selectedConnection.profilerPath || selectedConnection.reportPath,
         performance: selectedConnection.performancePath,
     };
 
     const pathToReplace = paths[type]!;
 
     return folder.remotePath.toLowerCase().replace(pathToReplace.toLowerCase(), '');
-};
-
-const getTestName = (folder: RemoteFolder) => {
-    return folder.testName.length > MAX_REPORT_NAME_LENGTH
-        ? `${folder.testName.slice(0, MAX_REPORT_NAME_LENGTH)}...`
-        : folder.testName;
 };
 
 const filterFolders =
@@ -61,7 +58,7 @@ const remoteFolderRenderer =
             return null;
         }
 
-        const { lastSynced, lastModified } = folder;
+        const { lastSynced, lastModified, testName } = folder;
         const lastSyncedDate = lastSynced ? formatter.format(new Date(lastSynced)) : 'Never';
 
         let statusIcon = (
@@ -92,17 +89,12 @@ const remoteFolderRenderer =
             }
         }
 
-        const getLabelElement = () => (
-            <>
-                <span className='test-name'>{getTestName(folder)}</span>
-                {!isUsingRemoteQuerying && statusIcon}
-            </>
-        );
+        const getLabelElement = () => !isUsingRemoteQuerying && statusIcon;
 
         return (
             <MenuItem
                 className='remote-folder-item'
-                active={isEqual(selectedFolder, folder)}
+                active={selectedFolder?.testName === testName}
                 disabled={modifiers.disabled}
                 key={`${formatRemoteFolderName(folder, type, connection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}

@@ -13,7 +13,7 @@ export TTNN_CONFIG_OVERRIDES='{
     "enable_fast_runtime_mode": false,
     "enable_logging": true,
     "report_name": "TODO ADD NAME",
-    "enable_graph_report": true,
+    "enable_graph_report": false,
     "enable_detailed_buffer_report": true,
     "enable_detailed_tensor_report": false,
     "enable_comparison_mode": false
@@ -32,11 +32,11 @@ The final output should be a folder including at least a `config.json` and a `db
 
 <img width="909" alt="Screenshot 2024-12-13 at 12 29 24 PM" src="https://github.com/user-attachments/assets/ab31892a-2779-4fe1-9ad5-0f35f8329f9a" />
 
-### Performance traces
+### Performance reports
 
-TT-NN Visualizer supports the reading of TT-Metalium performance traces. The expected output should be a folder containing `profile_log_device.csv`, another csv with the performance results, e.g. `ops_perf_results_2024_12_11_11_09_16.csv`, and a `tracy_profile_log_host.tracy` file.
+TT-NN Visualizer supports the reading of TT-Metalium performance reports. The expected output should be a folder containing `profile_log_device.csv`, another csv with the performance results, e.g. `ops_perf_results_2024_12_11_11_09_16.csv`, and a `tracy_profile_log_host.tracy` file.
 
-Consult the TT-Metalium documentation on [how to generate a performance trace](https://github.com/tenstorrent/tt-perf-report?tab=readme-ov-file#generating-performance-traces).
+Consult the TT-Metalium documentation on [how to generate a performance report](https://github.com/tenstorrent/tt-perf-report?tab=readme-ov-file#generating-performance-traces).
 
 <img width="916" alt="Screenshot 2024-12-13 at 12 29 44 PM" src="https://github.com/user-attachments/assets/8209f500-7913-41dc-8952-c1307e7720c3" />
 
@@ -115,8 +115,8 @@ The default behaviour is to sync the files to your local machine, but you may al
 
 The `ttnn-visualizer` command supports two CLI arguments for passing custom data paths:
 
-* `--report-path` - specify the local path to the folder containing the report
-* `--profiler-path` - specify the local path to the folder containing the profiler data
+* `--profiler-path` - specify the local path to the folder containing the report
+* `--performance-path` - specify the local path to the folder containing the profiler data
 
 These options allow you to pass the folders when starting the visualizer, instead of uploading the report and profiler
 data files from the browser after loading the site. This can be used for starting `ttnn-visualizer` from other tools

@@ -11,7 +11,7 @@ from pathlib import Path
 from flask import request
 
 from ttnn_visualizer.exceptions import InvalidReportPath, InvalidProfilerPath
-from ttnn_visualizer.utils import get_report_path, get_profiler_path, get_npe_path
+from ttnn_visualizer.utils import get_profiler_path, get_performance_path, get_npe_path
 from ttnn_visualizer.models import (
     InstanceTable,
 )
@@ -25,31 +25,40 @@ from sqlalchemy.exc import SQLAlchemyError
 
 def update_existing_instance(
     session_data,
-    report_name,
-    profile_name,
+    profiler_name,
+    performance_name,
     npe_name,
     remote_connection,
-    remote_folder,
-    remote_profile_folder,
+    remote_profiler_folder,
+    remote_performance_folder,
     clear_remote,
 ):
     active_report = session_data.active_report or {}
 
-    if report_name:
-        active_report["report_name"] = report_name
-    if profile_name:
-        active_report["profile_name"] = profile_name
-    if npe_name:
+    # First ifs are explicit deletes and elifs are updates
+    if profiler_name == "":
+        active_report.pop("profiler_name", None)
+    elif profiler_name is not None:
+        active_report["profiler_name"] = profiler_name
+
+    if performance_name == "":
+        active_report.pop("performance_name", None)
+    elif performance_name is not None:
+
+        active_report["performance_name"] = performance_name
+    if npe_name == "":
+        active_report.pop("npe_name", None)
+    elif npe_name is not None:
         active_report["npe_name"] = npe_name
 
     session_data.active_report = active_report
 
     if remote_connection:
         session_data.remote_connection = remote_connection.model_dump()
-    if remote_folder:
-        session_data.remote_folder = remote_folder.model_dump()
-    if remote_profile_folder:
-        session_data.remote_profile_folder = remote_profile_folder.model_dump()
+    if remote_profiler_folder:
+        session_data.remote_profiler_folder = remote_profiler_folder.model_dump()
+    if remote_performance_folder:
+        session_data.remote_performance_folder = remote_performance_folder.model_dump()
 
     if clear_remote:
         clear_remote_data(session_data)
@@ -61,8 +70,8 @@ def update_existing_instance(
 
 def clear_remote_data(session_data):
     session_data.remote_connection = None
-    session_data.remote_folder = None
-    session_data.remote_profile_folder = None
+    session_data.remote_profiler_folder = None
+    session_data.remote_performance_folder = None
 
 
 def handle_sqlalchemy_error(error):
@@ -82,16 +91,16 @@ def commit_and_log_session(session_data, instance_id):
 def update_paths(
     session_data, active_report, remote_connection
 ):
-    if active_report.get("profile_name"):
-        session_data.profiler_path = get_profiler_path(
-            profile_name=active_report["profile_name"],
+    if active_report.get("performance_name"):
+        session_data.performance_path = get_performance_path(
+            performance_name=active_report["performance_name"],
             current_app=current_app,
             remote_connection=remote_connection,
         )
 
-    if active_report.get("report_name"):
-        session_data.report_path = get_report_path(
-            active_report=active_report,
+    if active_report.get("profiler_name"):
+        session_data.profiler_path = get_profiler_path(
+            profiler_name=active_report["profiler_name"],
             current_app=current_app,
             remote_connection=remote_connection,
         )
@@ -105,41 +114,41 @@ def update_paths(
 
 def create_new_instance(
     instance_id,
-    report_name,
-    profile_name,
+    profiler_name,
+    performance_name,
     npe_name,
     remote_connection,
-    remote_folder,
-    remote_profile_folder,
+    remote_profiler_folder,
+    remote_performance_folder,
     clear_remote,
 ):
     active_report = {}
-    if report_name:
-        active_report["report_name"] = report_name
-    if profile_name:
-        active_report["profile_name"] = profile_name
+    if profiler_name:
+        active_report["profiler_name"] = profiler_name
+    if performance_name:
+        active_report["performance_name"] = performance_name
     if npe_name:
         active_report["npe_name"] = npe_name
 
     if clear_remote:
         remote_connection = None
-        remote_folder = None
-        remote_profile_folder = None
+        remote_profiler_folder = None
+        remote_performance_folder = None
 
     session_data = InstanceTable(
         instance_id=instance_id,
         active_report=active_report,
-        report_path=get_report_path(
-            active_report,
+        profiler_path=get_profiler_path(
+            active_report["profiler_name"],
             current_app=current_app,
             remote_connection=remote_connection,
         ),
         remote_connection=(
             remote_connection.model_dump() if remote_connection else None
         ),
-        remote_folder=remote_folder.model_dump() if remote_folder else None,
-        remote_profile_folder=(
-            remote_profile_folder.model_dump() if remote_profile_folder else None
+        remote_profiler_folder=remote_profiler_folder.model_dump() if remote_profiler_folder else None,
+        remote_performance_folder=(
+            remote_performance_folder.model_dump() if remote_performance_folder else None
         ),
     )
     db.session.add(session_data)
@@ -148,12 +157,12 @@ def create_new_instance(
 
 def update_instance(
     instance_id,
-    report_name=None,
-    profile_name=None,
+    profiler_name=None,
+    performance_name=None,
     npe_name=None,
     remote_connection=None,
-    remote_folder=None,
-    remote_profile_folder=None,
+    remote_profiler_folder=None,
+    remote_performance_folder=None,
     clear_remote=False,
 ):
     try:
@@ -162,23 +171,23 @@ def update_instance(
         if session_data:
             update_existing_instance(
                 session_data,
-                report_name,
-                profile_name,
+                profiler_name,
+                performance_name,
                 npe_name,
                 remote_connection,
-                remote_folder,
-                remote_profile_folder,
+                remote_profiler_folder,
+                remote_performance_folder,
                 clear_remote,
             )
         else:
             session_data = create_new_instance(
                 instance_id,
-                report_name,
-                profile_name,
+                profiler_name,
+                performance_name,
                 npe_name,
                 remote_connection,
-                remote_folder,
-                remote_profile_folder,
+                remote_profiler_folder,
+                remote_performance_folder,
                 clear_remote,
             )
 
@@ -192,11 +201,11 @@ def update_instance(
 
 def get_or_create_instance(
     instance_id,
-    report_name=None,
-    profile_name=None,
+    profiler_name=None,
+    performance_name=None,
     npe_name=None,
     remote_connection=None,
-    remote_folder=None,
+    remote_profiler_folder=None,
 ):
     """
     Retrieve an existing tab session or create a new one if it doesn't exist.
@@ -212,20 +221,20 @@ def get_or_create_instance(
                 instance_id=instance_id,
                 active_report={},
                 remote_connection=None,
-                remote_folder=None,
+                remote_profiler_folder=None,
             )
             db.session.add(session_data)
             db.session.commit()
 
         # Update the session if any new data is provided
-        if report_name or profile_name or npe_name or remote_connection or remote_folder:
+        if profiler_name or performance_name or npe_name or remote_connection or remote_profiler_folder:
             update_instance(
                 instance_id=instance_id,
-                report_name=report_name,
-                profile_name=profile_name,
+                profiler_name=profiler_name,
+                performance_name=performance_name,
                 npe_name=npe_name,
                 remote_connection=remote_connection,
-                remote_folder=remote_folder,
+                remote_profiler_folder=remote_profiler_folder,
             )
 
         # Query again to get the updated session data
@@ -270,30 +279,30 @@ def create_random_instance_id():
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
 
 
-def create_instance_from_local_paths(report_path, profiler_path):
-    _report_path = Path(report_path)
-    _profiler_path = Path(profiler_path)
+def create_instance_from_local_paths(profiler_path, performance_path):
+    _profiler_path = Path(profiler_path) if profiler_path else None
+    _performance_path = Path(performance_path) if performance_path else None
 
-    if not _report_path.exists() or not _report_path.is_dir():
+    if _profiler_path and (not _profiler_path.exists() or not _profiler_path.is_dir()):
         raise InvalidReportPath()
 
-    if not _profiler_path.exists() or not _profiler_path.is_dir():
+    if _performance_path and (not _performance_path.exists() or not _performance_path.is_dir()):
         raise InvalidProfilerPath()
 
-    report_name = _report_path.parts[-1] if len(_report_path.parts) > 2 else ""
-    profile_name = _profiler_path.parts[-1] if len(_profiler_path.parts) > 2 else ""
+    profiler_name = _profiler_path.parts[-1] if _profiler_path and len(_profiler_path.parts) > 2 else ""
+    performance_name = _performance_path.parts[-1] if _performance_path and len(_performance_path.parts) > 2 else ""
     session_data = InstanceTable(
         instance_id=create_random_instance_id(),
         active_report={
-            "report_name": report_name,
-            "profile_name": profile_name,
+            "profiler_name": profiler_name,
+            "performance_name": performance_name,
             "npe_name": None,
         },
-        report_path=f"{report_path}/db.sqlite",
-        profiler_path=profiler_path,
+        profiler_path=f"{_profiler_path}/db.sqlite" if profiler_path else None,
+        performance_path=performance_path if performance_path else None,
         remote_connection=None,
-        remote_folder=None,
-        remote_profile_folder=None,
+        remote_profiler_folder=None,
+        remote_performance_folder=None,
     )
     db.session.add(session_data)
     db.session.commit()

@@ -86,6 +86,7 @@ export interface PlotConfiguration {
         b: number;
         t: number;
     };
+    showLegend?: boolean;
     title?: string;
     gridColour?: string;
     bgColour?: string;
@@ -125,6 +126,12 @@ export const CONDENSED_PLOT_CHUNK_COLOR = '#9c9e9f';
 
 export interface PlotMouseEventCustom extends PlotMouseEvent {
     points: PlotDatumCustom[];
+}
+
+export interface PlotMarker {
+    color: string;
+    address: number;
+    label?: string;
 }
 
 export interface PlotDatumCustom extends PlotDatum {
@@ -209,3 +216,6 @@ export const PerfChartLayout: Partial<Layout> = {
         zeroline: false,
     },
 };
+
+export const L1_SMALL_MARKER_COLOR: string = '#FF0000';
+export const L1_START_MARKER_COLOR: string = '#8EF32F';

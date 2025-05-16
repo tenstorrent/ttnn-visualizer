@@ -2,60 +2,70 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { MARKER_COLOURS, Marker, PerfTableRow } from '../../definitions/PerfTable';
-import PerfChart from './PerfChart';
+import { PlotData } from 'plotly.js';
+import { useAtomValue } from 'jotai';
+import { Marker, PerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import PerfChart from './PerfChart';
+import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import getPlotLabel from '../../functions/getPlotLabel';
 
 interface PerfOpCountVsRuntimeChartProps {
     selectedOpCodes: Marker[];
-    data?: PerfTableRow[];
+    datasets?: PerfTableRow[][];
 }
 
-function PerfOpCountVsRuntimeChart({ selectedOpCodes, data = [] }: PerfOpCountVsRuntimeChartProps) {
+function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCountVsRuntimeChartProps) {
+    const perfReport = useAtomValue(activePerformanceReportAtom);
+    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+    const flattenedData = datasets.flat();
     const opCodes = useMemo(
-        () => [...new Set(data?.filter((row) => row.raw_op_code !== undefined).map((row) => row.raw_op_code))],
-        [data],
+        () => [...new Set(flattenedData?.filter((row) => row.raw_op_code !== undefined).map((row) => row.raw_op_code))],
+        [flattenedData],
     );
-    const totalRuntime = useMemo(() => data.reduce(getRuntimeLength, 0), [data]);
 
     const opCountData = useMemo(
         () =>
-            opCodes.map(
-                (opCode) =>
-                    ({
-                        x: ['Op Count'],
-                        y: [data.filter((row) => row.raw_op_code === opCode).length / data.length],
-                        type: 'bar',
-                        name: '',
-                        hovertemplate: `${opCode}<br />%{y:.1%}`,
-                        marker: {
-                            color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
-                        },
-                    }) as Partial<PlotData>,
+            datasets.map((data, dataIndex) =>
+                opCodes.map(
+                    (opCode) =>
+                        ({
+                            x: [`Op Count ${datasets.length > 1 ? `(${dataIndex + 1})` : ''}`],
+                            y: [data.filter((row) => row.raw_op_code === opCode).length / data.length],
+                            type: 'bar',
+                            name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                            hovertemplate: `${opCode}<br />%{y:.1%}`,
+                            marker: {
+                                color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
+                            },
+                        }) as Partial<PlotData>,
+                ),
             ),
-        [data, opCodes, selectedOpCodes],
+        [datasets, opCodes, selectedOpCodes, perfReport, comparisonReport],
     );
 
     const opRuntimeData = useMemo(
         () =>
-            opCodes.map(
-                (opCode, index) =>
-                    ({
-                        x: ['Runtime %'],
-                        y: [
-                            data.filter((row) => row.raw_op_code === opCode).reduce(getRuntimeLength, 0) / totalRuntime,
-                        ],
-                        type: 'bar',
-                        name: '',
-                        hovertemplate: `${opCode}<br />%{y:.1%}`,
-                        marker: {
-                            color: MARKER_COLOURS[index],
-                        },
-                    }) as Partial<PlotData>,
+            datasets.map((data, dataIndex) =>
+                opCodes.map(
+                    (opCode) =>
+                        ({
+                            x: [`Runtime % ${datasets.length > 1 ? `(${dataIndex + 1})` : ''}`],
+                            y: [
+                                data.filter((row) => row.raw_op_code === opCode).reduce(getRuntimeLength, 0) /
+                                    data.reduce(getRuntimeLength, 0),
+                            ],
+                            type: 'bar',
+                            name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                            hovertemplate: `${opCode}<br />%{y:.1%}`,
+                            marker: {
+                                color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
+                            },
+                        }) as Partial<PlotData>,
+                ),
             ),
-        [data, opCodes, totalRuntime],
+        [datasets, opCodes, selectedOpCodes, perfReport, comparisonReport],
     );
 
     const configuration: PlotConfiguration = {
@@ -75,7 +85,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, data = [] }: PerfOpCountVs
     return (
         <PerfChart
             title='Operation Count vs Runtime Contribution'
-            chartData={[...opCountData, ...opRuntimeData]}
+            chartData={[...opCountData.flat(), ...opRuntimeData.flat()]}
             configuration={configuration}
         />
     );

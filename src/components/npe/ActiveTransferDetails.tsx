@@ -1,6 +1,6 @@
 import { Button, Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { NoCID, NoCTransfer } from '../../model/NPEModel';
+import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer } from '../../model/NPEModel';
 import { calculateLinkCongestionColor, getRouteColor } from './drawingApi';
 import { formatSize } from '../../functions/math';
 
@@ -14,10 +14,10 @@ const ActiveTransferDetails = ({
 }: {
     groupedTransfersByNoCID: Record<NoCID, NoCTransfer[]>;
     selectedNode: { index: number; coords: number[] } | null;
-    showActiveTransfers: (route: [number, number, NoCID, number] | null, index?: number) => void;
+    showActiveTransfers: (route: LinkUtilization | null, index?: number) => void;
     highlightedTransfer: NoCTransfer | null;
     setHighlightedTransfer: (transfer: NoCTransfer | null) => void;
-    congestionData: [number, number, NoCID, number][]; // [src, dst, congestion, demand]
+    congestionData: LinkUtilization[];
 }) => {
     return (
         <div className='side-data'>
@@ -32,8 +32,9 @@ const ActiveTransferDetails = ({
                         />
                     </h3>
                     {Object.entries(groupedTransfersByNoCID).map(([nocId, localTransferList]) => {
-                        const nocData = congestionData.find((el) => el[2] === nocId);
-                        const congestion = nocData ? nocData[3] : 0;
+                        const nocData = congestionData.find((el) => el[NPE_LINK.NOC_ID] === nocId);
+                        const congestion = nocData ? nocData[NPE_LINK.DEMAND] : 0;
+
                         return (
                             <div
                                 className='local-transfer-ctn'
@@ -83,7 +84,12 @@ const ActiveTransferDetails = ({
                                         </div>
                                         <div>{formatSize(transfer.total_bytes)}B</div>
                                         <div>{transfer.noc_event_type}</div>
-                                        <div>injection rate: {transfer.injection_rate.toFixed(2)}</div>
+
+                                        <div>
+                                            <div className='route'>
+                                                {transfer.route[0].injection_rate.toFixed(2)} b/cycle
+                                            </div>
+                                        </div>
                                     </div>
                                 ))}
                             </div>

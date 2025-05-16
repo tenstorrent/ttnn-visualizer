@@ -18,10 +18,13 @@ class DefaultConfig(object):
     PRINT_ENV = True
 
     # Path Settings
+    DB_VERSION = "0.29.0"  # App version when DB schema last changed
     REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
-    VERSION = "0.26.0"
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
     REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
+    PROFILER_DIRECTORY_NAME = "profiler-reports"
+    PERFORMANCE_DIRECTORY_NAME = "performance-reports"
+    NPE_DIRECTORY_NAME = "npe-reports"
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
     STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0
@@ -37,7 +40,7 @@ class DefaultConfig(object):
 
     # SQL Alchemy Settings
     SQLALCHEMY_DATABASE_URI = (
-        f"sqlite:///{os.path.join(APPLICATION_DIR, f'ttnn_{VERSION}.db')}"
+        f"sqlite:///{os.path.join(APPLICATION_DIR, f'ttnn_{DB_VERSION}.db')}"
     )
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_size": 10,  # Adjust pool size as needed (default is 5)
@@ -50,7 +53,7 @@ class DefaultConfig(object):
     GUNICORN_WORKER_CLASS = os.getenv("GUNICORN_WORKER_CLASS", "gevent")
     GUNICORN_WORKERS = os.getenv("GUNICORN_WORKERS", "1")
     PORT = os.getenv("PORT", "8000")
-    HOST = "localhost"
+    HOST = os.getenv("HOST", "localhost")
     DEV_SERVER_PORT = "5173"
     DEV_SERVER_HOST = "localhost"
 

@@ -2,24 +2,42 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { UIEvent, useMemo, useRef, useState } from 'react';
+import React, { UIEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAtom, useAtomValue } from 'jotai';
-import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
-import { BuffersByOperationData, useDevices, useOperationsList } from '../../hooks/useAPI';
+import {
+    BufferSummaryAxisConfiguration,
+    L1_SMALL_MARKER_COLOR,
+    L1_START_MARKER_COLOR,
+} from '../../definitions/PlotConfigurations';
+import {
+    BuffersByOperationData,
+    useDevices,
+    useGetL1SmallMarker,
+    useGetL1StartMarker,
+    useOperationsList,
+} from '../../hooks/useAPI';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import LoadingSpinner from '../LoadingSpinner';
 import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/Routes';
 import isValidNumber from '../../functions/isValidNumber';
-import { TensorsByOperationByAddress } from '../../model/BufferSummary';
-import { renderMemoryLayoutAtom, selectedDeviceAtom, showBufferSummaryZoomedAtom, showHexAtom } from '../../store/app';
+import { TensorDeallocationReport, TensorsByOperationByAddress } from '../../model/BufferSummary';
+import {
+    renderMemoryLayoutAtom,
+    selectedDeviceAtom,
+    showBufferSummaryZoomedAtom,
+    showHexAtom,
+    showMemoryRegionsAtom,
+} from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
+import { ScrollLocations } from '../../definitions/ScrollPositions';
+import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -34,6 +52,8 @@ interface BufferSummaryPlotRendererProps {
 function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }: BufferSummaryPlotRendererProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const [activeRow, setActiveRow] = useState<number | null>(null);
+    const [showDeallocationReport, setShowDeallocationReport] = useState(true);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const deviceId = useAtomValue(selectedDeviceAtom) || 0;
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
@@ -41,12 +61,44 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const { data: devices, isLoading: isLoadingDevices } = useDevices();
     const scrollElementRef = useRef(null);
     const { data: operations } = useOperationsList();
+    const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
+    const navigate = useNavigate();
 
+    const l1StartMarker = useGetL1StartMarker();
+    const l1SmallMarker = useGetL1SmallMarker();
     const numberOfOperations = useMemo(
         () =>
             buffersByOperation && buffersByOperation.length >= 0 ? buffersByOperation.length : PLACEHOLDER_ARRAY_SIZE,
         [buffersByOperation],
     );
+
+    const nondeallocatedTensorsByOperationId = useMemo(() => {
+        const result = new Map<number, TensorDeallocationReport[]>();
+        if (showDeallocationReport) {
+            tensorListByOperation.forEach((tensorsMap, operationId) => {
+                tensorsMap.forEach((tensor, address) => {
+                    if (tensor.id && tensor.consumers && tensor.consumers.length > 0) {
+                        const lastConsumerOperationId = Math.max(...tensor.consumers);
+                        if (lastConsumerOperationId < operationId) {
+                            if (!result.has(operationId)) {
+                                result.set(operationId, []);
+                            }
+                            const list: TensorDeallocationReport[] = result.get(operationId)!;
+                            list.push({
+                                id: tensor.id,
+                                address,
+                                consumerName: '',
+                                lastConsumerOperationId,
+                                lastOperationId: operationId,
+                            });
+                            result.set(operationId, list);
+                        }
+                    }
+                });
+            });
+        }
+        return result;
+    }, [tensorListByOperation, showDeallocationReport]);
 
     const getMemorySize = () =>
         !isLoadingDevices && devices ? devices[deviceId]?.worker_l1_size : L1_DEFAULT_MEMORY_SIZE;
@@ -82,12 +134,27 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     });
     const virtualItems = virtualizer.getVirtualItems();
 
+    const { updateScrollPosition } = useRestoreScrollPosition(virtualizer, ScrollLocations.BUFFER_SUMMARY);
+
     const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
         const el = event.currentTarget;
 
         setHasScrolledFromTop(!(el.scrollTop < OPERATION_EL_HEIGHT / 2));
         setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
     };
+
+    const handleNavigateToOperation = (event: React.MouseEvent<HTMLAnchorElement>, path: string, index: number) => {
+        event.preventDefault();
+        updateScrollPosition(index);
+        navigate(path);
+    };
+
+    const memoryRegionsMarkers = showMemoryRegions
+        ? [
+              { color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker, label: 'L1 SMALL' },
+              { color: L1_START_MARKER_COLOR, address: l1StartMarker, label: '' },
+          ]
+        : [];
 
     return buffersByOperation && !isLoadingDevices && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
@@ -97,6 +164,13 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                     checked={isZoomedIn}
                     onChange={() => {
                         setIsZoomedIn(!isZoomedIn);
+                    }}
+                />
+                <Switch
+                    label='Mark late tensor deallocations'
+                    checked={showDeallocationReport}
+                    onChange={() => {
+                        setShowDeallocationReport(!showDeallocationReport);
                     }}
                 />
 
@@ -113,6 +187,14 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                     checked={renderMemoryLayout}
                     onChange={() => {
                         setRenderMemoryLayout(!renderMemoryLayout);
+                    }}
+                />
+
+                <GlobalSwitch
+                    label='Memory regions'
+                    checked={showMemoryRegions}
+                    onChange={() => {
+                        setShowMemoryRegions(!showMemoryRegions);
                     }}
                 />
             </div>
@@ -143,6 +225,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                             : [0, memorySize]
                     }
                     configuration={BufferSummaryAxisConfiguration}
+                    markers={memoryRegionsMarkers}
                 />
             </div>
 
@@ -176,23 +259,37 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                                     key={virtualRow.key}
                                     data-index={virtualRow.index}
                                     ref={virtualizer.measureElement}
+                                    onMouseEnter={() => setActiveRow(operation.id)}
+                                    onMouseLeave={() => setActiveRow(null)}
                                 >
                                     <BufferSummaryRow
+                                        className={classNames({ 'is-active': operation.id === activeRow })}
                                         buffers={operation.buffers}
-                                        // operationId={operation.id}
                                         memoryStart={isZoomedIn ? zoomedMemorySizeStart : 0}
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
                                         tensorList={tensorListByOperation.get(operation.id)!}
+                                        tensorDeallocationReport={
+                                            nondeallocatedTensorsByOperationId.get(operation.id) || []
+                                        }
                                     />
 
                                     <Tooltip
                                         content={`${operation.id} ${operation.name} (${operations?.find((op) => op.id === operation.id)?.operationFileIdentifier})`}
                                         className='y-axis-tick'
                                     >
-                                        <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
+                                        <a
+                                            href={`${ROUTES.OPERATIONS}/${operation.id}`}
+                                            onClick={(event) =>
+                                                handleNavigateToOperation(
+                                                    event,
+                                                    `${ROUTES.OPERATIONS}/${operation.id}`,
+                                                    virtualRow.index,
+                                                )
+                                            }
+                                        >
                                             {operation.id}&nbsp;{operation.name}
-                                        </Link>
+                                        </a>
                                     </Tooltip>
                                 </div>
                             );

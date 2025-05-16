@@ -15,6 +15,9 @@ export interface UploadProgress {
 
 type FileWithRelativePath = File & { webkitRelativePath?: string };
 
+const ua = navigator.userAgent.toLowerCase();
+const IS_SAFARI = ua.includes('safari') && !ua.includes('chrome') && !ua.includes('android');
+
 const useLocalConnection = () => {
     /**
      * Retrieves the top level folder name from an array of uploaded files
@@ -100,8 +103,13 @@ const useLocalConnection = () => {
             formData.append('files', f);
         });
 
+        // In the POST request Safari seems to remove the parent folder name so we're adding it specifically here
+        if (IS_SAFARI) {
+            formData.append('folderName', files[0].webkitRelativePath.split('/')[0]);
+        }
+
         return axiosInstance
-            .post(`${import.meta.env.VITE_API_ROOT}/local/upload/report`, formData, {
+            .post(`${import.meta.env.VITE_API_ROOT}/local/upload/profiler`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
@@ -139,8 +147,13 @@ const useLocalConnection = () => {
             formData.append('files', f);
         });
 
+        // In the POST request Safari seems to remove the parent folder name so we're adding it specifically here
+        if (IS_SAFARI) {
+            formData.append('folderName', files[0].webkitRelativePath.split('/')[0]);
+        }
+
         return axiosInstance
-            .post(`${import.meta.env.VITE_API_ROOT}/local/upload/profile`, formData, {
+            .post(`${import.meta.env.VITE_API_ROOT}/local/upload/performance`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },

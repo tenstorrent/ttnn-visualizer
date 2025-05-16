@@ -54,17 +54,14 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
     return (
         <nav className='operation-details-navigation navbar'>
             <ButtonGroup className='button-group'>
-                <Tooltip
-                    content='View operations graph'
-                    placement={PopoverPosition.TOP}
-                >
-                    <Button
-                        icon={IconNames.Graph}
-                        onClick={() => navigate(`${ROUTES.GRAPHTREE}/${operationId}`)}
-                        variant='outlined'
-                        className='graph-button'
-                    />
-                </Tooltip>
+                <Button
+                    icon={IconNames.Graph}
+                    onClick={() => navigate(`${ROUTES.GRAPHTREE}/${operationId}`)}
+                    variant='outlined'
+                    className='graph-button'
+                    text='View in graph'
+                />
+
                 <Tooltip
                     content={previousOperation ? `${previousOperation?.id} ${previousOperation?.name}` : ''}
                     placement={PopoverPosition.TOP}

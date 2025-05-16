@@ -22,7 +22,19 @@
             text-decoration: none;
 
             h1 {
+                display: inline-flex;
+                flex-direction: column;
                 margin: 0;
+                text-align: right;
+
+                .visualizer-title {
+                    font-size: 14px;
+                    margin-left: 52px;
+                }
+            }
+
+            .version {
+                top: -1.5em;
             }
 
             #logo {

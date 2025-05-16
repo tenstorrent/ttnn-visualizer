@@ -231,3 +231,9 @@ export const calculateLinkCongestionColor = (value: number, min: number = 0, isH
 
     return `rgb(${intensity}, ${255 - intensity}, 0)`;
 };
+
+export const getLines = (nocs: Array<{ transfer: number; nocId: NoCID }>) => {
+    return nocs.map((noc) => {
+        return getLinkPoints(noc.nocId, getRouteColor(noc.transfer));
+    });
+};
