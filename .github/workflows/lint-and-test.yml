@@ -2,11 +2,11 @@ name: Lint and Test Workflow
 
 on:
   pull_request:
-    branches:
-      - dev
+    branches: [ "dev" ]
 
 jobs:
-    update-version:
+    lint-and-test:
+        name: Lint and Test
         runs-on: ubuntu-latest
         steps:
             - name: Checkout code
@@ -18,8 +18,5 @@ jobs:
                 node-version: v20.11.1
             - run: npm install -g pnpm@latest-10
             - run: pnpm install
-
-            - name: Lint and test
-              run: |
-                pnpm run lint
-                pnpm run test
+            - run: pnpm run lint
+            - run: pnpm run test
