@@ -611,7 +611,10 @@ def create_profiler_files():
 
     logger.info(f"Writing report files to {profiler_directory}/{profiler_name}")
 
-    save_uploaded_files(files, profiler_directory, folder_name)
+    try:
+        save_uploaded_files(files, profiler_directory, folder_name)
+    except DataFormatError:
+        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
     instance_id = request.args.get("instanceId")
     update_instance(instance_id=instance_id, profiler_name=profiler_name, clear_remote=True)
@@ -650,11 +653,14 @@ def create_profile_files():
 
     logger.info(f"Writing performance files to {target_directory}/{performance_name}")
 
-    save_uploaded_files(
-        files,
-        target_directory,
-        folder_name
-    )
+    try:
+        save_uploaded_files(
+            files,
+            target_directory,
+            folder_name
+        )
+    except DataFormatError:
+        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
     instance_id = request.args.get("instanceId")
     update_instance(
@@ -682,7 +688,10 @@ def create_npe_files():
     target_directory = data_directory / current_app.config["NPE_DIRECTORY_NAME"]
     target_directory.mkdir(parents=True, exist_ok=True)
 
-    save_uploaded_files(files, target_directory)
+    try:
+        save_uploaded_files(files, target_directory)
+    except DataFormatError:
+        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
     instance_id = request.args.get("instanceId")
     update_instance(instance_id=instance_id, npe_name=npe_name, clear_remote=True)

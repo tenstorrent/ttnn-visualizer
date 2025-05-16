@@ -2,8 +2,17 @@
 #
 # SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-from pathlib import Path
 import logging
+import os
+import shlex
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
+from flask import current_app
+
+from ttnn_visualizer.exceptions import DataFormatError
 
 logger = logging.getLogger(__name__)
 
@@ -74,13 +83,44 @@ def save_uploaded_files(
         else:
             destination_file = Path(target_directory) / str(file_path)
 
-        logger.info(f"Writing file to {destination_file}")
+        if current_app.config["MALWARE_SCANNER"]:
+            (_, temp_path) = tempfile.mkstemp()
+            file.save(temp_path)
 
-        # Create directory if it doesn't exist
-        if not destination_file.parent.exists():
-            logger.info(
-                f"{destination_file.parent.name} does not exist. Creating directory"
-            )
-            destination_file.parent.mkdir(exist_ok=True, parents=True)
+           # Run malware scanner
+            cmd_list = shlex.split(current_app.config["MALWARE_SCANNER"])
+            cmd_list.append(temp_path)
 
-        file.save(destination_file)
+            try:
+                result = subprocess.run(
+                    cmd_list,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                if result.returncode == 0:
+                    # No virus found, move file to final destination
+                    if not destination_file.parent.exists():
+                        destination_file.parent.mkdir(exist_ok=True, parents=True)
+
+                    shutil.move(temp_path, destination_file)
+                    logger.info(f"File scanned clean and saved to {destination_file}")
+                else:
+                    os.unlink(temp_path)
+                    logger.warning(f"Malware scanner flagged file: {current_file_name}")
+                    raise DataFormatError()
+            except Exception as e:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                raise
+        else:
+            logger.info(f"Writing file to {destination_file}")
+
+            # Create directory if it doesn't exist
+            if not destination_file.parent.exists():
+                logger.info(
+                    f"{destination_file.parent.name} does not exist. Creating directory"
+                )
+                destination_file.parent.mkdir(exist_ok=True, parents=True)
+
+            file.save(destination_file)

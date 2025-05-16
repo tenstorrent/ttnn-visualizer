@@ -17,6 +17,7 @@ class DefaultConfig(object):
     TESTING = False
     PRINT_ENV = True
     SERVER_MODE = str_to_bool(os.getenv("SERVER_MODE", "false"))
+    MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
 
     # Path Settings
     DB_VERSION = "0.29.0"  # App version when DB schema last changed
