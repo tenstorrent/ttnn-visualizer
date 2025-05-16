@@ -173,7 +173,6 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                         setShowDeallocationReport(!showDeallocationReport);
                     }}
                 />
-
                 <GlobalSwitch
                     label='Hex axis labels'
                     checked={showHex}
@@ -181,7 +180,6 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                         setShowHex(!showHex);
                     }}
                 />
-
                 <GlobalSwitch
                     label='Tensor memory layout overlay'
                     checked={renderMemoryLayout}
@@ -189,7 +187,6 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                         setRenderMemoryLayout(!renderMemoryLayout);
                     }}
                 />
-
                 <GlobalSwitch
                     label='Memory regions'
                     checked={showMemoryRegions}
@@ -272,6 +269,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                                         tensorDeallocationReport={
                                             nondeallocatedTensorsByOperationId.get(operation.id) || []
                                         }
+                                        showMemoryLayout={renderMemoryLayout}
                                     />
 
                                     <Tooltip
