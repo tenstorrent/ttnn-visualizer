@@ -79,9 +79,6 @@ const BufferSummaryRow = ({
                 interactivityList.forEach(({ color, position, size, buffer, dimmedColor, tensor, notDeallocated }) => {
                     let activeColor = color;
                     const tensorMemoryLayout = tensor?.memory_config?.memory_layout;
-                    const originalColour = tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address);
-                    const currentColour =
-                        (selectedTensor && selectedTensor !== tensor?.id ? dimmedColor : originalColour) ?? '#000';
 
                     if (selectedTensor && selectedTensor === tensor?.id) {
                         activeColor = color;
@@ -95,14 +92,7 @@ const BufferSummaryRow = ({
                     ctx.fillRect(position, 1, size, CANVAS_HEIGHT);
 
                     if (showMemoryLayout && tensorMemoryLayout && !notDeallocated) {
-                        const svgPattern =
-                            tensorMemoryLayout &&
-                            currentColour &&
-                            getBackgroundPattern(tensorMemoryLayout, currentColour);
-
-                        if (svgPattern) {
-                            // Add pattern to canvas here
-                        }
+                        getBackgroundPattern(ctx, tensorMemoryLayout, position, size);
                     }
 
                     if (notDeallocated) {
@@ -263,23 +253,85 @@ const BufferSummaryRow = ({
 
 const FG_COLOUR = 'rgba(0, 0, 0, 0.7)';
 
-function getBackgroundPattern(layout: TensorMemoryLayout, colour: string): string | null {
-    let pattern: string | null = null;
+function getBackgroundPattern(ctx, layout, position, size): string | null {
+    const pattern: string | null = null;
 
     if (layout === TensorMemoryLayout.INTERLEAVED) {
-        pattern = `<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4px" height="4px" fill="${colour}" fill-opacity="1"></rect><circle cx="2" cy="2" r="1.2360774464742066" opacity="0.3" fill="${FG_COLOUR}"></circle></svg>`;
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = FG_COLOUR;
+        const dotRadius = 1;
+        const spacing = 4;
+        for (let x = position + spacing / 2; x < position + size; x += spacing) {
+            for (let y = spacing / 2; y < CANVAS_HEIGHT; y += spacing) {
+                ctx.beginPath();
+                ctx.arc(x, y, dotRadius, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
     }
 
     if (layout === TensorMemoryLayout.BLOCK_SHARDED) {
-        pattern = `<svg xmlns="http://www.w3.org/2000/svg" width="6" height="6"><rect width="6px" height="6px" fill="${colour}" fill-opacity="1"></rect><path d="M3,0L3,6M0,3L6,3" opacity="0.2" stroke="${FG_COLOUR}" stroke-width="0.9800398407955466px"></path></svg>`;
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.strokeStyle = FG_COLOUR;
+        ctx.lineWidth = 1;
+        const spacing = 5;
+
+        for (let x = position; x < position + size; x += spacing) {
+            ctx.beginPath();
+            ctx.moveTo(x, 1);
+            ctx.lineTo(x, CANVAS_HEIGHT);
+            ctx.stroke();
+        }
+
+        for (let y = 1; y < CANVAS_HEIGHT; y += spacing) {
+            ctx.beginPath();
+            ctx.moveTo(position, y);
+            ctx.lineTo(position + size, y);
+            ctx.stroke();
+        }
+
+        ctx.globalAlpha = 1;
+        ctx.restore();
     }
 
     if (layout === TensorMemoryLayout.HEIGHT_SHARDED) {
-        pattern = `<svg xmlns="http://www.w3.org/2000/svg" width="6" height="6"><rect width="6px" height="6px" fill="${colour}" fill-opacity="1"></rect><path d="M3,0L3,6" opacity="0.2" stroke="${FG_COLOUR}" stroke-width="1.7999999999999998px"></path></svg>`;
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.strokeStyle = FG_COLOUR;
+        ctx.lineWidth = 1;
+        const spacing = 5;
+
+        for (let x = position; x < position + size; x += spacing) {
+            ctx.beginPath();
+            ctx.moveTo(x, 1);
+            ctx.lineTo(x, CANVAS_HEIGHT);
+            ctx.stroke();
+        }
+
+        ctx.globalAlpha = 1;
+        ctx.restore();
     }
 
     if (layout === TensorMemoryLayout.WIDTH_SHARDED) {
-        pattern = `<svg xmlns="http://www.w3.org/2000/svg" width="6" height="6"><rect width="6px" height="6px" fill="${colour}" fill-opacity="1"></rect><path d="M0,3L6,3" opacity="0.2" stroke="${FG_COLOUR}" stroke-width="1.7999999999999998px"></path></svg>`;
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.strokeStyle = FG_COLOUR;
+        ctx.lineWidth = 1;
+        const spacing = 5;
+
+        for (let y = 1; y < CANVAS_HEIGHT; y += spacing) {
+            ctx.beginPath();
+            ctx.moveTo(position, y);
+            ctx.lineTo(position + size, y);
+            ctx.stroke();
+        }
+
+        ctx.globalAlpha = 1;
+        ctx.restore();
     }
 
     return pattern;
