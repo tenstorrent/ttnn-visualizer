@@ -14,7 +14,7 @@ import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { getDimmedColour } from '../../functions/colour';
 import { TensorDeallocationReport } from '../../model/BufferSummary';
-import { TensorMemoryLayout } from '../../functions/parseMemoryConfig';
+import getCanvasBackgroundPattern from '../../functions/getCanvasBackgroundPattern';
 
 interface BufferSummaryRowProps {
     buffers: Buffer[];
@@ -92,7 +92,7 @@ const BufferSummaryRow = ({
                     ctx.fillRect(position, 1, size, CANVAS_HEIGHT);
 
                     if (showMemoryLayout && tensorMemoryLayout && !notDeallocated) {
-                        getBackgroundPattern(ctx, tensorMemoryLayout, position, size);
+                        getCanvasBackgroundPattern(ctx, tensorMemoryLayout, position, size, CANVAS_HEIGHT);
                     }
 
                     if (notDeallocated) {
@@ -250,91 +250,5 @@ const BufferSummaryRow = ({
         </>
     );
 };
-
-const FG_COLOUR = 'rgba(0, 0, 0, 0.7)';
-
-function getBackgroundPattern(ctx, layout, position, size): string | null {
-    const pattern: string | null = null;
-
-    if (layout === TensorMemoryLayout.INTERLEAVED) {
-        ctx.save();
-        ctx.globalAlpha = 0.7;
-        ctx.fillStyle = FG_COLOUR;
-        const dotRadius = 1;
-        const spacing = 4;
-        for (let x = position + spacing / 2; x < position + size; x += spacing) {
-            for (let y = spacing / 2; y < CANVAS_HEIGHT; y += spacing) {
-                ctx.beginPath();
-                ctx.arc(x, y, dotRadius, 0, 2 * Math.PI);
-                ctx.fill();
-            }
-        }
-        ctx.globalAlpha = 1;
-        ctx.restore();
-    }
-
-    if (layout === TensorMemoryLayout.BLOCK_SHARDED) {
-        ctx.save();
-        ctx.globalAlpha = 0.7;
-        ctx.strokeStyle = FG_COLOUR;
-        ctx.lineWidth = 1;
-        const spacing = 5;
-
-        for (let x = position; x < position + size; x += spacing) {
-            ctx.beginPath();
-            ctx.moveTo(x, 1);
-            ctx.lineTo(x, CANVAS_HEIGHT);
-            ctx.stroke();
-        }
-
-        for (let y = 1; y < CANVAS_HEIGHT; y += spacing) {
-            ctx.beginPath();
-            ctx.moveTo(position, y);
-            ctx.lineTo(position + size, y);
-            ctx.stroke();
-        }
-
-        ctx.globalAlpha = 1;
-        ctx.restore();
-    }
-
-    if (layout === TensorMemoryLayout.HEIGHT_SHARDED) {
-        ctx.save();
-        ctx.globalAlpha = 0.7;
-        ctx.strokeStyle = FG_COLOUR;
-        ctx.lineWidth = 1;
-        const spacing = 5;
-
-        for (let x = position; x < position + size; x += spacing) {
-            ctx.beginPath();
-            ctx.moveTo(x, 1);
-            ctx.lineTo(x, CANVAS_HEIGHT);
-            ctx.stroke();
-        }
-
-        ctx.globalAlpha = 1;
-        ctx.restore();
-    }
-
-    if (layout === TensorMemoryLayout.WIDTH_SHARDED) {
-        ctx.save();
-        ctx.globalAlpha = 0.7;
-        ctx.strokeStyle = FG_COLOUR;
-        ctx.lineWidth = 1;
-        const spacing = 5;
-
-        for (let y = 1; y < CANVAS_HEIGHT; y += spacing) {
-            ctx.beginPath();
-            ctx.moveTo(position, y);
-            ctx.lineTo(position + size, y);
-            ctx.stroke();
-        }
-
-        ctx.globalAlpha = 1;
-        ctx.restore();
-    }
-
-    return pattern;
-}
 
 export default BufferSummaryRow;
