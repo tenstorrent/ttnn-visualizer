@@ -78,6 +78,7 @@ const drawDots = (ctx: CanvasRenderingContext2D, position: number, height: numbe
     ctx.fillStyle = FG_COLOUR;
     const dotRadius = 1;
     const spacing = 4;
+
     for (let x = position + spacing / 2; x < position + width; x += spacing) {
         for (let y = spacing / 2; y < height; y += spacing) {
             ctx.beginPath();
@@ -85,6 +86,7 @@ const drawDots = (ctx: CanvasRenderingContext2D, position: number, height: numbe
             ctx.fill();
         }
     }
+
     ctx.globalAlpha = 1;
     ctx.restore();
 };
