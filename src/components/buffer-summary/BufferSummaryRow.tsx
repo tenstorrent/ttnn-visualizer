@@ -14,6 +14,7 @@ import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { getDimmedColour } from '../../functions/colour';
 import { TensorDeallocationReport } from '../../model/BufferSummary';
+import getCanvasBackgroundPattern from '../../functions/getCanvasBackgroundPattern';
 
 interface BufferSummaryRowProps {
     buffers: Buffer[];
@@ -21,6 +22,7 @@ interface BufferSummaryRowProps {
     memoryEnd: number;
     memoryPadding: number;
     tensorList: Map<number, Tensor>;
+    showMemoryLayout: boolean;
     className?: string;
     tensorDeallocationReport?: TensorDeallocationReport[];
 }
@@ -38,6 +40,7 @@ const BufferSummaryRow = ({
     tensorList,
     className = '',
     tensorDeallocationReport = [],
+    showMemoryLayout,
 }: BufferSummaryRowProps) => {
     const computedMemorySize = memoryEnd - memoryStart;
     const computedPadding = (memoryPadding / computedMemorySize) * SCALE;
@@ -46,6 +49,7 @@ const BufferSummaryRow = ({
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
     const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
+
     const { createToast, resetToasts } = useBufferFocus();
 
     const interactivityList = useMemo(() => {
@@ -65,13 +69,16 @@ const BufferSummaryRow = ({
 
     useEffect(() => {
         const canvas = canvasRef.current;
+
         if (canvas) {
             const ctx = canvas.getContext('2d');
+
             if (ctx) {
                 ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
                 interactivityList.forEach(({ color, position, size, buffer, dimmedColor, tensor, notDeallocated }) => {
                     let activeColor = color;
+                    const tensorMemoryLayout = tensor?.memory_config?.memory_layout;
 
                     if (selectedTensor && selectedTensor === tensor?.id) {
                         activeColor = color;
@@ -83,6 +90,10 @@ const BufferSummaryRow = ({
 
                     ctx.fillStyle = activeColor;
                     ctx.fillRect(position, 1, size, CANVAS_HEIGHT);
+
+                    if (showMemoryLayout && tensorMemoryLayout && !notDeallocated) {
+                        getCanvasBackgroundPattern(ctx, tensorMemoryLayout, position, size, CANVAS_HEIGHT);
+                    }
 
                     if (notDeallocated) {
                         ctx.strokeStyle = '#000000';
@@ -109,7 +120,7 @@ const BufferSummaryRow = ({
                 });
             }
         }
-    }, [interactivityList, selectedAddress, selectedTensor]);
+    }, [interactivityList, selectedAddress, selectedTensor, showMemoryLayout]);
 
     const findBufferForInteraction = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
@@ -134,6 +145,7 @@ const BufferSummaryRow = ({
             clearFocusedBuffer();
         }
     };
+
     const clearFocusedBuffer = () => {
         resetToasts();
     };
