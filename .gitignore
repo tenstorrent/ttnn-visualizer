@@ -26,6 +26,7 @@ dist-ssr
 
 myenv
 ttnn_env
+python_env
 **.sqlite
 **/__pycache__/
 
