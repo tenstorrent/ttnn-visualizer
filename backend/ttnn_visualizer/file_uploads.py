@@ -72,55 +72,71 @@ def save_uploaded_files(
     :param target_directory: The base directory for saving the files.
     :param folder_name: The name to use for the directory.
     """
-    for file in files:
-        current_file_name = str(file.filename)
-        logger.info(f"Processing file: {current_file_name}")
+    if current_app.config["MALWARE_SCANNER"]:
+        scanned_files = scan_uploaded_files(files, target_directory, folder_name)
 
-        file_path = Path(current_file_name)
+        for temp_path, dest_path in scanned_files:
+            if dest_path.parent.exists():
+                dest_path.parent.mkdir(exist_ok=True, parents=True)
 
-        if folder_name:
-            destination_file = Path(target_directory) / folder_name / str(file_path)
-        else:
-            destination_file = Path(target_directory) / str(file_path)
-
-        if current_app.config["MALWARE_SCANNER"]:
-            (_, temp_path) = tempfile.mkstemp()
-            file.save(temp_path)
-
-           # Run malware scanner
-            cmd_list = shlex.split(current_app.config["MALWARE_SCANNER"])
-            cmd_list.append(temp_path)
-
-            try:
-                result = subprocess.run(
-                    cmd_list,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                )
-                if result.returncode == 0:
-                    # No virus found, move file to final destination
-                    if not destination_file.parent.exists():
-                        destination_file.parent.mkdir(exist_ok=True, parents=True)
-
-                    shutil.move(temp_path, destination_file)
-                    logger.info(f"File scanned clean and saved to {destination_file}")
-                else:
-                    os.unlink(temp_path)
-                    logger.warning(f"Malware scanner flagged file: {current_file_name}")
-                    raise DataFormatError()
-            except Exception as e:
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                raise
-        else:
-            logger.info(f"Writing file to {destination_file}")
+            logger.info(f"Saving uploaded file (clean): {dest_path}")
+            shutil.move(temp_path, dest_path)
+    else:
+        for file in files:
+            dest_path = construct_dest_path(file, target_directory, folder_name)
+            logger.info(f"Writing file to {dest_path}")
 
             # Create directory if it doesn't exist
-            if not destination_file.parent.exists():
+            if not dest_path.parent.exists():
                 logger.info(
-                    f"{destination_file.parent.name} does not exist. Creating directory"
+                    f"{dest_path.parent.name} does not exist. Creating directory"
                 )
-                destination_file.parent.mkdir(exist_ok=True, parents=True)
+                dest_path.parent.mkdir(exist_ok=True, parents=True)
 
-            file.save(destination_file)
+            logger.info(f"Saving uploaded file: {dest_path}")
+            file.save(dest_path)
+
+
+def scan_uploaded_files(
+    files,
+    target_directory,
+    folder_name=None,
+):
+    scanned_files = []
+
+    for file in files:
+        (_, temp_path) = tempfile.mkstemp()
+        file.save(temp_path)
+        dest_path = construct_dest_path(file, target_directory, folder_name)
+
+        cmd_list = shlex.split(current_app.config["MALWARE_SCANNER"])
+        cmd_list.append(temp_path)
+
+        try:
+            result = subprocess.run(
+                cmd_list,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            if result.returncode == 0:
+                scanned_files.append((temp_path, dest_path))
+            else:
+                os.unlink(temp_path)
+                logger.warning(f"Malware scanner flagged file: {file.filename}")
+                raise DataFormatError()
+        except Exception as e:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
+
+    return scanned_files
+
+
+def construct_dest_path(file, target_directory, folder_name):
+    if folder_name:
+        dest_path = Path(target_directory) / folder_name / str(file.filename)
+    else:
+        dest_path = Path(target_directory) / str(file.filename)
+
+    return dest_path
