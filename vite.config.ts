@@ -23,6 +23,7 @@ export default defineConfig(({ mode }) => {
         define: {
             'import.meta.env.APP_VERSION': JSON.stringify(version),
             'import.meta.env.VITE_API_ROOT': JSON.stringify(env.VITE_API_ROOT) ?? '"http://localhost:8000/api"',
+            'import.meta.env.VITE_DISABLE_REMOTE_SYNC': JSON.stringify(env.VITE_DISABLE_REMOTE_SYNC) ?? null,
         },
         plugins: [react()],
         server: {
