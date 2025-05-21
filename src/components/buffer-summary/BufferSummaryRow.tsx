@@ -178,7 +178,7 @@ const BufferSummaryRow = ({
                     <br />
                     <Icon
                         intent={Intent.WARNING}
-                        icon={IconNames.ISSUE}
+                        icon={IconNames.WARNING_SIGN}
                     />{' '}
                     Opportunity to deallocate earlier
                 </>
