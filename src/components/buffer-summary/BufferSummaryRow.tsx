@@ -4,9 +4,10 @@
 
 import 'styles/components/BufferSummaryRow.scss';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useAtom } from 'jotai/index';
 import classNames from 'classnames';
+import { IconNames } from '@blueprintjs/icons';
 import { Buffer, Tensor } from '../../model/APIData';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatSize, toHex, toReadableShape, toReadableType } from '../../functions/math';
@@ -56,10 +57,25 @@ const BufferSummaryRow = ({
             const color = (tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address)) || 'black';
             const dimmedColor = getDimmedColour(color);
             let notDeallocated = false;
-            if (tensorDeallocationReport?.some((el) => el.address === buffer.address)) {
+            let consumerOperationId = -1;
+            let consumerName = '';
+            const result = tensorDeallocationReport?.find((report) => report.address === buffer.address);
+            if (result !== undefined) {
                 notDeallocated = true;
+                consumerOperationId = result.lastConsumerOperationId;
+                consumerName = result.consumerName;
             }
-            return { position, size, tensor, color, dimmedColor, buffer, notDeallocated };
+            return {
+                position,
+                size,
+                tensor,
+                color,
+                dimmedColor,
+                buffer,
+                notDeallocated,
+                consumerOperationId,
+                consumerName,
+            };
         });
     }, [buffers, computedMemorySize, memoryStart, tensorList, tensorDeallocationReport]);
 
@@ -155,6 +171,19 @@ const BufferSummaryRow = ({
             const x = interactiveBuffer.position / scaleX;
             const { color } = interactiveBuffer;
 
+            const missingDeallocationNotice = interactiveBuffer.notDeallocated ? (
+                <>
+                    <br />
+                    Last consumer is {interactiveBuffer.consumerOperationId} {interactiveBuffer.consumerName}
+                    <br />
+                    <Icon
+                        intent={Intent.WARNING}
+                        icon={IconNames.ISSUE}
+                    />{' '}
+                    Opportunity to deallocate earlier
+                </>
+            ) : null;
+
             setTooltip({
                 x,
                 y: 0,
@@ -176,6 +205,7 @@ const BufferSummaryRow = ({
                                     {interactiveBuffer.tensor?.memory_config?.memory_layout}
                                 </>
                             ) : null}
+                            {missingDeallocationNotice}
                         </strong>
                     </div>
                 ),
