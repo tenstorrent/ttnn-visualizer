@@ -27,7 +27,7 @@ import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
     const queryClient = useQueryClient();
-    const disableRemoteSync = import.meta.env.VITE_DISABLE_REMOTE_SYNC;
+    const disableRemoteSync = import.meta.env.VITE_SERVER_MODE;
 
     const setReportLocation = useSetAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);

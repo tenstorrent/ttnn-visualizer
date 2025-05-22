@@ -12,7 +12,7 @@ import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 function Home() {
     useClearSelectedBuffer();
 
-    const disableRemoteSync = import.meta.env.VITE_DISABLE_REMOTE_SYNC;
+    const disableRemoteSync = import.meta.env.VITE_SERVER_MODE;
 
     return (
         <div className='home'>
