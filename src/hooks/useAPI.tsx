@@ -53,13 +53,13 @@ const parseFileOperationIdentifier = (stackTrace: string): string => {
 // Possibly rename this and related functions to be "Instance"
 export const fetchTabSession = async (): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
-    const response = await axiosInstance.get<TabSession>('/api/session').catch();
+    const response = await axiosInstance.get<TabSession>('/api/instance').catch();
     return response?.data;
 };
 
 export const updateTabSession = async (payload: Partial<TabSession>): Promise<TabSession | null> => {
     // eslint-disable-next-line promise/valid-params
-    const response = await axiosInstance.put<TabSession>('/api/session', payload).catch();
+    const response = await axiosInstance.put<TabSession>('/api/instance', payload).catch();
     return response?.data;
 };
 
