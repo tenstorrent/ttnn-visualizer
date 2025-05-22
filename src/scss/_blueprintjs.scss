@@ -13,6 +13,13 @@ $dark-warning-background-base: $tt-yellow;
 $dark-danger-background-base: $tt-red-accent;
 $dark-success-intent-color: $green4; // from BlueprintJS
 
+$pt-intent-text-colors: (
+    'primary': $dark-primary-intent-color,
+    'success': $dark-success-intent-color,
+    'warning': $dark-warning-background-base,
+    'danger': $dark-danger-background-base,
+);
+
 @use '@blueprintjs/core/src/blueprint.scss' with (
     $dark-button-background-color: $dark-button-background-base,
     $dark-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: -5%),

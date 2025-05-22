@@ -164,7 +164,12 @@ export default function Performance() {
                     id='tab-1'
                     title='Table'
                     icon={IconNames.TH}
-                    panel={<PerformanceReport data={rangedData} />}
+                    panel={
+                        <PerformanceReport
+                            data={rangedData}
+                            comparisonData={filteredComparisonData}
+                        />
+                    }
                 />
 
                 <Tab
