@@ -141,11 +141,12 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
         })) as TypedPerfTableRow[];
 
-        // Need to confirm this is an appropriate sorting key
+        // Need to confirm this is an appropriate sorting
         changeSorting('id')(SortingDirection.ASC);
 
         return sortTableFields(parsedRows);
-    }, [data, sortTableFields, filters, filterableColumnKeys, activeFilters, matches, changeSorting]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [data, sortTableFields, filters, filterableColumnKeys, activeFilters, matches]);
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
