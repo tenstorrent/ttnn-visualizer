@@ -42,6 +42,7 @@ export interface PerfTableRow {
     output_subblock_w: string;
     high_dispatch?: boolean;
     pm_ideal_ns: string;
+    missing?: boolean;
 }
 
 export interface RowData {

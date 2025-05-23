@@ -86,6 +86,10 @@
         }
     }
 
+    .added-data {
+        background-color: colours.$tt-green-shade;
+    }
+
     .missing-data {
         background-color: colours.$tt-red-shade;
     }

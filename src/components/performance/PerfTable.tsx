@@ -122,6 +122,12 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             );
         }
 
+        if (matches && matches.length > 0) {
+            const existingIds = new Set(filteredRows.map((row) => `${row.id}-${row.raw_op_code}`));
+            const missingMatches = matches.filter((match) => !existingIds.has(`${match.id}-${match.raw_op_code}`));
+            filteredRows = filteredRows.concat(missingMatches.map((match) => ({ ...match, missing: true })));
+        }
+
         const parsedRows = filteredRows.map((row) => ({
             ...row,
             id: parseInt(row.id, 10),
@@ -135,8 +141,11 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
         })) as TypedPerfTableRow[];
 
+        // Need to confirm this is an appropriate sorting key
+        changeSorting('id')(SortingDirection.ASC);
+
         return sortTableFields(parsedRows);
-    }, [data, sortTableFields, filters, filterableColumnKeys, activeFilters]);
+    }, [data, sortTableFields, filters, filterableColumnKeys, activeFilters, matches, changeSorting]);
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
@@ -220,11 +229,14 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                     <Fragment key={i}>
                         <tr
                             className={classNames({
-                                'missing-data': matches?.some(
-                                    (match) =>
-                                        parseInt(match.id, 10) === parseInt(row.id, 10) &&
-                                        match.raw_op_code === row.raw_op_code,
-                                ),
+                                'missing-data': row.missing,
+                                'added-data':
+                                    !row.missing &&
+                                    matches?.some(
+                                        (match) =>
+                                            parseInt(match.id, 10) === parseInt(row.id, 10) &&
+                                            match.raw_op_code === row.raw_op_code,
+                                    ),
                             })}
                         >
                             {visibleHeaders.map((h) => (
