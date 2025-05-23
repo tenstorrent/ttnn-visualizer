@@ -18,6 +18,7 @@ interface PerformanceTableProps {
     filters: Record<TableKeys, string> | null;
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
+    matches?: PerfTableRow[];
 }
 
 interface TypedPerfTableRow
@@ -79,7 +80,13 @@ const TABLE_HEADERS: TableHeader[] = [
 const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
 
-const PerformanceTable: FC<PerformanceTableProps> = ({ data, filters, provideMatmulAdvice, hiliteHighDispatch }) => {
+const PerformanceTable: FC<PerformanceTableProps> = ({
+    data,
+    filters,
+    provideMatmulAdvice,
+    hiliteHighDispatch,
+    matches,
+}) => {
     const { activeFilters } = useTableFilter('math_fidelity', data || []);
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOptoPerfIdFiltered();
@@ -211,7 +218,15 @@ const PerformanceTable: FC<PerformanceTableProps> = ({ data, filters, provideMat
             <tbody>
                 {tableFields.map((row, i) => (
                     <Fragment key={i}>
-                        <tr>
+                        <tr
+                            className={classNames({
+                                'missing-data': matches?.some(
+                                    (match) =>
+                                        parseInt(match.id, 10) === parseInt(row.id, 10) &&
+                                        match.raw_op_code === row.raw_op_code,
+                                ),
+                            })}
+                        >
                             {visibleHeaders.map((h) => (
                                 <td
                                     key={h.key}

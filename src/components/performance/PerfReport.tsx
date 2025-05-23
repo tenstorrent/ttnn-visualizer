@@ -178,6 +178,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         } as Record<TableKeys, string>);
     };
 
+    const normalisedData = normaliseData(processedRows, processedComparisonRows);
+
     return (
         <>
             <Switch
@@ -272,6 +274,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                 filters={filters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
+                                matches={normalisedData}
                             />
                         }
                     />
@@ -287,6 +290,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                     filters={filters}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
+                                    matches={normalisedData}
                                 />
                             }
                         />
@@ -307,6 +311,80 @@ const getCellText = (buffer: PerfTableRow, key: TableKeys) => {
     const textValue = buffer[key]?.toString() || '';
 
     return textValue;
+};
+
+// const PLACEHOLDER: PerfTableRow = {
+//     id: '0',
+//     advice: [],
+//     total_percent: '0',
+//     bound: '',
+//     op_code: 'MISSING',
+//     raw_op_code: 'MISSING',
+//     device_time: '0',
+//     op_to_op_gap: '',
+//     cores: '0',
+//     dram: '',
+//     dram_percent: '',
+//     flops: '',
+//     flops_percent: '',
+//     math_fidelity: '',
+//     output_datatype: '',
+//     output_0_memory: '',
+//     input_0_datatype: '',
+//     input_1_datatype: '',
+//     dram_sharded: '',
+//     input_0_memory: '',
+//     input_1_memory: '',
+//     inner_dim_block_size: '',
+//     output_subblock_h: '',
+//     output_subblock_w: '',
+//     pm_ideal_ns: '',
+// };
+
+const normaliseData = (data: PerfTableRow[], comparisonData: PerfTableRow[]): PerfTableRow[] => {
+    if (!data || !comparisonData) {
+        return [];
+    }
+
+    const mismatches: PerfTableRow[] = [];
+    let compIndex = 0;
+
+    data.forEach((row, index) => {
+        const comparisonDataCopy = [...comparisonData];
+        const comparisonRow = comparisonDataCopy[index];
+
+        if (!comparisonRow) {
+            return;
+        }
+
+        // Scan ahead in comparisonData to find a matching raw_op_code
+        while (compIndex < comparisonData.length && comparisonData[compIndex].raw_op_code !== row.raw_op_code) {
+            mismatches.push(comparisonData[compIndex]);
+            compIndex++;
+        }
+        // If found a match, move to the next for the next iteration
+        if (compIndex < comparisonData.length) {
+            compIndex++;
+        }
+
+        // else {
+        //     while (index + comparisonIndexOffset < comparisonData.length) {
+        //         const nextRow = comparisonData[index + comparisonIndexOffset];
+
+        //         if (row.raw_op_code === nextRow.raw_op_code) {
+        //             break;
+        //         }
+
+        //         comparisonIndexOffset += 1;
+        //     }
+        // }
+    });
+
+    return mismatches;
+    // return {
+    // data: data.length > comparisonData.length ? array1 : array2,
+    // comparisonData: data.length > comparisonData.length ? array2 : array1,
+    // }
 };
 
 export default PerformanceReport;

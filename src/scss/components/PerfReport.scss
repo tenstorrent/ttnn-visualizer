@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 @use '../definitions/variables' as *;
+@use '../definitions/colours' as colours;
 @use '../mixins/perfReportColours' as perf;
 
 .perf-report {
@@ -83,6 +84,10 @@
         &.is-active {
             opacity: 1;
         }
+    }
+
+    .missing-data {
+        background-color: colours.$tt-red-shade;
     }
 
     .cell {
