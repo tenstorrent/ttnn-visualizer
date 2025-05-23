@@ -357,34 +357,18 @@ const normaliseData = (data: PerfTableRow[], comparisonData: PerfTableRow[]): Pe
             return;
         }
 
-        // Scan ahead in comparisonData to find a matching raw_op_code
         while (compIndex < comparisonData.length && comparisonData[compIndex].raw_op_code !== row.raw_op_code) {
             mismatches.push(comparisonData[compIndex]);
             compIndex++;
         }
+
         // If found a match, move to the next for the next iteration
         if (compIndex < comparisonData.length) {
             compIndex++;
         }
-
-        // else {
-        //     while (index + comparisonIndexOffset < comparisonData.length) {
-        //         const nextRow = comparisonData[index + comparisonIndexOffset];
-
-        //         if (row.raw_op_code === nextRow.raw_op_code) {
-        //             break;
-        //         }
-
-        //         comparisonIndexOffset += 1;
-        //     }
-        // }
     });
 
     return mismatches;
-    // return {
-    // data: data.length > comparisonData.length ? array1 : array2,
-    // comparisonData: data.length > comparisonData.length ? array2 : array1,
-    // }
 };
 
 export default PerformanceReport;
