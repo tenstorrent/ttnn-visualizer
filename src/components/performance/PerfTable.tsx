@@ -122,12 +122,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             );
         }
 
-        if (matches && matches.length > 0) {
-            const existingIds = new Set(filteredRows.map((row) => `${row.id}-${row.raw_op_code}`));
-            const missingMatches = matches.filter((match) => !existingIds.has(`${match.id}-${match.raw_op_code}`));
-            filteredRows = filteredRows.concat(missingMatches.map((match) => ({ ...match, missing: true })));
-        }
-
         const parsedRows = filteredRows.map((row) => ({
             ...row,
             id: parseInt(row.id, 10),
@@ -140,9 +134,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             flops: row.flops ? parseFloat(row.flops) : null,
             flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
         })) as TypedPerfTableRow[];
-
-        // Need to confirm this is an appropriate sorting
-        changeSorting('id')(SortingDirection.ASC);
 
         return sortTableFields(parsedRows);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -230,7 +221,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                     <Fragment key={i}>
                         <tr
                             className={classNames({
-                                'missing-data': row.missing,
+                                'missing-data': row.missing || row.raw_op_code.includes('MISSING'),
                                 'added-data':
                                     !row.missing &&
                                     matches?.some(

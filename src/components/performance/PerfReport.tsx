@@ -16,6 +16,7 @@ import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import normalisePerformanceData, { MISSING_ROWS } from '../../functions/normalisePerformanceData';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -90,6 +91,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>('perf-table-1');
+    const [useNormalisedData, setUseNormalisedData] = useState(true);
 
     const filterableColumnKeys = useMemo(
         () => TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key),
@@ -178,7 +180,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         } as Record<TableKeys, string>);
     };
 
-    const normalisedData = normaliseData(processedRows, processedComparisonRows);
+    const normalisedData = useMemo(
+        () => normalisePerformanceData(processedRows, processedComparisonRows),
+        [processedRows, processedComparisonRows],
+    );
+
+    // console.log('processedRows', processedRows);
+    // console.log('processedComparisonRows', processedComparisonRows);
+    // console.log('normalisedData', normalisedData);
 
     return (
         <>
@@ -202,6 +211,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                 label='Highlight high dispatch ops'
                 onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
                 checked={hiliteHighDispatch}
+            />
+
+            <Switch
+                label='Normalised data'
+                onChange={() => setUseNormalisedData(!useNormalisedData)}
+                checked={useNormalisedData}
             />
 
             <div className='perf-report'>
@@ -270,11 +285,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         icon={IconNames.TH_LIST}
                         panel={
                             <PerfTable
-                                data={processedRows}
+                                data={useNormalisedData ? normalisedData[0] : processedRows}
                                 filters={filters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
-                                matches={normalisedData}
+                                matches={MISSING_ROWS}
                             />
                         }
                     />
@@ -286,11 +301,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             icon={IconNames.TH_LIST}
                             panel={
                                 <PerfTable
-                                    data={processedComparisonRows}
+                                    data={useNormalisedData ? normalisedData[1] : processedComparisonRows}
                                     filters={filters}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
-                                    matches={normalisedData}
+                                    matches={MISSING_ROWS}
                                 />
                             }
                         />
@@ -311,64 +326,6 @@ const getCellText = (buffer: PerfTableRow, key: TableKeys) => {
     const textValue = buffer[key]?.toString() || '';
 
     return textValue;
-};
-
-// const PLACEHOLDER: PerfTableRow = {
-//     id: '0',
-//     advice: [],
-//     total_percent: '0',
-//     bound: '',
-//     op_code: 'MISSING',
-//     raw_op_code: 'MISSING',
-//     device_time: '0',
-//     op_to_op_gap: '',
-//     cores: '0',
-//     dram: '',
-//     dram_percent: '',
-//     flops: '',
-//     flops_percent: '',
-//     math_fidelity: '',
-//     output_datatype: '',
-//     output_0_memory: '',
-//     input_0_datatype: '',
-//     input_1_datatype: '',
-//     dram_sharded: '',
-//     input_0_memory: '',
-//     input_1_memory: '',
-//     inner_dim_block_size: '',
-//     output_subblock_h: '',
-//     output_subblock_w: '',
-//     pm_ideal_ns: '',
-// };
-
-const normaliseData = (data: PerfTableRow[], comparisonData: PerfTableRow[]): PerfTableRow[] => {
-    if (!data || !comparisonData) {
-        return [];
-    }
-
-    const mismatches: PerfTableRow[] = [];
-    let compIndex = 0;
-
-    data.forEach((row, index) => {
-        const comparisonDataCopy = [...comparisonData];
-        const comparisonRow = comparisonDataCopy[index];
-
-        if (!comparisonRow) {
-            return;
-        }
-
-        while (compIndex < comparisonData.length && comparisonData[compIndex].raw_op_code !== row.raw_op_code) {
-            mismatches.push(comparisonData[compIndex]);
-            compIndex++;
-        }
-
-        // If found a match, move to the next for the next iteration
-        if (compIndex < comparisonData.length) {
-            compIndex++;
-        }
-    });
-
-    return mismatches;
 };
 
 export default PerformanceReport;
