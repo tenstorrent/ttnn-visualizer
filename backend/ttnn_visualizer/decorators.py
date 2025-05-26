@@ -7,7 +7,7 @@ from ttnn_visualizer.enums import ConnectionTestStates
 
 
 from functools import wraps
-from flask import request, abort
+from flask import abort, request, session
 from paramiko.ssh_exception import (
     AuthenticationException,
     NoValidConnectionsError,
@@ -37,6 +37,13 @@ def with_instance(func):
         instance = instance_query_data.to_pydantic()
 
         kwargs["instance"] = instance
+
+        if 'instances' not in session:
+            session['instances'] = []
+
+        if instance.instance_id not in session['instances']:
+            session['instances'].append(instance.instance_id)
+
         return func(*args, **kwargs)
 
     return wrapper

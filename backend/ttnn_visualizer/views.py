@@ -12,7 +12,7 @@ from typing import List
 import shutil
 
 from flask import Blueprint
-from flask import request, current_app
+from flask import current_app, session, request
 
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries, OpsPerformanceReportQueries
 from ttnn_visualizer.decorators import with_instance
@@ -43,7 +43,7 @@ from ttnn_visualizer.serializers import (
     serialize_devices, serialize_buffer,
 )
 from ttnn_visualizer.instances import (
-    update_instance,
+    get_instances, update_instance,
 )
 from ttnn_visualizer.sftp_operations import (
     sync_remote_profiler_folders,
@@ -389,9 +389,15 @@ def get_profiler_data_list(instance: Instance):
     if not path.exists():
         path.mkdir(parents=True, exist_ok=True)
 
-    directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
-
     valid_dirs = []
+
+    if current_app.config["SERVER_MODE"]:
+        session_instances = session.get("instances", [])
+        instances = get_instances(session_instances)
+        db_paths = [instance.profiler_path for instance in instances if instance.profiler_path]
+        directory_names = [str(Path(db_path).parent.name) for db_path in db_paths]
+    else:
+        directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
@@ -444,17 +450,21 @@ def get_performance_data_list(instance: Instance):
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     config_key = 'LOCAL_DATA_DIRECTORY'
     data_directory = Path(current_app.config[config_key])
+    path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
 
-    if is_remote:
-        connection = RemoteConnection.model_validate(instance.remote_connection, strict=False)
-        path = data_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-    else:
-        path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-
-    if not path.exists():
+    if not is_remote and not path.exists():
         path.mkdir(parents=True, exist_ok=True)
 
-    directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
+    if current_app.config["SERVER_MODE"]:
+        session_instances = session.get("instances", [])
+        instances = get_instances(session_instances)
+        db_paths = [instance.performance_path for instance in instances if instance.performance_path]
+        directory_names = [str(Path(db_path).name) for db_path in db_paths]
+    else:
+        if is_remote:
+            connection = RemoteConnection.model_validate(instance.remote_connection, strict=False)
+            path = data_directory / connection.host / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+        directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
 
     valid_dirs = []
 
@@ -991,7 +1001,7 @@ def get_instance(instance: Instance):
     return instance.model_dump()
 
 
-@api.route("/session", methods=["PUT"])
+@api.route("/instance", methods=["PUT"])
 def update_current_instance():
     try:
         update_data = request.get_json()

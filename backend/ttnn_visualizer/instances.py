@@ -267,6 +267,17 @@ def get_instance():
     return jsonify({"active_report": active_report.active_report}), 200
 
 
+def get_instances(instance_ids):
+    instances = []
+
+    for instance_id in instance_ids:
+        instance = InstanceTable.query.filter_by(instance_id=instance_id).first()
+        if instance:
+            instances.append(instance)
+
+    return instances
+
+
 def init_instances(app):
     """
     Initializes instance middleware and hooks it into Flask.
