@@ -131,6 +131,12 @@ export interface TimestepData {
     link_demand: LinkUtilization[];
     avg_link_demand: number;
     avg_link_util: number;
+    noc: {
+        [K in NoCType]: {
+            avg_link_demand: number;
+            avg_link_util: number;
+        };
+    };
 }
 
 export interface NPEData {

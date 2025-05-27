@@ -10,7 +10,7 @@ import { Button, ButtonGroup, Intent, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
-import { LinkUtilization, NPEData, NPE_COORDINATES, NPE_LINK, NoCID, NoCTransfer } from '../../model/NPEModel';
+import { LinkUtilization, NPEData, NPE_COORDINATES, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import { NODE_SIZE, calculateLinkCongestionColor, getLines, getLinkPoints, resetRouteColors } from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
@@ -53,6 +53,17 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     });
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
+    const [showNOC, setShowNOC] = useState<NoCType | undefined>(undefined);
+
+    const showNOCType = (value: NoCType) => {
+        if (showNOC === undefined) {
+            setShowNOC(value === 'NOC0' ? 'NOC1' : 'NOC0');
+        } else if (showNOC !== value) {
+            setShowNOC(undefined);
+        } else {
+            setShowNOC(value === 'NOC0' ? 'NOC1' : 'NOC0');
+        }
+    };
 
     const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
     useEffect(() => {
@@ -60,8 +71,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
-    // const width = npeData.common_info.num_cols;
-    // const height = npeData.common_info.num_rows;
 
     const { architecture, cores, dram, eth, pcie } = useNodeType(npeData.common_info.arch as DeviceArchitecture);
     const width = architecture.grid?.x_size || 10;
@@ -275,6 +284,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     };
 
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
+
     return (
         <div className='npe'>
             <NPEMetadata
@@ -316,6 +326,16 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         checked={isAnnotatingCores}
                         onChange={() => setIsAnnotatingCores(!isAnnotatingCores)}
                     />
+                    <Switch
+                        label='NOC0'
+                        checked={showNOC === 'NOC0' || showNOC === undefined}
+                        onChange={() => showNOCType('NOC0')}
+                    />
+                    <Switch
+                        label='NOC1'
+                        checked={showNOC === 'NOC1' || showNOC === undefined}
+                        onChange={() => showNOCType('NOC1')}
+                    />
                     |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                     <label>
                         Zoom
@@ -350,6 +370,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 <NPECongestionHeatMap
                     timestepList={npeData.timestep_data}
                     canvasWidth={canvasWidth}
+                    nocType={showNOC}
                 />
             </div>
             <div className='split-grid'>
