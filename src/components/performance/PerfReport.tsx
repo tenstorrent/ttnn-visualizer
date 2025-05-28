@@ -4,7 +4,7 @@
 
 import { FC, useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Button, ButtonVariant, MenuItem, Size, Switch, Tab, TabId, Tabs } from '@blueprintjs/core';
+import { Button, ButtonVariant, Icon, MenuItem, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
@@ -219,17 +219,31 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
             />
 
             <Switch
-                label='Normalise performance data'
+                labelElement={
+                    <Tooltip content='Tries to match up operations between the performance reports'>
+                        <>
+                            <span>Normalise performance data</span>
+                            <Icon icon={IconNames.SMALL_INFO_SIGN} />
+                        </>
+                    </Tooltip>
+                }
                 onChange={() => setUseNormalisedData(!useNormalisedData)}
                 checked={useNormalisedData}
                 disabled={!activeComparisonReport}
             />
 
             <Switch
-                label='Highlight row difference'
+                labelElement={
+                    <Tooltip content='Highlights rows where ops have been added or are missing after normalising the data'>
+                        <>
+                            <span>Highlight row difference</span>
+                            <Icon icon={IconNames.SMALL_INFO_SIGN} />
+                        </>
+                    </Tooltip>
+                }
                 onChange={() => setHighlightRows(!highlightRows)}
                 checked={highlightRows}
-                disabled={!activeComparisonReport}
+                disabled={!activeComparisonReport || !useNormalisedData}
             />
 
             <div className='perf-report'>
