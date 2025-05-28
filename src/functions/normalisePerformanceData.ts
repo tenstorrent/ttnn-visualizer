@@ -1,15 +1,19 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { PerfTableRow } from '../definitions/PerfTable';
 
 const PLACEHOLDER: PerfTableRow = {
-    id: '0',
+    id: '',
     advice: [],
-    total_percent: '0',
+    total_percent: '',
     bound: '',
     op_code: 'MISSING',
     raw_op_code: 'MISSING',
-    device_time: '0',
+    device_time: '',
     op_to_op_gap: '',
-    cores: '0',
+    cores: '',
     dram: '',
     dram_percent: '',
     flops: '',
@@ -29,6 +33,7 @@ const PLACEHOLDER: PerfTableRow = {
 };
 
 const MISSING_ROWS: PerfTableRow[] = [];
+const MISSING_PREFIX = 'MISSING - ';
 
 function normalisePerformanceData(arr1: PerfTableRow[], arr2: PerfTableRow[]) {
     MISSING_ROWS.length = 0; // Clear array
@@ -62,7 +67,7 @@ function normalisePerformanceData(arr1: PerfTableRow[], arr2: PerfTableRow[]) {
                 // Add placeholders until match is found (arr1)
                 while (i < indexIn1) {
                     result1.push(arr1[i]);
-                    result2.push({ ...PLACEHOLDER, op_code: `MISSING - ${arr1[i].raw_op_code}` });
+                    result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr1[i].raw_op_code}` });
                     MISSING_ROWS.push(arr1[i]);
                     i++;
                 }
@@ -70,7 +75,7 @@ function normalisePerformanceData(arr1: PerfTableRow[], arr2: PerfTableRow[]) {
                 // Add placeholders until match is found (arr2)
                 while (j < indexIn2) {
                     result2.push(arr2[j]);
-                    result1.push({ ...PLACEHOLDER, op_code: `MISSING - ${arr2[j].raw_op_code}` });
+                    result1.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr2[j].raw_op_code}` });
                     MISSING_ROWS.push(arr2[j]);
                     j++;
                 }
@@ -87,7 +92,7 @@ function normalisePerformanceData(arr1: PerfTableRow[], arr2: PerfTableRow[]) {
     // Fill any remaining items (arr1)
     while (i < arr1.length) {
         result1.push(arr1[i]);
-        result2.push({ ...PLACEHOLDER, op_code: `MISSING - ${arr1[i].raw_op_code}` });
+        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr1[i].raw_op_code}` });
         MISSING_ROWS.push(arr1[i]);
         i++;
     }
@@ -95,7 +100,7 @@ function normalisePerformanceData(arr1: PerfTableRow[], arr2: PerfTableRow[]) {
     // Fill any remaining items (arr2)
     while (j < arr2.length) {
         result1.push(PLACEHOLDER);
-        result2.push({ ...PLACEHOLDER, op_code: `MISSING - ${arr2[j].raw_op_code}` });
+        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr2[j].raw_op_code}` });
         MISSING_ROWS.push(arr2[j]);
         j++;
     }

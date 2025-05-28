@@ -17,7 +17,6 @@ export interface TableHeader {
 export interface PerfTableRow {
     id: string;
     advice: string[];
-    op?: number; // New
     total_percent: string;
     bound: string;
     op_code: string;
@@ -42,6 +41,7 @@ export interface PerfTableRow {
     output_subblock_w: string;
     high_dispatch?: boolean;
     pm_ideal_ns: string;
+    op?: number;
     missing?: boolean;
 }
 
