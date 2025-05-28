@@ -53,15 +53,16 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     });
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
-    const [showNOC, setShowNOC] = useState<NoCType | undefined>(undefined);
+    // TODO: null is better than undefined as a default value
+    const [nocFilter, setNocFilter] = useState<NoCType | undefined>(undefined);
 
     const showNOCType = (value: NoCType) => {
-        if (showNOC === undefined) {
-            setShowNOC(value === 'NOC0' ? 'NOC1' : 'NOC0');
-        } else if (showNOC !== value) {
-            setShowNOC(undefined);
+        if (nocFilter === undefined) {
+            setNocFilter(value === 'NOC0' ? 'NOC1' : 'NOC0');
+        } else if (nocFilter !== value) {
+            setNocFilter(undefined);
         } else {
-            setShowNOC(value === 'NOC0' ? 'NOC1' : 'NOC0');
+            setNocFilter(value === 'NOC0' ? 'NOC1' : 'NOC0');
         }
     };
 
@@ -228,7 +229,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 (link) =>
                                     link[NPE_LINK.Y] === linkUtilizationData[NPE_LINK.Y] &&
                                     link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X] &&
-                                    (showNOC === undefined || link[NPE_LINK.NOC_ID].indexOf(showNOC) === 0),
+                                    (nocFilter === undefined || link[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0),
                             )
                         ) {
                             return r;
@@ -329,12 +330,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     />
                     <Switch
                         label='NOC0'
-                        checked={showNOC === 'NOC0' || showNOC === undefined}
+                        checked={nocFilter === 'NOC0' || nocFilter === undefined}
                         onChange={() => showNOCType('NOC0')}
                     />
                     <Switch
                         label='NOC1'
-                        checked={showNOC === 'NOC1' || showNOC === undefined}
+                        checked={nocFilter === 'NOC1' || nocFilter === undefined}
                         onChange={() => showNOCType('NOC1')}
                     />
                     |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
@@ -371,7 +372,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 <NPECongestionHeatMap
                     timestepList={npeData.timestep_data}
                     canvasWidth={canvasWidth}
-                    nocType={showNOC}
+                    nocType={nocFilter}
                 />
             </div>
             <div className='split-grid'>
@@ -426,8 +427,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     {links?.link_demand.map((linkUtilization, index) => {
                                         if (
                                             linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id &&
-                                            (showNOC === undefined ||
-                                                linkUtilization[NPE_LINK.NOC_ID].indexOf(showNOC) === 0)
+                                            (nocFilter === undefined ||
+                                                linkUtilization[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0)
                                         ) {
                                             return (
                                                 <button
@@ -576,7 +577,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     showActiveTransfers={showActiveTransfers}
                     highlightedTransfer={highlightedTransfer}
                     setHighlightedTransfer={setHighlightedTransfer}
-                    nocType={showNOC}
+                    nocType={nocFilter}
                 />
             </div>
         </div>
