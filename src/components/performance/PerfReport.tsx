@@ -2,9 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { FC, useMemo, useState } from 'react';
+import { FC, useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Button, ButtonVariant, MenuItem, Size, Switch, Tab, TabId, Tabs } from '@blueprintjs/core';
+import { Button, ButtonVariant, Icon, MenuItem, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
@@ -16,6 +16,7 @@ import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import normalisePerformanceData, { MISSING_ROWS } from '../../functions/normalisePerformanceData';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -90,6 +91,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>('perf-table-1');
+
+    const [useNormalisedData, setUseNormalisedData] = useState(true);
+    const [highlightRows, setHighlightRows] = useState<boolean>(true);
 
     const filterableColumnKeys = useMemo(
         () => TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key),
@@ -178,6 +182,18 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         } as Record<TableKeys, string>);
     };
 
+    const normalisedData = useMemo(
+        () => normalisePerformanceData(processedRows, processedComparisonRows),
+        [processedRows, processedComparisonRows],
+    );
+
+    useEffect(() => {
+        if (!activeComparisonReport) {
+            setHighlightRows(false);
+            setUseNormalisedData(false);
+        }
+    }, [activeComparisonReport]);
+
     return (
         <>
             <Switch
@@ -190,7 +206,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
             <Switch
                 className='expand-button'
-                label={provideMatmulAdvice ? 'Hide Matmul optimization analysis' : 'Show Matmul optimization analysis'}
+                label='Show Matmul optimization analysis'
                 onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
                 checked={provideMatmulAdvice}
             />
@@ -200,6 +216,34 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                 label='Highlight high dispatch ops'
                 onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
                 checked={hiliteHighDispatch}
+            />
+
+            <Switch
+                labelElement={
+                    <Tooltip content='Tries to match up operations between the performance reports'>
+                        <>
+                            <span>Normalise performance data</span>
+                            <Icon icon={IconNames.SMALL_INFO_SIGN} />
+                        </>
+                    </Tooltip>
+                }
+                onChange={() => setUseNormalisedData(!useNormalisedData)}
+                checked={useNormalisedData}
+                disabled={!activeComparisonReport}
+            />
+
+            <Switch
+                labelElement={
+                    <Tooltip content='Highlights rows where ops have been added or are missing after normalising the data'>
+                        <>
+                            <span>Highlight row difference</span>
+                            <Icon icon={IconNames.SMALL_INFO_SIGN} />
+                        </>
+                    </Tooltip>
+                }
+                onChange={() => setHighlightRows(!highlightRows)}
+                checked={highlightRows}
+                disabled={!activeComparisonReport || !useNormalisedData}
             />
 
             <div className='perf-report'>
@@ -268,10 +312,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         icon={IconNames.TH_LIST}
                         panel={
                             <PerfTable
-                                data={processedRows}
+                                data={useNormalisedData ? normalisedData[0] : processedRows}
+                                comparisonData={useNormalisedData ? normalisedData[1] : []}
                                 filters={filters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
+                                matches={MISSING_ROWS}
+                                highlightRows={highlightRows}
                             />
                         }
                     />
@@ -283,10 +330,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             icon={IconNames.TH_LIST}
                             panel={
                                 <PerfTable
-                                    data={processedComparisonRows}
+                                    data={useNormalisedData ? normalisedData[1] : processedComparisonRows}
+                                    comparisonData={useNormalisedData ? normalisedData[0] : []}
                                     filters={filters}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
+                                    matches={MISSING_ROWS}
+                                    highlightRows={highlightRows}
                                 />
                             }
                         />
