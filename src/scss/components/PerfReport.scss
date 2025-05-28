@@ -6,7 +6,6 @@
 @use '../definitions/colours' as colours;
 @use '../mixins/perfReportColours' as perf;
 
-$comparison-row-colour: rgba(colours.$tt-green, 0.1);
 $group-row-pattern: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
 
 .perf-report {
@@ -96,6 +95,14 @@ $group-row-pattern: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%
                 &:nth-child(4n-5) {
                     background-image: $group-row-pattern;
                     background-size: 5px 5px;
+                }
+            }
+
+            &.comparison-row {
+                border-bottom: 1px solid colours.$tt-sand-accent;
+
+                td {
+                    border-bottom: 0;
                 }
             }
         }

@@ -299,7 +299,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         panel={
                             <PerfTable
                                 data={useNormalisedData ? normalisedData[0] : processedRows}
-                                comparisonData={useNormalisedData ? normalisedData[1] : processedComparisonRows}
+                                comparisonData={useNormalisedData ? normalisedData[1] : []}
                                 filters={filters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
@@ -317,7 +317,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             panel={
                                 <PerfTable
                                     data={useNormalisedData ? normalisedData[1] : processedComparisonRows}
-                                    comparisonData={useNormalisedData ? normalisedData[0] : processedRows}
+                                    comparisonData={useNormalisedData ? normalisedData[0] : []}
                                     filters={filters}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
