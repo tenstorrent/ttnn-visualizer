@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import React, { useState } from 'react';
 import { useAtom } from 'jotai';
 import { FileInput, Icon, IconName, Intent } from '@blueprintjs/core';

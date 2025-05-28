@@ -1,16 +1,20 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { calculateLinkCongestionColor } from './drawingApi';
-import { NPE_LINK, TimestepData } from '../../model/NPEModel';
+import { NPE_LINK, NoCType, TimestepData } from '../../model/NPEModel';
 
 interface NPEHeatMapProps {
     timestepList: TimestepData[];
     canvasWidth: number;
+    nocType?: NoCType;
 }
 
-const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasWidth }) => {
+const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasWidth, nocType = undefined }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
     const canvasHeight = 30;
 
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
@@ -18,17 +22,47 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
     const congestionMapPerTimestamp = useMemo(() => {
         return {
             worst: timestepList.map((timestep) => {
+                if (nocType) {
+                    const value = Math.max(
+                        -1,
+                        ...timestep.link_demand
+                            .filter((linkData) => linkData[NPE_LINK.NOC_ID].indexOf(nocType) === 0)
+                            .map((linkData) => linkData[NPE_LINK.DEMAND]),
+                    );
+                    const color = calculateLinkCongestionColor(value);
+                    return { value, color };
+                }
                 const value = Math.max(-1, ...timestep.link_demand.map((linkData) => linkData[NPE_LINK.DEMAND]));
                 const color = calculateLinkCongestionColor(value);
                 return { value, color };
             }),
 
-            utilization: timestepList.map((timestep) => ({
-                value: timestep.avg_link_util,
-                color: calculateLinkCongestionColor(timestep.avg_link_util),
-            })),
+            utilization: timestepList.map((timestep) => {
+                if (nocType) {
+                    const nocData = timestep.noc[nocType];
+                    if (nocData) {
+                        return {
+                            value: nocData.avg_link_util,
+                            color: calculateLinkCongestionColor(nocData.avg_link_util),
+                        };
+                    }
+                }
+                return {
+                    value: timestep.avg_link_util,
+                    color: calculateLinkCongestionColor(timestep.avg_link_util),
+                };
+            }),
 
             demand: timestepList.map((timestep) => {
+                if (nocType) {
+                    const nocData = timestep.noc[nocType];
+                    if (nocData) {
+                        return {
+                            value: nocData.avg_link_demand,
+                            color: calculateLinkCongestionColor(nocData.avg_link_demand),
+                        };
+                    }
+                }
                 const color = calculateLinkCongestionColor(timestep.avg_link_demand);
                 return {
                     value: timestep.avg_link_demand,
@@ -36,7 +70,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                 };
             }),
         };
-    }, [timestepList]);
+    }, [nocType, timestepList]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -78,6 +112,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                     y: 0,
                     text: (
                         <div>
+                            {nocType !== undefined && <div>Selected {nocType}</div>}
                             <div>
                                 <span
                                     style={{

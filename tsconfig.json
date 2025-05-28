@@ -29,6 +29,6 @@
       "vitest/importMeta"
     ],
   },
-  "include": ["vite.config.ts", "src", "package.json", "tests"],
+  "include": ["vite.config.ts", "src", "package.json", "tests", "scripts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
