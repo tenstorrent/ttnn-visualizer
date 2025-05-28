@@ -86,7 +86,9 @@ export const NPE_KPI_METADATA = {
 type row = number;
 type col = number;
 type device_id = number;
+// TODO: change to enum
 type NoCTransferId = number;
+
 export type NoCType = 'NOC0' | 'NOC1';
 
 export enum NoCID {
@@ -135,6 +137,12 @@ export interface TimestepData {
     link_demand: LinkUtilization[];
     avg_link_demand: number;
     avg_link_util: number;
+    noc: {
+        [K in NoCType]: {
+            avg_link_demand: number;
+            avg_link_util: number;
+        };
+    };
 }
 
 export interface NPEData {
