@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { TensorMemoryLayout } from './parseMemoryConfig';
 
 const FG_COLOUR = 'rgba(0, 0, 0, 0.7)';

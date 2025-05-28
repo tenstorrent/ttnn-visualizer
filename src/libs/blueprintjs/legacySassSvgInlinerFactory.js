@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 // This is a workaround for an outstanding issue in Blueprint as of 5/8/23.
 // Issue is here: https://github.com/palantir/blueprint/issues/6051
 //

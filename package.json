@@ -23,7 +23,8 @@
     "release:minor": "node scripts/release.mjs -minor",
     "release:major": "node scripts/release.mjs -major",
     "test": "vitest run --environment jsdom",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "spdx": "node scripts/check-spdx.mjs"
   },
   "dependencies": {
     "@blueprintjs/colors": "^5.1.8",
