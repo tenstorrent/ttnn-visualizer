@@ -20,7 +20,7 @@ from ttnn_visualizer.extensions import db
 logger = getLogger(__name__)
 
 from flask import jsonify, current_app
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 
 def update_existing_instance(
@@ -224,7 +224,12 @@ def get_or_create_instance(
                 remote_profiler_folder=None,
             )
             db.session.add(instance_data)
-            db.session.commit()
+
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                instance_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
 
         # Update the instance if any new data is provided
         if profiler_name or performance_name or npe_name or remote_connection or remote_profiler_folder:
@@ -237,8 +242,8 @@ def get_or_create_instance(
                 remote_profiler_folder=remote_profiler_folder,
             )
 
-        # Query again to get the updated instance data
-        instance_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
+            # Query again to get the updated instance data
+            instance_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
 
         return instance_data
 
