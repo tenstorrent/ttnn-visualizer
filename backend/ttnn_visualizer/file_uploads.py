@@ -4,6 +4,7 @@
 
 import logging
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -52,12 +53,12 @@ def extract_profiler_name(files):
     unsplit_profiler_name = str(files[0].filename)
     return unsplit_profiler_name.split("/")[0]
 
+
 def extract_npe_name(files):
     if not files:
         return None
 
-    file_path = Path(files[0].filename)
-    return file_path.stem
+    return re.sub(r"\.(json|npeviz\.zst)$", "", files[0].filename)
 
 
 def save_uploaded_files(

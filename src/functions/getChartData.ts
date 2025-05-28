@@ -63,6 +63,15 @@ export default function getChartData(
                     fgopacity: 0.2,
                 };
             }
+            if (tensorMemoryLayout === TensorMemoryLayout.WIDTH_SHARDED) {
+                pattern = {
+                    shape: '-',
+                    fillmode: 'overlay',
+                    size: 6,
+                    fgcolor: '#000000',
+                    fgopacity: 0.2,
+                };
+            }
         }
 
         return {

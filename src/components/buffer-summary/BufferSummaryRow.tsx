@@ -4,15 +4,18 @@
 
 import 'styles/components/BufferSummaryRow.scss';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useAtom } from 'jotai/index';
 import classNames from 'classnames';
+import { IconNames } from '@blueprintjs/icons';
 import { Buffer, Tensor } from '../../model/APIData';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatSize, toHex, toReadableShape, toReadableType } from '../../functions/math';
 import { selectedAddressAtom, selectedTensorAtom } from '../../store/app';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { getDimmedColour } from '../../functions/colour';
+import { TensorDeallocationReport } from '../../model/BufferSummary';
+import getCanvasBackgroundPattern from '../../functions/getCanvasBackgroundPattern';
 
 interface BufferSummaryRowProps {
     buffers: Buffer[];
@@ -20,7 +23,9 @@ interface BufferSummaryRowProps {
     memoryEnd: number;
     memoryPadding: number;
     tensorList: Map<number, Tensor>;
+    showMemoryLayout: boolean;
     className?: string;
+    tensorDeallocationReport?: TensorDeallocationReport[];
 }
 
 const SCALE = 100;
@@ -35,6 +40,8 @@ const BufferSummaryRow = ({
     memoryPadding,
     tensorList,
     className = '',
+    tensorDeallocationReport = [],
+    showMemoryLayout,
 }: BufferSummaryRowProps) => {
     const computedMemorySize = memoryEnd - memoryStart;
     const computedPadding = (memoryPadding / computedMemorySize) * SCALE;
@@ -43,6 +50,7 @@ const BufferSummaryRow = ({
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
     const [selectedTensor, setSelectedTensor] = useAtom(selectedTensorAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
+
     const { createToast, resetToasts } = useBufferFocus();
 
     const interactivityList = useMemo(() => {
@@ -52,19 +60,41 @@ const BufferSummaryRow = ({
             const tensor = tensorList.get(buffer.address);
             const color = (tensor ? getTensorColor(tensor.id) : getBufferColor(buffer.address)) || 'black';
             const dimmedColor = getDimmedColour(color);
-            return { position, size, tensor, color, dimmedColor, buffer };
+            let notDeallocated = false;
+            let consumerOperationId = -1;
+            let consumerName = '';
+            const result = tensorDeallocationReport?.find((report) => report.address === buffer.address);
+            if (result !== undefined) {
+                notDeallocated = true;
+                consumerOperationId = result.lastConsumerOperationId;
+                consumerName = result.consumerName;
+            }
+            return {
+                position,
+                size,
+                tensor,
+                color,
+                dimmedColor,
+                buffer,
+                notDeallocated,
+                consumerOperationId,
+                consumerName,
+            };
         });
-    }, [buffers, computedMemorySize, memoryStart, tensorList]);
+    }, [buffers, computedMemorySize, memoryStart, tensorList, tensorDeallocationReport]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
+
         if (canvas) {
             const ctx = canvas.getContext('2d');
+
             if (ctx) {
                 ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-                interactivityList.forEach(({ color, position, size, buffer, dimmedColor, tensor }) => {
+                interactivityList.forEach(({ color, position, size, buffer, dimmedColor, tensor, notDeallocated }) => {
                     let activeColor = color;
+                    const tensorMemoryLayout = tensor?.memory_config?.memory_layout;
 
                     if (selectedTensor && selectedTensor === tensor?.id) {
                         activeColor = color;
@@ -76,10 +106,37 @@ const BufferSummaryRow = ({
 
                     ctx.fillStyle = activeColor;
                     ctx.fillRect(position, 1, size, CANVAS_HEIGHT);
+
+                    if (showMemoryLayout && tensorMemoryLayout && !notDeallocated) {
+                        getCanvasBackgroundPattern(ctx, tensorMemoryLayout, position, size, CANVAS_HEIGHT);
+                    }
+
+                    if (notDeallocated) {
+                        ctx.strokeStyle = '#000000';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(position, 1, size, CANVAS_HEIGHT - 2);
+
+                        ctx.save();
+
+                        ctx.beginPath();
+                        ctx.rect(position, 1, size, CANVAS_HEIGHT - 1);
+                        ctx.clip();
+
+                        const spacing = 10;
+
+                        for (let x = position - CANVAS_HEIGHT; x < position + size; x += spacing) {
+                            ctx.beginPath();
+                            ctx.moveTo(x, 1);
+                            ctx.lineTo(x + CANVAS_HEIGHT, CANVAS_HEIGHT);
+                            ctx.stroke();
+                        }
+
+                        ctx.restore();
+                    }
                 });
             }
         }
-    }, [interactivityList, selectedAddress, selectedTensor]);
+    }, [interactivityList, selectedAddress, selectedTensor, showMemoryLayout]);
 
     const findBufferForInteraction = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
@@ -104,6 +161,7 @@ const BufferSummaryRow = ({
             clearFocusedBuffer();
         }
     };
+
     const clearFocusedBuffer = () => {
         resetToasts();
     };
@@ -124,6 +182,19 @@ const BufferSummaryRow = ({
             canvas.style.cursor = 'pointer';
             const x = interactiveBuffer.position / scaleX;
             const { color } = interactiveBuffer;
+
+            const missingDeallocationNotice = interactiveBuffer.notDeallocated ? (
+                <>
+                    <br />
+                    Last consumer is {interactiveBuffer.consumerOperationId} {interactiveBuffer.consumerName}
+                    <br />
+                    <Icon
+                        intent={Intent.WARNING}
+                        icon={IconNames.WARNING_SIGN}
+                    />{' '}
+                    Opportunity to deallocate earlier
+                </>
+            ) : null;
 
             setTooltip({
                 x,
@@ -146,6 +217,7 @@ const BufferSummaryRow = ({
                                     {interactiveBuffer.tensor?.memory_config?.memory_layout}
                                 </>
                             ) : null}
+                            {missingDeallocationNotice}
                         </strong>
                     </div>
                 ),

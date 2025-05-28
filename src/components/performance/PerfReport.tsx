@@ -2,21 +2,25 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { FC, Fragment, useMemo, useState } from 'react';
-import classNames from 'classnames';
-import { Button, ButtonVariant, Icon, MenuItem, Size, Switch } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
+import { FC, useEffect, useMemo, useState } from 'react';
+import { useAtomValue } from 'jotai';
+import { Button, ButtonVariant, Icon, MenuItem, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
+import { IconNames } from '@blueprintjs/icons';
 import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
-import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
-import { calcHighDispatchOps, formatCell } from '../../functions/perfFunctions';
-import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
+import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
+import { calcHighDispatchOps } from '../../functions/perfFunctions';
+import useSortTable from '../../hooks/useSortTable';
 import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
+import PerfTable from './PerfTable';
+import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import normalisePerformanceData, { MISSING_ROWS } from '../../functions/normalisePerformanceData';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
+    comparisonData?: PerfTableRow[];
 }
 
 interface TypedPerfTableRow
@@ -75,18 +79,21 @@ const TABLE_HEADERS: TableHeader[] = [
     { label: 'Math Fidelity', key: COLUMN_HEADERS.math_fidelity, colour: 'cyan' },
 ];
 
-const OP_ID_INSERTION_POINT = 1;
-const HIGH_DISPATCH_INSERTION_POINT = 5;
-
-const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
+const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData }) => {
     const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
-    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
+    const { sortTableFields, changeSorting, sortingColumn } = useSortTable(null);
+    const opIdsMap = useOptoPerfIdFiltered();
+
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const activeComparisonReport = useAtomValue(comparisonPerformanceReportAtom);
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
-    const opIdsMap = useOptoPerfIdFiltered();
-    const { data: operations } = useOperationsList();
+    const [selectedTabId, setSelectedTabId] = useState<TabId>('perf-table-1');
+
+    const [useNormalisedData, setUseNormalisedData] = useState(true);
+    const [highlightRows, setHighlightRows] = useState<boolean>(true);
 
     const filterableColumnKeys = useMemo(
         () => TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key),
@@ -112,6 +119,20 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
             }) || []
         );
     }, [data, opIdsMap]);
+
+    const processedComparisonRows: PerfTableRow[] = useMemo(() => {
+        return (
+            comparisonData?.map((opData) => {
+                const val = parseInt(opData.op_to_op_gap, 10);
+                const op = opIdsMap.find((opMap) => opMap.perfId === opData.id)?.opId;
+                return {
+                    ...opData,
+                    high_dispatch: !!val && val > 6.5,
+                    op,
+                };
+            }) || []
+        );
+    }, [comparisonData, opIdsMap]);
 
     const tableFields: PerfTableRow[] = useMemo(() => {
         let filteredRows = processedRows;
@@ -154,20 +175,24 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
         return sortTableFields(parsedRows);
     }, [processedRows, sortTableFields, filters, filterableColumnKeys, activeFilters]);
 
-    const visibleHeaders = [
-        ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
-        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: COLUMN_HEADERS.OP, sortable: true }] : []),
-        ...TABLE_HEADERS.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
-        ...(hiliteHighDispatch ? [{ label: 'Slow', key: COLUMN_HEADERS.HIGH_DISPATCH }] : []),
-        ...TABLE_HEADERS.slice(HIGH_DISPATCH_INSERTION_POINT),
-    ] as TableHeader[];
-
     const updateColumnFilter = (key: TableKeys, value: string) => {
         setFilters({
             ...filters,
             [key]: value ?? '',
         } as Record<TableKeys, string>);
     };
+
+    const normalisedData = useMemo(
+        () => normalisePerformanceData(processedRows, processedComparisonRows),
+        [processedRows, processedComparisonRows],
+    );
+
+    useEffect(() => {
+        if (!activeComparisonReport) {
+            setHighlightRows(false);
+            setUseNormalisedData(false);
+        }
+    }, [activeComparisonReport]);
 
     return (
         <>
@@ -181,7 +206,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
 
             <Switch
                 className='expand-button'
-                label={provideMatmulAdvice ? 'Hide Matmul optimization analysis' : 'Show Matmul optimization analysis'}
+                label='Show Matmul optimization analysis'
                 onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
                 checked={provideMatmulAdvice}
             />
@@ -191,6 +216,34 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                 label='Highlight high dispatch ops'
                 onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
                 checked={hiliteHighDispatch}
+            />
+
+            <Switch
+                labelElement={
+                    <Tooltip content='Tries to match up operations between the performance reports'>
+                        <>
+                            <span>Normalise performance data</span>
+                            <Icon icon={IconNames.SMALL_INFO_SIGN} />
+                        </>
+                    </Tooltip>
+                }
+                onChange={() => setUseNormalisedData(!useNormalisedData)}
+                checked={useNormalisedData}
+                disabled={!activeComparisonReport}
+            />
+
+            <Switch
+                labelElement={
+                    <Tooltip content='Highlights rows where ops have been added or are missing after normalising the data'>
+                        <>
+                            <span>Highlight row difference</span>
+                            <Icon icon={IconNames.SMALL_INFO_SIGN} />
+                        </>
+                    </Tooltip>
+                }
+                onChange={() => setHighlightRows(!highlightRows)}
+                checked={highlightRows}
+                disabled={!activeComparisonReport || !useNormalisedData}
             />
 
             <div className='perf-report'>
@@ -247,105 +300,48 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                     </Button>
                 </div>
 
-                <table className='perf-table monospace'>
-                    <thead>
-                        <tr>
-                            {visibleHeaders.map((h) => {
-                                const targetSortDirection =
-                                    // eslint-disable-next-line no-nested-ternary
-                                    sortingColumn === h.key
-                                        ? sortDirection === SortingDirection.ASC
-                                            ? SortingDirection.DESC
-                                            : SortingDirection.ASC
-                                        : sortDirection;
+                <Tabs
+                    selectedTabId={selectedTabId}
+                    onChange={setSelectedTabId}
+                    renderActiveTabPanelOnly
+                    size={Size.LARGE}
+                >
+                    <Tab
+                        id='perf-table-1'
+                        title={activePerformanceReport}
+                        icon={IconNames.TH_LIST}
+                        panel={
+                            <PerfTable
+                                data={useNormalisedData ? normalisedData[0] : processedRows}
+                                comparisonData={useNormalisedData ? normalisedData[1] : []}
+                                filters={filters}
+                                provideMatmulAdvice={provideMatmulAdvice}
+                                hiliteHighDispatch={hiliteHighDispatch}
+                                matches={MISSING_ROWS}
+                                highlightRows={highlightRows}
+                            />
+                        }
+                    />
 
-                                return (
-                                    <th
-                                        key={h.key}
-                                        className='cell-header'
-                                    >
-                                        {h.sortable ? (
-                                            <Button
-                                                onClick={() => changeSorting(h.key)(targetSortDirection)}
-                                                variant={ButtonVariant.MINIMAL}
-                                                size={Size.SMALL}
-                                            >
-                                                <span className='header-label'>{h.label}</span>
-
-                                                {sortingColumn === h.key ? (
-                                                    <Icon
-                                                        className={classNames(
-                                                            {
-                                                                'is-active': sortingColumn === h.key,
-                                                            },
-                                                            'sort-icon',
-                                                        )}
-                                                        icon={
-                                                            sortDirection === SortingDirection.ASC
-                                                                ? IconNames.CARET_DOWN
-                                                                : IconNames.CARET_UP
-                                                        }
-                                                    />
-                                                ) : (
-                                                    <Icon
-                                                        className={classNames('sort-icon')}
-                                                        icon={IconNames.CARET_DOWN}
-                                                    />
-                                                )}
-                                            </Button>
-                                        ) : (
-                                            <span className='header-label no-button'>{h.label}</span>
-                                        )}
-
-                                        {/* TODO: May want this in the near future */}
-                                        {/* {h?.filterable && (
-                                            <div className='column-filter'>
-                                                <InputGroup
-                                                    asyncControl
-                                                    size='small'
-                                                    onValueChange={(value) => updateColumnFilter(h.key, value)}
-                                                    placeholder='Filter...'
-                                                    value={filters?.[h.key]}
-                                                />
-                                            </div>
-                                        )} */}
-                                    </th>
-                                );
-                            })}
-                        </tr>
-                    </thead>
-
-                    <tbody>
-                        {tableFields.map((row, i) => (
-                            <Fragment key={i}>
-                                <tr>
-                                    {visibleHeaders.map((h) => (
-                                        <td
-                                            key={h.key}
-                                            className={classNames('cell', {
-                                                'align-right': h.key === COLUMN_HEADERS.math_fidelity,
-                                            })}
-                                        >
-                                            {formatCell(row, h, operations, filters?.[h.key])}
-                                        </td>
-                                    ))}
-                                </tr>
-                                {provideMatmulAdvice && row.op_code.includes('Matmul') && (
-                                    <tr>
-                                        <td
-                                            colSpan={visibleHeaders.length}
-                                            className='cell advice'
-                                        >
-                                            <ul>
-                                                {row?.advice.map((advice, j) => <li key={`advice-${j}`}>{advice}</li>)}
-                                            </ul>
-                                        </td>
-                                    </tr>
-                                )}
-                            </Fragment>
-                        ))}
-                    </tbody>
-                </table>
+                    {activeComparisonReport && processedComparisonRows?.length ? (
+                        <Tab
+                            id='perf-table-2'
+                            title={activeComparisonReport}
+                            icon={IconNames.TH_LIST}
+                            panel={
+                                <PerfTable
+                                    data={useNormalisedData ? normalisedData[1] : processedComparisonRows}
+                                    comparisonData={useNormalisedData ? normalisedData[0] : []}
+                                    filters={filters}
+                                    provideMatmulAdvice={provideMatmulAdvice}
+                                    hiliteHighDispatch={hiliteHighDispatch}
+                                    matches={MISSING_ROWS}
+                                    highlightRows={highlightRows}
+                                />
+                            }
+                        />
+                    ) : null}
+                </Tabs>
             </div>
             <hr />
             {hiliteHighDispatch && calcHighDispatchOps(processedRows)}

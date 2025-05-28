@@ -26,7 +26,7 @@ import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/Routes';
 import isValidNumber from '../../functions/isValidNumber';
-import { TensorsByOperationByAddress } from '../../model/BufferSummary';
+import { TensorDeallocationReport, TensorsByOperationByAddress } from '../../model/BufferSummary';
 import {
     renderMemoryLayoutAtom,
     selectedDeviceAtom,
@@ -38,6 +38,7 @@ import GlobalSwitch from '../GlobalSwitch';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import { ScrollLocations } from '../../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
+import { Operation } from '../../model/APIData';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -53,7 +54,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [activeRow, setActiveRow] = useState<number | null>(null);
-
+    const [showDeallocationReport, setShowDeallocationReport] = useState(true);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const deviceId = useAtomValue(selectedDeviceAtom) || 0;
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
@@ -63,14 +64,62 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const { data: operations } = useOperationsList();
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
     const navigate = useNavigate();
+    const operationsById = useMemo(() => {
+        const map = new Map<number, Operation>();
+        operations?.forEach((operation) => {
+            map.set(operation.id, operation);
+        });
+        return map;
+    }, [operations]);
 
     const l1StartMarker = useGetL1StartMarker();
     const l1SmallMarker = useGetL1SmallMarker();
+
     const numberOfOperations = useMemo(
         () =>
             buffersByOperation && buffersByOperation.length >= 0 ? buffersByOperation.length : PLACEHOLDER_ARRAY_SIZE,
         [buffersByOperation],
     );
+
+    const nondeallocatedTensorsByOperationId = useMemo(() => {
+        const getLastValidConsumer = (consumers: number[]) => {
+            const list = [...consumers];
+            while (list && list.length > 0) {
+                const lastConsumerOperationId = list.sort().pop() || -1;
+                const lastConsumerName = operationsById.get(lastConsumerOperationId)?.name || '';
+
+                if (lastConsumerOperationId > -1 && !lastConsumerName.includes('ttnn.deallocate')) {
+                    return { lastConsumerOperationId, lastConsumerName };
+                }
+            }
+            return { lastConsumerName: '', lastConsumerOperationId: -1 };
+        };
+        const result = new Map<number, TensorDeallocationReport[]>();
+        if (showDeallocationReport) {
+            tensorListByOperation.forEach((tensorsMap, operationId) => {
+                tensorsMap.forEach((tensor, address) => {
+                    if (tensor.id && tensor.consumers && tensor.consumers.length > 0) {
+                        const { lastConsumerOperationId, lastConsumerName } = getLastValidConsumer(tensor.consumers);
+                        if (lastConsumerOperationId !== null && lastConsumerOperationId < operationId) {
+                            if (!result.has(operationId)) {
+                                result.set(operationId, []);
+                            }
+                            const list: TensorDeallocationReport[] = result.get(operationId)!;
+                            list.push({
+                                id: tensor.id,
+                                address,
+                                consumerName: lastConsumerName,
+                                lastConsumerOperationId,
+                                lastOperationId: operationId,
+                            });
+                            result.set(operationId, list);
+                        }
+                    }
+                });
+            });
+        }
+        return result;
+    }, [operationsById, showDeallocationReport, tensorListByOperation]);
 
     const getMemorySize = () =>
         !isLoadingDevices && devices ? devices[deviceId]?.worker_l1_size : L1_DEFAULT_MEMORY_SIZE;
@@ -138,7 +187,13 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                         setIsZoomedIn(!isZoomedIn);
                     }}
                 />
-
+                <Switch
+                    label='Mark late tensor deallocations'
+                    checked={showDeallocationReport}
+                    onChange={() => {
+                        setShowDeallocationReport(!showDeallocationReport);
+                    }}
+                />
                 <GlobalSwitch
                     label='Hex axis labels'
                     checked={showHex}
@@ -146,7 +201,6 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                         setShowHex(!showHex);
                     }}
                 />
-
                 <GlobalSwitch
                     label='Tensor memory layout overlay'
                     checked={renderMemoryLayout}
@@ -154,7 +208,6 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                         setRenderMemoryLayout(!renderMemoryLayout);
                     }}
                 />
-
                 <GlobalSwitch
                     label='Memory regions'
                     checked={showMemoryRegions}
@@ -234,6 +287,10 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                                         memoryEnd={isZoomedIn ? zoomedMemorySizeEnd : memorySize}
                                         memoryPadding={memoryPadding}
                                         tensorList={tensorListByOperation.get(operation.id)!}
+                                        tensorDeallocationReport={
+                                            nondeallocatedTensorsByOperationId.get(operation.id) || []
+                                        }
+                                        showMemoryLayout={renderMemoryLayout}
                                     />
 
                                     <Tooltip
