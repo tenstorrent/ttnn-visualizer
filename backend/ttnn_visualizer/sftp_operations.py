@@ -52,7 +52,7 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     """
     Resolve the file path if it contains a wildcard ('*') by using glob on the remote machine.
 
-    :param session: A session object containing the remote connection information.
+    :param remote_connection: A RemoteConnection object containing the remote connection information.
     :param file_path: The file path, which may include wildcards.
     :return: The resolved file path.
     :raises FileNotFoundError: If no files match the pattern.
