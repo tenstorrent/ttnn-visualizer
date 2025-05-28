@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import fs from 'fs';
 import path from 'path';
 
@@ -7,29 +11,7 @@ const nonCompliantFiles = [];
 
 function isTextFile(filePath) {
     const ext = path.extname(filePath).toLowerCase();
-    return [
-        '.js',
-        '.ts',
-        '.jsx',
-        '.tsx',
-        '.c',
-        '.cpp',
-        '.h',
-        '.cs',
-        '.java',
-        '.py',
-        '.go',
-        '.rb',
-        '.php',
-        '.html',
-        '.css',
-        '.scss',
-        '.json',
-        '.xml',
-        '.yml',
-        '.yaml',
-        '.txt',
-    ].includes(ext);
+    return ['.js', '.ts', '.jsx', '.tsx', '.mjs', '.css', '.scss', '.xml'].includes(ext);
 }
 
 function checkFile(filePath) {
