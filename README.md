@@ -105,8 +105,10 @@ Unzip the files into their own directories and select them with the local folder
 
 ### NPE report
 
-**Llama decode**
-[npe data](https://github.com/user-attachments/files/18772778/llama-decode-3B.zip)
+**T3K synthetic**
+[synthetic_t3k_small.json.zip](https://github.com/user-attachments/files/20491459/synthetic_t3k_small.json.zip)
+
+
 
 
 ## Contributing
