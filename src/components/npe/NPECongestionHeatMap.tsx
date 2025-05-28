@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { calculateLinkCongestionColor } from './drawingApi';

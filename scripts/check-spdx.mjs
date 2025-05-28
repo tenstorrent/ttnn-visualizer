@@ -61,7 +61,7 @@ walkDirectory(startDir);
 
 if (nonCompliantFiles.length > 0) {
     // eslint-disable-next-line no-console
-    console.log('Files missing the SPDX-License-Identifier string:');
+    console.log(`${nonCompliantFiles.length} files missing the SPDX-License-Identifier string:`);
     // eslint-disable-next-line no-console
     nonCompliantFiles.forEach((file) => console.log(file));
 } else {

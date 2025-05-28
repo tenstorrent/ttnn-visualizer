@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
 import { formatSize } from '../functions/math';
