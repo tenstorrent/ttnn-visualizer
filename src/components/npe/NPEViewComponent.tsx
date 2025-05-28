@@ -227,7 +227,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             r.links.some(
                                 (link) =>
                                     link[NPE_LINK.Y] === linkUtilizationData[NPE_LINK.Y] &&
-                                    link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X],
+                                    link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X] &&
+                                    (showNOC === undefined || link[NPE_LINK.NOC_ID].indexOf(showNOC) === 0),
                             )
                         ) {
                             return r;
@@ -423,7 +424,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     ))}
 
                                     {links?.link_demand.map((linkUtilization, index) => {
-                                        if (linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id) {
+                                        if (
+                                            linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id &&
+                                            (showNOC === undefined ||
+                                                linkUtilization[NPE_LINK.NOC_ID].indexOf(showNOC) === 0)
+                                        ) {
                                             return (
                                                 <button
                                                     type='button'
@@ -571,6 +576,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     showActiveTransfers={showActiveTransfers}
                     highlightedTransfer={highlightedTransfer}
                     setHighlightedTransfer={setHighlightedTransfer}
+                    nocType={showNOC}
                 />
             </div>
         </div>

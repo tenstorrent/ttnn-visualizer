@@ -1,6 +1,6 @@
 import { Button, Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer } from '../../model/NPEModel';
+import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
 import { calculateLinkCongestionColor, getRouteColor } from './drawingApi';
 import { formatSize } from '../../functions/math';
 
@@ -11,6 +11,8 @@ const ActiveTransferDetails = ({
     highlightedTransfer,
     setHighlightedTransfer,
     congestionData,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    nocType, // this may or may not be used in the future
 }: {
     groupedTransfersByNoCID: Record<NoCID, NoCTransfer[]>;
     selectedNode: { index: number; coords: number[] } | null;
@@ -18,6 +20,7 @@ const ActiveTransferDetails = ({
     highlightedTransfer: NoCTransfer | null;
     setHighlightedTransfer: (transfer: NoCTransfer | null) => void;
     congestionData: LinkUtilization[];
+    nocType: NoCType | undefined;
 }) => {
     return (
         <div className='side-data'>

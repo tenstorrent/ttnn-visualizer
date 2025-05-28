@@ -108,6 +108,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                     y: 0,
                     text: (
                         <div>
+                            {nocType !== undefined && <div>Selected {nocType}</div>}
                             <div>
                                 <span
                                     style={{
