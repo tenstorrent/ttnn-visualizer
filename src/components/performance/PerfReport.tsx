@@ -319,6 +319,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                 hiliteHighDispatch={hiliteHighDispatch}
                                 matches={MISSING_ROWS}
                                 highlightRows={highlightRows}
+                                normaliseData={useNormalisedData}
                             />
                         }
                     />
@@ -337,6 +338,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     matches={MISSING_ROWS}
                                     highlightRows={highlightRows}
+                                    normaliseData={useNormalisedData}
                                 />
                             }
                         />
