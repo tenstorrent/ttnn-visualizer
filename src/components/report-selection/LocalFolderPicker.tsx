@@ -2,7 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Button, ButtonVariant, Intent, MenuItem } from '@blueprintjs/core';
+import { useState } from 'react';
+import { Alert, Button, ButtonVariant, Intent, MenuItem } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useSession } from '../../hooks/useAPI';
@@ -26,6 +27,8 @@ const LocalFolderPicker = ({
     const { data: session } = useSession();
     const isDisabled = !items || items.length === 0;
 
+    const [showDeleteAlert, setShowDeleteAlert] = useState<boolean>(false);
+
     const renderItem: ItemRenderer<string> = (folder, { handleClick, handleFocus, modifiers }) => {
         if (!modifiers.matchesPredicate) {
             return null;
@@ -48,12 +51,32 @@ const LocalFolderPicker = ({
                 />
 
                 {handleDelete && (
-                    <Button
-                        icon={IconNames.TRASH}
-                        onClick={() => handleDelete(folder)}
-                        variant={ButtonVariant.MINIMAL}
-                        intent={Intent.DANGER}
-                    />
+                    <>
+                        <Button
+                            icon={IconNames.TRASH}
+                            onClick={() => setShowDeleteAlert(true)}
+                            variant={ButtonVariant.MINIMAL}
+                            intent={Intent.DANGER}
+                        />
+
+                        <Alert
+                            canEscapeKeyCancel
+                            isOpen={showDeleteAlert}
+                            intent={Intent.DANGER}
+                            onClose={() => setShowDeleteAlert(false)}
+                            onConfirm={() => {
+                                handleDelete(folder);
+                                setShowDeleteAlert(false);
+                            }}
+                            cancelButtonText='Cancel'
+                            confirmButtonText='Delete'
+                            className='bp5-dark'
+                        >
+                            <p>
+                                Are you sure you want to delete <strong>{folder}</strong>? This action cannot be undone.
+                            </p>
+                        </Alert>
+                    </>
                 )}
             </div>
         );
