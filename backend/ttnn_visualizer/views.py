@@ -434,7 +434,7 @@ def delete_profiler_report(profiler_name, session: Instance):
 @api.route("/performance", methods=["GET"])
 @with_session
 def get_performance_data_list(session: Instance):
-    is_remote = bool(session.remote_connection)
+    is_remote = False  # Performance data is always local for now
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     data_directory = Path(current_app.config[config_key])
 
@@ -943,8 +943,9 @@ def use_remote_folder():
         performance_name = remote_performance_folder.reportName
     data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
     profiler_name = folder.reportName
+    folder_name = folder.remotePath.split("/")[-1]
 
-    connection_directory = Path(data_directory, connection.host, current_app.config["PROFILER_DIRECTORY_NAME"], profiler_name)
+    connection_directory = Path(data_directory, connection.host, current_app.config["PROFILER_DIRECTORY_NAME"], folder_name)
 
     if not connection.useRemoteQuerying and not connection_directory.exists():
         return Response(
