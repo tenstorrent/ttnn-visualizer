@@ -25,12 +25,14 @@ import {
     PROFILER_FOLDER_QUERY_KEY,
     deletePerformance,
     deleteProfiler,
+    fetchTabSession,
     updateTabSession,
     usePerfFolderList,
     useReportFolderList,
     useSession,
 } from '../../hooks/useAPI';
 import LocalFolderPicker from './LocalFolderPicker';
+import { ReportFolder } from '../../definitions/Reports';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -121,13 +123,17 @@ const LocalFolderOptions: FC = () => {
         } else if (response?.data?.status !== ConnectionTestStates.OK) {
             connectionStatus = directoryErrorStatus;
         } else {
-            const fileName = getReportName(files);
+            const updatedSession = await fetchTabSession();
+            const updatedProfilerName = updatedSession?.active_report?.profiler_name;
 
             setProfilerUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
             setSelectedDevice(DEFAULT_DEVICE_ID);
-            setActiveProfilerReport(fileName);
-            createToastNotification('Active memory report', fileName);
+
+            if (updatedProfilerName) {
+                setActiveProfilerReport(updatedProfilerName);
+                createToastNotification('Active memory report', updatedProfilerName);
+            }
         }
 
         queryClient.clear();
@@ -160,7 +166,7 @@ const LocalFolderOptions: FC = () => {
         } else if (response?.data?.status !== ConnectionTestStates.OK) {
             connectionStatus = directoryErrorStatus;
         } else {
-            const fileName = getReportName(files);
+            const fileName = getFolderName(files);
             setPerformanceDataUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
             setActivePerformanceReport(fileName);
@@ -188,40 +194,40 @@ const LocalFolderOptions: FC = () => {
         }
     }, [isUploadingReport, isUploadingPerformance]);
 
-    const handleSelectProfiler = async (item: string) => {
-        await updateTabSession({ ...session, active_report: { profiler_name: item } });
+    const handleSelectProfiler = async (item: ReportFolder) => {
+        await updateTabSession({ ...session, active_report: { profiler_name: item.reportName } });
 
-        createToastNotification('Active memory report', item);
-        setActiveProfilerReport(item);
+        createToastNotification('Active memory report', item.reportName);
+        setActiveProfilerReport(item.reportName);
     };
 
-    const handleDeleteProfiler = async (folder: string) => {
-        await deleteProfiler(folder);
+    const handleDeleteProfiler = async (folder: ReportFolder) => {
+        await deleteProfiler(folder.path);
         await queryClient.invalidateQueries([PROFILER_FOLDER_QUERY_KEY]);
 
-        createToastNotification(`Memory report deleted`, folder);
+        createToastNotification(`Memory report deleted`, folder.reportName);
 
-        if (activeProfilerReport === folder) {
+        if (activeProfilerReport === folder.reportName) {
             setActiveProfilerReport(null);
             setProfilerUploadLabel('Choose directory...');
             setProfilerFolder(undefined);
         }
     };
 
-    const handleSelectPerformance = async (item: string) => {
-        await updateTabSession({ ...session, active_report: { performance_name: item } });
+    const handleSelectPerformance = async (item: ReportFolder) => {
+        await updateTabSession({ ...session, active_report: { performance_name: item.reportName } });
 
-        createToastNotification('Active performance report', item);
-        setActivePerformanceReport(item);
+        createToastNotification('Active performance report', item.reportName);
+        setActivePerformanceReport(item.reportName);
     };
 
-    const handleDeletePerformance = async (folder: string) => {
-        await deletePerformance(folder);
+    const handleDeletePerformance = async (folder: ReportFolder) => {
+        await deletePerformance(folder.path);
         await queryClient.invalidateQueries([PERFORMANCE_FOLDER_QUERY_KEY]);
 
-        createToastNotification(`Performance report deleted`, folder);
+        createToastNotification(`Performance report deleted`, folder.reportName);
 
-        if (activePerformanceReport === folder) {
+        if (activePerformanceReport === folder.reportName) {
             setActivePerformanceReport(null);
             setPerformanceDataUploadLabel('Choose directory...');
             setPerformanceFolder(undefined);
@@ -237,7 +243,13 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={reportFolderList}
-                    value={reportFolderList?.includes(activeProfilerReport) ? activeProfilerReport : null}
+                    value={
+                        reportFolderList
+                            ?.map((folder: ReportFolder) => folder.reportName)
+                            .includes(activeProfilerReport)
+                            ? activeProfilerReport
+                            : null
+                    }
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
                 />
@@ -286,7 +298,13 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={perfFolderList}
-                    value={perfFolderList?.includes(activePerformanceReport) ? activePerformanceReport : null}
+                    value={
+                        perfFolderList
+                            ?.map((folder: ReportFolder) => folder.reportName)
+                            .includes(activePerformanceReport)
+                            ? activePerformanceReport
+                            : null
+                    }
                     handleSelect={handleSelectPerformance}
                     handleDelete={handleDeletePerformance}
                 />
@@ -331,6 +349,6 @@ const LocalFolderOptions: FC = () => {
     );
 };
 
-const getReportName = (files: FileList) => files[0].webkitRelativePath.split('/')[0];
+const getFolderName = (files: FileList) => files[0].webkitRelativePath.split('/')[0];
 
 export default LocalFolderOptions;

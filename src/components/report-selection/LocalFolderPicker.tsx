@@ -7,12 +7,13 @@ import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useSession } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
+import { ReportFolder } from '../../definitions/Reports';
 
 interface LocalFolderPickerProps {
-    items: [];
+    items: ReportFolder[];
     value: string | null;
-    handleSelect: (folder: string) => void;
-    handleDelete?: (folder: string) => void;
+    handleSelect: (folder: ReportFolder) => void;
+    handleDelete?: (folder: ReportFolder) => void;
     defaultLabel?: string;
 }
 
@@ -26,7 +27,7 @@ const LocalFolderPicker = ({
     const { data: session } = useSession();
     const isDisabled = !items || items.length === 0;
 
-    const renderItem: ItemRenderer<string> = (folder, { handleClick, handleFocus, modifiers }) => {
+    const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers }) => {
         if (!modifiers.matchesPredicate) {
             return null;
         }
@@ -34,14 +35,14 @@ const LocalFolderPicker = ({
         return (
             <div
                 className='folder-picker-menu-item'
-                key={folder}
+                key={folder.reportName}
             >
                 <MenuItem
-                    text={`/${folder}`}
+                    text={folder.reportName}
                     roleStructure='listoption'
-                    active={folder === value}
+                    active={folder.reportName === value}
                     disabled={modifiers.disabled}
-                    key={folder}
+                    key={folder.reportName}
                     onClick={handleClick}
                     onFocus={handleFocus}
                     icon={modifiers.active ? IconNames.FOLDER_OPEN : IconNames.FOLDER_CLOSE}
@@ -60,10 +61,10 @@ const LocalFolderPicker = ({
     };
 
     return (
-        <Select
+        <Select<ReportFolder>
             className='folder-picker'
             items={items ?? []}
-            itemPredicate={(query, item) => !query || item.toLowerCase().includes(query.toLowerCase())}
+            itemPredicate={(query, item) => !query || item.reportName.toLowerCase().includes(query.toLowerCase())}
             itemRenderer={renderItem}
             noResults={
                 <MenuItem
@@ -78,7 +79,7 @@ const LocalFolderPicker = ({
         >
             <Button
                 className='folder-picker-button'
-                text={value ? `/${value}` : defaultLabel}
+                text={value || defaultLabel}
                 disabled={isDisabled || !session}
                 alignText='start'
                 icon={IconNames.FOLDER_OPEN}
