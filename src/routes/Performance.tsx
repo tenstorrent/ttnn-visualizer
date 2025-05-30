@@ -29,6 +29,7 @@ import PerfCharts from '../components/performance/PerfCharts';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
 import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
 import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
+import { ReportFolder } from '../definitions/Reports';
 
 export default function Performance() {
     const [comparisonReport, setComparisonReport] = useAtom(comparisonPerformanceReportAtom);
@@ -136,9 +137,11 @@ export default function Performance() {
                 >
                     <div className='folder-selection'>
                         <LocalFolderPicker
-                            items={folderList.filter((folder: string) => folder !== activePerformanceReport)}
+                            items={folderList.filter(
+                                (folder: ReportFolder) => folder.reportName !== activePerformanceReport,
+                            )}
                             value={comparisonReport}
-                            handleSelect={(value) => setComparisonReport(value)}
+                            handleSelect={(folder: ReportFolder) => setComparisonReport(folder.reportName)}
                         />
 
                         <Button
