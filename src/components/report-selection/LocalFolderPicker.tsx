@@ -45,7 +45,7 @@ const LocalFolderPicker = ({
                     key={folder.reportName}
                     onClick={handleClick}
                     onFocus={handleFocus}
-                    icon={modifiers.active ? IconNames.FOLDER_OPEN : IconNames.FOLDER_CLOSE}
+                    icon={folder.reportName === value ? IconNames.FOLDER_OPEN : IconNames.FOLDER_CLOSE}
                 />
 
                 {handleDelete && (

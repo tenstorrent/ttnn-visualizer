@@ -534,7 +534,6 @@ def get_performance_results_report(session: Instance):
     if name:
         performance_path = performance_path.parent / name
         session.performance_path = str(performance_path)
-        logger.info(f"************ Performance path set to {session.performance_path}")
 
     try:
         report = OpsPerformanceReportQueries.generate_report(session)
@@ -941,9 +940,9 @@ def use_remote_folder():
     remote_performance_folder = None
     if profile:
         remote_performance_folder = RemoteReportFolder.model_validate(profile, strict=False)
-        performance_name = remote_performance_folder.testName
+        performance_name = remote_performance_folder.reportName
     data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-    profiler_name = Path(folder.remotePath).name
+    profiler_name = folder.reportName
 
     connection_directory = Path(data_directory, connection.host, current_app.config["PROFILER_DIRECTORY_NAME"], profiler_name)
 

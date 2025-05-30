@@ -27,7 +27,6 @@ const formatRemoteFolderName = (
     }
 
     const paths = {
-        // report: selectedConnection.reportPath, // Deprecated - use profiler and profilerPath
         profiler: selectedConnection.profilerPath || selectedConnection.reportPath,
         performance: selectedConnection.performancePath,
     };
@@ -58,7 +57,7 @@ const remoteFolderRenderer =
             return null;
         }
 
-        const { lastSynced, lastModified, testName } = folder;
+        const { lastSynced, lastModified, reportName } = folder;
         const lastSyncedDate = lastSynced ? formatter.format(new Date(lastSynced)) : 'Never';
 
         let statusIcon = (
@@ -89,17 +88,21 @@ const remoteFolderRenderer =
             }
         }
 
-        const getLabelElement = () => !isUsingRemoteQuerying && statusIcon;
+        const getLabelElement = () => (
+            <>
+                <span>{reportName}</span>
+                <span>{!isUsingRemoteQuerying && statusIcon}</span>
+            </>
+        );
 
         return (
             <MenuItem
                 className='remote-folder-item'
-                active={selectedFolder?.testName === testName}
+                active={selectedFolder?.reportName === reportName}
                 disabled={modifiers.disabled}
                 key={`${formatRemoteFolderName(folder, type, connection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
                 text={formatRemoteFolderName(folder, type, connection)}
-                textClassName='folder-path'
                 icon={IconNames.FOLDER_CLOSE}
                 labelElement={getLabelElement()}
                 labelClassName='remote-folder-status-icon'
@@ -154,7 +157,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
                     icon={icon as IconName}
                     endIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={loading || remoteFolderList?.length === 0}
-                    text={remoteFolder ? formatRemoteFolderName(remoteFolder, type, remoteConnection) : fallbackLabel}
+                    text={remoteFolder ? remoteFolder.reportName : fallbackLabel}
                 />
             </Select>
 
