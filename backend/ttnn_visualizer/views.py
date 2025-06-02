@@ -623,9 +623,11 @@ def create_profiler_files():
     logger.info(f"Writing report files to {profiler_directory}/{profiler_name}")
 
     try:
-        save_uploaded_files(files, profiler_directory, folder_name)
+        paths = save_uploaded_files(files, profiler_directory, folder_name)
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+
+    profiler_path = next((p for p in paths if Path(p).name == "db.sqlite"), None)
 
     instance_id = request.args.get("instanceId")
     update_instance(instance_id=instance_id, profiler_name=profiler_name, clear_remote=True)

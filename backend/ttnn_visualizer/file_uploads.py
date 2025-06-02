@@ -9,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from flask import current_app
@@ -73,6 +74,8 @@ def save_uploaded_files(
     :param target_directory: The base directory for saving the files.
     :param folder_name: The name to use for the directory.
     """
+    saved_paths = []
+
     if current_app.config["MALWARE_SCANNER"]:
         scanned_files = scan_uploaded_files(files, target_directory, folder_name)
 
@@ -82,6 +85,7 @@ def save_uploaded_files(
 
             logger.info(f"Saving uploaded file (clean): {dest_path}")
             shutil.move(temp_path, dest_path)
+            saved_paths.append(dest_path)
     else:
         for file in files:
             dest_path = construct_dest_path(file, target_directory, folder_name)
@@ -96,7 +100,9 @@ def save_uploaded_files(
 
             logger.info(f"Saving uploaded file: {dest_path}")
             file.save(dest_path)
+            saved_paths.append(dest_path)
 
+    return saved_paths
 
 def scan_uploaded_files(
     files,
@@ -136,8 +142,10 @@ def scan_uploaded_files(
 
 def construct_dest_path(file, target_directory, folder_name):
     if folder_name:
-        dest_path = Path(target_directory) / folder_name / str(file.filename)
+        prefixed_folder_name = f"{int(time.time())}_{folder_name}"
+        dest_path = Path(target_directory) / prefixed_folder_name / str(file.filename)
     else:
-        dest_path = Path(target_directory) / str(file.filename)
+        prefixed_filename = f"{int(time.time())}_{file.filename}"
+        dest_path = Path(target_directory) / prefixed_filename
 
     return dest_path
