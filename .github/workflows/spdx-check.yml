@@ -1,0 +1,28 @@
+name: Checking SPDX License Identifiers
+
+on:
+  pull_request:
+    branches: [ "dev" ]
+  workflow_dispatch:
+
+jobs:
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+            node-version: v20.11.1
+
+      - name: Install dependencies
+        run: |
+          npm install -g pnpm@latest-10
+          pnpm install
+
+      - name: Running check for SPDX license identifiers
+        run: |
+          pnpm run spdx

@@ -46,7 +46,11 @@ if (nonCompliantFiles.length > 0) {
     console.log(`${nonCompliantFiles.length} files missing the SPDX-License-Identifier string:`);
     // eslint-disable-next-line no-console
     nonCompliantFiles.forEach((file) => console.log(file));
+
+    process.exit(1);
 } else {
     // eslint-disable-next-line no-console
     console.log('All files contain the SPDX-License-Identifier string.');
+
+    process.exit(0);
 }
