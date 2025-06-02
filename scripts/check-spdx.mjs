@@ -8,8 +8,12 @@ import path from 'path';
 // Licenses
 const SPDX_JS_LICENSE = '// SPDX-License-Identifier: Apache-2.0';
 const SPDX_PYTHON_LICENSE = '# SPDX-License-Identifier: Apache-2.0';
-const SPDX_JSON_LICENSE = {
+const SPDX_PACKAGE_JSON_LICENSE = {
     license: 'Apache-2.0',
+    author: {
+        name: 'Tenstorrent AI ULC',
+        url: 'https://tenstorrent.com/',
+    },
 };
 
 // File extensions
@@ -28,8 +32,6 @@ const IGNORED_DIRS = [
     'backend/ttnn_visualizer/data',
     'backend/ttnn_visualizer/static',
     'node_modules',
-    'src/assets',
-    'tests/data',
     'ttnn_env',
 ];
 const nonCompliantFiles = [];
@@ -75,7 +77,8 @@ function checkLicenseObject(filePath, licenseType) {
             nonCompliantFiles.push(filePath);
         }
     } catch (err) {
-        console.log('err', err);
+        // eslint-disable-next-line no-console
+        console.error(`Error processing file ${filePath}:`, err);
         nonCompliantFiles.push(filePath);
     }
 }
@@ -86,16 +89,14 @@ function walkDirectory(dir) {
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
 
-        if (entry.isDirectory()) {
-            if (!IGNORED_DIRS.some((ignoredDirectory) => fullPath.includes(ignoredDirectory))) {
-                walkDirectory(fullPath);
-            }
+        if (entry.isDirectory() && !IGNORED_DIRS.some((ignoredDirectory) => fullPath.includes(ignoredDirectory))) {
+            walkDirectory(fullPath);
         } else if (entry.isFile() && isTextFile(fullPath)) {
             checkLicenseString(fullPath, SPDX_JS_LICENSE);
         } else if (entry.isFile() && isPythonFile(fullPath)) {
             checkLicenseString(fullPath, SPDX_PYTHON_LICENSE);
-        } else if (entry.isFile() && isJSONFile(fullPath)) {
-            checkLicenseObject(fullPath, SPDX_JSON_LICENSE);
+        } else if (entry.isFile() && isJSONFile(fullPath) && fullPath.includes('package.json')) {
+            checkLicenseObject(fullPath, SPDX_PACKAGE_JSON_LICENSE);
         }
     }
 }

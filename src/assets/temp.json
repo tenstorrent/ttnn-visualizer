@@ -670,5 +670,9 @@
         "counter": 58,
         "node_type": "capture_end",
         "params": {}
+    },
+    "license": {
+        "SPDX-FileCopyrightText": "© 2025 Tenstorrent AI ULC",
+        "SPDX-License-Identifier": "Apache-2.0",
     }
 ]

@@ -10,6 +10,5 @@
    "include":[
       "vite.config.ts",
       "package.json"
-   ],
-   "license":"Apache-2.0"
+   ]
 }
