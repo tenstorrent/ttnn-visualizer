@@ -115,5 +115,9 @@
       "**/*.scss":"npx stylelint --fix",
       "**/*.{js,jsx,ts,tsx,css,scss}":"pnpm run format"
    },
-   "license": "Apache-2.0"
+   "license": "Apache-2.0",
+   "author": {
+        "name": "Tenstorrent AI ULC",
+        "url": "https://tenstorrent.com/"
+    }
 }

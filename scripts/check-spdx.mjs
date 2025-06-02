@@ -68,12 +68,15 @@ function checkLicenseObject(filePath, licenseType) {
         const content = fs.readFileSync(filePath, 'utf8');
         const json = JSON.parse(content);
 
-        const license = json.license || {};
-        const required = licenseType.license;
+        const authors = json.author || {};
+        const requiredAuthorShape = licenseType.author;
 
-        const hasAllKeys = Object.keys(required).every((key) => license[key] === required[key]);
+        const hasAllAuthorKeys = Object.keys(requiredAuthorShape).every(
+            (key) => authors[key] === requiredAuthorShape[key],
+        );
+        const hasLicense = json.license === licenseType.license;
 
-        if (!hasAllKeys) {
+        if (!hasAllAuthorKeys || !hasLicense) {
             nonCompliantFiles.push(filePath);
         }
     } catch (err) {
