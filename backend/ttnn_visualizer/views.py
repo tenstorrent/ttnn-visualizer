@@ -577,10 +577,10 @@ def get_devices(session: Instance):
 @api.route("/local/upload/profiler", methods=["POST"])
 def create_profiler_files():
     files = request.files.getlist("files")
-    safari_folder_name = request.form.get("folderName") # Optional folder name - Used for Safari compatibility
+    folder_name = request.form.get("folderName") # Optional folder name - Used for Safari compatibility
     profiler_directory = current_app.config["LOCAL_DATA_DIRECTORY"] / current_app.config["PROFILER_DIRECTORY_NAME"]
 
-    if not validate_files(files, {"db.sqlite", "config.json"}):
+    if not validate_files(files, {"db.sqlite", "config.json"}, folder_name=folder_name):
         return StatusMessage(
             status=ConnectionTestStates.FAILED,
             message="Invalid project directory.",
@@ -589,22 +589,33 @@ def create_profiler_files():
     if not profiler_directory.exists():
         profiler_directory.mkdir(parents=True, exist_ok=True)
 
-    if safari_folder_name:
-        folder_name = safari_folder_name
+    if folder_name:
+        parent_folder_name = folder_name
     else:
-        folder_name = extract_folder_name_from_files(files)
+        parent_folder_name = extract_folder_name_from_files(files)
 
-    logger.info(f"Writing report files to {profiler_directory}/{folder_name}")
+    logger.info(f"Writing report files to {profiler_directory}/{parent_folder_name}")
 
-    save_uploaded_files(files, profiler_directory, safari_folder_name)
+    save_uploaded_files(files, profiler_directory, folder_name)
 
     instance_id = request.args.get("instanceId")
-    update_instance(instance_id=instance_id, profiler_name=folder_name, clear_remote=True)
+    update_instance(instance_id=instance_id, profiler_name=parent_folder_name, clear_remote=True)
 
-    return StatusMessage(
-        status=ConnectionTestStates.OK, message="Success."
-    ).model_dump()
+    config_file = profiler_directory / parent_folder_name / "config.json"
+    report_name = None
 
+    if config_file.exists():
+        try:
+            with open(config_file, "r") as f:
+                config_data = json.load(f)
+                report_name = config_data.get("report_name")
+        except Exception as e:
+            logger.warning(f"Failed to read config.json in {config_file}: {e}")
+
+    return {
+        "path": parent_folder_name,
+        "reportName": report_name,
+    }
 
 @api.route("/local/upload/performance", methods=["POST"])
 def create_profile_files():
@@ -629,21 +640,21 @@ def create_profile_files():
         target_directory.mkdir(parents=True, exist_ok=True)
 
     if folder_name:
-        performance_folder_name = folder_name
+        parent_folder_name = folder_name
     else:
-        performance_folder_name = extract_folder_name_from_files(files)
+        parent_folder_name = extract_folder_name_from_files(files)
 
-    logger.info(f"Writing performance files to {target_directory}/{performance_folder_name}")
+    logger.info(f"Writing performance files to {target_directory}/{parent_folder_name}")
 
     save_uploaded_files(
         files,
         target_directory,
-        performance_folder_name
+        folder_name
     )
 
     instance_id = request.args.get("instanceId")
     update_instance(
-        instance_id=instance_id, performance_name=performance_name, clear_remote=True
+        instance_id=instance_id, performance_name=parent_folder_name, clear_remote=True
     )
 
     return StatusMessage(

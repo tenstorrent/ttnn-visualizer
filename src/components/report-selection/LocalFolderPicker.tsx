@@ -38,8 +38,9 @@ const LocalFolderPicker = ({
                 key={folder.reportName}
             >
                 <MenuItem
+                    textClassName='folder-picker-label'
                     text={`/${folder.path}`}
-                    labelElement={<span className='folder-picker-label'>{folder.reportName}</span>}
+                    labelElement={folder.reportName}
                     roleStructure='listoption'
                     active={folder.reportName === value}
                     disabled={modifiers.disabled}

@@ -25,7 +25,6 @@ import {
     PROFILER_FOLDER_QUERY_KEY,
     deletePerformance,
     deleteProfiler,
-    fetchTabSession,
     updateTabSession,
     usePerfFolderList,
     useReportFolderList,
@@ -120,19 +119,14 @@ const LocalFolderOptions: FC = () => {
 
         if (response.status !== 200) {
             connectionStatus = connectionFailedStatus;
-        } else if (response?.data?.status !== ConnectionTestStates.OK) {
-            connectionStatus = directoryErrorStatus;
         } else {
-            const updatedSession = await fetchTabSession();
-            const updatedProfilerName = updatedSession?.active_report?.profiler_name;
-
             setProfilerUploadLabel(`${files.length} files uploaded`);
             setReportLocation('local');
             setSelectedDevice(DEFAULT_DEVICE_ID);
 
-            if (updatedProfilerName) {
-                setActiveProfilerReport(updatedProfilerName);
-                createToastNotification('Active memory report', updatedProfilerName);
+            if (response.data) {
+                setActiveProfilerReport(response.data.path);
+                createToastNotification('Active memory report', response.data.reportName);
             }
         }
 
@@ -197,7 +191,7 @@ const LocalFolderOptions: FC = () => {
     const handleSelectProfiler = async (item: ReportFolder) => {
         await updateTabSession({ ...session, active_report: { profiler_name: item.path } });
 
-        createToastNotification('Active memory report', item.path);
+        createToastNotification('Active memory report', getReportName(reportFolderList, item.path) ?? '');
         setActiveProfilerReport(item.path);
     };
 
@@ -205,7 +199,7 @@ const LocalFolderOptions: FC = () => {
         await deleteProfiler(folder.path);
         await queryClient.invalidateQueries([PROFILER_FOLDER_QUERY_KEY]);
 
-        createToastNotification(`Memory report deleted from /${folder.path}`, folder.reportName);
+        createToastNotification('Memory report deleted', folder.reportName);
 
         if (activeProfilerReport === folder.path) {
             setActiveProfilerReport(null);
@@ -348,5 +342,9 @@ const LocalFolderOptions: FC = () => {
 };
 
 const getFolderName = (files: FileList) => files[0].webkitRelativePath.split('/')[0];
+
+const getReportName = (reports: ReportFolder[], path: string | null) => {
+    return reports?.find((report) => report.path === path)?.reportName;
+};
 
 export default LocalFolderOptions;
