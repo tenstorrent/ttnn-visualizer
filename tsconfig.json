@@ -44,5 +44,5 @@
          "path":"./tsconfig.node.json"
       }
    ],
-   "license":"Apache-2."
+   "license":"Apache-2.0"
 }
