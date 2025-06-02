@@ -89,7 +89,10 @@ type device_id = number;
 // TODO: change to enum
 type NoCTransferId = number;
 
-export type NoCType = 'NOC0' | 'NOC1';
+export enum NoCType {
+    NOC0 = 'NOC0',
+    NOC1 = 'NOC1',
+}
 
 export enum NoCID {
     NOC1_NORTH = 'NOC1_NORTH',
