@@ -5,19 +5,77 @@
 import fs from 'fs';
 import path from 'path';
 
-const targetString = '// SPDX-License-Identifier';
-const ignoredDirs = ['node_modules', '.git', '.github', '.idea', '.vscode', 'dist', 'build', 'backend', 'ttnn_env'];
+// Licenses
+const SPDX_JS_LICENSE = '// SPDX-License-Identifier: Apache-2.0';
+const SPDX_PYTHON_LICENSE = '# SPDX-License-Identifier: Apache-2.0';
+const SPDX_JSON_LICENSE = {
+    license: 'Apache-2.0',
+};
+
+// File extensions
+const JS_FILE_EXTENSIONS = ['.js', '.ts', '.jsx', '.tsx', '.mjs', '.css', '.scss', '.xml'];
+const PYTHON_FILE_EXTENSIONS = ['.py'];
+const JSON_FILE_EXTENSIONS = ['.json'];
+
+const IGNORED_DIRS = [
+    '.git',
+    '.github',
+    '.idea',
+    '.vscode',
+    'dist',
+    'build',
+    'backend/data/',
+    'backend/ttnn_visualizer/data',
+    'backend/ttnn_visualizer/static',
+    'node_modules',
+    'src/assets',
+    'tests/data',
+    'ttnn_env',
+];
 const nonCompliantFiles = [];
 
 function isTextFile(filePath) {
     const ext = path.extname(filePath).toLowerCase();
-    return ['.js', '.ts', '.jsx', '.tsx', '.mjs', '.css', '.scss', '.xml'].includes(ext);
+
+    return JS_FILE_EXTENSIONS.includes(ext);
 }
 
-function checkFile(filePath) {
+function isPythonFile(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+
+    return PYTHON_FILE_EXTENSIONS.includes(ext);
+}
+
+function isJSONFile(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+
+    return JSON_FILE_EXTENSIONS.includes(ext);
+}
+
+function checkLicenseString(filePath, licenseType) {
     const content = fs.readFileSync(filePath, 'utf8');
     const firstFewLines = content.split('\n').slice(0, 5).join('\n');
-    if (!firstFewLines.includes(targetString)) {
+
+    if (!firstFewLines.includes(licenseType)) {
+        nonCompliantFiles.push(filePath);
+    }
+}
+
+function checkLicenseObject(filePath, licenseType) {
+    try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const json = JSON.parse(content);
+
+        const license = json.license || {};
+        const required = licenseType.license;
+
+        const hasAllKeys = Object.keys(required).every((key) => license[key] === required[key]);
+
+        if (!hasAllKeys) {
+            nonCompliantFiles.push(filePath);
+        }
+    } catch (err) {
+        console.log('err', err);
         nonCompliantFiles.push(filePath);
     }
 }
@@ -29,11 +87,15 @@ function walkDirectory(dir) {
         const fullPath = path.join(dir, entry.name);
 
         if (entry.isDirectory()) {
-            if (!ignoredDirs.includes(entry.name)) {
+            if (!IGNORED_DIRS.some((ignoredDirectory) => fullPath.includes(ignoredDirectory))) {
                 walkDirectory(fullPath);
             }
         } else if (entry.isFile() && isTextFile(fullPath)) {
-            checkFile(fullPath);
+            checkLicenseString(fullPath, SPDX_JS_LICENSE);
+        } else if (entry.isFile() && isPythonFile(fullPath)) {
+            checkLicenseString(fullPath, SPDX_PYTHON_LICENSE);
+        } else if (entry.isFile() && isJSONFile(fullPath)) {
+            checkLicenseObject(fullPath, SPDX_JSON_LICENSE);
         }
     }
 }
