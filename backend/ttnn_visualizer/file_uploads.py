@@ -60,9 +60,12 @@ def save_uploaded_files(
         current_file_name = str(file.filename)
         logger.info(f"Processing file: {current_file_name}")
 
-        file_path = Path(current_file_name).name
+        file_path = Path(current_file_name)
 
-        destination_file = Path(base_directory) / parent_folder_name / str(file_path)
+        if parent_folder_name:
+            destination_file = Path(base_directory) / parent_folder_name / file_path
+        else:
+            destination_file = Path(base_directory) / file_path
 
         logger.info(f"Writing file to {destination_file}")
 

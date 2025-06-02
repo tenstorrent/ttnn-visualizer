@@ -608,9 +608,9 @@ def create_profiler_files():
     else:
         profiler_name = extract_folder_name_from_files(files)
 
-    logger.info(f"Writing report files to {profiler_directory}/{profiler_name}")
+    logger.info(f"Writing report files to {profiler_directory}/{folder_name}")
 
-    save_uploaded_files(files, profiler_directory, profiler_name)
+    save_uploaded_files(files, profiler_directory, safari_folder_name)
 
     instance_id = request.args.get("instanceId")
     update_instance(instance_id=instance_id, profiler_name=profiler_name, clear_remote=True)

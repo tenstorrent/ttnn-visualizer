@@ -38,7 +38,8 @@ const LocalFolderPicker = ({
                 key={folder.reportName}
             >
                 <MenuItem
-                    text={folder.reportName}
+                    text={`/${folder.path}`}
+                    labelElement={<span className='folder-picker-label'>{folder.reportName}</span>}
                     roleStructure='listoption'
                     active={folder.reportName === value}
                     disabled={modifiers.disabled}
@@ -79,7 +80,7 @@ const LocalFolderPicker = ({
         >
             <Button
                 className='folder-picker-button'
-                text={value || defaultLabel}
+                text={items && value ? `/${getPathFromReportName(items, value)}` : defaultLabel}
                 disabled={isDisabled || !session}
                 alignText='start'
                 icon={IconNames.FOLDER_OPEN}
@@ -89,6 +90,10 @@ const LocalFolderPicker = ({
             />
         </Select>
     );
+};
+
+const getPathFromReportName = (folders: ReportFolder[], reportName: string | null) => {
+    return folders?.find((folder) => folder.reportName === reportName)?.path;
 };
 
 export default LocalFolderPicker;
