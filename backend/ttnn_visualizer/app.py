@@ -21,7 +21,7 @@ from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from ttnn_visualizer.exceptions import DatabaseFileNotFoundException, InvalidProfilerPath, InvalidReportPath
-from ttnn_visualizer.sessions import create_instance_from_local_paths
+from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
 
 logger = logging.getLogger(__name__)

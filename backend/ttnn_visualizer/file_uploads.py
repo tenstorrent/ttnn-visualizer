@@ -2,9 +2,18 @@
 #
 # SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 
-from pathlib import Path
 import logging
+import os
 import re
+import shlex
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
+from flask import current_app
+
+from ttnn_visualizer.exceptions import DataFormatError
 
 logger = logging.getLogger(__name__)
 
@@ -56,24 +65,78 @@ def save_uploaded_files(
     base_directory,
     parent_folder_name=None,
 ):
+    """
+    Save uploaded files to the target directory.
+
+    :param files: List of files to be saved.
+    :param target_directory: The base directory for saving the files.
+    :param folder_name: The name to use for the directory.
+    """
+    if current_app.config["MALWARE_SCANNER"]:
+        scanned_files = scan_uploaded_files(files, base_directory, parent_folder_name)
+
+        for temp_path, dest_path in scanned_files:
+            if dest_path.parent.exists():
+                dest_path.parent.mkdir(exist_ok=True, parents=True)
+
+            logger.info(f"Saving uploaded file (clean): {dest_path}")
+            shutil.move(temp_path, dest_path)
+    else:
+        for file in files:
+            dest_path = construct_dest_path(file, base_directory, parent_folder_name)
+            logger.info(f"Writing file to {dest_path}")
+
+            # Create directory if it doesn't exist
+            if not dest_path.parent.exists():
+                logger.info(
+                    f"{dest_path.parent.name} does not exist. Creating directory"
+                )
+                dest_path.parent.mkdir(exist_ok=True, parents=True)
+
+            logger.info(f"Saving uploaded file: {dest_path}")
+            file.save(dest_path)
+
+
+def scan_uploaded_files(
+    files,
+    target_directory,
+    folder_name=None,
+):
+    scanned_files = []
+
     for file in files:
-        current_file_name = str(file.filename)
-        logger.info(f"Processing file: {current_file_name}")
+        (_, temp_path) = tempfile.mkstemp()
+        file.save(temp_path)
+        dest_path = construct_dest_path(file, target_directory, folder_name)
 
-        file_path = Path(current_file_name)
+        cmd_list = shlex.split(current_app.config["MALWARE_SCANNER"])
+        cmd_list.append(temp_path)
 
-        if parent_folder_name:
-            destination_file = Path(base_directory) / parent_folder_name / file_path
-        else:
-            destination_file = Path(base_directory) / file_path
-
-        logger.info(f"Writing file to {destination_file}")
-
-        # Create directory if it doesn't exist
-        if not destination_file.parent.exists():
-            logger.info(
-                f"{destination_file.parent.name} does not exist. Creating directory"
+        try:
+            result = subprocess.run(
+                cmd_list,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
             )
-            destination_file.parent.mkdir(exist_ok=True, parents=True)
+            if result.returncode == 0:
+                scanned_files.append((temp_path, dest_path))
+            else:
+                os.unlink(temp_path)
+                logger.warning(f"Malware scanner flagged file: {file.filename}")
+                raise DataFormatError()
+        except Exception as e:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
 
-        file.save(destination_file)
+    return scanned_files
+
+
+def construct_dest_path(file, target_directory, folder_name):
+    if folder_name:
+        dest_path = Path(target_directory) / folder_name / str(file.filename)
+    else:
+        dest_path = Path(target_directory) / str(file.filename)
+
+    return dest_path
