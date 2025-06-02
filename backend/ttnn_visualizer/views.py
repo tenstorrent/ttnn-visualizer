@@ -594,26 +594,12 @@ def create_profiler_files():
     else:
         folder_name = extract_folder_name_from_files(files)
 
-    config_file = None
-    for file in files:
-        if file.filename == "config.json" or file.filename == f"{folder_name}/config.json":
-            config_file = file
-            break
-
-    if config_file:
-        config_file.stream.seek(0)
-        config_data = json.load(config_file.stream)
-        profiler_name = config_data.get("report_name")
-        config_file.stream.seek(0)
-    else:
-        profiler_name = extract_folder_name_from_files(files)
-
     logger.info(f"Writing report files to {profiler_directory}/{folder_name}")
 
     save_uploaded_files(files, profiler_directory, safari_folder_name)
 
     instance_id = request.args.get("instanceId")
-    update_instance(instance_id=instance_id, profiler_name=profiler_name, clear_remote=True)
+    update_instance(instance_id=instance_id, profiler_name=folder_name, clear_remote=True)
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
@@ -643,16 +629,16 @@ def create_profile_files():
         target_directory.mkdir(parents=True, exist_ok=True)
 
     if folder_name:
-        performance_name = folder_name
+        performance_folder_name = folder_name
     else:
-        performance_name = extract_folder_name_from_files(files)
+        performance_folder_name = extract_folder_name_from_files(files)
 
-    logger.info(f"Writing performance files to {target_directory}/{performance_name}")
+    logger.info(f"Writing performance files to {target_directory}/{performance_folder_name}")
 
     save_uploaded_files(
         files,
         target_directory,
-        performance_name
+        performance_folder_name
     )
 
     instance_id = request.args.get("instanceId")

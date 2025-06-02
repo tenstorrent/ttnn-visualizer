@@ -195,19 +195,19 @@ const LocalFolderOptions: FC = () => {
     }, [isUploadingReport, isUploadingPerformance]);
 
     const handleSelectProfiler = async (item: ReportFolder) => {
-        await updateTabSession({ ...session, active_report: { profiler_name: item.reportName } });
+        await updateTabSession({ ...session, active_report: { profiler_name: item.path } });
 
-        createToastNotification('Active memory report', item.reportName);
-        setActiveProfilerReport(item.reportName);
+        createToastNotification('Active memory report', item.path);
+        setActiveProfilerReport(item.path);
     };
 
     const handleDeleteProfiler = async (folder: ReportFolder) => {
         await deleteProfiler(folder.path);
         await queryClient.invalidateQueries([PROFILER_FOLDER_QUERY_KEY]);
 
-        createToastNotification(`Memory report deleted`, folder.reportName);
+        createToastNotification(`Memory report deleted from /${folder.path}`, folder.reportName);
 
-        if (activeProfilerReport === folder.reportName) {
+        if (activeProfilerReport === folder.path) {
             setActiveProfilerReport(null);
             setProfilerUploadLabel('Choose directory...');
             setProfilerFolder(undefined);
@@ -215,10 +215,10 @@ const LocalFolderOptions: FC = () => {
     };
 
     const handleSelectPerformance = async (item: ReportFolder) => {
-        await updateTabSession({ ...session, active_report: { performance_name: item.reportName } });
+        await updateTabSession({ ...session, active_report: { performance_name: item.path } });
 
         createToastNotification('Active performance report', item.reportName);
-        setActivePerformanceReport(item.reportName);
+        setActivePerformanceReport(item.path);
     };
 
     const handleDeletePerformance = async (folder: ReportFolder) => {
@@ -244,9 +244,7 @@ const LocalFolderOptions: FC = () => {
                 <LocalFolderPicker
                     items={reportFolderList}
                     value={
-                        reportFolderList
-                            ?.map((folder: ReportFolder) => folder.reportName)
-                            .includes(activeProfilerReport)
+                        reportFolderList?.map((folder: ReportFolder) => folder.path).includes(activeProfilerReport)
                             ? activeProfilerReport
                             : null
                     }

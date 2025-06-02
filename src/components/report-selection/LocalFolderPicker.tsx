@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { Button, ButtonVariant, Intent, MenuItem } from '@blueprintjs/core';
+import { Button, ButtonVariant, Intent, MenuItem, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useSession } from '../../hooks/useAPI';
@@ -78,22 +78,24 @@ const LocalFolderPicker = ({
             disabled={!items || !session}
             fill
         >
-            <Button
-                className='folder-picker-button'
-                text={items && value ? `/${getPathFromReportName(items, value)}` : defaultLabel}
-                disabled={isDisabled || !session}
-                alignText='start'
-                icon={IconNames.FOLDER_OPEN}
-                endIcon={IconNames.CARET_DOWN}
-                variant={ButtonVariant.OUTLINED}
-                fill
-            />
+            <Tooltip content={getReportName(items, value)}>
+                <Button
+                    className='folder-picker-button'
+                    text={items && value ? `/${value}` : defaultLabel}
+                    disabled={isDisabled || !session}
+                    alignText='start'
+                    icon={IconNames.FOLDER_OPEN}
+                    endIcon={IconNames.CARET_DOWN}
+                    variant={ButtonVariant.OUTLINED}
+                    fill
+                />
+            </Tooltip>
         </Select>
     );
 };
 
-const getPathFromReportName = (folders: ReportFolder[], reportName: string | null) => {
-    return folders?.find((folder) => folder.reportName === reportName)?.path;
+const getReportName = (reports: ReportFolder[], path: string | null) => {
+    return reports?.find((report) => report.path === path)?.reportName;
 };
 
 export default LocalFolderPicker;
