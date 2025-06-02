@@ -86,7 +86,7 @@ export const NPE_KPI_METADATA = {
 type row = number;
 type col = number;
 type device_id = number;
-// TODO: change to enum
+
 type NoCTransferId = number;
 
 export enum NoCType {
