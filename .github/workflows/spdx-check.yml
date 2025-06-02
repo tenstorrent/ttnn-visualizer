@@ -1,4 +1,4 @@
-name: Checking SPDX License Identifiers
+name: Checking SPDX License Headers
 
 on:
   pull_request:
@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  lint-and-test:
-    name: Lint and Test
+  check-headers:
+    name: Check Headers
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -23,6 +23,6 @@ jobs:
           npm install -g pnpm@latest-10
           pnpm install
 
-      - name: Running check for SPDX license identifiers
+      - name: Running check license identifiers
         run: |
           pnpm run spdx
