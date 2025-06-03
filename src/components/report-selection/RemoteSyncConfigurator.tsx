@@ -23,11 +23,12 @@ import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import createToastNotification from '../../functions/createToastNotification';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
+import getServerConfig from '../../functions/getServerConfig';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
     const queryClient = useQueryClient();
-    const disableRemoteSync = import.meta.env.VITE_SERVER_MODE;
+    const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
 
     const setReportLocation = useSetAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);

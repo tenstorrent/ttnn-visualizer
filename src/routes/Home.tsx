@@ -8,11 +8,12 @@ import LocalFolderSelector from '../components/report-selection/LocalFolderSelec
 import RemoteSyncConfigurator from '../components/report-selection/RemoteSyncConfigurator';
 import 'styles/routes/Home.scss';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
+import getServerConfig from '../functions/getServerConfig';
 
 function Home() {
     useClearSelectedBuffer();
 
-    const disableRemoteSync = import.meta.env.VITE_SERVER_MODE;
+    const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
 
     return (
         <div className='home'>
