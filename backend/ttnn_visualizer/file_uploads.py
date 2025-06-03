@@ -96,6 +96,17 @@ def save_uploaded_files(
             logger.info(f"Saving uploaded file: {dest_path}")
             file.save(dest_path)
 
+            # Update the modified time of the parent directory (for sorting purposes)
+            os.utime(dest_path.parent, None)
+
+    # Update the modified time of the uploaded directory
+    if parent_folder_name:
+        uploaded_dir = Path(base_directory) / parent_folder_name
+    else:
+        uploaded_dir = Path(base_directory)
+    if uploaded_dir.exists():
+        os.utime(uploaded_dir, None)
+
 
 def scan_uploaded_files(
     files,

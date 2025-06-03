@@ -229,7 +229,7 @@ const LocalFolderOptions: FC = () => {
     };
 
     return (
-        <div>
+        <>
             <FormGroup
                 className='form-group'
                 label={<h3 className='label'>Memory report</h3>}
@@ -337,7 +337,7 @@ const LocalFolderOptions: FC = () => {
                     )}
                 </div>
             </FormGroup>
-        </div>
+        </>
     );
 };
 

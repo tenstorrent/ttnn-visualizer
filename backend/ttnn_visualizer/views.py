@@ -400,6 +400,15 @@ def get_profiler_data_list(instance: Instance):
     else:
         directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
 
+    # Sort directory names by modified time (most recent first)
+    def get_modified_time(dir_name):
+        dir_path = Path(path) / dir_name
+        if dir_path.exists():
+            return dir_path.stat().st_mtime
+        return 0
+
+    directory_names.sort(key=get_modified_time, reverse=True)
+
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
         files = list(dir_path.glob("**/*"))
@@ -477,6 +486,15 @@ def get_performance_data_list(instance: Instance):
         directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
 
     valid_dirs = []
+
+    # Sort directory names by modified time (most recent first)
+    def get_modified_time(dir_name):
+        dir_path = Path(path) / dir_name
+        if dir_path.exists():
+            return dir_path.stat().st_mtime
+        return 0
+
+    directory_names.sort(key=get_modified_time, reverse=True)
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
