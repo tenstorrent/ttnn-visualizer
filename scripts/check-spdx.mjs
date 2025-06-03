@@ -5,7 +5,7 @@
 import fs from 'fs';
 import path from 'path';
 
-// Licenses
+// License formats
 const SPDX_JS_LICENSE = '// SPDX-License-Identifier: Apache-2.0';
 const SPDX_PYTHON_LICENSE = '# SPDX-License-Identifier: Apache-2.0';
 const SPDX_PACKAGE_JSON_LICENSE = {
@@ -34,9 +34,9 @@ const IGNORED_DIRS = [
     'node_modules',
     'ttnn_env',
 ];
-const nonCompliantFiles = [];
+const NON_COMPLIANT_FILES = [];
 
-function isTextFile(filePath) {
+function isJsFile(filePath) {
     const ext = path.extname(filePath).toLowerCase();
 
     return JS_FILE_EXTENSIONS.includes(ext);
@@ -59,7 +59,7 @@ function checkLicenseString(filePath, licenseType) {
     const firstFewLines = content.split('\n').slice(0, 5).join('\n');
 
     if (!firstFewLines.includes(licenseType)) {
-        nonCompliantFiles.push(filePath);
+        NON_COMPLIANT_FILES.push(filePath);
     }
 }
 
@@ -77,12 +77,12 @@ function checkLicenseObject(filePath, licenseType) {
         const hasLicense = json.license === licenseType.license;
 
         if (!hasAllAuthorKeys || !hasLicense) {
-            nonCompliantFiles.push(filePath);
+            NON_COMPLIANT_FILES.push(filePath);
         }
     } catch (err) {
         // eslint-disable-next-line no-console
         console.error(`Error processing file ${filePath}:`, err);
-        nonCompliantFiles.push(filePath);
+        NON_COMPLIANT_FILES.push(filePath);
     }
 }
 
@@ -91,15 +91,19 @@ function walkDirectory(dir) {
 
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
+        const relativePath = path.relative(process.cwd(), fullPath);
 
-        if (entry.isDirectory() && !IGNORED_DIRS.some((ignoredDirectory) => fullPath.includes(ignoredDirectory))) {
-            walkDirectory(fullPath);
-        } else if (entry.isFile() && isTextFile(fullPath)) {
-            checkLicenseString(fullPath, SPDX_JS_LICENSE);
-        } else if (entry.isFile() && isPythonFile(fullPath)) {
-            checkLicenseString(fullPath, SPDX_PYTHON_LICENSE);
-        } else if (entry.isFile() && isJSONFile(fullPath) && fullPath.includes('package.json')) {
-            checkLicenseObject(fullPath, SPDX_PACKAGE_JSON_LICENSE);
+        if (
+            entry.isDirectory() &&
+            !IGNORED_DIRS.some((ignoredDirectory) => relativePath.startsWith(ignoredDirectory))
+        ) {
+            walkDirectory(relativePath);
+        } else if (entry.isFile() && isJsFile(relativePath)) {
+            checkLicenseString(relativePath, SPDX_JS_LICENSE);
+        } else if (entry.isFile() && isPythonFile(relativePath)) {
+            checkLicenseString(relativePath, SPDX_PYTHON_LICENSE);
+        } else if (entry.isFile() && isJSONFile(relativePath) && relativePath.includes('package.json')) {
+            checkLicenseObject(relativePath, SPDX_PACKAGE_JSON_LICENSE);
         }
     }
 }
@@ -107,11 +111,11 @@ function walkDirectory(dir) {
 const startDir = process.cwd();
 walkDirectory(startDir);
 
-if (nonCompliantFiles.length > 0) {
+if (NON_COMPLIANT_FILES.length > 0) {
     // eslint-disable-next-line no-console
-    console.log(`${nonCompliantFiles.length} files missing the SPDX-License-Identifier string:`);
+    console.log(`${NON_COMPLIANT_FILES.length} files missing the SPDX-License-Identifier string:`);
     // eslint-disable-next-line no-console
-    nonCompliantFiles.forEach((file) => console.log(file));
+    NON_COMPLIANT_FILES.forEach((file) => console.log(file));
 
     process.exit(1);
 } else {
