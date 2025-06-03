@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import React from 'react';
 import { Tooltip } from '@blueprintjs/core';
 import { CommonInfo, NPE_KPI, NPE_KPI_METADATA } from '../../model/NPEModel';

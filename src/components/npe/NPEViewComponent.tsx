@@ -10,7 +10,7 @@ import { Button, ButtonGroup, Intent, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
-import { LinkUtilization, NPEData, NPE_COORDINATES, NPE_LINK, NoCID, NoCTransfer } from '../../model/NPEModel';
+import { LinkUtilization, NPEData, NPE_COORDINATES, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import { NODE_SIZE, calculateLinkCongestionColor, getLines, getLinkPoints, resetRouteColors } from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
@@ -53,6 +53,17 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     });
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
+    const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
+
+    const showNOCType = (value: NoCType) => {
+        if (nocFilter === undefined) {
+            setNocFilter(value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0);
+        } else if (nocFilter !== value) {
+            setNocFilter(null);
+        } else {
+            setNocFilter(value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0);
+        }
+    };
 
     const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
     useEffect(() => {
@@ -60,8 +71,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
-    // const width = npeData.common_info.num_cols;
-    // const height = npeData.common_info.num_rows;
 
     const { architecture, cores, dram, eth, pcie } = useNodeType(npeData.common_info.arch as DeviceArchitecture);
     const width = architecture.grid?.x_size || 10;
@@ -218,7 +227,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             r.links.some(
                                 (link) =>
                                     link[NPE_LINK.Y] === linkUtilizationData[NPE_LINK.Y] &&
-                                    link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X],
+                                    link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X] &&
+                                    (nocFilter === null || link[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0),
                             )
                         ) {
                             return r;
@@ -275,6 +285,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     };
 
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
+
     return (
         <div className='npe'>
             <NPEMetadata
@@ -316,6 +327,16 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         checked={isAnnotatingCores}
                         onChange={() => setIsAnnotatingCores(!isAnnotatingCores)}
                     />
+                    <Switch
+                        label='NOC0'
+                        checked={nocFilter === NoCType.NOC0 || nocFilter === null}
+                        onChange={() => showNOCType(NoCType.NOC0)}
+                    />
+                    <Switch
+                        label='NOC1'
+                        checked={nocFilter === NoCType.NOC1 || nocFilter === null}
+                        onChange={() => showNOCType(NoCType.NOC1)}
+                    />
                     |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                     <label>
                         Zoom
@@ -350,6 +371,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 <NPECongestionHeatMap
                     timestepList={npeData.timestep_data}
                     canvasWidth={canvasWidth}
+                    nocType={nocFilter}
                 />
             </div>
             <div className='split-grid'>
@@ -402,7 +424,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     ))}
 
                                     {links?.link_demand.map((linkUtilization, index) => {
-                                        if (linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id) {
+                                        if (
+                                            linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id &&
+                                            (nocFilter === null ||
+                                                linkUtilization[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0)
+                                        ) {
                                             return (
                                                 <button
                                                     type='button'
@@ -550,6 +576,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     showActiveTransfers={showActiveTransfers}
                     highlightedTransfer={highlightedTransfer}
                     setHighlightedTransfer={setHighlightedTransfer}
+                    nocType={nocFilter}
                 />
             </div>
         </div>

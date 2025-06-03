@@ -38,6 +38,7 @@ import GlobalSwitch from '../GlobalSwitch';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import { ScrollLocations } from '../../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
+import { Operation } from '../../model/APIData';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -63,9 +64,17 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const { data: operations } = useOperationsList();
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
     const navigate = useNavigate();
+    const operationsById = useMemo(() => {
+        const map = new Map<number, Operation>();
+        operations?.forEach((operation) => {
+            map.set(operation.id, operation);
+        });
+        return map;
+    }, [operations]);
 
     const l1StartMarker = useGetL1StartMarker();
     const l1SmallMarker = useGetL1SmallMarker();
+
     const numberOfOperations = useMemo(
         () =>
             buffersByOperation && buffersByOperation.length >= 0 ? buffersByOperation.length : PLACEHOLDER_ARRAY_SIZE,
@@ -73,13 +82,25 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     );
 
     const nondeallocatedTensorsByOperationId = useMemo(() => {
+        const getLastValidConsumer = (consumers: number[]) => {
+            const list = [...consumers];
+            while (list && list.length > 0) {
+                const lastConsumerOperationId = list.sort().pop() || -1;
+                const lastConsumerName = operationsById.get(lastConsumerOperationId)?.name || '';
+
+                if (lastConsumerOperationId > -1 && !lastConsumerName.includes('ttnn.deallocate')) {
+                    return { lastConsumerOperationId, lastConsumerName };
+                }
+            }
+            return { lastConsumerName: '', lastConsumerOperationId: -1 };
+        };
         const result = new Map<number, TensorDeallocationReport[]>();
         if (showDeallocationReport) {
             tensorListByOperation.forEach((tensorsMap, operationId) => {
                 tensorsMap.forEach((tensor, address) => {
                     if (tensor.id && tensor.consumers && tensor.consumers.length > 0) {
-                        const lastConsumerOperationId = Math.max(...tensor.consumers);
-                        if (lastConsumerOperationId < operationId) {
+                        const { lastConsumerOperationId, lastConsumerName } = getLastValidConsumer(tensor.consumers);
+                        if (lastConsumerOperationId !== null && lastConsumerOperationId < operationId) {
                             if (!result.has(operationId)) {
                                 result.set(operationId, []);
                             }
@@ -87,7 +108,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                             list.push({
                                 id: tensor.id,
                                 address,
-                                consumerName: '',
+                                consumerName: lastConsumerName,
                                 lastConsumerOperationId,
                                 lastOperationId: operationId,
                             });
@@ -98,7 +119,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
             });
         }
         return result;
-    }, [tensorListByOperation, showDeallocationReport]);
+    }, [operationsById, showDeallocationReport, tensorListByOperation]);
 
     const getMemorySize = () =>
         !isLoadingDevices && devices ? devices[deviceId]?.worker_l1_size : L1_DEFAULT_MEMORY_SIZE;

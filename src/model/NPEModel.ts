@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { ClusterCoordinates } from './ClusterModel';
 
 export interface CommonInfo {
@@ -82,8 +86,13 @@ export const NPE_KPI_METADATA = {
 type row = number;
 type col = number;
 type device_id = number;
+
 type NoCTransferId = number;
-export type NoCType = 'NOC0' | 'NOC1';
+
+export enum NoCType {
+    NOC0 = 'NOC0',
+    NOC1 = 'NOC1',
+}
 
 export enum NoCID {
     NOC1_NORTH = 'NOC1_NORTH',
@@ -131,6 +140,12 @@ export interface TimestepData {
     link_demand: LinkUtilization[];
     avg_link_demand: number;
     avg_link_util: number;
+    noc: {
+        [K in NoCType]: {
+            avg_link_demand: number;
+            avg_link_util: number;
+        };
+    };
 }
 
 export interface NPEData {

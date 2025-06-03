@@ -1,7 +1,7 @@
 [project]
 name = "ttnn_visualizer"
 authors = []
-version = "0.34.0"
+version = "0.36.0"
 description = "TT-NN Visualizer"
 readme = "README.md"
 requires-python = ">=3.10"
