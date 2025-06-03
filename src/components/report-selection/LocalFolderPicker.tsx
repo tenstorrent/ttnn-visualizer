@@ -26,6 +26,7 @@ const LocalFolderPicker = ({
 }: LocalFolderPickerProps) => {
     const { data: session } = useSession();
     const isDisabled = !items || items.length === 0;
+    const path = value || '';
 
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers }) => {
         if (!modifiers.matchesPredicate) {
@@ -41,13 +42,13 @@ const LocalFolderPicker = ({
                     textClassName='folder-picker-label'
                     text={`/${folder.path}`}
                     labelElement={folder.reportName}
+                    labelClassName='folder-picker-name-label'
                     roleStructure='listoption'
-                    active={folder.reportName === value}
+                    active={folder.path === path}
                     disabled={modifiers.disabled}
-                    key={folder.reportName}
                     onClick={handleClick}
                     onFocus={handleFocus}
-                    icon={folder.reportName === value ? IconNames.FOLDER_OPEN : IconNames.FOLDER_CLOSE}
+                    icon={folder.path === path ? IconNames.SAVED : IconNames.DOCUMENT}
                 />
 
                 {handleDelete && (
@@ -79,13 +80,13 @@ const LocalFolderPicker = ({
             disabled={!items || !session}
             fill
         >
-            <Tooltip content={getReportName(items, value)}>
+            <Tooltip content={`/${path}`}>
                 <Button
                     className='folder-picker-button'
-                    text={items && value ? `/${value}` : defaultLabel}
+                    text={items && path ? getReportName(items, path) : defaultLabel}
                     disabled={isDisabled || !session}
                     alignText='start'
-                    icon={IconNames.FOLDER_OPEN}
+                    icon={IconNames.DOCUMENT_OPEN}
                     endIcon={IconNames.CARET_DOWN}
                     variant={ButtonVariant.OUTLINED}
                     fill

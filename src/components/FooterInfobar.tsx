@@ -54,7 +54,6 @@ function FooterInfobar() {
     };
 
     const activeReportName = getReportName(reports, activeProfilerReport);
-    const isLengthyReportName = activeReportName && activeReportName.length > MAX_TITLE_LENGTH;
 
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
@@ -62,19 +61,13 @@ function FooterInfobar() {
                 <div className='active-reports'>
                     {activeReportName && (
                         <Tooltip
-                            content={
-                                isLengthyReportName
-                                    ? `/${activeProfilerReport} - ${activeReportName}`
-                                    : `/${activeProfilerReport}`
-                            }
-                            className={classNames('title', {
-                                'is-lengthy': isLengthyReportName,
-                            })}
+                            content={`/${activeProfilerReport}`}
                             position={PopoverPosition.TOP}
                         >
-                            <span>
-                                <strong>Report:</strong> {activeReportName}
-                            </span>
+                            <div className='title'>
+                                <strong>Report:</strong>
+                                <span className='report-name'>{activeReportName}</span>
+                            </div>
                         </Tooltip>
                     )}
 
@@ -82,18 +75,18 @@ function FooterInfobar() {
                         (activePerformanceReport.length > MAX_TITLE_LENGTH ? (
                             <Tooltip
                                 content={activePerformanceReport}
-                                className={classNames('title', {
-                                    'is-lengthy': activePerformanceReport.length > MAX_TITLE_LENGTH,
-                                })}
+                                className='title'
                             >
-                                <span>
-                                    <strong>Performance:</strong> {activePerformanceReport}
-                                </span>
+                                <div className='title'>
+                                    <strong>Performance:</strong>
+                                    <span className='report-name'>{activePerformanceReport}</span>
+                                </div>
                             </Tooltip>
                         ) : (
-                            <span>
-                                <strong>Performance:</strong> {activePerformanceReport}
-                            </span>
+                            <div className='title'>
+                                <strong>Performance:</strong>
+                                <span className='report-name'>{activePerformanceReport}</span>
+                            </div>
                         ))}
                     {activeProfilerReport && activePerformanceReport && <SyncStatus />}
                 </div>
