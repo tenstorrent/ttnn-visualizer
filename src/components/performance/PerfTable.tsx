@@ -21,6 +21,7 @@ interface PerformanceTableProps {
     hiliteHighDispatch: boolean;
     matches?: PerfTableRow[];
     highlightRows?: boolean;
+    normaliseData?: boolean;
 }
 
 interface TypedPerfTableRow
@@ -91,6 +92,7 @@ const COMPARISON_KEYS: TableKeys[] = [
     COLUMN_HEADERS.flops,
     COLUMN_HEADERS.flops_percent,
     COLUMN_HEADERS.math_fidelity,
+    COLUMN_HEADERS.HIGH_DISPATCH,
 ];
 
 const OP_ID_INSERTION_POINT = 1;
@@ -104,6 +106,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     hiliteHighDispatch,
     matches,
     highlightRows,
+    normaliseData,
 }) => {
     const { activeFilters } = useTableFilter('math_fidelity', data || []);
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
@@ -288,7 +291,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                             parseInt(match.id, 10) === parseInt(row.id, 10) &&
                                             match.raw_op_code === row.raw_op_code,
                                     ),
-                                'row-pattern': comparisonData,
+                                'row-pattern': comparisonData && normaliseData,
                             })}
                         >
                             {visibleHeaders.map((h) => (
@@ -317,7 +320,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                     parseInt(match.id, 10) === parseInt(row.id, 10) &&
                                                     match.raw_op_code === row.raw_op_code,
                                             ),
-                                        'row-pattern': comparisonData,
+                                        'row-pattern': comparisonData && normaliseData,
                                     },
                                     'comparison-row',
                                 )}

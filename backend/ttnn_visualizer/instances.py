@@ -20,11 +20,11 @@ from ttnn_visualizer.extensions import db
 logger = getLogger(__name__)
 
 from flask import jsonify, current_app
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 
 def update_existing_instance(
-    session_data,
+    instance_data,
     profiler_name,
     performance_name,
     npe_name,
@@ -33,7 +33,7 @@ def update_existing_instance(
     remote_performance_folder,
     clear_remote,
 ):
-    active_report = session_data.active_report or {}
+    active_report = instance_data.active_report or {}
 
     # First ifs are explicit deletes and elifs are updates
     if profiler_name == "":
@@ -51,62 +51,62 @@ def update_existing_instance(
     elif npe_name is not None:
         active_report["npe_name"] = npe_name
 
-    session_data.active_report = active_report
+    instance_data.active_report = active_report
 
     if remote_connection:
-        session_data.remote_connection = remote_connection.model_dump()
+        instance_data.remote_connection = remote_connection.model_dump()
     if remote_profiler_folder:
-        session_data.remote_profiler_folder = remote_profiler_folder.model_dump()
+        instance_data.remote_profiler_folder = remote_profiler_folder.model_dump()
     if remote_performance_folder:
-        session_data.remote_performance_folder = remote_performance_folder.model_dump()
+        instance_data.remote_performance_folder = remote_performance_folder.model_dump()
 
     if clear_remote:
-        clear_remote_data(session_data)
+        clear_remote_data(instance_data)
 
     update_paths(
-        session_data, active_report, remote_connection
+        instance_data, active_report, remote_connection
     )
 
 
-def clear_remote_data(session_data):
-    session_data.remote_connection = None
-    session_data.remote_profiler_folder = None
-    session_data.remote_performance_folder = None
+def clear_remote_data(instance_data):
+    instance_data.remote_connection = None
+    instance_data.remote_profiler_folder = None
+    instance_data.remote_performance_folder = None
 
 
 def handle_sqlalchemy_error(error):
-    current_app.logger.error(f"Failed to update tab session: {str(error)}")
+    current_app.logger.error(f"Failed to update tab instance: {str(error)}")
     db.session.rollback()
 
 
-def commit_and_log_session(session_data, instance_id):
+def commit_and_log_session(instance_data, instance_id):
     db.session.commit()
 
-    session_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
+    instance_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
     current_app.logger.info(
-        f"Session data for instance {instance_id}: {json.dumps(session_data.to_dict(), indent=4)}"
+        f"Data for instance {instance_id}: {json.dumps(instance_data.to_dict(), indent=4)}"
     )
 
 
 def update_paths(
-    session_data, active_report, remote_connection
+    instance_data, active_report, remote_connection
 ):
     if active_report.get("performance_name"):
-        session_data.performance_path = get_performance_path(
+        instance_data.performance_path = get_performance_path(
             performance_name=active_report["performance_name"],
             current_app=current_app,
             remote_connection=remote_connection,
         )
 
     if active_report.get("profiler_name"):
-        session_data.profiler_path = get_profiler_path(
+        instance_data.profiler_path = get_profiler_path(
             profiler_name=active_report["profiler_name"],
             current_app=current_app,
             remote_connection=remote_connection,
         )
 
     if active_report.get("npe_name"):
-        session_data.npe_path = get_npe_path(
+        instance_data.npe_path = get_npe_path(
             npe_name=active_report["npe_name"],
             current_app=current_app
         )
@@ -135,7 +135,7 @@ def create_new_instance(
         remote_profiler_folder = None
         remote_performance_folder = None
 
-    session_data = InstanceTable(
+    instance_data = InstanceTable(
         instance_id=instance_id,
         active_report=active_report,
         profiler_path=get_profiler_path(
@@ -151,8 +151,8 @@ def create_new_instance(
             remote_performance_folder.model_dump() if remote_performance_folder else None
         ),
     )
-    db.session.add(session_data)
-    return session_data
+    db.session.add(instance_data)
+    return instance_data
 
 
 def update_instance(
@@ -166,11 +166,11 @@ def update_instance(
     clear_remote=False,
 ):
     try:
-        session_data = get_or_create_instance(instance_id)
+        instance_data = get_or_create_instance(instance_id)
 
-        if session_data:
+        if instance_data:
             update_existing_instance(
-                session_data,
+                instance_data,
                 profiler_name,
                 performance_name,
                 npe_name,
@@ -180,7 +180,7 @@ def update_instance(
                 clear_remote,
             )
         else:
-            session_data = create_new_instance(
+            instance_data = create_new_instance(
                 instance_id,
                 profiler_name,
                 performance_name,
@@ -191,12 +191,12 @@ def update_instance(
                 clear_remote,
             )
 
-        commit_and_log_session(session_data, instance_id)
-        return jsonify({"message": "Tab session updated successfully"}), 200
+        commit_and_log_session(instance_data, instance_id)
+        return jsonify({"message": "Tab instance updated successfully"}), 200
 
     except SQLAlchemyError as e:
         handle_sqlalchemy_error(e)
-        return jsonify({"error": "Failed to update tab session"}), 500
+        return jsonify({"error": "Failed to update tab instance"}), 500
 
 
 def get_or_create_instance(
@@ -208,25 +208,30 @@ def get_or_create_instance(
     remote_profiler_folder=None,
 ):
     """
-    Retrieve an existing tab session or create a new one if it doesn't exist.
-    Uses the Instance model to manage session data and supports conditional updates.
+    Retrieve an existing tab instance or create a new one if it doesn't exist.
+    Uses the Instance model to manage instance data and supports conditional updates.
     """
     try:
-        # Query the database for the tab session
-        session_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
+        # Query the database for the tab instance
+        instance_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
 
-        # If session doesn't exist, initialize it
-        if not session_data:
-            session_data = InstanceTable(
+        # If instance doesn't exist, initialize it
+        if not instance_data:
+            instance_data = InstanceTable(
                 instance_id=instance_id,
                 active_report={},
                 remote_connection=None,
                 remote_profiler_folder=None,
             )
-            db.session.add(session_data)
-            db.session.commit()
+            db.session.add(instance_data)
 
-        # Update the session if any new data is provided
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                instance_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
+
+        # Update the instance if any new data is provided
         if profiler_name or performance_name or npe_name or remote_connection or remote_profiler_folder:
             update_instance(
                 instance_id=instance_id,
@@ -237,20 +242,20 @@ def get_or_create_instance(
                 remote_profiler_folder=remote_profiler_folder,
             )
 
-        # Query again to get the updated session data
-        session_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
+            # Query again to get the updated instance data
+            instance_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
 
-        return session_data
+        return instance_data
 
     except SQLAlchemyError as e:
-        current_app.logger.error(f"Failed to get or create tab session: {str(e)}")
+        current_app.logger.error(f"Failed to get or create tab instance: {str(e)}")
         db.session.rollback()
         return None
 
 
 def get_instance():
     """
-    Middleware to retrieve or create a tab session based on the instance_id.
+    Middleware to retrieve or create a tab instance based on the instance_id.
     """
     instance_id = request.args.get("instanceId", None)
 
@@ -261,22 +266,33 @@ def get_instance():
 
     active_report = get_or_create_instance(instance_id)
     current_app.logger.info(
-        f"get_instance: Session retrieved: {active_report.active_report}"
+        f"get_instance: active report retrieved: {active_report.active_report}"
     )
 
     return jsonify({"active_report": active_report.active_report}), 200
 
 
-def init_sessions(app):
+def get_instances(instance_ids):
+    instances = []
+
+    for instance_id in instance_ids:
+        instance = InstanceTable.query.filter_by(instance_id=instance_id).first()
+        if instance:
+            instances.append(instance)
+
+    return instances
+
+
+def init_instances(app):
     """
-    Initializes session middleware and hooks it into Flask.
+    Initializes instance middleware and hooks it into Flask.
     """
     app.before_request(get_instance)
-    app.logger.info("Sessions middleware initialized.")
+    app.logger.info("Instances middleware initialized.")
 
 
 def create_random_instance_id():
-    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=45))
 
 
 def create_instance_from_local_paths(profiler_path, performance_path):
@@ -291,7 +307,7 @@ def create_instance_from_local_paths(profiler_path, performance_path):
 
     profiler_name = _profiler_path.parts[-1] if _profiler_path and len(_profiler_path.parts) > 2 else ""
     performance_name = _performance_path.parts[-1] if _performance_path and len(_performance_path.parts) > 2 else ""
-    session_data = InstanceTable(
+    instance_data = InstanceTable(
         instance_id=create_random_instance_id(),
         active_report={
             "profiler_name": profiler_name,
@@ -304,6 +320,6 @@ def create_instance_from_local_paths(profiler_path, performance_path):
         remote_profiler_folder=None,
         remote_performance_folder=None,
     )
-    db.session.add(session_data)
+    db.session.add(instance_data)
     db.session.commit()
-    return session_data
+    return instance_data
