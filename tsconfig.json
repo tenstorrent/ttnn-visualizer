@@ -1,34 +1,47 @@
 {
-  "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": false,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
-
-    /* Linting */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true,
-
-    "paths": {
-        "styles/*": [ "./src/scss/*" ],
-        "@blueprintjs": [ "./node_modules/@blueprintjs" ]
-    },
-    "allowSyntheticDefaultImports": true,
-    "types": [
-      "vitest/importMeta"
-    ],
-  },
-  "include": ["vite.config.ts", "src", "package.json", "tests", "scripts"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+   "compilerOptions":{
+      "target":"ES2020",
+      "useDefineForClassFields":true,
+      "lib":[
+         "ES2020",
+         "DOM",
+         "DOM.Iterable"
+      ],
+      "module":"ESNext",
+      "skipLibCheck":true,
+      "moduleResolution":"bundler",
+      "allowImportingTsExtensions":false,
+      "resolveJsonModule":true,
+      "isolatedModules":true,
+      "noEmit":true,
+      "jsx":"react-jsx",
+      "strict":true,
+      "noUnusedLocals":true,
+      "noUnusedParameters":false,
+      "noFallthroughCasesInSwitch":true,
+      "paths":{
+         "styles/*":[
+            "./src/scss/*"
+         ],
+         "@blueprintjs":[
+            "./node_modules/@blueprintjs"
+         ]
+      },
+      "allowSyntheticDefaultImports":true,
+      "types":[
+         "vitest/importMeta"
+      ]
+   },
+   "include":[
+      "vite.config.ts",
+      "src",
+      "package.json",
+      "tests",
+      "scripts"
+   ],
+   "references":[
+      {
+         "path":"./tsconfig.node.json"
+      }
+   ],
 }
