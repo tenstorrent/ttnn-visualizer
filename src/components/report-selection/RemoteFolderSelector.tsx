@@ -103,7 +103,7 @@ const remoteFolderRenderer =
                 key={`${formatRemoteFolderName(folder, type, connection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
                 text={formatRemoteFolderName(folder, type, connection)}
-                icon={IconNames.FOLDER_CLOSE}
+                icon={selectedFolder?.reportName === reportName ? IconNames.SAVED : IconNames.DOCUMENT}
                 labelElement={getLabelElement()}
                 labelClassName='remote-folder-status-icon'
             />
@@ -129,7 +129,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     onSelectFolder,
     children,
     fallbackLabel = '(No selection)',
-    icon = IconNames.FOLDER_OPEN,
+    icon = IconNames.DOCUMENT_OPEN,
     type,
 }) => {
     const { persistentState } = useRemoteConnection();
