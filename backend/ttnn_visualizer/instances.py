@@ -23,6 +23,9 @@ from flask import jsonify, current_app
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 
+_sentinel = object()
+
+
 def update_existing_instance(
     instance_data,
     profiler_name,
@@ -32,6 +35,9 @@ def update_existing_instance(
     remote_profiler_folder,
     remote_performance_folder,
     clear_remote,
+    profiler_path=_sentinel,
+    performance_path=_sentinel,
+    npe_path=_sentinel,
 ):
     active_report = instance_data.active_report or {}
 
@@ -63,9 +69,19 @@ def update_existing_instance(
     if clear_remote:
         clear_remote_data(instance_data)
 
-    update_paths(
-        instance_data, active_report, remote_connection
-    )
+    if profiler_path is not _sentinel:
+        instance_data.profiler_path = profiler_path
+
+    if performance_path is not _sentinel:
+        instance_data.performance_path = performance_path
+
+    if npe_path is not _sentinel:
+        instance_data.npe_path = npe_path
+
+    if remote_connection and not clear_remote:
+        update_paths(
+            instance_data, active_report, remote_connection
+        )
 
 
 def clear_remote_data(instance_data):
@@ -121,6 +137,9 @@ def create_new_instance(
     remote_profiler_folder,
     remote_performance_folder,
     clear_remote,
+    profiler_path=_sentinel,
+    performance_path=_sentinel,
+    npe_path=_sentinel,
 ):
     active_report = {}
     if profiler_name:
@@ -138,7 +157,7 @@ def create_new_instance(
     instance_data = InstanceTable(
         instance_id=instance_id,
         active_report=active_report,
-        profiler_path=get_profiler_path(
+        profiler_path=profiler_path if profiler_path is not _sentinel else get_profiler_path(
             active_report["profiler_name"],
             current_app=current_app,
             remote_connection=remote_connection,
@@ -151,6 +170,13 @@ def create_new_instance(
             remote_performance_folder.model_dump() if remote_performance_folder else None
         ),
     )
+
+    if performance_path is not _sentinel:
+        instance_data.performance_path = performance_path
+
+    if npe_path is not _sentinel:
+        instance_data.npe_path = npe_path
+
     db.session.add(instance_data)
     return instance_data
 
@@ -164,6 +190,9 @@ def update_instance(
     remote_profiler_folder=None,
     remote_performance_folder=None,
     clear_remote=False,
+    profiler_path=_sentinel,
+    performance_path=_sentinel,
+    npe_path=_sentinel,
 ):
     try:
         instance_data = get_or_create_instance(instance_id)
@@ -178,6 +207,9 @@ def update_instance(
                 remote_profiler_folder,
                 remote_performance_folder,
                 clear_remote,
+                profiler_path,
+                performance_path,
+                npe_path,
             )
         else:
             instance_data = create_new_instance(
@@ -189,6 +221,9 @@ def update_instance(
                 remote_profiler_folder,
                 remote_performance_folder,
                 clear_remote,
+                profiler_path,
+                performance_path,
+                npe_path,
             )
 
         commit_and_log_session(instance_data, instance_id)

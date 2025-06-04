@@ -80,7 +80,7 @@ def save_uploaded_files(
         scanned_files = scan_uploaded_files(files, target_directory, folder_name)
 
         for temp_path, dest_path in scanned_files:
-            if dest_path.parent.exists():
+            if not dest_path.parent.exists():
                 dest_path.parent.mkdir(exist_ok=True, parents=True)
 
             logger.info(f"Saving uploaded file (clean): {dest_path}")

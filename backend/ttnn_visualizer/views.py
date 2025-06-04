@@ -554,13 +554,6 @@ def get_performance_results_report(instance: Instance):
     if not instance.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
 
-    name = request.args.get("name", None)
-    performance_path = Path(instance.performance_path)
-    if name:
-        performance_path = performance_path.parent / name
-        instance.performance_path = str(performance_path)
-        logger.info(f"************ Profiler path set to {instance.performance_path}")
-
     try:
         report = OpsPerformanceReportQueries.generate_report(instance)
     except DataFormatError:
@@ -630,7 +623,12 @@ def create_profiler_files():
     profiler_path = next((p for p in paths if Path(p).name == "db.sqlite"), None)
 
     instance_id = request.args.get("instanceId")
-    update_instance(instance_id=instance_id, profiler_name=profiler_name, clear_remote=True)
+    update_instance(
+        instance_id=instance_id,
+        profiler_name=profiler_name,
+        clear_remote=True,
+        profiler_path=str(profiler_path) if profiler_path else None,
+    )
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
@@ -638,7 +636,7 @@ def create_profiler_files():
 
 
 @api.route("/local/upload/performance", methods=["POST"])
-def create_profile_files():
+def create_performance_files():
     files = request.files.getlist("files")
     folder_name = request.form.get("folderName") # Optional folder name
     data_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
@@ -664,20 +662,25 @@ def create_profile_files():
     else:
         performance_name = extract_profiler_name(files)
 
-    logger.info(f"Writing performance files to {target_directory}/{performance_name}")
+    logger.info(f"Saving performance report files {performance_name}")
 
     try:
-        save_uploaded_files(
+        paths = save_uploaded_files(
             files,
             target_directory,
-            folder_name
+            folder_name,
         )
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
+    performance_path = str(paths[0].parent)
+
     instance_id = request.args.get("instanceId")
     update_instance(
-        instance_id=instance_id, performance_name=performance_name, clear_remote=True
+        instance_id=instance_id,
+        performance_name=performance_name,
+        clear_remote=True,
+        performance_path=performance_path,
     )
 
     return StatusMessage(
