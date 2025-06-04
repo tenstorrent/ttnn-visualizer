@@ -42,7 +42,7 @@ const RemoteSyncConfigurator: FC = () => {
     const [isSyncingReportFolder, setIsSyncingReportFolder] = useState(false);
     const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(
         activeProfilerReport
-            ? reportFolderList.find((folder) => folder.reportName.includes(activeProfilerReport))
+            ? reportFolderList.find((folder) => folder.reportName?.includes(activeProfilerReport))
             : reportFolderList[0],
     );
 
@@ -52,7 +52,7 @@ const RemoteSyncConfigurator: FC = () => {
     const [isSyncingPerformanceFolder, setIsSyncingPerformanceFolder] = useState(false);
     const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(
         activePerformanceReport
-            ? remotePerformanceFolderList.find((folder) => folder.reportName.includes(activePerformanceReport))
+            ? remotePerformanceFolderList.find((folder) => folder.reportName?.includes(activePerformanceReport))
             : remotePerformanceFolderList[0],
     );
 
