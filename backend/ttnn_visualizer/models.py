@@ -186,7 +186,7 @@ class ActiveReports(SerializeableModel):
 
 
 class RemoteReportFolder(SerializeableModel):
-    testName: str
+    reportName: str
     remotePath: str
     lastModified: int
     lastSynced: Optional[int] = None

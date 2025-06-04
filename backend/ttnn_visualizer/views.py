@@ -21,7 +21,7 @@ from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.file_uploads import (
-    extract_profiler_name,
+    extract_folder_name_from_files,
     extract_npe_name,
     save_uploaded_files,
     validate_files,
@@ -400,9 +400,28 @@ def get_profiler_data_list(instance: Instance):
     else:
         directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
 
+    # Sort directory names by modified time (most recent first)
+    def get_modified_time(dir_name):
+        dir_path = Path(path) / dir_name
+        if dir_path.exists():
+            return dir_path.stat().st_mtime
+        return 0
+
+    directory_names.sort(key=get_modified_time, reverse=True)
+
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
         files = list(dir_path.glob("**/*"))
+        report_name = None
+        config_file = dir_path / "config.json"
+
+        if config_file.exists():
+            try:
+                with open(config_file, "r") as f:
+                    config_data = json.load(f)
+                    report_name = config_data.get("report_name")
+            except Exception as e:
+                logger.warning(f"Failed to read config.json in {dir_path}: {e}")
 
         # Would like to use the existing validate_files function but there's a type difference I'm not sure how to handle
         if not any(file.name == "db.sqlite" for file in files):
@@ -410,7 +429,7 @@ def get_profiler_data_list(instance: Instance):
         if not any(file.name == "config.json" for file in files):
             continue
 
-        valid_dirs.append(dir_name)
+        valid_dirs.append({"path": dir_path.name, "reportName": report_name})
 
     return jsonify(valid_dirs)
 
@@ -449,7 +468,6 @@ def delete_profiler_report(profiler_name, instance: Instance):
 def get_performance_data_list(instance: Instance):
     is_remote = True if instance.remote_connection else False
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    config_key = 'LOCAL_DATA_DIRECTORY'
     data_directory = Path(current_app.config[config_key])
     path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
 
@@ -469,6 +487,15 @@ def get_performance_data_list(instance: Instance):
 
     valid_dirs = []
 
+    # Sort directory names by modified time (most recent first)
+    def get_modified_time(dir_name):
+        dir_path = Path(path) / dir_name
+        if dir_path.exists():
+            return dir_path.stat().st_mtime
+        return 0
+
+    directory_names.sort(key=get_modified_time, reverse=True)
+
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
         files = list(dir_path.glob("**/*"))
@@ -481,7 +508,7 @@ def get_performance_data_list(instance: Instance):
         if not any(file.name.startswith("ops_perf_results") for file in files):
             continue
 
-        valid_dirs.append(dir_name)
+        valid_dirs.append({"path": dir_path.name, "reportName": dir_path.name})
 
     return jsonify(valid_dirs)
 
@@ -554,6 +581,13 @@ def get_performance_results_report(instance: Instance):
     if not instance.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
 
+    name = request.args.get("name", None)
+    performance_path = Path(instance.performance_path)
+    if name:
+        performance_path = performance_path.parent / name
+        instance.performance_path = str(performance_path)
+        logger.info(f"************ Performance path set to {instance.performance_path}")
+
     try:
         report = OpsPerformanceReportQueries.generate_report(instance)
     except DataFormatError:
@@ -596,7 +630,7 @@ def get_devices(instance: Instance):
 @api.route("/local/upload/profiler", methods=["POST"])
 def create_profiler_files():
     files = request.files.getlist("files")
-    folder_name = request.form.get("folderName") # Optional folder name
+    folder_name = request.form.get("folderName") # Optional folder name - Used for Safari compatibility
     profiler_directory = current_app.config["LOCAL_DATA_DIRECTORY"] / current_app.config["PROFILER_DIRECTORY_NAME"]
 
     if not validate_files(files, {"db.sqlite", "config.json"}, folder_name=folder_name):
@@ -609,11 +643,11 @@ def create_profiler_files():
         profiler_directory.mkdir(parents=True, exist_ok=True)
 
     if folder_name:
-        profiler_name = folder_name
+        parent_folder_name = folder_name
     else:
-        profiler_name = extract_profiler_name(files)
+        parent_folder_name = extract_folder_name_from_files(files)
 
-    logger.info(f"Writing report files to {profiler_directory}/{profiler_name}")
+    logger.info(f"Writing report files to {profiler_directory}/{parent_folder_name}")
 
     try:
         paths = save_uploaded_files(files, profiler_directory, folder_name)
@@ -623,17 +657,29 @@ def create_profiler_files():
     profiler_path = next((p for p in paths if Path(p).name == "db.sqlite"), None)
 
     instance_id = request.args.get("instanceId")
+
     update_instance(
         instance_id=instance_id,
-        profiler_name=profiler_name,
+        profiler_name=parent_folder_name,
         clear_remote=True,
         profiler_path=str(profiler_path) if profiler_path else None,
     )
 
-    return StatusMessage(
-        status=ConnectionTestStates.OK, message="Success."
-    ).model_dump()
+    config_file = profiler_directory / parent_folder_name / "config.json"
+    report_name = None
 
+    if config_file.exists():
+        try:
+            with open(config_file, "r") as f:
+                config_data = json.load(f)
+                report_name = config_data.get("report_name")
+        except Exception as e:
+            logger.warning(f"Failed to read config.json in {config_file}: {e}")
+
+    return {
+        "path": parent_folder_name,
+        "reportName": report_name,
+    }
 
 @api.route("/local/upload/performance", methods=["POST"])
 def create_performance_files():
@@ -658,11 +704,11 @@ def create_performance_files():
         target_directory.mkdir(parents=True, exist_ok=True)
 
     if folder_name:
-        performance_name = folder_name
+        parent_folder_name = folder_name
     else:
-        performance_name = extract_profiler_name(files)
+        parent_folder_name = extract_folder_name_from_files(files)
 
-    logger.info(f"Saving performance report files {performance_name}")
+    logger.info(f"Saving performance report files {parent_folder_name}")
 
     try:
         paths = save_uploaded_files(
@@ -678,7 +724,7 @@ def create_performance_files():
     instance_id = request.args.get("instanceId")
     update_instance(
         instance_id=instance_id,
-        performance_name=performance_name,
+        performance_name=parent_folder_name,
         clear_remote=True,
         performance_path=performance_path,
     )
@@ -966,11 +1012,12 @@ def use_remote_folder():
     remote_performance_folder = None
     if profile:
         remote_performance_folder = RemoteReportFolder.model_validate(profile, strict=False)
-        performance_name = remote_performance_folder.testName
+        performance_name = remote_performance_folder.reportName
     data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-    profiler_name = Path(folder.remotePath).name
+    profiler_name = folder.reportName
+    folder_name = folder.remotePath.split("/")[-1]
 
-    connection_directory = Path(data_directory, connection.host, current_app.config["PROFILER_DIRECTORY_NAME"], profiler_name)
+    connection_directory = Path(data_directory, connection.host, current_app.config["PROFILER_DIRECTORY_NAME"], folder_name)
 
     if not connection.useRemoteQuerying and not connection_directory.exists():
         return Response(
