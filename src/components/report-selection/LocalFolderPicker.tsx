@@ -65,8 +65,10 @@ const LocalFolderPicker = ({
 
                         <Alert
                             canEscapeKeyCancel
+                            canOutsideClickCancel
                             isOpen={showDeleteAlert}
                             intent={Intent.DANGER}
+                            onCancel={() => setShowDeleteAlert(false)}
                             onClose={() => setShowDeleteAlert(false)}
                             onConfirm={() => {
                                 handleDelete(folder);
@@ -104,7 +106,7 @@ const LocalFolderPicker = ({
             disabled={!items || !session}
             fill
         >
-            <Tooltip content={`/${path}`}>
+            <Tooltip content={path ? `/${path}` : ''}>
                 <Button
                     className='folder-picker-button'
                     text={items && path ? getReportName(items, path) : defaultLabel}
