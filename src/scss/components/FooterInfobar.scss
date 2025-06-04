@@ -44,4 +44,17 @@
     .slider-container {
         // padding-top: 5px;
     }
+
+    .title {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+
+        .report-name {
+            display: inline-block;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    }
 }

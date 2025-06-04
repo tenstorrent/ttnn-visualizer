@@ -24,7 +24,7 @@ const ActiveTransferDetails = ({
     highlightedTransfer: NoCTransfer | null;
     setHighlightedTransfer: (transfer: NoCTransfer | null) => void;
     congestionData: LinkUtilization[];
-    nocType: NoCType | undefined;
+    nocType: NoCType | null;
 }) => {
     return (
         <div className='side-data'>

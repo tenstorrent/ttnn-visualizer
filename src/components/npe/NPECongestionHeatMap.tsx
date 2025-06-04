@@ -10,10 +10,10 @@ import { NPE_LINK, NoCType, TimestepData } from '../../model/NPEModel';
 interface NPEHeatMapProps {
     timestepList: TimestepData[];
     canvasWidth: number;
-    nocType?: NoCType;
+    nocType?: NoCType | null;
 }
 
-const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasWidth, nocType = undefined }) => {
+const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasWidth, nocType = null }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const canvasHeight = 30;
 
