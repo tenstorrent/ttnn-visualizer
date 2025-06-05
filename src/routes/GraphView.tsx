@@ -32,7 +32,7 @@ const GraphView: React.FC = () => {
         <div className='data-padding'>
             <Helmet title='GraphTree' />
 
-            {isLoading || !filteredOperationList ? (
+            {isLoading || filteredOperationList === undefined || filteredOperationList.length === 0 ? (
                 <div className='graph-tree-loader'>
                     <LoadingSpinner />
                 </div>

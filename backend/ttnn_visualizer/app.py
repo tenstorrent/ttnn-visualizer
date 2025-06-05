@@ -127,7 +127,7 @@ def middleware(app: flask.Flask):
         app.wsgi_app = ProxyFix(app.wsgi_app)
 
     # CORS configuration
-    origins = ["http://localhost:5173", "http://localhost:8000"]
+    origins = app.config["ALLOWED_ORIGINS"]
 
     CORS(
         app,

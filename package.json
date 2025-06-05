@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualizer",
   "private": true,
-  "version": "0.36.0",
+  "version": "0.37.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -114,5 +114,10 @@
     ],
     "**/*.scss": "npx stylelint --fix",
     "**/*.{js,jsx,ts,tsx,css,scss}": "pnpm run format"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Tenstorrent AI ULC",
+    "url": "https://tenstorrent.com/"
   }
 }

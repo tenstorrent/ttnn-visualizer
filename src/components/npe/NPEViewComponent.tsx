@@ -53,16 +53,15 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     });
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
-    // TODO: null is better than undefined as a default value
-    const [nocFilter, setNocFilter] = useState<NoCType | undefined>(undefined);
+    const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
 
     const showNOCType = (value: NoCType) => {
         if (nocFilter === undefined) {
-            setNocFilter(value === 'NOC0' ? 'NOC1' : 'NOC0');
+            setNocFilter(value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0);
         } else if (nocFilter !== value) {
-            setNocFilter(undefined);
+            setNocFilter(null);
         } else {
-            setNocFilter(value === 'NOC0' ? 'NOC1' : 'NOC0');
+            setNocFilter(value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0);
         }
     };
 
@@ -229,7 +228,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 (link) =>
                                     link[NPE_LINK.Y] === linkUtilizationData[NPE_LINK.Y] &&
                                     link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X] &&
-                                    (nocFilter === undefined || link[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0),
+                                    (nocFilter === null || link[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0),
                             )
                         ) {
                             return r;
@@ -330,13 +329,13 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     />
                     <Switch
                         label='NOC0'
-                        checked={nocFilter === 'NOC0' || nocFilter === undefined}
-                        onChange={() => showNOCType('NOC0')}
+                        checked={nocFilter === NoCType.NOC0 || nocFilter === null}
+                        onChange={() => showNOCType(NoCType.NOC0)}
                     />
                     <Switch
                         label='NOC1'
-                        checked={nocFilter === 'NOC1' || nocFilter === undefined}
-                        onChange={() => showNOCType('NOC1')}
+                        checked={nocFilter === NoCType.NOC1 || nocFilter === null}
+                        onChange={() => showNOCType(NoCType.NOC1)}
                     />
                     |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                     <label>
@@ -427,7 +426,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     {links?.link_demand.map((linkUtilization, index) => {
                                         if (
                                             linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id &&
-                                            (nocFilter === undefined ||
+                                            (nocFilter === null ||
                                                 linkUtilization[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0)
                                         ) {
                                             return (
