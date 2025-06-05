@@ -751,12 +751,13 @@ def create_npe_files():
     target_directory.mkdir(parents=True, exist_ok=True)
 
     try:
-        save_uploaded_files(files, target_directory)
+        paths = save_uploaded_files(files, target_directory)
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
     instance_id = request.args.get("instanceId")
-    update_instance(instance_id=instance_id, npe_name=npe_name, clear_remote=True)
+    npe_path = str(paths[0])
+    update_instance(instance_id=instance_id, npe_name=npe_name, clear_remote=True, npe_path=npe_path)
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success"
@@ -1091,14 +1092,21 @@ def get_npe_data(instance: Instance):
         logger.error("NPE path is not set in the instance.")
         return Response(status=HTTPStatus.NOT_FOUND)
 
-    compressed_path = Path(f"{instance.npe_path}/{instance.active_report.npe_name}.npeviz.zst")
-    uncompressed_path = Path(f"{instance.npe_path}/{instance.active_report.npe_name}.json")
+    if instance.npe_path.endswith(".zst"):
+        compressed_path = Path(instance.npe_path)
+        uncompressed_path = None
+    elif instance.npe_path.endswith(".json"):
+        compressed_path = None
+        uncompressed_path = Path(instance.npe_path)
+    else:
+        compressed_path = Path(instance.npe_path)
+        uncompressed_path = Path(instance.npe_path)
 
-    if not compressed_path.exists() and not uncompressed_path.exists():
+    if not (compressed_path and compressed_path.exists()) and not (uncompressed_path and uncompressed_path.exists()):
         logger.error(f"NPE file does not exist: {compressed_path} / {uncompressed_path}")
         return Response(status=HTTPStatus.NOT_FOUND)
 
-    if compressed_path.exists():
+    if compressed_path and compressed_path.exists():
        with open(compressed_path, "rb") as file:
             compressed_data = file.read()
             uncompressed_data = zstd.uncompress(compressed_data)
