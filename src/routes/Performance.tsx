@@ -145,7 +145,6 @@ export default function Performance() {
                         />
 
                         <Button
-                            className='clear-selection'
                             variant={ButtonVariant.OUTLINED}
                             icon={IconNames.CROSS}
                             onClick={() => setComparisonReport(null)}
