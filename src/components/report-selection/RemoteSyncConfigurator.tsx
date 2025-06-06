@@ -23,10 +23,12 @@ import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import createToastNotification from '../../functions/createToastNotification';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
+import getServerConfig from '../../functions/getServerConfig';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
     const queryClient = useQueryClient();
+    const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
 
     const setReportLocation = useSetAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
@@ -119,7 +121,7 @@ const RemoteSyncConfigurator: FC = () => {
 
     const isUsingRemoteQuerying = remote.persistentState.selectedConnection?.useRemoteQuerying;
     const isLoading = isSyncingReportFolder || isSyncingPerformanceFolder;
-    const isDisabled = isFetching || isLoading;
+    const isDisabled = isFetching || isLoading || disableRemoteSync;
 
     const updateReportSelection = (fileName: string) => {
         queryClient.clear();
@@ -259,6 +261,7 @@ const RemoteSyncConfigurator: FC = () => {
                     remoteFolderList={reportFolderList}
                     loading={isLoading || isFetching}
                     updatingFolderList={isFetching}
+                    disabled={isDisabled}
                     onSelectFolder={async (folder) => {
                         setSelectedReportFolder(folder);
 
@@ -361,6 +364,7 @@ const RemoteSyncConfigurator: FC = () => {
                         remoteFolderList={remotePerformanceFolderList}
                         loading={isLoading || isFetching}
                         updatingFolderList={isFetching}
+                        disabled={isDisabled}
                         onSelectFolder={async (folder) => {
                             setSelectedPerformanceFolder(folder);
 

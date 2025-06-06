@@ -50,6 +50,7 @@ function Layout() {
                 titleTemplate='%s | TT-NN Visualizer'
             >
                 <meta charSet='utf-8' />
+                <script src='/api/config.js' />
             </Helmet>
 
             <header className='app-header'>
