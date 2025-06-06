@@ -44,7 +44,7 @@ const RemoteSyncConfigurator: FC = () => {
     const [isSyncingReportFolder, setIsSyncingReportFolder] = useState(false);
     const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(
         activeProfilerReport
-            ? reportFolderList.find((folder) => folder.testName.includes(activeProfilerReport))
+            ? reportFolderList.find((folder) => folder.reportName?.includes(activeProfilerReport))
             : reportFolderList[0],
     );
 
@@ -54,7 +54,7 @@ const RemoteSyncConfigurator: FC = () => {
     const [isSyncingPerformanceFolder, setIsSyncingPerformanceFolder] = useState(false);
     const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(
         activePerformanceReport
-            ? remotePerformanceFolderList.find((folder) => folder.testName.includes(activePerformanceReport))
+            ? remotePerformanceFolderList.find((folder) => folder.reportName?.includes(activePerformanceReport))
             : remotePerformanceFolderList[0],
     );
 
@@ -74,7 +74,7 @@ const RemoteSyncConfigurator: FC = () => {
 
         const savedFolders = remote.persistentState.getSavedReportFolders(connection);
         const mergedFolders = (updatedFolders ?? []).map((updatedFolder) => {
-            const existingFolder = savedFolders?.find((f) => f.remotePath === updatedFolder.remotePath);
+            const existingFolder = savedFolders?.find((f) => f.reportName === updatedFolder.reportName);
 
             return {
                 ...existingFolder,
@@ -95,7 +95,7 @@ const RemoteSyncConfigurator: FC = () => {
 
         const savedFolders = remote.persistentState.getSavedPerformanceFolders(connection);
         const mergedFolders = (updatedFolders ?? []).map((updatedFolder) => {
-            const existingFolder = savedFolders?.find((f) => f.remotePath === updatedFolder.remotePath);
+            const existingFolder = savedFolders?.find((f) => f.reportName === updatedFolder.reportName);
 
             return {
                 ...existingFolder,
@@ -276,7 +276,7 @@ const RemoteSyncConfigurator: FC = () => {
                             );
 
                             if (response.status === 200) {
-                                updateReportSelection(folder.testName);
+                                updateReportSelection(folder.reportName);
                             }
                         }
                     }}
@@ -303,7 +303,7 @@ const RemoteSyncConfigurator: FC = () => {
                                             );
 
                                             const updatedFolderIndex = savedRemoteFolders.findIndex(
-                                                (f) => f.remotePath === selectedReportFolder?.remotePath,
+                                                (f) => f.reportName === selectedReportFolder?.reportName,
                                             );
 
                                             savedRemoteFolders[updatedFolderIndex] = updatedFolder;
@@ -335,8 +335,8 @@ const RemoteSyncConfigurator: FC = () => {
                                             );
 
                                             if (response.status === 200) {
-                                                const reportFileName = selectedReportFolder.testName;
-                                                const performanceFileName = selectedPerformanceFolder?.testName;
+                                                const reportFileName = selectedReportFolder.reportName;
+                                                const performanceFileName = selectedPerformanceFolder?.reportName;
 
                                                 updateReportSelection(reportFileName);
 
@@ -379,7 +379,7 @@ const RemoteSyncConfigurator: FC = () => {
                                 );
 
                                 if (response.status === 200) {
-                                    const fileName = folder.testName;
+                                    const fileName = folder.reportName;
 
                                     updatePerformanceSelection(fileName);
                                 }
@@ -414,7 +414,7 @@ const RemoteSyncConfigurator: FC = () => {
                                                     );
 
                                                 const updatedFolderIndex = savedRemoteFolders.findIndex(
-                                                    (f) => f.remotePath === selectedPerformanceFolder?.remotePath,
+                                                    (f) => f.reportName === selectedPerformanceFolder?.reportName,
                                                 );
 
                                                 savedRemoteFolders[updatedFolderIndex] = updatedFolder;
@@ -440,7 +440,7 @@ const RemoteSyncConfigurator: FC = () => {
                                                     );
 
                                                     if (response.status === 200) {
-                                                        const fileName = selectedPerformanceFolder.testName;
+                                                        const fileName = selectedPerformanceFolder.reportName;
 
                                                         updatePerformanceSelection(fileName);
                                                     }

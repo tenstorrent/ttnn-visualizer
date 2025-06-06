@@ -46,13 +46,12 @@ def validate_files(files, required_files, pattern=None, folder_name=None):
     return True
 
 
-def extract_profiler_name(files):
+def extract_folder_name_from_files(files):
     """Extract the report name from the first file."""
     if not files:
         return None
-    unsplit_profiler_name = str(files[0].filename)
-    return unsplit_profiler_name.split("/")[0]
-
+    unsplit_name = str(files[0].filename)
+    return unsplit_name.split("/")[0]
 
 def extract_npe_name(files):
     if not files:
@@ -63,8 +62,8 @@ def extract_npe_name(files):
 
 def save_uploaded_files(
     files,
-    target_directory,
-    folder_name=None,
+    base_directory,
+    parent_folder_name=None,
 ):
     """
     Save uploaded files to the target directory.
@@ -74,17 +73,18 @@ def save_uploaded_files(
     :param folder_name: The name to use for the directory.
     """
     if current_app.config["MALWARE_SCANNER"]:
-        scanned_files = scan_uploaded_files(files, target_directory, folder_name)
+        scanned_files = scan_uploaded_files(files, base_directory, parent_folder_name)
 
         for temp_path, dest_path in scanned_files:
-            if dest_path.parent.exists():
+            if not dest_path.parent.exists():
                 dest_path.parent.mkdir(exist_ok=True, parents=True)
 
             logger.info(f"Saving uploaded file (clean): {dest_path}")
+
             shutil.move(temp_path, dest_path)
     else:
         for file in files:
-            dest_path = construct_dest_path(file, target_directory, folder_name)
+            dest_path = construct_dest_path(file, base_directory, parent_folder_name)
             logger.info(f"Writing file to {dest_path}")
 
             # Create directory if it doesn't exist
@@ -96,6 +96,17 @@ def save_uploaded_files(
 
             logger.info(f"Saving uploaded file: {dest_path}")
             file.save(dest_path)
+
+            # Update the modified time of the parent directory (for sorting purposes)
+            os.utime(dest_path.parent, None)
+
+    # Update the modified time of the uploaded directory
+    if parent_folder_name:
+        uploaded_dir = Path(base_directory) / parent_folder_name
+    else:
+        uploaded_dir = Path(base_directory)
+    if uploaded_dir.exists():
+        os.utime(uploaded_dir, None)
 
 
 def scan_uploaded_files(

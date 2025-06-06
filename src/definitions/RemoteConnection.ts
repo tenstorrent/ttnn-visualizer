@@ -17,7 +17,7 @@ export interface RemoteConnection {
 }
 
 export interface RemoteFolder {
-    testName: string;
+    reportName: string;
     remotePath: string;
     lastModified: number;
     lastSynced?: number | null;

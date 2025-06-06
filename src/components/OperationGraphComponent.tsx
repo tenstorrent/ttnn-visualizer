@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Edge, Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
-import { Button, Intent, Label, PopoverPosition, Slider, Tooltip } from '@blueprintjs/core';
+import { Button, InputGroup, Intent, Label, PopoverPosition, Slider, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { OperationDescription, Tensor } from '../model/APIData';
@@ -32,6 +32,10 @@ const OperationGraph: React.FC<{
     const focusNodeId = operationId !== undefined ? operationId : (operationList[0].id ?? 0);
     const [currentOperationId, setCurrentOperationId] = useState<number | null>(operationId ?? 0);
     const currentOpIdRef = useRef<number>(currentOperationId);
+
+    const [nodeNameFilter, setNodeNameFilter] = useState<string>('');
+    const [filteredNodeIdList, setFilteredNodeIdList] = useState<number[]>([]);
+    const [currentFilteredIndex, setCurrentFilteredIndex] = useState<number | null>(null);
 
     const edges = useMemo(
         () =>
@@ -79,6 +83,59 @@ const OperationGraph: React.FC<{
         },
         [networkRef],
     );
+
+    const nextFilteredIndex = useMemo(() => {
+        if (currentFilteredIndex === null || filteredNodeIdList.length === 0) {
+            return 0;
+        }
+        return (currentFilteredIndex + 1) % filteredNodeIdList.length;
+    }, [currentFilteredIndex, filteredNodeIdList.length]);
+    const previousFilteredIndex = useMemo(() => {
+        if (currentFilteredIndex === null || filteredNodeIdList.length === 0) {
+            return 0;
+        }
+        return (currentFilteredIndex - 1 + filteredNodeIdList.length) % filteredNodeIdList.length;
+    }, [currentFilteredIndex, filteredNodeIdList.length]);
+
+    const navigateFilteredNodes = useCallback(
+        (index: number) => {
+            if (networkRef.current && !isLoading) {
+                if (filteredNodeIdList.length > index) {
+                    focusOnNode(filteredNodeIdList[index]);
+                }
+                networkRef.current.selectNodes(filteredNodeIdList, false);
+            }
+            setCurrentFilteredIndex(index);
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [isLoading, filteredNodeIdList],
+    );
+
+    const clearFilteredNodes = () => {
+        setFilteredNodeIdList([]);
+        setCurrentFilteredIndex(null);
+        setNodeNameFilter('');
+        if (networkRef.current) {
+            networkRef.current.selectNodes([], true);
+            networkRef.current.focus(focusNodeId, {
+                scale,
+                animation: { duration: 500, easingFunction: 'easeInOutQuad' },
+            });
+            setCurrentOperationId(focusNodeId);
+        }
+    };
+    const filterNodes = () => {
+        if (!nodeNameFilter) {
+            setFilteredNodeIdList([]);
+            return null;
+        }
+        const filteredNodes = nodes.get({
+            filter: (node) => node.label?.toLowerCase().includes(nodeNameFilter.toLowerCase()),
+        });
+        const nodeIdList = filteredNodes.map((node) => node.id);
+        setFilteredNodeIdList(nodeIdList);
+        return nodeIdList[0] || null;
+    };
     useEffect(() => {
         setIsLoading(true);
 
@@ -167,39 +224,6 @@ const OperationGraph: React.FC<{
                         }
                     });
 
-                    // keeping this for now in case we resurrect this soon
-                    // networkRef.current.on('dragEnd', () => {
-                    //     if (networkRef.current) {
-                    //         const centerPosition = networkRef.current.getViewPosition();
-                    //         const nodePositions = networkRef.current.getPositions();
-                    //
-                    //         const closestNodeId = Object.keys(nodePositions).reduce(
-                    //             (closestId, nodeId) => {
-                    //                 const pos = nodePositions[nodeId];
-                    //                 const distance = Math.sqrt(
-                    //                     (centerPosition.x - pos.x) ** 2 + (centerPosition.y - pos.y) ** 2,
-                    //                 );
-                    //                 if (
-                    //                     closestId === null ||
-                    //                     distance <
-                    //                         Math.sqrt(
-                    //                             (centerPosition.x - nodePositions[closestId].x) ** 2 +
-                    //                                 (centerPosition.y - nodePositions[closestId].y) ** 2,
-                    //                         )
-                    //                 ) {
-                    //                     return nodeId;
-                    //                 }
-                    //                 return closestId;
-                    //             },
-                    //             null as string | null,
-                    //         );
-                    //         if (closestNodeId) {
-                    //             networkRef.current.selectNodes([closestNodeId], true);
-                    //             setCurrentOperationId(parseInt(closestNodeId, 10));
-                    //             currentOpIdRef.current = parseInt(closestNodeId, 10);
-                    //         }
-                    //     }
-                    // });
                     networkRef.current.on('zoom', (params) => {
                         if (params.scale <= 3) {
                             setScale(params.scale);
@@ -302,6 +326,59 @@ const OperationGraph: React.FC<{
                             variant='outlined'
                         />
                     </Tooltip>
+                    <InputGroup
+                        className='node-name-filter'
+                        placeholder='Filter by operation name'
+                        value={nodeNameFilter}
+                        onChange={(e) => setNodeNameFilter(e.target.value)}
+                        disabled={isLoading}
+                        rightElement={
+                            nodeNameFilter ? (
+                                <Button
+                                    variant='minimal'
+                                    onClick={() => {
+                                        // setNodeNameFilter('');
+                                        clearFilteredNodes();
+                                    }}
+                                    icon={IconNames.CROSS}
+                                />
+                            ) : (
+                                <Button
+                                    variant='minimal'
+                                    disabled
+                                    icon={IconNames.CROSS}
+                                />
+                            )
+                        }
+                    />
+                    <Button
+                        icon={IconNames.SEARCH}
+                        onClick={() => {
+                            filterNodes();
+                            setTimeout(() => {
+                                navigateFilteredNodes(0);
+                            }, 200);
+                        }}
+                        disabled={isLoading || !nodeNameFilter}
+                        variant='outlined'
+                    />
+                    <Button
+                        icon={IconNames.ArrowLeft}
+                        onClick={() => {
+                            navigateFilteredNodes(previousFilteredIndex);
+                        }}
+                        disabled={isLoading || filteredNodeIdList.length === 0}
+                        variant='outlined'
+                    />
+                    {filteredNodeIdList.length}
+                    <Button
+                        icon={IconNames.ArrowRight}
+                        onClick={() => {
+                            navigateFilteredNodes(nextFilteredIndex);
+                        }}
+                        disabled={isLoading || filteredNodeIdList.length === 0}
+                        variant='outlined'
+                    />
                 </div>
                 <div className='slider-wrapper'>
                     <Label disabled={isLoading}>Scale</Label>
