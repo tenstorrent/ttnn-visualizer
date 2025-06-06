@@ -777,26 +777,32 @@ export const usePerformanceReport = (name: string | null) => {
     }, [response.isLoading]);
 };
 
-export const usePerformanceComparisonReport = (name: string | null) => {
+export const usePerformanceComparisonReport = (reportNames: string[] | null) => {
     const response = useQuery({
-        queryFn: () => (name !== null ? fetchPerformanceReport(name) : Promise.resolve([])),
-        queryKey: ['get-performance-comparison-report', name],
+        queryFn: async () => {
+            if (!reportNames) {
+                return [];
+            }
+
+            const results = await Promise.all(reportNames.map((name) => fetchPerformanceReport(name)));
+
+            return results;
+        },
+        queryKey: ['get-performance-comparison-report', reportNames],
         staleTime: Infinity,
-        enabled: name !== null,
+        enabled: reportNames !== null,
     });
 
     return useMemo(() => {
         if (response.data) {
-            const df: PerfTableRow[] = response.data
-                .slice()
-                .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
-
-            response.data = df;
+            const filtered = response.data.map((report: PerfTableRow[]) =>
+                report.slice().filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === '')),
+            );
+            response.data = filtered;
         }
-
         return response;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.isLoading, name]);
+    }, [response.isLoading, reportNames]);
 };
 
 export const useSession = () => {

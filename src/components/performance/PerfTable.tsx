@@ -143,7 +143,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             );
         }
 
-        const parsedRows = filteredRows.map((row) => ({
+        const parsedRows = filteredRows?.map((row) => ({
             ...row,
             id: row.id ? parseInt(row.id, 10) : null,
             total_percent: row.total_percent ? parseFloat(row.total_percent) : null,
@@ -278,7 +278,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             </thead>
 
             <tbody>
-                {tableFields.map((row, i) => (
+                {tableFields?.map((row, i) => (
                     <Fragment key={i}>
                         <tr
                             className={classNames({

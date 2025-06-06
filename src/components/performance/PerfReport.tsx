@@ -16,11 +16,11 @@ import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
-import normalisePerformanceData, { MISSING_ROWS } from '../../functions/normalisePerformanceData';
+import { MISSING_ROWS } from '../../functions/normalisePerformanceData';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
-    comparisonData?: PerfTableRow[];
+    comparisonData?: PerfTableRow[][];
 }
 
 interface TypedPerfTableRow
@@ -79,6 +79,8 @@ const TABLE_HEADERS: TableHeader[] = [
     { label: 'Math Fidelity', key: COLUMN_HEADERS.math_fidelity, colour: 'cyan' },
 ];
 
+const INITIAL_TAB_ID = 'perf-table-0';
+
 const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData }) => {
     const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
     const { sortTableFields, changeSorting, sortingColumn } = useSortTable(null);
@@ -91,8 +93,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
-    const [selectedTabId, setSelectedTabId] = useState<TabId>('perf-table-1');
-
+    const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState<boolean>(true);
 
@@ -121,19 +122,24 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         );
     }, [data, opIdsMap]);
 
-    const processedComparisonRows: PerfTableRow[] = useMemo(() => {
+    const processedComparisonRows: PerfTableRow[][] = useMemo(() => {
         return (
-            comparisonData?.map((opData) => {
-                const val = parseInt(opData.op_to_op_gap, 10);
-                const op = opIdsMap.find((opMap) => opMap.perfId === opData.id)?.opId;
-                return {
-                    ...opData,
-                    high_dispatch: !!val && val > 6.5,
-                    op,
-                };
-            }) || []
+            comparisonData?.map((dataset) =>
+                dataset.map((opData) => {
+                    const value = parseInt(opData.op_to_op_gap, 10);
+                    const op = opIdsMap.find((opMap) => opMap.perfId === opData.id)?.opId;
+
+                    return {
+                        ...opData,
+                        high_dispatch: !!value && value > 6.5,
+                        op,
+                    };
+                }),
+            ) || []
         );
     }, [comparisonData, opIdsMap]);
+
+    // console.log('processedComparisonRows', processedComparisonRows);
 
     const tableFields: PerfTableRow[] = useMemo(() => {
         let filteredRows = processedRows;
@@ -183,17 +189,22 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         } as Record<TableKeys, string>);
     };
 
-    const normalisedData = useMemo(
-        () => normalisePerformanceData(processedRows, processedComparisonRows),
-        [processedRows, processedComparisonRows],
-    );
+    // const normalisedData = useMemo(
+    //     () => processedComparisonRows.map((dataset) => normalisePerformanceData(processedRows, dataset)),
+    //     [processedRows, processedComparisonRows],
+    // );
+    const normalisedData = [[]];
+
+    const dataLength = selectedTabId === INITIAL_TAB_ID ? data?.length : comparisonData?.[0]?.length || 0;
+    const filteredDataLength = selectedTabId === INITIAL_TAB_ID ? data?.length : comparisonData?.[0]?.length || 0;
 
     useEffect(() => {
-        if (!activeComparisonReport) {
+        if (!activeComparisonReports) {
             setHighlightRows(false);
             setUseNormalisedData(false);
+            setSelectedTabId(INITIAL_TAB_ID);
         }
-    }, [activeComparisonReport]);
+    }, [activeComparisonReports]);
 
     return (
         <>
@@ -229,8 +240,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                     </Tooltip>
                 }
                 onChange={() => setUseNormalisedData(!useNormalisedData)}
-                checked={useNormalisedData}
-                disabled={!activeComparisonReport}
+                // checked={useNormalisedData}
+                checked={false}
+                disabled={!activeComparisonReports}
             />
 
             <Switch
@@ -243,8 +255,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                     </Tooltip>
                 }
                 onChange={() => setHighlightRows(!highlightRows)}
-                checked={highlightRows}
-                disabled={!activeComparisonReport || !useNormalisedData}
+                // checked={highlightRows}
+                checked={false}
+                disabled={!activeComparisonReports || !useNormalisedData}
             />
 
             <div className='perf-report'>
@@ -253,9 +266,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
                     <div className='header-aside'>
                         <p className='result-count'>
-                            {tableFields.length !== data?.length
-                                ? `Showing ${tableFields.length} of ${data?.length} rows`
-                                : `Showing ${tableFields.length} rows`}
+                            {filteredDataLength !== dataLength
+                                ? `Showing ${filteredDataLength} of ${dataLength} rows`
+                                : `Showing ${filteredDataLength} rows`}
                         </p>
                     </div>
                 </div>
@@ -308,13 +321,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                     size={Size.LARGE}
                 >
                     <Tab
-                        id='perf-table-1'
+                        id={INITIAL_TAB_ID}
                         title={activePerformanceReport}
                         icon={IconNames.TH_LIST}
                         panel={
                             <PerfTable
-                                data={useNormalisedData ? normalisedData[0] : processedRows}
-                                comparisonData={useNormalisedData ? normalisedData[1] : []}
+                                // data={useNormalisedData ? normalisedData[0] : processedRows}
+                                data={processedRows}
+                                // comparisonData={useNormalisedData ? normalisedData[1] : []}
                                 filters={filters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
@@ -325,28 +339,36 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         }
                     />
 
-                    {activeComparisonReport && processedComparisonRows?.length ? (
-                        <Tab
-                            id='perf-table-2'
-                            title={activeComparisonReport}
-                            icon={IconNames.TH_LIST}
-                            panel={
-                                <PerfTable
-                                    data={useNormalisedData ? normalisedData[1] : processedComparisonRows}
-                                    comparisonData={useNormalisedData ? normalisedData[0] : []}
-                                    filters={filters}
-                                    provideMatmulAdvice={provideMatmulAdvice}
-                                    hiliteHighDispatch={hiliteHighDispatch}
-                                    matches={MISSING_ROWS}
-                                    highlightRows={highlightRows}
-                                    normaliseData={useNormalisedData}
-                                />
-                            }
-                        />
-                    ) : null}
+                    {activeComparisonReports
+                        ?.filter((report) => report)
+                        .map((report, index) => (
+                            <Tab
+                                id={report}
+                                key={index}
+                                title={report}
+                                icon={IconNames.TH_LIST}
+                                panel={
+                                    <PerfTable
+                                        // data={
+                                        //     useNormalisedData ? normalisedData[index] : processedComparisonRows[index]
+                                        // }
+                                        data={processedComparisonRows[index]}
+                                        // comparisonData={useNormalisedData ? normalisedData[index] : []}
+                                        filters={filters}
+                                        provideMatmulAdvice={provideMatmulAdvice}
+                                        hiliteHighDispatch={hiliteHighDispatch}
+                                        matches={MISSING_ROWS}
+                                        highlightRows={highlightRows}
+                                        normaliseData={useNormalisedData}
+                                    />
+                                }
+                            />
+                        ))}
                 </Tabs>
             </div>
+
             <hr />
+
             {hiliteHighDispatch && calcHighDispatchOps(processedRows)}
         </>
     );
