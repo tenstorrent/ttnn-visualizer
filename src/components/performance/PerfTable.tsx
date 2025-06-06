@@ -8,7 +8,7 @@ import { Button, ButtonVariant, Icon, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
-import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
+import { useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import { formatCell } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import useTableFilter from '../../hooks/useTableFilter';
@@ -110,7 +110,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
 }) => {
     const { activeFilters } = useTableFilter('math_fidelity', data || []);
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
-    const opIdsMap = useOptoPerfIdFiltered();
+    const opIdsMap = useOpToPerfIdFiltered();
     const { data: operations } = useOperationsList();
 
     const filterableColumnKeys = useMemo(

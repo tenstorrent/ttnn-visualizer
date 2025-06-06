@@ -19,9 +19,9 @@ import ROUTES from '../definitions/Routes';
 import 'styles/components/RangeSlider.scss';
 import {
     useGetDeviceOperationListPerf,
+    useOpToPerfIdFiltered,
     useOperationListRange,
     useOperationsList,
-    useOptoPerfIdFiltered,
     usePerformanceRange,
     usePerformanceReport,
 } from '../hooks/useAPI';
@@ -46,7 +46,7 @@ function Range() {
     const location = useLocation();
     const listPerf = useGetDeviceOperationListPerf();
     const isInSync = listPerf?.length > 0;
-    const opIdsMap = useOptoPerfIdFiltered();
+    const opIdsMap = useOpToPerfIdFiltered();
     const operationRange = useOperationListRange();
     const perfRange = usePerformanceRange();
 

@@ -593,7 +593,7 @@ export const useGetDeviceOperationListPerf = () => {
 /**
  * @description op id to perf id mapping only for existing perf ids
  */
-export const useOptoPerfIdFiltered = () => {
+export const useOpToPerfIdFiltered = () => {
     const opMapping = useGetDeviceOperationListPerf();
     return useMemo(
         () =>

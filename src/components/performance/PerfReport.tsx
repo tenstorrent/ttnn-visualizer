@@ -9,7 +9,7 @@ import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
-import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
+import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
 import useSortTable from '../../hooks/useSortTable';
 import SearchField from '../SearchField';
@@ -82,10 +82,11 @@ const TABLE_HEADERS: TableHeader[] = [
 const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData }) => {
     const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
     const { sortTableFields, changeSorting, sortingColumn } = useSortTable(null);
-    const opIdsMap = useOptoPerfIdFiltered();
+    const opIdsMap = useOpToPerfIdFiltered();
 
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const activeComparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+    const activeComparisonReports = useAtomValue(comparisonPerformanceReportAtom);
+
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
