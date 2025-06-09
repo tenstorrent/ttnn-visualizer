@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+
 import { Button, ButtonVariant, FormGroup } from '@blueprintjs/core';
 import { useAtom, useAtomValue } from 'jotai';
 import React, { FC } from 'react';
