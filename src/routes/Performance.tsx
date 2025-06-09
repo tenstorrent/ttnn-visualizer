@@ -75,7 +75,8 @@ export default function Performance() {
     // Clear comparison report if users switches active perf report to the comparison report
     useEffect(() => {
         if (activePerformanceReport && comparisonReports?.includes(activePerformanceReport)) {
-            setComparisonReports(comparisonReports.filter((report) => report !== activePerformanceReport));
+            const filteredReports = comparisonReports.filter((report) => report !== activePerformanceReport);
+            setComparisonReports(filteredReports.length === 0 ? null : filteredReports);
         }
     }, [comparisonReports, activePerformanceReport, setComparisonReports]);
 

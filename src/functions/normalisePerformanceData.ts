@@ -36,7 +36,7 @@ const PLACEHOLDER: PerfTableRow = {
 const MISSING_ROWS: TypedPerfTableRow[] = [];
 const MISSING_PREFIX = 'MISSING - ';
 
-function normalisePerformanceData(arr1: TypedPerfTableRow[], arr2: TypedPerfTableRow[]) {
+function normalisePerformanceData(primaryData: TypedPerfTableRow[], comparisonData: TypedPerfTableRow[]) {
     MISSING_ROWS.length = 0; // Clear array
     const result1 = [];
     const result2 = [];
@@ -44,9 +44,9 @@ function normalisePerformanceData(arr1: TypedPerfTableRow[], arr2: TypedPerfTabl
     let i = 0;
     let j = 0;
 
-    while (i < arr1.length && j < arr2.length) {
-        const item1 = arr1[i];
-        const item2 = arr2[j];
+    while (i < primaryData.length && j < comparisonData.length) {
+        const item1 = primaryData[i];
+        const item2 = comparisonData[j];
         const code1 = item1.raw_op_code;
         const code2 = item2.raw_op_code;
 
@@ -58,26 +58,30 @@ function normalisePerformanceData(arr1: TypedPerfTableRow[], arr2: TypedPerfTabl
             j++;
         } else {
             // Look ahead to find matching op_code in remaining items
-            const nextMatchIn1 = arr1.slice(i + 1).findIndex((el) => el.raw_op_code === code2);
-            const nextMatchIn2 = arr2.slice(j + 1).findIndex((el) => el.raw_op_code === code1);
+            const nextMatchIn1 = comparisonData.slice(i + 1).findIndex((el) => el.raw_op_code === code2);
+            const nextMatchIn2 = comparisonData.slice(j + 1).findIndex((el) => el.raw_op_code === code1);
 
             const indexIn1 = nextMatchIn1 >= 0 ? i + 1 + nextMatchIn1 : null;
             const indexIn2 = nextMatchIn2 >= 0 ? j + 1 + nextMatchIn2 : null;
 
             if (indexIn1 !== null && (indexIn2 === null || indexIn1 - i <= indexIn2 - j)) {
                 // Add placeholders until match is found (arr1)
+
                 while (i < indexIn1) {
-                    result1.push(arr1[i]);
-                    result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr1[i].raw_op_code}` });
-                    MISSING_ROWS.push(arr1[i]);
+                    if (primaryData[i]) {
+                        result1.push(primaryData[i]);
+                        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${primaryData[i].raw_op_code}` });
+                        MISSING_ROWS.push(primaryData[i]);
+                    }
+
                     i++;
                 }
             } else if (indexIn2 !== null) {
                 // Add placeholders until match is found (arr2)
                 while (j < indexIn2) {
-                    result2.push(arr2[j]);
-                    result1.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr2[j].raw_op_code}` });
-                    MISSING_ROWS.push(arr2[j]);
+                    result2.push(comparisonData[j]);
+                    result1.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${comparisonData[j].raw_op_code}` });
+                    MISSING_ROWS.push(comparisonData[j]);
                     j++;
                 }
             } else {
@@ -90,19 +94,19 @@ function normalisePerformanceData(arr1: TypedPerfTableRow[], arr2: TypedPerfTabl
         }
     }
 
-    // Fill any remaining items (arr1)
-    while (i < arr1.length) {
-        result1.push(arr1[i]);
-        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr1[i].raw_op_code}` });
-        MISSING_ROWS.push(arr1[i]);
+    // Fill any remaining items
+    while (i < primaryData.length) {
+        result1.push(primaryData[i]);
+        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${primaryData[i].raw_op_code}` });
+        MISSING_ROWS.push(primaryData[i]);
         i++;
     }
 
-    // Fill any remaining items (arr2)
-    while (j < arr2.length) {
+    // Fill any remaining items
+    while (j < comparisonData.length) {
         result1.push(PLACEHOLDER);
-        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr2[j].raw_op_code}` });
-        MISSING_ROWS.push(arr2[j]);
+        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${comparisonData[j].raw_op_code}` });
+        MISSING_ROWS.push(comparisonData[j]);
         j++;
     }
 

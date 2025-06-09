@@ -121,6 +121,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         [processedRows, processedComparisonRows],
     );
 
+    console.log('normalisedData', normalisedData);
+
     const totalDataLength =
         selectedTabId === INITIAL_TAB_ID ? data?.length : comparisonData?.[comparisonIndex]?.length || 0;
     const filteredDataLength =
@@ -255,6 +257,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             <PerfTable
                                 // data={useNormalisedData ? normalisedData?.[0]?.[0] : filteredRows}
                                 data={filteredRows}
+                                // comparisonData={useNormalisedData ? normalisedData[index] : []}
                                 filters={filters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
