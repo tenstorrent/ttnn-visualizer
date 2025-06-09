@@ -7,7 +7,7 @@ import { useAtomValue } from 'jotai';
 import { Icon, MenuItem, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
+import { PerfTableRow, TableFilter, TableHeader, TableKeys } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
@@ -17,34 +17,11 @@ import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
 import { MISSING_ROWS } from '../../functions/normalisePerformanceData';
+import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
     comparisonData?: PerfTableRow[][];
-}
-
-interface TypedPerfTableRow
-    extends Omit<
-        PerfTableRow,
-        | 'id'
-        | 'total_percent'
-        | 'device_time'
-        | 'op_to_op_gap'
-        | 'cores'
-        | 'dram'
-        | 'dram_percent'
-        | 'flops'
-        | 'flops_percent'
-    > {
-    id: number;
-    total_percent: number;
-    device_time: number;
-    op_to_op_gap: number | null;
-    cores: number;
-    dram: number;
-    dram_percent: number;
-    flops: number;
-    flops_percent: number;
 }
 
 enum COLUMN_HEADERS {
@@ -101,128 +78,36 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         () => TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key),
         [],
     );
-    const [filters, setFilters] = useState<Record<TableKeys, string> | null>(
+    const [filters, setFilters] = useState<TableFilter>(
         Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
             string
         >,
     );
 
+    const comparisonIndex = activeComparisonReports?.findIndex((value) => value === selectedTabId) || 0;
+
     const processedRows: PerfTableRow[] = useMemo(() => {
-        return (
-            data?.map((opData) => {
-                const val = parseInt(opData.op_to_op_gap, 10);
-                const op = opIdsMap.find((opMap) => opMap.perfId === opData.id)?.opId;
-                return {
-                    ...opData,
-                    high_dispatch: !!val && val > 6.5,
-                    op,
-                };
-            }) || []
-        );
+        return data ? enrichData(data, opIdsMap) : [];
     }, [data, opIdsMap]);
 
     const processedComparisonRows: PerfTableRow[][] = useMemo(() => {
-        return (
-            comparisonData?.map((dataset) =>
-                dataset.map((opData) => {
-                    const value = parseInt(opData.op_to_op_gap, 10);
-                    const op = opIdsMap.find((opMap) => opMap.perfId === opData.id)?.opId;
-
-                    return {
-                        ...opData,
-                        high_dispatch: !!value && value > 6.5,
-                        op,
-                    };
-                }),
-            ) || []
-        );
+        return comparisonData ? comparisonData.map((dataset) => enrichData(dataset, opIdsMap)) : [];
     }, [comparisonData, opIdsMap]);
 
     const sortedAndFilteredRows: PerfTableRow[] = useMemo(() => {
-        let filteredRows = processedRows;
-
-        if (areFiltersActive(filters) && filterableColumnKeys) {
-            filteredRows = filteredRows.filter((row) => {
-                const isFilteredOut =
-                    filters &&
-                    Object.entries(filters)
-                        .filter(([_key, filterValue]) => String(filterValue).length)
-                        .some(([key, filterValue]) => {
-                            const bufferValue = getCellText(row, key as TableKeys);
-
-                            return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
-                        });
-
-                return !isFilteredOut;
-            });
-        }
-
-        if (activeFilters?.length > 0) {
-            filteredRows = filteredRows.filter(
-                (tensor) => tensor?.math_fidelity !== null && activeFilters.includes(tensor.math_fidelity),
-            );
-        }
-
-        const parsedRows = filteredRows.map((row) => ({
-            ...row,
-            id: parseInt(row.id, 10),
-            total_percent: parseFloat(row.total_percent),
-            device_time: parseFloat(row.device_time),
-            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
-            cores: parseInt(row.cores, 10),
-            dram: row.dram ? parseFloat(row.dram) : null,
-            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
-            flops: row.flops ? parseFloat(row.flops) : null,
-            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
-        })) as TypedPerfTableRow[];
+        const parsedRows = sortAndFilterPerfTableData(processedRows, filters, filterableColumnKeys, activeFilters);
 
         return sortTableFields(parsedRows);
     }, [processedRows, sortTableFields, filters, filterableColumnKeys, activeFilters]);
 
-    const comparisonIndex = activeComparisonReports?.findIndex((value) => value === selectedTabId) || 0;
-
     const sortedAndFilteredComparisonRows: PerfTableRow[] = useMemo(() => {
-        let filteredRows = processedComparisonRows[comparisonIndex];
-
-        if (!filteredRows) {
-            return [];
-        }
-
-        if (areFiltersActive(filters) && filterableColumnKeys) {
-            filteredRows = filteredRows.filter((row) => {
-                const isFilteredOut =
-                    filters &&
-                    Object.entries(filters)
-                        .filter(([_key, filterValue]) => String(filterValue).length)
-                        .some(([key, filterValue]) => {
-                            const bufferValue = getCellText(row, key as TableKeys);
-
-                            return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
-                        });
-
-                return !isFilteredOut;
-            });
-        }
-
-        if (activeFilters?.length > 0) {
-            filteredRows = filteredRows.filter(
-                (tensor) => tensor?.math_fidelity !== null && activeFilters.includes(tensor.math_fidelity),
-            );
-        }
-
-        const parsedRows = filteredRows.map((row) => ({
-            ...row,
-            id: parseInt(row.id, 10),
-            total_percent: parseFloat(row.total_percent),
-            device_time: parseFloat(row.device_time),
-            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
-            cores: parseInt(row.cores, 10),
-            dram: row.dram ? parseFloat(row.dram) : null,
-            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
-            flops: row.flops ? parseFloat(row.flops) : null,
-            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
-        })) as TypedPerfTableRow[];
+        const parsedRows = sortAndFilterPerfTableData(
+            processedComparisonRows[comparisonIndex],
+            filters,
+            filterableColumnKeys,
+            activeFilters,
+        );
 
         return sortTableFields(parsedRows);
     }, [comparisonIndex, processedComparisonRows, sortTableFields, filters, filterableColumnKeys, activeFilters]);
@@ -418,14 +303,20 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     );
 };
 
-function areFiltersActive(filters: Record<TableKeys, string> | null) {
-    return filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
-}
+const HIGH_DISPATCH_THRESHOLD = 6.5;
 
-const getCellText = (buffer: PerfTableRow, key: TableKeys) => {
-    const textValue = buffer[key]?.toString() || '';
+const enrichData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: number }[]) => {
+    return rows.map((opData) => {
+        const val = parseInt(opData.op_to_op_gap, 10);
+        const opStr = opIdsMap.find((opMap) => opMap.perfId === opData.id)?.opId;
+        const op = opStr !== undefined ? Number(opStr) : undefined;
 
-    return textValue;
+        return {
+            ...opData,
+            high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD,
+            op,
+        };
+    });
 };
 
 export default PerformanceReport;

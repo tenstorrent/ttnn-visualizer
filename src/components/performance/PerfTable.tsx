@@ -12,6 +12,7 @@ import { useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import { formatCell } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import useTableFilter from '../../hooks/useTableFilter';
+import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 
 interface PerformanceTableProps {
     data: PerfTableRow[];
@@ -22,30 +23,6 @@ interface PerformanceTableProps {
     matches?: PerfTableRow[];
     highlightRows?: boolean;
     normaliseData?: boolean;
-}
-
-interface TypedPerfTableRow
-    extends Omit<
-        PerfTableRow,
-        | 'id'
-        | 'total_percent'
-        | 'device_time'
-        | 'op_to_op_gap'
-        | 'cores'
-        | 'dram'
-        | 'dram_percent'
-        | 'flops'
-        | 'flops_percent'
-    > {
-    id: number;
-    total_percent: number;
-    device_time: number;
-    op_to_op_gap: number | null;
-    cores: number;
-    dram: number;
-    dram_percent: number;
-    flops: number;
-    flops_percent: number;
 }
 
 enum COLUMN_HEADERS {
@@ -119,86 +96,17 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     );
 
     const tableFields: PerfTableRow[] = useMemo(() => {
-        let filteredRows = data;
-
-        if (areFiltersActive(filters) && filterableColumnKeys) {
-            filteredRows = filteredRows.filter((row) => {
-                const isFilteredOut =
-                    filters &&
-                    Object.entries(filters)
-                        .filter(([_key, filterValue]) => String(filterValue).length)
-                        .some(([key, filterValue]) => {
-                            const bufferValue = getCellText(row, key as TableKeys);
-
-                            return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
-                        });
-
-                return !isFilteredOut;
-            });
-        }
-
-        if (activeFilters?.length > 0) {
-            filteredRows = filteredRows.filter(
-                (tensor) => tensor?.math_fidelity !== null && activeFilters.includes(tensor.math_fidelity),
-            );
-        }
-
-        const parsedRows = filteredRows?.map((row) => ({
-            ...row,
-            id: row.id ? parseInt(row.id, 10) : null,
-            total_percent: row.total_percent ? parseFloat(row.total_percent) : null,
-            device_time: row.device_time ? parseFloat(row.device_time) : null,
-            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
-            cores: row.cores ? parseInt(row.cores, 10) : null,
-            dram: row.dram ? parseFloat(row.dram) : null,
-            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
-            flops: row.flops ? parseFloat(row.flops) : null,
-            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
-        })) as TypedPerfTableRow[];
+        const parsedRows = sortAndFilterPerfTableData(data, filters, filterableColumnKeys, activeFilters);
 
         return sortTableFields(parsedRows);
-    }, [data, sortTableFields, filters, filterableColumnKeys, activeFilters]);
+    }, [data, filters, filterableColumnKeys, activeFilters, sortTableFields]);
 
     const comparisonDataTableFields: PerfTableRow[] = useMemo(() => {
-        let filteredRows = comparisonData || [];
-
-        if (areFiltersActive(filters) && filterableColumnKeys) {
-            filteredRows = filteredRows.filter((row) => {
-                const isFilteredOut =
-                    filters &&
-                    Object.entries(filters)
-                        .filter(([_key, filterValue]) => String(filterValue).length)
-                        .some(([key, filterValue]) => {
-                            const bufferValue = getCellText(row, key as TableKeys);
-
-                            return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
-                        });
-
-                return !isFilteredOut;
-            });
-        }
-
-        if (activeFilters?.length > 0) {
-            filteredRows = filteredRows.filter(
-                (tensor) => tensor?.math_fidelity !== null && activeFilters.includes(tensor.math_fidelity),
-            );
-        }
-
-        const parsedRows = filteredRows.map((row) => ({
-            ...row,
-            id: row.id ? parseInt(row.id, 10) : null,
-            total_percent: row.total_percent ? parseFloat(row.total_percent) : null,
-            device_time: row.device_time ? parseFloat(row.device_time) : null,
-            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
-            cores: row.cores ? parseInt(row.cores, 10) : null,
-            dram: row.dram ? parseFloat(row.dram) : null,
-            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
-            flops: row.flops ? parseFloat(row.flops) : null,
-            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
-        })) as TypedPerfTableRow[];
+        const dataToProcess = comparisonData || [];
+        const parsedRows = sortAndFilterPerfTableData(dataToProcess, filters, filterableColumnKeys, activeFilters);
 
         return sortTableFields(parsedRows);
-    }, [comparisonData, sortTableFields, filters, filterableColumnKeys, activeFilters]);
+    }, [comparisonData, filters, filterableColumnKeys, activeFilters, sortTableFields]);
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
@@ -365,16 +273,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             </tbody>
         </table>
     );
-};
-
-function areFiltersActive(filters: Record<TableKeys, string> | null) {
-    return filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
-}
-
-const getCellText = (buffer: PerfTableRow, key: TableKeys) => {
-    const textValue = buffer[key]?.toString() || '';
-
-    return textValue;
 };
 
 const isOpCodeMatmulOrConv = (opCode: string) =>

@@ -595,6 +595,7 @@ export const useGetDeviceOperationListPerf = () => {
  */
 export const useOpToPerfIdFiltered = () => {
     const opMapping = useGetDeviceOperationListPerf();
+
     return useMemo(
         () =>
             opMapping.map(({ id, perfData }) => {
