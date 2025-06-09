@@ -4,7 +4,7 @@
 
 import { PerfTableRow, TableFilter, TableKeys } from '../definitions/PerfTable';
 
-interface TypedPerfTableRow
+export interface TypedPerfTableRow
     extends Omit<
         PerfTableRow,
         | 'id'
@@ -22,27 +22,27 @@ interface TypedPerfTableRow
     device_time: number;
     op_to_op_gap: number | null;
     cores: number;
-    dram: number;
-    dram_percent: number;
-    flops: number;
-    flops_percent: number;
+    dram: number | null;
+    dram_percent: number | null;
+    flops: number | null;
+    flops_percent: number | null;
 }
 
 const areFiltersActive = (filters: Record<TableKeys, string> | null) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
 
-const getCellText = (buffer: PerfTableRow, key: TableKeys) => {
+const getCellText = (buffer: TypedPerfTableRow, key: TableKeys) => {
     const textValue = buffer[key]?.toString() || '';
 
     return textValue;
 };
 
 const sortAndFilterPerfTableData = (
-    data: PerfTableRow[],
+    data: TypedPerfTableRow[],
     filters: TableFilter,
     filterableColumnKeys: TableKeys[],
     activeFilters: (string | number)[],
-) => {
+): TypedPerfTableRow[] => {
     let filteredRows = data || [];
 
     if (areFiltersActive(filters) && filterableColumnKeys) {
@@ -54,7 +54,7 @@ const sortAndFilterPerfTableData = (
                     .some(([key, filterValue]) => {
                         const bufferValue = getCellText(row, key as TableKeys);
 
-                        return !bufferValue.includes(filterValue);
+                        return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
                     });
 
             return !isFilteredOut;
@@ -67,18 +67,7 @@ const sortAndFilterPerfTableData = (
         );
     }
 
-    return filteredRows.map((row) => ({
-        ...row,
-        id: parseInt(row.id, 10),
-        total_percent: parseFloat(row.total_percent),
-        device_time: parseFloat(row.device_time),
-        op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
-        cores: parseInt(row.cores, 10),
-        dram: row.dram ? parseFloat(row.dram) : null,
-        dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
-        flops: row.flops ? parseFloat(row.flops) : null,
-        flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
-    })) as TypedPerfTableRow[];
+    return filteredRows;
 };
 
 export default sortAndFilterPerfTableData;

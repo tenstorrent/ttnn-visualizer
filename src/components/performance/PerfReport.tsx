@@ -11,13 +11,12 @@ import { PerfTableRow, TableFilter, TableHeader, TableKeys } from '../../definit
 import 'styles/components/PerfReport.scss';
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
-import useSortTable from '../../hooks/useSortTable';
 import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
-import { MISSING_ROWS } from '../../functions/normalisePerformanceData';
-import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
+import normalisePerformanceData, { MISSING_ROWS } from '../../functions/normalisePerformanceData';
+import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -60,7 +59,6 @@ const INITIAL_TAB_ID = 'perf-table-0';
 
 const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData }) => {
     const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
-    const { sortTableFields } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
 
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
@@ -87,30 +85,26 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
     const comparisonIndex = activeComparisonReports?.findIndex((value) => value === selectedTabId) || 0;
 
-    const processedRows: PerfTableRow[] = useMemo(() => {
-        return data ? enrichData(data, opIdsMap) : [];
+    const processedRows: TypedPerfTableRow[] = useMemo(() => {
+        return data ? enrichRowData(data, opIdsMap) : [];
     }, [data, opIdsMap]);
 
-    const processedComparisonRows: PerfTableRow[][] = useMemo(() => {
-        return comparisonData ? comparisonData.map((dataset) => enrichData(dataset, opIdsMap)) : [];
+    const processedComparisonRows: TypedPerfTableRow[][] = useMemo(() => {
+        return comparisonData ? comparisonData.map((dataset) => enrichRowData(dataset, opIdsMap)) : [];
     }, [comparisonData, opIdsMap]);
 
-    const sortedAndFilteredRows: PerfTableRow[] = useMemo(() => {
-        const parsedRows = sortAndFilterPerfTableData(processedRows, filters, filterableColumnKeys, activeFilters);
+    const filteredRows = useMemo(() => {
+        return sortAndFilterPerfTableData(processedRows, filters, filterableColumnKeys, activeFilters);
+    }, [processedRows, filters, filterableColumnKeys, activeFilters]);
 
-        return sortTableFields(parsedRows);
-    }, [processedRows, sortTableFields, filters, filterableColumnKeys, activeFilters]);
-
-    const sortedAndFilteredComparisonRows: PerfTableRow[] = useMemo(() => {
-        const parsedRows = sortAndFilterPerfTableData(
+    const filteredComparisonRows = useMemo(() => {
+        return sortAndFilterPerfTableData(
             processedComparisonRows[comparisonIndex],
             filters,
             filterableColumnKeys,
             activeFilters,
         );
-
-        return sortTableFields(parsedRows);
-    }, [comparisonIndex, processedComparisonRows, sortTableFields, filters, filterableColumnKeys, activeFilters]);
+    }, [comparisonIndex, processedComparisonRows, filters, filterableColumnKeys, activeFilters]);
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
         setFilters({
@@ -119,16 +113,18 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         } as Record<TableKeys, string>);
     };
 
-    // const normalisedData = useMemo(
-    //     () => processedComparisonRows.map((dataset) => normalisePerformanceData(processedRows, dataset)),
-    //     [processedRows, processedComparisonRows],
-    // );
-    const normalisedData = [[]];
+    const normalisedData = useMemo(
+        () =>
+            processedComparisonRows.map((dataset) =>
+                processedRows && dataset ? normalisePerformanceData(processedRows, dataset) : [],
+            ),
+        [processedRows, processedComparisonRows],
+    );
 
     const totalDataLength =
         selectedTabId === INITIAL_TAB_ID ? data?.length : comparisonData?.[comparisonIndex]?.length || 0;
     const filteredDataLength =
-        selectedTabId === INITIAL_TAB_ID ? sortedAndFilteredRows?.length : sortedAndFilteredComparisonRows?.length || 0;
+        selectedTabId === INITIAL_TAB_ID ? filteredRows?.length : filteredComparisonRows?.length || 0;
 
     useEffect(() => {
         if (!activeComparisonReports) {
@@ -186,8 +182,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                     </Tooltip>
                 }
                 onChange={() => setHighlightRows(!highlightRows)}
-                // checked={highlightRows}
-                checked={false}
+                checked={highlightRows}
                 disabled={!activeComparisonReports || !useNormalisedData}
             />
 
@@ -258,7 +253,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         icon={IconNames.TH_LIST}
                         panel={
                             <PerfTable
-                                data={useNormalisedData ? normalisedData[0] : sortedAndFilteredRows}
+                                // data={useNormalisedData ? normalisedData?.[0]?.[0] : filteredRows}
+                                data={filteredRows}
                                 filters={filters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
@@ -279,9 +275,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                 icon={IconNames.TH_LIST}
                                 panel={
                                     <PerfTable
-                                        data={
-                                            useNormalisedData ? normalisedData[index] : sortedAndFilteredComparisonRows
-                                        }
+                                        // data={
+                                        //     useNormalisedData ? normalisedData[0]?.[index + 1] : filteredComparisonRows
+                                        // }
+                                        data={filteredComparisonRows}
                                         // comparisonData={useNormalisedData ? normalisedData[index] : []}
                                         filters={filters}
                                         provideMatmulAdvice={provideMatmulAdvice}
@@ -305,16 +302,25 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
 const HIGH_DISPATCH_THRESHOLD = 6.5;
 
-const enrichData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: number }[]) => {
-    return rows.map((opData) => {
-        const val = parseInt(opData.op_to_op_gap, 10);
-        const opStr = opIdsMap.find((opMap) => opMap.perfId === opData.id)?.opId;
+const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: number }[]): TypedPerfTableRow[] => {
+    return rows.map((row) => {
+        const val = parseInt(row.op_to_op_gap, 10);
+        const opStr = opIdsMap.find((opMap) => opMap.perfId === row.id)?.opId;
         const op = opStr !== undefined ? Number(opStr) : undefined;
 
         return {
-            ...opData,
-            high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD,
+            ...row,
             op,
+            high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD,
+            id: parseInt(row.id, 10),
+            total_percent: parseFloat(row.total_percent),
+            device_time: parseFloat(row.device_time),
+            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
+            cores: parseInt(row.cores, 10),
+            dram: row.dram ? parseFloat(row.dram) : null,
+            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
+            flops: row.flops ? parseFloat(row.flops) : null,
+            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
         };
     });
 };

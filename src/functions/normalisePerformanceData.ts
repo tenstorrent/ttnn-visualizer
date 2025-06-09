@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { PerfTableRow } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from './sortAndFilterPerfTableData';
 
 const PLACEHOLDER: PerfTableRow = {
     id: '',
@@ -32,10 +33,10 @@ const PLACEHOLDER: PerfTableRow = {
     pm_ideal_ns: '',
 };
 
-const MISSING_ROWS: PerfTableRow[] = [];
+const MISSING_ROWS: TypedPerfTableRow[] = [];
 const MISSING_PREFIX = 'MISSING - ';
 
-function normalisePerformanceData(arr1: PerfTableRow[], arr2: PerfTableRow[]) {
+function normalisePerformanceData(arr1: TypedPerfTableRow[], arr2: TypedPerfTableRow[]) {
     MISSING_ROWS.length = 0; // Clear array
     const result1 = [];
     const result2 = [];

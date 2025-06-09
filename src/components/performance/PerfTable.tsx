@@ -6,21 +6,21 @@ import { FC, Fragment, useMemo } from 'react';
 import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
+import { TableHeader, TableKeys } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
 import { useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import { formatCell } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import useTableFilter from '../../hooks/useTableFilter';
-import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
+import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
 
 interface PerformanceTableProps {
-    data: PerfTableRow[];
-    comparisonData?: PerfTableRow[];
+    data: TypedPerfTableRow[];
+    comparisonData?: TypedPerfTableRow[];
     filters: Record<TableKeys, string> | null;
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
-    matches?: PerfTableRow[];
+    matches?: TypedPerfTableRow[];
     highlightRows?: boolean;
     normaliseData?: boolean;
 }
@@ -95,13 +95,15 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         [],
     );
 
-    const tableFields: PerfTableRow[] = useMemo(() => {
+    // TODO: Refactor so that sortAndFilterPerfTableData is not used here and PerfReport.
+    // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
+    const tableFields: TypedPerfTableRow[] = useMemo(() => {
         const parsedRows = sortAndFilterPerfTableData(data, filters, filterableColumnKeys, activeFilters);
 
         return sortTableFields(parsedRows);
     }, [data, filters, filterableColumnKeys, activeFilters, sortTableFields]);
 
-    const comparisonDataTableFields: PerfTableRow[] = useMemo(() => {
+    const comparisonDataTableFields: TypedPerfTableRow[] = useMemo(() => {
         const dataToProcess = comparisonData || [];
         const parsedRows = sortAndFilterPerfTableData(dataToProcess, filters, filterableColumnKeys, activeFilters);
 
@@ -195,9 +197,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                     highlightRows &&
                                     !row.missing &&
                                     matches?.some(
-                                        (match) =>
-                                            parseInt(match.id, 10) === parseInt(row.id, 10) &&
-                                            match.raw_op_code === row.raw_op_code,
+                                        (match) => match.id === row.id && match.raw_op_code === row.raw_op_code,
                                     ),
                                 'row-pattern': comparisonData && normaliseData,
                             })}
@@ -224,9 +224,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                             highlightRows &&
                                             !row.missing &&
                                             matches?.some(
-                                                (match) =>
-                                                    parseInt(match.id, 10) === parseInt(row.id, 10) &&
-                                                    match.raw_op_code === row.raw_op_code,
+                                                (match) => match.id === row.id && match.raw_op_code === row.raw_op_code,
                                             ),
                                         'row-pattern': comparisonData && normaliseData,
                                     },
