@@ -4,7 +4,7 @@
 
 import { FC, useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Button, ButtonVariant, Icon, MenuItem, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
+import { Icon, MenuItem, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
@@ -83,7 +83,7 @@ const INITIAL_TAB_ID = 'perf-table-0';
 
 const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData }) => {
     const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
-    const { sortTableFields, changeSorting, sortingColumn } = useSortTable(null);
+    const { sortTableFields } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
 
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
@@ -139,9 +139,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         );
     }, [comparisonData, opIdsMap]);
 
-    // console.log('processedComparisonRows', processedComparisonRows);
-
-    const tableFields: PerfTableRow[] = useMemo(() => {
+    const sortedAndFilteredRows: PerfTableRow[] = useMemo(() => {
         let filteredRows = processedRows;
 
         if (areFiltersActive(filters) && filterableColumnKeys) {
@@ -182,6 +180,53 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         return sortTableFields(parsedRows);
     }, [processedRows, sortTableFields, filters, filterableColumnKeys, activeFilters]);
 
+    const comparisonIndex = activeComparisonReports?.findIndex((value) => value === selectedTabId) || 0;
+
+    const sortedAndFilteredComparisonRows: PerfTableRow[] = useMemo(() => {
+        let filteredRows = processedComparisonRows[comparisonIndex];
+
+        if (!filteredRows) {
+            return [];
+        }
+
+        if (areFiltersActive(filters) && filterableColumnKeys) {
+            filteredRows = filteredRows.filter((row) => {
+                const isFilteredOut =
+                    filters &&
+                    Object.entries(filters)
+                        .filter(([_key, filterValue]) => String(filterValue).length)
+                        .some(([key, filterValue]) => {
+                            const bufferValue = getCellText(row, key as TableKeys);
+
+                            return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
+                        });
+
+                return !isFilteredOut;
+            });
+        }
+
+        if (activeFilters?.length > 0) {
+            filteredRows = filteredRows.filter(
+                (tensor) => tensor?.math_fidelity !== null && activeFilters.includes(tensor.math_fidelity),
+            );
+        }
+
+        const parsedRows = filteredRows.map((row) => ({
+            ...row,
+            id: parseInt(row.id, 10),
+            total_percent: parseFloat(row.total_percent),
+            device_time: parseFloat(row.device_time),
+            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
+            cores: parseInt(row.cores, 10),
+            dram: row.dram ? parseFloat(row.dram) : null,
+            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
+            flops: row.flops ? parseFloat(row.flops) : null,
+            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
+        })) as TypedPerfTableRow[];
+
+        return sortTableFields(parsedRows);
+    }, [comparisonIndex, processedComparisonRows, sortTableFields, filters, filterableColumnKeys, activeFilters]);
+
     const updateColumnFilter = (key: TableKeys, value: string) => {
         setFilters({
             ...filters,
@@ -195,8 +240,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     // );
     const normalisedData = [[]];
 
-    const dataLength = selectedTabId === INITIAL_TAB_ID ? data?.length : comparisonData?.[0]?.length || 0;
-    const filteredDataLength = selectedTabId === INITIAL_TAB_ID ? data?.length : comparisonData?.[0]?.length || 0;
+    const totalDataLength =
+        selectedTabId === INITIAL_TAB_ID ? data?.length : comparisonData?.[comparisonIndex]?.length || 0;
+    const filteredDataLength =
+        selectedTabId === INITIAL_TAB_ID ? sortedAndFilteredRows?.length : sortedAndFilteredComparisonRows?.length || 0;
 
     useEffect(() => {
         if (!activeComparisonReports) {
@@ -240,8 +287,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                     </Tooltip>
                 }
                 onChange={() => setUseNormalisedData(!useNormalisedData)}
-                // checked={useNormalisedData}
-                checked={false}
+                checked={useNormalisedData}
                 disabled={!activeComparisonReports}
             />
 
@@ -266,8 +312,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
                     <div className='header-aside'>
                         <p className='result-count'>
-                            {filteredDataLength !== dataLength
-                                ? `Showing ${filteredDataLength} of ${dataLength} rows`
+                            {filteredDataLength !== totalDataLength
+                                ? `Showing ${filteredDataLength} of ${totalDataLength} rows`
                                 : `Showing ${filteredDataLength} rows`}
                         </p>
                     </div>
@@ -305,13 +351,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         resetOnSelect
                     />
 
-                    <Button
+                    {/* Need to refactor to have the reset working */}
+                    {/* <Button
                         onClick={() => changeSorting(null)(null)}
                         variant={ButtonVariant.OUTLINED}
                         disabled={sortingColumn === null}
                     >
                         Reset sort
-                    </Button>
+                    </Button> */}
                 </div>
 
                 <Tabs
@@ -326,9 +373,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         icon={IconNames.TH_LIST}
                         panel={
                             <PerfTable
-                                // data={useNormalisedData ? normalisedData[0] : processedRows}
-                                data={processedRows}
-                                // comparisonData={useNormalisedData ? normalisedData[1] : []}
+                                data={useNormalisedData ? normalisedData[0] : sortedAndFilteredRows}
                                 filters={filters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
@@ -349,10 +394,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                 icon={IconNames.TH_LIST}
                                 panel={
                                     <PerfTable
-                                        // data={
-                                        //     useNormalisedData ? normalisedData[index] : processedComparisonRows[index]
-                                        // }
-                                        data={processedComparisonRows[index]}
+                                        data={
+                                            useNormalisedData ? normalisedData[index] : sortedAndFilteredComparisonRows
+                                        }
                                         // comparisonData={useNormalisedData ? normalisedData[index] : []}
                                         filters={filters}
                                         provideMatmulAdvice={provideMatmulAdvice}
