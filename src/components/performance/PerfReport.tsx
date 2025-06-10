@@ -288,13 +288,19 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                 icon={IconNames.TH_LIST}
                                 panel={
                                     <PerfTable
+                                        // TODO: Enforcing restrictions on comparison data based on index
                                         data={
-                                            useNormalisedData
+                                            useNormalisedData &&
+                                            normalisedData?.[1]?.[comparisonIndex] &&
+                                            comparisonIndex < 1
                                                 ? normalisedData[1][comparisonIndex]
                                                 : filteredComparisonRows
                                         }
                                         comparisonData={
-                                            useNormalisedData && normalisedData?.[0] ? normalisedData[0] : []
+                                            // TODO: Enforcing restrictions on comparison data based on index
+                                            useNormalisedData && normalisedData?.[0] && comparisonIndex < 1
+                                                ? normalisedData[0]
+                                                : []
                                         }
                                         filters={filters}
                                         provideMatmulAdvice={provideMatmulAdvice}
