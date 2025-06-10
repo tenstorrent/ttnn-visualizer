@@ -41,8 +41,12 @@ const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({ folderLis
                     })}
                     value={comparisonReports?.[reportIndex] || null}
                     handleSelect={(folder: ReportFolder) => {
-                        const updatedReports = [...(comparisonReports || '')];
+                        const updatedReports = [...(comparisonReports || [])];
                         updatedReports[reportIndex] = folder.reportName;
+
+                        if (updatedReports.at(-1) !== '') {
+                            updatedReports.push('');
+                        }
 
                         setComparisonReports(updatedReports);
                     }}
@@ -57,6 +61,7 @@ const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({ folderLis
 
                         setComparisonReports(updatedReports?.length === 0 ? null : updatedReports);
                     }}
+                    disabled={!comparisonReports?.[reportIndex]}
                 />
             </div>
         </FormGroup>

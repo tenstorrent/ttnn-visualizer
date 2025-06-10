@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import { Helmet } from 'react-helmet-async';
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Button, Size, Tab, TabId, Tabs } from '@blueprintjs/core';
+import { useEffect, useMemo, useState } from 'react';
+import { Size, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import {
@@ -141,22 +141,13 @@ export default function Performance() {
             {folderList ? (
                 folderList &&
                 reportSelectors?.map((_, index) => (
-                    <Fragment key={`${index}-comparison-report-selector`}>
-                        <ComparisonReportSelector
-                            folderList={folderList}
-                            reportIndex={index}
-                            label={index === 0 ? <h3 className='label'>Compare</h3> : null}
-                            subLabel={index === 0 ? 'Select a performance report to compare' : ''}
-                        />
-
-                        {index === reportSelectors.length - 1 && (
-                            <Button
-                                text='Add'
-                                onClick={() => setComparisonReports([...reportSelectors, ''])}
-                                disabled={!reportSelectors[index]}
-                            />
-                        )}
-                    </Fragment>
+                    <ComparisonReportSelector
+                        key={`${index}-comparison-report-selector`}
+                        folderList={folderList}
+                        reportIndex={index}
+                        label={index === 0 ? <h3 className='label'>Compare</h3> : null}
+                        subLabel={index === 0 ? 'Select a performance report to compare' : ''}
+                    />
                 ))
             ) : (
                 <LoadingSpinner />
