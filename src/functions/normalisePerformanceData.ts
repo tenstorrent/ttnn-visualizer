@@ -35,79 +35,90 @@ const PLACEHOLDER: TypedPerfTableRow = {
 const MISSING_ROWS: TypedPerfTableRow[] = [];
 const MISSING_PREFIX = 'MISSING - ';
 
-function normalisePerformanceData(primaryData: TypedPerfTableRow[], comparisonData: TypedPerfTableRow[]) {
+function normalisePerformanceData(
+    primaryData: TypedPerfTableRow[],
+    comparisonData: TypedPerfTableRow[][],
+): [TypedPerfTableRow[], TypedPerfTableRow[][]] {
     MISSING_ROWS.length = 0; // Clear array
-    const result1 = [];
-    const result2 = [];
+    const result1: TypedPerfTableRow[] = [];
+    const result2: TypedPerfTableRow[][] = [];
 
     let i = 0;
     let j = 0;
 
-    while (i < primaryData.length && j < comparisonData.length) {
-        const item1 = primaryData[i];
-        const item2 = comparisonData[j];
-        const code1 = item1.raw_op_code;
-        const code2 = item2.raw_op_code;
+    comparisonData.forEach((cData) => {
+        const cDataArray = [];
 
-        // Op code match, continue on
-        if (code1 === code2) {
-            result1.push(item1);
-            result2.push(item2);
-            i++;
-            j++;
-        } else {
-            // Look ahead to find matching op_code in remaining items
-            const nextMatchIn1 = comparisonData.slice(i + 1).findIndex((el) => el.raw_op_code === code2);
-            const nextMatchIn2 = comparisonData.slice(j + 1).findIndex((el) => el.raw_op_code === code1);
+        while (i < primaryData.length && j < cData.length) {
+            const item1 = primaryData[i];
+            const item2 = cData[j];
+            const code1 = item1.raw_op_code;
+            const code2 = item2.raw_op_code;
 
-            const indexIn1 = nextMatchIn1 >= 0 ? i + 1 + nextMatchIn1 : null;
-            const indexIn2 = nextMatchIn2 >= 0 ? j + 1 + nextMatchIn2 : null;
-
-            if (indexIn1 !== null && (indexIn2 === null || indexIn1 - i <= indexIn2 - j)) {
-                // Add placeholders until match is found (arr1)
-
-                while (i < indexIn1) {
-                    if (primaryData[i]) {
-                        result1.push(primaryData[i]);
-                        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${primaryData[i].raw_op_code}` });
-                        MISSING_ROWS.push(primaryData[i]);
-                    }
-
-                    i++;
-                }
-            } else if (indexIn2 !== null) {
-                // Add placeholders until match is found (arr2)
-                while (j < indexIn2) {
-                    result2.push(comparisonData[j]);
-                    result1.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${comparisonData[j].raw_op_code}` });
-                    MISSING_ROWS.push(comparisonData[j]);
-                    j++;
-                }
-            } else {
-                // No match found
+            // Op code match, continue on
+            if (code1 === code2) {
                 result1.push(item1);
-                result2.push(item2);
+                cDataArray.push(item2);
                 i++;
                 j++;
+            } else {
+                // Look ahead to find matching op_code in remaining items
+                const nextMatchIn1 = cData.slice(i + 1).findIndex((el) => el.raw_op_code === code2);
+                const nextMatchIn2 = cData.slice(j + 1).findIndex((el) => el.raw_op_code === code1);
+
+                const indexIn1 = nextMatchIn1 >= 0 ? i + 1 + nextMatchIn1 : null;
+                const indexIn2 = nextMatchIn2 >= 0 ? j + 1 + nextMatchIn2 : null;
+
+                if (indexIn1 !== null && (indexIn2 === null || indexIn1 - i <= indexIn2 - j)) {
+                    // Add placeholders until match is found (primaryData)
+                    while (i < indexIn1) {
+                        if (primaryData[i]) {
+                            result1.push(primaryData[i]);
+                            cDataArray.push({
+                                ...PLACEHOLDER,
+                                op_code: `${MISSING_PREFIX} ${primaryData[i].raw_op_code}`,
+                            });
+                            MISSING_ROWS.push(primaryData[i]);
+                        }
+
+                        i++;
+                    }
+                } else if (indexIn2 !== null) {
+                    // Add placeholders until match is found (cData)
+                    while (j < indexIn2) {
+                        cDataArray.push(cData[j]);
+                        result1.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${cData[j].raw_op_code}` });
+                        MISSING_ROWS.push(cData[j]);
+                        j++;
+                    }
+                } else {
+                    // No match found
+                    result1.push(item1);
+                    cDataArray.push(item2);
+                    i++;
+                    j++;
+                }
             }
         }
-    }
 
-    // Fill any remaining items
-    while (i < primaryData.length) {
-        result1.push(primaryData[i]);
-        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${primaryData[i].raw_op_code}` });
-        MISSING_ROWS.push(primaryData[i]);
-        i++;
-    }
+        // Fill any remaining items
+        while (i < primaryData.length) {
+            result1.push(primaryData[i]);
+            cDataArray.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${primaryData[i].raw_op_code}` });
+            MISSING_ROWS.push(primaryData[i]);
+            i++;
+        }
 
-    // Fill any remaining items
-    while (j < comparisonData.length) {
-        result1.push(PLACEHOLDER);
-        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${comparisonData[j].raw_op_code}` });
-        MISSING_ROWS.push(comparisonData[j]);
-        j++;
-    }
+        // Fill any remaining items
+        while (j < cData.length) {
+            result1.push(PLACEHOLDER);
+            cDataArray.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${cData[j].raw_op_code}` });
+            MISSING_ROWS.push(cData[j]);
+            j++;
+        }
+
+        result2.push(cDataArray);
+    });
 
     return [result1, result2];
 }

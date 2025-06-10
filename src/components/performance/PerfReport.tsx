@@ -83,7 +83,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         >,
     );
 
-    const comparisonIndex = activeComparisonReports?.findIndex((value) => value === selectedTabId) || 0;
+    const comparisonIndex =
+        (activeComparisonReports ?? []).findIndex((value) => value === selectedTabId) > -1
+            ? (activeComparisonReports ?? []).findIndex((value) => value === selectedTabId)
+            : 0;
 
     const processedRows: TypedPerfTableRow[] = useMemo(() => {
         return data ? enrichRowData(data, opIdsMap) : [];
@@ -116,7 +119,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     const normalisedData = useMemo(
         () =>
             processedRows && processedComparisonRows[0]
-                ? normalisePerformanceData(processedRows, processedComparisonRows[0])
+                ? normalisePerformanceData(processedRows, processedComparisonRows)
                 : [],
         [processedRows, processedComparisonRows],
     );
@@ -260,7 +263,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         panel={
                             <PerfTable
                                 data={useNormalisedData ? normalisedData[0] : filteredRows}
-                                comparisonData={useNormalisedData ? normalisedData[1] : []}
+                                comparisonData={
+                                    useNormalisedData && normalisedData?.[1]?.[comparisonIndex]
+                                        ? normalisedData[1][comparisonIndex]
+                                        : []
+                                }
                                 filters={filters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
@@ -281,8 +288,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                 icon={IconNames.TH_LIST}
                                 panel={
                                     <PerfTable
-                                        data={useNormalisedData ? normalisedData[1] : filteredComparisonRows}
-                                        comparisonData={useNormalisedData ? normalisedData[0] : []}
+                                        data={
+                                            useNormalisedData
+                                                ? normalisedData[1][comparisonIndex]
+                                                : filteredComparisonRows
+                                        }
+                                        comparisonData={
+                                            useNormalisedData && normalisedData?.[0] ? normalisedData[0] : []
+                                        }
                                         filters={filters}
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
