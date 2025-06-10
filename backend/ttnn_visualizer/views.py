@@ -581,13 +581,6 @@ def get_performance_results_report(instance: Instance):
     if not instance.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
 
-    name = request.args.get("name", None)
-    performance_path = Path(instance.performance_path)
-    if name:
-        performance_path = performance_path.parent / name
-        instance.performance_path = str(performance_path)
-        logger.info(f"************ Performance path set to {instance.performance_path}")
-
     try:
         report = OpsPerformanceReportQueries.generate_report(instance)
     except DataFormatError:
