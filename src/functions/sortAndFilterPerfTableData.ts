@@ -17,11 +17,11 @@ export interface TypedPerfTableRow
         | 'flops'
         | 'flops_percent'
     > {
-    id: number;
-    total_percent: number;
-    device_time: number;
+    id: number | null;
+    total_percent: number | null;
+    device_time: number | null;
     op_to_op_gap: number | null;
-    cores: number;
+    cores: number | null;
     dram: number | null;
     dram_percent: number | null;
     flops: number | null;

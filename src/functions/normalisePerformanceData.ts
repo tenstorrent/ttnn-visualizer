@@ -2,23 +2,22 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { PerfTableRow } from '../definitions/PerfTable';
 import { TypedPerfTableRow } from './sortAndFilterPerfTableData';
 
-const PLACEHOLDER: PerfTableRow = {
-    id: '',
+const PLACEHOLDER: TypedPerfTableRow = {
+    id: null,
     advice: [],
-    total_percent: '',
+    total_percent: null,
     bound: '',
     op_code: 'MISSING',
     raw_op_code: 'MISSING',
-    device_time: '',
-    op_to_op_gap: '',
-    cores: '',
-    dram: '',
-    dram_percent: '',
-    flops: '',
-    flops_percent: '',
+    device_time: null,
+    op_to_op_gap: null,
+    cores: null,
+    dram: null,
+    dram_percent: null,
+    flops: null,
+    flops_percent: null,
     math_fidelity: '',
     output_datatype: '',
     output_0_memory: '',

@@ -115,13 +115,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
     const normalisedData = useMemo(
         () =>
-            processedComparisonRows.map((dataset) =>
-                processedRows && dataset ? normalisePerformanceData(processedRows, dataset) : [],
-            ),
+            processedRows && processedComparisonRows[0]
+                ? normalisePerformanceData(processedRows, processedComparisonRows[0])
+                : [],
         [processedRows, processedComparisonRows],
     );
-
-    console.log('normalisedData', normalisedData);
 
     const totalDataLength =
         selectedTabId === INITIAL_TAB_ID ? data?.length : comparisonData?.[comparisonIndex]?.length || 0;
@@ -135,6 +133,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
             setSelectedTabId(INITIAL_TAB_ID);
         }
     }, [activeComparisonReports]);
+
+    useEffect(() => {
+        if (activeComparisonReports && !activeComparisonReports.includes(selectedTabId as string)) {
+            setSelectedTabId(INITIAL_TAB_ID);
+        }
+    }, [activeComparisonReports, selectedTabId]);
 
     return (
         <>
@@ -255,9 +259,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         icon={IconNames.TH_LIST}
                         panel={
                             <PerfTable
-                                // data={useNormalisedData ? normalisedData?.[0]?.[0] : filteredRows}
-                                data={filteredRows}
-                                // comparisonData={useNormalisedData ? normalisedData[index] : []}
+                                data={useNormalisedData ? normalisedData[0] : filteredRows}
+                                comparisonData={useNormalisedData ? normalisedData[1] : []}
                                 filters={filters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
@@ -278,11 +281,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                 icon={IconNames.TH_LIST}
                                 panel={
                                     <PerfTable
-                                        // data={
-                                        //     useNormalisedData ? normalisedData[0]?.[index + 1] : filteredComparisonRows
-                                        // }
-                                        data={filteredComparisonRows}
-                                        // comparisonData={useNormalisedData ? normalisedData[index] : []}
+                                        data={useNormalisedData ? normalisedData[1] : filteredComparisonRows}
+                                        comparisonData={useNormalisedData ? normalisedData[0] : []}
                                         filters={filters}
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
