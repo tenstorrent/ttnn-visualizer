@@ -56,7 +56,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
 
     const showNOCType = (value: NoCType) => {
-        if (nocFilter === undefined) {
+        if (nocFilter === null) {
             setNocFilter(value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0);
         } else if (nocFilter !== value) {
             setNocFilter(null);
