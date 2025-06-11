@@ -80,10 +80,7 @@ const OperationGraph: React.FC<{
 
     const focusOnNode = useCallback(
         (nodeId: number | null) => {
-            if (nodeId === null) {
-                return;
-            }
-            if (networkRef.current) {
+            if (networkRef.current && nodeId !== null) {
                 networkRef.current.focus(nodeId, {
                     scale,
                     animation: { duration: 500, easingFunction: 'easeInOutCubic' },
@@ -335,19 +332,14 @@ const OperationGraph: React.FC<{
                     <SearchField
                         searchQuery={nodeNameFilter}
                         onQueryChanged={(query) => {
-                            setNodeNameFilter(query);
-                            const firstNode = filterNodes(query);
-                            navigateFilteredNodes(0, firstNode);
+                            if (!query) {
+                                clearFilteredNodes();
+                            } else {
+                                setNodeNameFilter(query);
+                                const firstNode = filterNodes(query);
+                                navigateFilteredNodes(0, firstNode);
+                            }
                         }}
-                        controls={[
-                            <Button
-                                key='clear-filter'
-                                variant='minimal'
-                                icon={IconNames.CROSS}
-                                onClick={() => clearFilteredNodes()}
-                                disabled={isLoading || nodeNameFilter === ''}
-                            />,
-                        ]}
                         placeholder='Filter by operation name'
                         disabled={isLoading}
                     />
