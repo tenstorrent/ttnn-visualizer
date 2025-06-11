@@ -2,22 +2,22 @@
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
-import { PerfTableRow } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from './sortAndFilterPerfTableData';
 
-const PLACEHOLDER: PerfTableRow = {
-    id: '',
+const PLACEHOLDER: TypedPerfTableRow = {
+    id: null,
     advice: [],
-    total_percent: '',
+    total_percent: null,
     bound: '',
     op_code: 'MISSING',
     raw_op_code: 'MISSING',
-    device_time: '',
-    op_to_op_gap: '',
-    cores: '',
-    dram: '',
-    dram_percent: '',
-    flops: '',
-    flops_percent: '',
+    device_time: null,
+    op_to_op_gap: null,
+    cores: null,
+    dram: null,
+    dram_percent: null,
+    flops: null,
+    flops_percent: null,
     math_fidelity: '',
     output_datatype: '',
     output_0_memory: '',
@@ -32,78 +32,93 @@ const PLACEHOLDER: PerfTableRow = {
     pm_ideal_ns: '',
 };
 
-const MISSING_ROWS: PerfTableRow[] = [];
+const MISSING_ROWS: TypedPerfTableRow[] = [];
 const MISSING_PREFIX = 'MISSING - ';
 
-function normalisePerformanceData(arr1: PerfTableRow[], arr2: PerfTableRow[]) {
+function normalisePerformanceData(
+    primaryData: TypedPerfTableRow[],
+    comparisonData: TypedPerfTableRow[][],
+): [TypedPerfTableRow[], TypedPerfTableRow[][]] {
     MISSING_ROWS.length = 0; // Clear array
-    const result1 = [];
-    const result2 = [];
+    const result1: TypedPerfTableRow[] = [];
+    const result2: TypedPerfTableRow[][] = [];
 
     let i = 0;
     let j = 0;
 
-    while (i < arr1.length && j < arr2.length) {
-        const item1 = arr1[i];
-        const item2 = arr2[j];
-        const code1 = item1.raw_op_code;
-        const code2 = item2.raw_op_code;
+    comparisonData.forEach((cData) => {
+        const cDataArray = [];
 
-        // Op code match, continue on
-        if (code1 === code2) {
-            result1.push(item1);
-            result2.push(item2);
-            i++;
-            j++;
-        } else {
-            // Look ahead to find matching op_code in remaining items
-            const nextMatchIn1 = arr1.slice(i + 1).findIndex((el) => el.raw_op_code === code2);
-            const nextMatchIn2 = arr2.slice(j + 1).findIndex((el) => el.raw_op_code === code1);
+        while (i < primaryData.length && j < cData.length) {
+            const item1 = primaryData[i];
+            const item2 = cData[j];
+            const code1 = item1.raw_op_code;
+            const code2 = item2.raw_op_code;
 
-            const indexIn1 = nextMatchIn1 >= 0 ? i + 1 + nextMatchIn1 : null;
-            const indexIn2 = nextMatchIn2 >= 0 ? j + 1 + nextMatchIn2 : null;
-
-            if (indexIn1 !== null && (indexIn2 === null || indexIn1 - i <= indexIn2 - j)) {
-                // Add placeholders until match is found (arr1)
-                while (i < indexIn1) {
-                    result1.push(arr1[i]);
-                    result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr1[i].raw_op_code}` });
-                    MISSING_ROWS.push(arr1[i]);
-                    i++;
-                }
-            } else if (indexIn2 !== null) {
-                // Add placeholders until match is found (arr2)
-                while (j < indexIn2) {
-                    result2.push(arr2[j]);
-                    result1.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr2[j].raw_op_code}` });
-                    MISSING_ROWS.push(arr2[j]);
-                    j++;
-                }
-            } else {
-                // No match found
+            // Op code match, continue on
+            if (code1 === code2) {
                 result1.push(item1);
-                result2.push(item2);
+                cDataArray.push(item2);
                 i++;
                 j++;
+            } else {
+                // Look ahead to find matching op_code in remaining items
+                const nextMatchIn1 = cData.slice(i + 1).findIndex((el) => el.raw_op_code === code2);
+                const nextMatchIn2 = cData.slice(j + 1).findIndex((el) => el.raw_op_code === code1);
+
+                const indexIn1 = nextMatchIn1 >= 0 ? i + 1 + nextMatchIn1 : null;
+                const indexIn2 = nextMatchIn2 >= 0 ? j + 1 + nextMatchIn2 : null;
+
+                if (indexIn1 !== null && (indexIn2 === null || indexIn1 - i <= indexIn2 - j)) {
+                    // Add placeholders until match is found (primaryData)
+                    while (i < indexIn1) {
+                        if (primaryData[i]) {
+                            result1.push(primaryData[i]);
+                            cDataArray.push({
+                                ...PLACEHOLDER,
+                                op_code: `${MISSING_PREFIX} ${primaryData[i].raw_op_code}`,
+                            });
+                            MISSING_ROWS.push(primaryData[i]);
+                        }
+
+                        i++;
+                    }
+                } else if (indexIn2 !== null) {
+                    // Add placeholders until match is found (cData)
+                    while (j < indexIn2) {
+                        cDataArray.push(cData[j]);
+                        result1.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${cData[j].raw_op_code}` });
+                        MISSING_ROWS.push(cData[j]);
+                        j++;
+                    }
+                } else {
+                    // No match found
+                    result1.push(item1);
+                    cDataArray.push(item2);
+                    i++;
+                    j++;
+                }
             }
         }
-    }
 
-    // Fill any remaining items (arr1)
-    while (i < arr1.length) {
-        result1.push(arr1[i]);
-        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr1[i].raw_op_code}` });
-        MISSING_ROWS.push(arr1[i]);
-        i++;
-    }
+        // Fill any remaining items
+        while (i < primaryData.length) {
+            result1.push(primaryData[i]);
+            cDataArray.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${primaryData[i].raw_op_code}` });
+            MISSING_ROWS.push(primaryData[i]);
+            i++;
+        }
 
-    // Fill any remaining items (arr2)
-    while (j < arr2.length) {
-        result1.push(PLACEHOLDER);
-        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr2[j].raw_op_code}` });
-        MISSING_ROWS.push(arr2[j]);
-        j++;
-    }
+        // Fill any remaining items
+        while (j < cData.length) {
+            result1.push(PLACEHOLDER);
+            cDataArray.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${cData[j].raw_op_code}` });
+            MISSING_ROWS.push(cData[j]);
+            j++;
+        }
+
+        result2.push(cDataArray);
+    });
 
     return [result1, result2];
 }

@@ -6,11 +6,12 @@ import React from 'react';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
-import { MathFidelity, PerfTableRow, TableHeader, TableKeys } from '../definitions/PerfTable';
+import { MathFidelity, TableHeader, TableKeys } from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
 import { formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
+import { TypedPerfTableRow } from './sortAndFilterPerfTableData';
 
 type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'orange' | 'grey';
 
@@ -41,7 +42,7 @@ const NUMBER_KEYS_TO_PARSE = [
 ];
 
 export const formatCell = (
-    row: PerfTableRow,
+    row: TypedPerfTableRow,
     header: TableHeader,
     operations?: OperationDescription[],
     highlight?: string | null,
@@ -122,9 +123,9 @@ export const getCellMarkup = (text: string, colour?: string, highlight?: string 
     return <span>{text}</span>;
 };
 
-export const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '' => {
+export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColour | '' => {
     const keyValue = row[key];
-    const percentage = parseFloat(row.total_percent);
+    const percentage = row.total_percent;
 
     if (percentage != null && percentage < MIN_PERCENTAGE) {
         return 'grey';
@@ -234,9 +235,9 @@ export const getOpToOpGapColour = (value: string): CellColour | '' => {
     return parsedValue > 6.5 ? 'red' : '';
 };
 
-export const calcHighDispatchOps = (rows: PerfTableRow[]) => {
+export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     const highDispatchOps = rows
-        .map((opData: PerfTableRow, index: number): [number, PerfTableRow] => [index + 1, opData])
+        .map((opData: TypedPerfTableRow, index: number): [number, TypedPerfTableRow] => [index + 1, opData])
         .filter(([_, opData]) => {
             const val = opData.op_to_op_gap;
             return val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
@@ -248,14 +249,14 @@ export const calcHighDispatchOps = (rows: PerfTableRow[]) => {
 
     // Compute the max dispatch overhead
     const maxDispatchOverhead = highDispatchOps.reduce((acc, [_, opData]) => {
-        const val = parseInt(opData.op_to_op_gap, 10);
+        const val = opData.op_to_op_gap || 0;
 
         return acc + (val - 6);
     }, 0);
 
     // Compute total_duration as sum of device times + Op-to-Op Gaps
     const totalDeviceTime = rows.reduce((acc, r) => {
-        const val = parseInt(r.device_time, 10);
+        const val = r.device_time || 0;
 
         return acc + (typeof val === 'number' ? val : 0);
     }, 0);

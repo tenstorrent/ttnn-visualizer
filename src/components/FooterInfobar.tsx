@@ -111,7 +111,6 @@ function FooterInfobar() {
 
             {(activeProfilerReport || activePerformanceReport) && (
                 <Collapse
-                    className='slider-container'
                     isOpen={sliderIsOpen}
                     keepChildrenMounted
                 >

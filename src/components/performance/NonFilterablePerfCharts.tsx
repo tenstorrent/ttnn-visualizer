@@ -28,7 +28,7 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
     opCodeOptions,
 }) => {
     const performanceReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+    const comparisonReports = useAtomValue(comparisonPerformanceReportAtom);
 
     const datasets = [chartData, ...(secondaryData || [])].filter((set) => set.length > 0);
 
@@ -99,20 +99,21 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                 {performanceReport && (
                     <PerfOperationTypesChart
                         className='flex-chart'
-                        reportTitle={comparisonReport ? performanceReport : ''}
+                        reportTitle={comparisonReports ? performanceReport : ''}
                         data={chartData}
                         opCodes={opCodeOptions}
                     />
                 )}
 
-                {comparisonReport && (
+                {comparisonReports?.map((report, index) => (
                     <PerfOperationTypesChart
+                        key={`${report}-${index}`}
                         className='flex-chart'
-                        reportTitle={performanceReport ? comparisonReport : ''}
-                        data={secondaryData[0]}
+                        reportTitle={performanceReport ? report : ''}
+                        data={secondaryData[index]}
                         opCodes={opCodeOptions}
                     />
-                )}
+                ))}
             </div>
         </div>
     );

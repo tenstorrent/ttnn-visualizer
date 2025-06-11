@@ -4,47 +4,23 @@
 
 import { FC, useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Button, ButtonVariant, Icon, MenuItem, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
+import { Icon, MenuItem, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
+import { PerfTableRow, TableFilter, TableHeader, TableKeys } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
-import { useOptoPerfIdFiltered } from '../../hooks/useAPI';
+import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
-import useSortTable from '../../hooks/useSortTable';
 import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
 import normalisePerformanceData, { MISSING_ROWS } from '../../functions/normalisePerformanceData';
+import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
-    comparisonData?: PerfTableRow[];
-}
-
-interface TypedPerfTableRow
-    extends Omit<
-        PerfTableRow,
-        | 'id'
-        | 'total_percent'
-        | 'device_time'
-        | 'op_to_op_gap'
-        | 'cores'
-        | 'dram'
-        | 'dram_percent'
-        | 'flops'
-        | 'flops_percent'
-    > {
-    id: number;
-    total_percent: number;
-    device_time: number;
-    op_to_op_gap: number | null;
-    cores: number;
-    dram: number;
-    dram_percent: number;
-    flops: number;
-    flops_percent: number;
+    comparisonData?: PerfTableRow[][];
 }
 
 enum COLUMN_HEADERS {
@@ -79,19 +55,20 @@ const TABLE_HEADERS: TableHeader[] = [
     { label: 'Math Fidelity', key: COLUMN_HEADERS.math_fidelity, colour: 'cyan' },
 ];
 
+const INITIAL_TAB_ID = 'perf-table-0';
+
 const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData }) => {
     const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
-    const { sortTableFields, changeSorting, sortingColumn } = useSortTable(null);
-    const opIdsMap = useOptoPerfIdFiltered();
+    const opIdsMap = useOpToPerfIdFiltered();
 
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const activeComparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+    const activeComparisonReports = useAtomValue(comparisonPerformanceReportAtom);
+
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
-    const [selectedTabId, setSelectedTabId] = useState<TabId>('perf-table-1');
-
+    const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState<boolean>(true);
 
@@ -99,81 +76,38 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         () => TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key),
         [],
     );
-    const [filters, setFilters] = useState<Record<TableKeys, string> | null>(
+    const [filters, setFilters] = useState<TableFilter>(
         Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
             string
         >,
     );
 
-    const processedRows: PerfTableRow[] = useMemo(() => {
-        return (
-            data?.map((opData) => {
-                const val = parseInt(opData.op_to_op_gap, 10);
-                const op = opIdsMap.find((opMap) => opMap.perfId === opData.id)?.opId;
-                return {
-                    ...opData,
-                    high_dispatch: !!val && val > 6.5,
-                    op,
-                };
-            }) || []
-        );
+    const comparisonIndex =
+        (activeComparisonReports ?? []).findIndex((value) => value === selectedTabId) > -1
+            ? (activeComparisonReports ?? []).findIndex((value) => value === selectedTabId)
+            : 0;
+
+    const processedRows: TypedPerfTableRow[] = useMemo(() => {
+        return data ? enrichRowData(data, opIdsMap) : [];
     }, [data, opIdsMap]);
 
-    const processedComparisonRows: PerfTableRow[] = useMemo(() => {
-        return (
-            comparisonData?.map((opData) => {
-                const val = parseInt(opData.op_to_op_gap, 10);
-                const op = opIdsMap.find((opMap) => opMap.perfId === opData.id)?.opId;
-                return {
-                    ...opData,
-                    high_dispatch: !!val && val > 6.5,
-                    op,
-                };
-            }) || []
-        );
+    const processedComparisonRows: TypedPerfTableRow[][] = useMemo(() => {
+        return comparisonData ? comparisonData.map((dataset) => enrichRowData(dataset, opIdsMap)) : [];
     }, [comparisonData, opIdsMap]);
 
-    const tableFields: PerfTableRow[] = useMemo(() => {
-        let filteredRows = processedRows;
+    const filteredRows = useMemo(() => {
+        return sortAndFilterPerfTableData(processedRows, filters, filterableColumnKeys, activeFilters);
+    }, [processedRows, filters, filterableColumnKeys, activeFilters]);
 
-        if (areFiltersActive(filters) && filterableColumnKeys) {
-            filteredRows = filteredRows.filter((row) => {
-                const isFilteredOut =
-                    filters &&
-                    Object.entries(filters)
-                        .filter(([_key, filterValue]) => String(filterValue).length)
-                        .some(([key, filterValue]) => {
-                            const bufferValue = getCellText(row, key as TableKeys);
-
-                            return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
-                        });
-
-                return !isFilteredOut;
-            });
-        }
-
-        if (activeFilters?.length > 0) {
-            filteredRows = filteredRows.filter(
-                (tensor) => tensor?.math_fidelity !== null && activeFilters.includes(tensor.math_fidelity),
-            );
-        }
-
-        const parsedRows = filteredRows.map((row) => ({
-            ...row,
-            id: parseInt(row.id, 10),
-            total_percent: parseFloat(row.total_percent),
-            device_time: parseFloat(row.device_time),
-            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
-            cores: parseInt(row.cores, 10),
-            dram: row.dram ? parseFloat(row.dram) : null,
-            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
-            flops: row.flops ? parseFloat(row.flops) : null,
-            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
-        })) as TypedPerfTableRow[];
-
-        return sortTableFields(parsedRows);
-    }, [processedRows, sortTableFields, filters, filterableColumnKeys, activeFilters]);
+    const filteredComparisonRows = useMemo(() => {
+        return sortAndFilterPerfTableData(
+            processedComparisonRows[comparisonIndex],
+            filters,
+            filterableColumnKeys,
+            activeFilters,
+        );
+    }, [comparisonIndex, processedComparisonRows, filters, filterableColumnKeys, activeFilters]);
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
         setFilters({
@@ -183,21 +117,36 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     };
 
     const normalisedData = useMemo(
-        () => normalisePerformanceData(processedRows, processedComparisonRows),
+        () =>
+            processedRows && processedComparisonRows[0]
+                ? normalisePerformanceData(processedRows, processedComparisonRows)
+                : [],
         [processedRows, processedComparisonRows],
     );
 
+    const totalDataLength =
+        selectedTabId === INITIAL_TAB_ID ? data?.length : comparisonData?.[comparisonIndex]?.length || 0;
+    const filteredDataLength =
+        selectedTabId === INITIAL_TAB_ID ? filteredRows?.length : filteredComparisonRows?.length || 0;
+
+    // Resets the state of things if we remove all comparison reports
     useEffect(() => {
-        if (!activeComparisonReport) {
+        if (!activeComparisonReports) {
             setHighlightRows(false);
             setUseNormalisedData(false);
+            setSelectedTabId(INITIAL_TAB_ID);
         }
-    }, [activeComparisonReport]);
+    }, [activeComparisonReports]);
+
+    useEffect(() => {
+        if (activeComparisonReports && !activeComparisonReports.includes(selectedTabId as string)) {
+            setSelectedTabId(INITIAL_TAB_ID);
+        }
+    }, [activeComparisonReports, selectedTabId]);
 
     return (
         <>
             <Switch
-                className='expand-button'
                 label={!mergeDeviceData ? 'Expanded device data' : 'Merged device data'}
                 onChange={() => setMergeDeviceData(!mergeDeviceData)}
                 checked={mergeDeviceData && isMultiDevice}
@@ -205,14 +154,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
             />
 
             <Switch
-                className='expand-button'
                 label='Show Matmul optimization analysis'
                 onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
                 checked={provideMatmulAdvice}
             />
 
             <Switch
-                className='expand-button'
                 label='Highlight high dispatch ops'
                 onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
                 checked={hiliteHighDispatch}
@@ -221,29 +168,29 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
             <Switch
                 labelElement={
                     <Tooltip content='Tries to match up operations between the performance reports'>
-                        <>
+                        <span className='switch-label-with-icon'>
                             <span>Normalise performance data</span>
                             <Icon icon={IconNames.SMALL_INFO_SIGN} />
-                        </>
+                        </span>
                     </Tooltip>
                 }
                 onChange={() => setUseNormalisedData(!useNormalisedData)}
                 checked={useNormalisedData}
-                disabled={!activeComparisonReport}
+                disabled={!activeComparisonReports}
             />
 
             <Switch
                 labelElement={
                     <Tooltip content='Highlights rows where ops have been added or are missing after normalising the data'>
-                        <>
+                        <span className='switch-label-with-icon'>
                             <span>Highlight row difference</span>
                             <Icon icon={IconNames.SMALL_INFO_SIGN} />
-                        </>
+                        </span>
                     </Tooltip>
                 }
                 onChange={() => setHighlightRows(!highlightRows)}
                 checked={highlightRows}
-                disabled={!activeComparisonReport || !useNormalisedData}
+                disabled={!activeComparisonReports || !useNormalisedData}
             />
 
             <div className='perf-report'>
@@ -252,9 +199,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
                     <div className='header-aside'>
                         <p className='result-count'>
-                            {tableFields.length !== data?.length
-                                ? `Showing ${tableFields.length} of ${data?.length} rows`
-                                : `Showing ${tableFields.length} rows`}
+                            {filteredDataLength !== totalDataLength
+                                ? `Showing ${filteredDataLength} of ${totalDataLength} rows`
+                                : `Showing ${filteredDataLength} rows`}
                         </p>
                     </div>
                 </div>
@@ -291,13 +238,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         resetOnSelect
                     />
 
-                    <Button
+                    {/* Need to refactor to have the reset working */}
+                    {/* <Button
                         onClick={() => changeSorting(null)(null)}
                         variant={ButtonVariant.OUTLINED}
                         disabled={sortingColumn === null}
                     >
                         Reset sort
-                    </Button>
+                    </Button> */}
                 </div>
 
                 <Tabs
@@ -307,58 +255,94 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                     size={Size.LARGE}
                 >
                     <Tab
-                        id='perf-table-1'
+                        id={INITIAL_TAB_ID}
                         title={activePerformanceReport}
                         icon={IconNames.TH_LIST}
                         panel={
                             <PerfTable
-                                data={useNormalisedData ? normalisedData[0] : processedRows}
-                                comparisonData={useNormalisedData ? normalisedData[1] : []}
+                                data={useNormalisedData ? normalisedData[0] : filteredRows}
+                                comparisonData={
+                                    useNormalisedData && normalisedData?.[1]?.[comparisonIndex]
+                                        ? normalisedData[1][comparisonIndex]
+                                        : []
+                                }
                                 filters={filters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
                                 matches={MISSING_ROWS}
-                                highlightRows={highlightRows}
+                                highlightRows={highlightRows && useNormalisedData}
                                 normaliseData={useNormalisedData}
                             />
                         }
                     />
 
-                    {activeComparisonReport && processedComparisonRows?.length ? (
-                        <Tab
-                            id='perf-table-2'
-                            title={activeComparisonReport}
-                            icon={IconNames.TH_LIST}
-                            panel={
-                                <PerfTable
-                                    data={useNormalisedData ? normalisedData[1] : processedComparisonRows}
-                                    comparisonData={useNormalisedData ? normalisedData[0] : []}
-                                    filters={filters}
-                                    provideMatmulAdvice={provideMatmulAdvice}
-                                    hiliteHighDispatch={hiliteHighDispatch}
-                                    matches={MISSING_ROWS}
-                                    highlightRows={highlightRows}
-                                    normaliseData={useNormalisedData}
-                                />
-                            }
-                        />
-                    ) : null}
+                    {activeComparisonReports
+                        ?.filter((report) => report)
+                        .map((report, index) => (
+                            <Tab
+                                id={report}
+                                key={index}
+                                title={report}
+                                icon={IconNames.TH_LIST}
+                                panel={
+                                    <PerfTable
+                                        // TODO: Enforcing restrictions on comparison data based on index
+                                        data={
+                                            useNormalisedData &&
+                                            normalisedData?.[1]?.[comparisonIndex] &&
+                                            comparisonIndex < 1
+                                                ? normalisedData[1][comparisonIndex]
+                                                : filteredComparisonRows
+                                        }
+                                        comparisonData={
+                                            // TODO: Enforcing restrictions on comparison data based on index
+                                            useNormalisedData && normalisedData?.[0] && comparisonIndex < 1
+                                                ? normalisedData[0]
+                                                : []
+                                        }
+                                        filters={filters}
+                                        provideMatmulAdvice={provideMatmulAdvice}
+                                        hiliteHighDispatch={hiliteHighDispatch}
+                                        matches={MISSING_ROWS}
+                                        highlightRows={highlightRows && useNormalisedData}
+                                        normaliseData={useNormalisedData}
+                                    />
+                                }
+                            />
+                        ))}
                 </Tabs>
             </div>
+
             <hr />
+
             {hiliteHighDispatch && calcHighDispatchOps(processedRows)}
         </>
     );
 };
 
-function areFiltersActive(filters: Record<TableKeys, string> | null) {
-    return filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
-}
+const HIGH_DISPATCH_THRESHOLD = 6.5;
 
-const getCellText = (buffer: PerfTableRow, key: TableKeys) => {
-    const textValue = buffer[key]?.toString() || '';
+const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: number }[]): TypedPerfTableRow[] => {
+    return rows.map((row) => {
+        const val = parseInt(row.op_to_op_gap, 10);
+        const opStr = opIdsMap.find((opMap) => opMap.perfId === row.id)?.opId;
+        const op = opStr !== undefined ? Number(opStr) : undefined;
 
-    return textValue;
+        return {
+            ...row,
+            op,
+            high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD,
+            id: parseInt(row.id, 10),
+            total_percent: parseFloat(row.total_percent),
+            device_time: parseFloat(row.device_time),
+            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
+            cores: parseInt(row.cores, 10),
+            dram: row.dram ? parseFloat(row.dram) : null,
+            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
+            flops: row.flops ? parseFloat(row.flops) : null,
+            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
+        };
+    });
 };
 
 export default PerformanceReport;

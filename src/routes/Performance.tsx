@@ -4,7 +4,7 @@
 
 import { Helmet } from 'react-helmet-async';
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ButtonVariant, FormGroup, Size, Tab, TabId, Tabs } from '@blueprintjs/core';
+import { Size, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import {
@@ -19,7 +19,6 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceReport from '../components/performance/PerfReport';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import getCoreCount from '../functions/getCoreCount';
-import LocalFolderPicker from '../components/report-selection/LocalFolderPicker';
 import {
     activePerformanceReportAtom,
     comparisonPerformanceReportAtom,
@@ -29,16 +28,19 @@ import PerfCharts from '../components/performance/PerfCharts';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
 import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
 import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
-import { ReportFolder } from '../definitions/Reports';
+import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
+import 'styles/routes/Performance.scss';
+
+const INITIAL_TAB_ID = 'tab-1';
 
 export default function Performance() {
-    const [comparisonReport, setComparisonReport] = useAtom(comparisonPerformanceReportAtom);
+    const [comparisonReports, setComparisonReports] = useAtom(comparisonPerformanceReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
 
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport(activePerformanceReport);
-    const { data: comparisonData } = usePerformanceComparisonReport(comparisonReport);
+    const { data: comparisonData } = usePerformanceComparisonReport(comparisonReports || null);
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
 
@@ -51,8 +53,12 @@ export default function Performance() {
                     ?.map((row) => row.raw_op_code)
                     .filter((opCode): opCode is string => opCode !== undefined) || []),
                 ...(comparisonData
-                    ?.map((row) => row.raw_op_code)
-                    .filter((opCode): opCode is string => opCode !== undefined) || []),
+                    ? comparisonData.flatMap((report) =>
+                          report
+                              .map((row) => row.raw_op_code)
+                              .filter((opCode): opCode is string => opCode !== undefined),
+                      )
+                    : []),
             ]),
         );
 
@@ -62,31 +68,34 @@ export default function Performance() {
         }));
     }, [perfData, comparisonData]);
 
-    const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-1');
+    const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
-    const [filteredComparisonData, setFilteredComparisonData] = useState<PerfTableRow[]>([]);
+    const [filteredComparisonData, setFilteredComparisonData] = useState<PerfTableRow[][]>([]);
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>(opCodeOptions);
 
     // Clear comparison report if users switches active perf report to the comparison report
     useEffect(() => {
-        if (comparisonReport === activePerformanceReport) {
-            setComparisonReport(null);
+        if (activePerformanceReport && comparisonReports?.includes(activePerformanceReport)) {
+            const filteredReports = comparisonReports.filter((report) => report !== activePerformanceReport);
+            setComparisonReports(filteredReports.length === 0 ? null : filteredReports);
         }
-    }, [comparisonReport, activePerformanceReport, setComparisonReport]);
+    }, [comparisonReports, activePerformanceReport, setComparisonReports]);
 
     // If a comparison report is selected, clear the selected range as we don't currently support ranges for comparison
     useEffect(() => {
-        if (comparisonReport && perfRange) {
+        if (comparisonReports && perfRange) {
             setSelectedRange([perfRange[0], perfRange[1]]);
         }
-    }, [comparisonReport, setSelectedRange, perfRange]);
+    }, [comparisonReports, setSelectedRange, perfRange]);
 
     useEffect(() => {
         setFilteredComparisonData(
-            comparisonData?.filter((row) =>
-                selectedOpCodes.length
-                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
-                    : false,
+            comparisonData?.map((dataset) =>
+                dataset.filter((row) =>
+                    selectedOpCodes.length
+                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
+                        : false,
+                ),
             ) || [],
         );
     }, [selectedOpCodes, comparisonData]);
@@ -107,13 +116,13 @@ export default function Performance() {
 
     const rangedData = useMemo(
         () =>
-            !comparisonReport && selectedRange && filteredPerfData.length > 0
+            !comparisonReports && selectedRange && filteredPerfData.length > 0
                 ? filteredPerfData.filter((row) => {
                       const rowId = parseInt(row?.id, 10);
                       return rowId >= selectedRange[0] && rowId <= selectedRange[1];
                   })
                 : filteredPerfData,
-        [selectedRange, filteredPerfData, comparisonReport],
+        [selectedRange, filteredPerfData, comparisonReports],
     );
 
     if (isLoadingPerformance || isLoadingDeviceLog) {
@@ -122,6 +131,7 @@ export default function Performance() {
 
     const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
     const maxCores = perfData ? getCoreCount(architecture, perfData) : 0;
+    const reportSelectors = comparisonReports && comparisonReports?.length > 0 ? [...comparisonReports, null] : [null];
 
     return (
         <div className='performance data-padding'>
@@ -130,28 +140,19 @@ export default function Performance() {
             <h1 className='page-title'>Performance analysis</h1>
 
             {folderList ? (
-                <FormGroup
-                    className='form-group'
-                    label={<h3 className='label'>Compare</h3>}
-                    subLabel='Select a performance report to compare'
-                >
-                    <div className='folder-selection'>
-                        <LocalFolderPicker
-                            items={folderList.filter(
-                                (folder: ReportFolder) => folder.reportName !== activePerformanceReport,
-                            )}
-                            value={comparisonReport}
-                            handleSelect={(folder: ReportFolder) => setComparisonReport(folder.reportName)}
-                        />
-
-                        <Button
-                            className='clear-selection'
-                            variant={ButtonVariant.OUTLINED}
-                            icon={IconNames.CROSS}
-                            onClick={() => setComparisonReport(null)}
-                        />
-                    </div>
-                </FormGroup>
+                <div className='comparison-selectors'>
+                    {/* TODO: reportSelectors restricted to 1 for now */}
+                    {folderList &&
+                        reportSelectors.slice(0, 1)?.map((_, index) => (
+                            <ComparisonReportSelector
+                                key={`${index}-comparison-report-selector`}
+                                folderList={folderList}
+                                reportIndex={index}
+                                label={index === 0 ? <h3 className='label'>Compare</h3> : null}
+                                subLabel={index === 0 ? 'Select from performance reports to compare' : ''}
+                            />
+                        ))}
+                </div>
             ) : (
                 <LoadingSpinner />
             )}
@@ -164,7 +165,7 @@ export default function Performance() {
                 size={Size.LARGE}
             >
                 <Tab
-                    id='tab-1'
+                    id={INITIAL_TAB_ID}
                     title='Table'
                     icon={IconNames.TH}
                     panel={
@@ -199,7 +200,7 @@ export default function Performance() {
 
                                         <PerfCharts
                                             filteredPerfData={rangedData}
-                                            comparisonData={[filteredComparisonData]}
+                                            comparisonData={filteredComparisonData}
                                             maxCores={maxCores}
                                             selectedOpCodes={selectedOpCodes}
                                         />
@@ -211,7 +212,7 @@ export default function Performance() {
                                         <div>
                                             <NonFilterablePerfCharts
                                                 chartData={rangedData}
-                                                secondaryData={[comparisonData || []]}
+                                                secondaryData={comparisonData || []}
                                                 maxCores={maxCores}
                                                 opCodeOptions={opCodeOptions}
                                             />

@@ -15,12 +15,11 @@
     width: 250px;
     gap: 5px;
 
-    .folder-picker {
-        flex: 0 1 220px;
-    }
-
-    .clear-selection {
-        flex: 0 0 30px;
+    // TODO: Fix discrepancies between this usage and the one in FolderPicker.scss
+    .folder-picker-button {
+        .bp5-button-text {
+            max-width: 147px;
+        }
     }
 }
 

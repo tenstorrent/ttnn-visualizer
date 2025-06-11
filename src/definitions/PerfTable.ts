@@ -4,6 +4,8 @@
 
 export type TableKeys = Partial<keyof PerfTableRow>;
 
+export type TableFilter = Record<TableKeys, string> | null;
+
 export interface TableHeader {
     label: string;
     key: TableKeys;
