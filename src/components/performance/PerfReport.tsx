@@ -168,7 +168,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                 labelElement={
                     <Tooltip content='Tries to match up operations between the performance reports'>
                         <span className='switch-label-with-icon'>
-                            Normalise performance data
+                            <span>Normalise performance data</span>
                             <Icon icon={IconNames.SMALL_INFO_SIGN} />
                         </span>
                     </Tooltip>
@@ -182,7 +182,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                 labelElement={
                     <Tooltip content='Highlights rows where ops have been added or are missing after normalising the data'>
                         <span className='switch-label-with-icon'>
-                            Highlight row difference
+                            <span>Highlight row difference</span>
                             <Icon icon={IconNames.SMALL_INFO_SIGN} />
                         </span>
                     </Tooltip>
