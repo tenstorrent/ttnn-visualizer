@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Edge, Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
-import { Button, InputGroup, Intent, Label, PopoverPosition, Slider, Tooltip } from '@blueprintjs/core';
+import { Button, Intent, Label, PopoverPosition, Slider, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { OperationDescription, Tensor } from '../model/APIData';
@@ -16,6 +16,7 @@ import MemoryConfigRow from './MemoryConfigRow';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import { BufferType } from '../model/BufferType';
 import { toReadableShape, toReadableType } from '../functions/math';
+import SearchField from './SearchField';
 
 type OperationList = OperationDescription[];
 
@@ -72,9 +73,30 @@ const OperationGraph: React.FC<{
                     id: op.id,
                     label: `${op.id} ${op.name} \n ${op.operationFileIdentifier}`,
                     shape: 'box',
+                    filterString: `${op.name}`,
                 })),
         );
     }, [operationList, connectedNodeIds]);
+
+    const focusOnNode = useCallback(
+        (nodeId: number | null) => {
+            if (nodeId === null) {
+                return;
+            }
+            if (networkRef.current) {
+                networkRef.current.focus(nodeId, {
+                    scale,
+                    animation: { duration: 500, easingFunction: 'easeInOutCubic' },
+                });
+                networkRef.current.selectNodes([nodeId], true);
+                setCurrentOperationId(nodeId);
+                // @ts-expect-error this is normal
+                currentOpIdRef.current = nodeId;
+            }
+        },
+        [networkRef, scale],
+    );
+
     const updateScale = useCallback(
         (newScale: number) => {
             const limitedScale = Math.min(newScale, 3);
@@ -98,17 +120,19 @@ const OperationGraph: React.FC<{
     }, [currentFilteredIndex, filteredNodeIdList.length]);
 
     const navigateFilteredNodes = useCallback(
-        (index: number) => {
+        (index: number, firstNode?: number | null) => {
             if (networkRef.current && !isLoading) {
-                if (filteredNodeIdList.length > index) {
+                if (firstNode !== undefined && firstNode !== null) {
+                    focusOnNode(firstNode);
+                } else if (filteredNodeIdList.length > index) {
                     focusOnNode(filteredNodeIdList[index]);
+                    networkRef.current.selectNodes(filteredNodeIdList, false);
                 }
-                networkRef.current.selectNodes(filteredNodeIdList, false);
             }
             setCurrentFilteredIndex(index);
         },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [isLoading, filteredNodeIdList],
+
+        [isLoading, filteredNodeIdList, focusOnNode],
     );
 
     const clearFilteredNodes = () => {
@@ -124,15 +148,16 @@ const OperationGraph: React.FC<{
             setCurrentOperationId(focusNodeId);
         }
     };
-    const filterNodes = () => {
-        if (!nodeNameFilter) {
+    const filterNodes = (query: string) => {
+        if (!query) {
             setFilteredNodeIdList([]);
             return null;
         }
         const filteredNodes = nodes.get({
-            filter: (node) => node.label?.toLowerCase().includes(nodeNameFilter.toLowerCase()),
+            filter: (node) => node.filterString?.toLowerCase().includes(query.toLowerCase()),
         });
         const nodeIdList = filteredNodes.map((node) => node.id);
+        networkRef?.current?.selectNodes(nodeIdList, false);
         setFilteredNodeIdList(nodeIdList);
         return nodeIdList[0] || null;
     };
@@ -264,25 +289,6 @@ const OperationGraph: React.FC<{
         return currentIndex > 0 ? (nodeIds[currentIndex - 1] as number) : null;
     };
 
-    const focusOnNode = useCallback(
-        (nodeId: number | null) => {
-            if (nodeId === null) {
-                return;
-            }
-            if (networkRef.current) {
-                networkRef.current.focus(nodeId, {
-                    scale,
-                    animation: { duration: 500, easingFunction: 'easeInOutCubic' },
-                });
-                networkRef.current.selectNodes([nodeId], true);
-                setCurrentOperationId(nodeId);
-                // @ts-expect-error this is normal
-                currentOpIdRef.current = nodeId;
-            }
-        },
-        [networkRef, scale],
-    );
-
     const focusedNode = currentOperationId ?? operationList[0].id;
 
     return (
@@ -326,41 +332,24 @@ const OperationGraph: React.FC<{
                             variant='outlined'
                         />
                     </Tooltip>
-                    <InputGroup
-                        className='node-name-filter'
-                        placeholder='Filter by operation name'
-                        value={nodeNameFilter}
-                        onChange={(e) => setNodeNameFilter(e.target.value)}
-                        disabled={isLoading}
-                        rightElement={
-                            nodeNameFilter ? (
-                                <Button
-                                    variant='minimal'
-                                    onClick={() => {
-                                        // setNodeNameFilter('');
-                                        clearFilteredNodes();
-                                    }}
-                                    icon={IconNames.CROSS}
-                                />
-                            ) : (
-                                <Button
-                                    variant='minimal'
-                                    disabled
-                                    icon={IconNames.CROSS}
-                                />
-                            )
-                        }
-                    />
-                    <Button
-                        icon={IconNames.SEARCH}
-                        onClick={() => {
-                            filterNodes();
-                            setTimeout(() => {
-                                navigateFilteredNodes(0);
-                            }, 200);
+                    <SearchField
+                        searchQuery={nodeNameFilter}
+                        onQueryChanged={(query) => {
+                            setNodeNameFilter(query);
+                            const firstNode = filterNodes(query);
+                            navigateFilteredNodes(0, firstNode);
                         }}
-                        disabled={isLoading || !nodeNameFilter}
-                        variant='outlined'
+                        controls={[
+                            <Button
+                                key='clear-filter'
+                                variant='minimal'
+                                icon={IconNames.CROSS}
+                                onClick={() => clearFilteredNodes()}
+                                disabled={isLoading || nodeNameFilter === ''}
+                            />,
+                        ]}
+                        placeholder='Filter by operation name'
+                        disabled={isLoading}
                     />
                     <Button
                         icon={IconNames.ArrowLeft}
@@ -370,6 +359,7 @@ const OperationGraph: React.FC<{
                         disabled={isLoading || filteredNodeIdList.length === 0}
                         variant='outlined'
                     />
+                    {currentFilteredIndex !== null && filteredNodeIdList.length > 0 ? currentFilteredIndex + 1 : 0}/
                     {filteredNodeIdList.length}
                     <Button
                         icon={IconNames.ArrowRight}
