@@ -146,7 +146,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     return (
         <>
             <Switch
-                className='expand-button'
                 label={!mergeDeviceData ? 'Expanded device data' : 'Merged device data'}
                 onChange={() => setMergeDeviceData(!mergeDeviceData)}
                 checked={mergeDeviceData && isMultiDevice}
@@ -154,14 +153,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
             />
 
             <Switch
-                className='expand-button'
                 label='Show Matmul optimization analysis'
                 onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
                 checked={provideMatmulAdvice}
             />
 
             <Switch
-                className='expand-button'
                 label='Highlight high dispatch ops'
                 onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
                 checked={hiliteHighDispatch}
@@ -170,10 +167,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
             <Switch
                 labelElement={
                     <Tooltip content='Tries to match up operations between the performance reports'>
-                        <>
-                            <span>Normalise performance data</span>
+                        <span className='switch-label-with-icon'>
+                            Normalise performance data
                             <Icon icon={IconNames.SMALL_INFO_SIGN} />
-                        </>
+                        </span>
                     </Tooltip>
                 }
                 onChange={() => setUseNormalisedData(!useNormalisedData)}
@@ -184,10 +181,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
             <Switch
                 labelElement={
                     <Tooltip content='Highlights rows where ops have been added or are missing after normalising the data'>
-                        <>
-                            <span>Highlight row difference</span>
+                        <span className='switch-label-with-icon'>
+                            Highlight row difference
                             <Icon icon={IconNames.SMALL_INFO_SIGN} />
-                        </>
+                        </span>
                     </Tooltip>
                 }
                 onChange={() => setHighlightRows(!highlightRows)}
@@ -272,7 +269,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
                                 matches={MISSING_ROWS}
-                                highlightRows={highlightRows}
+                                highlightRows={highlightRows && useNormalisedData}
                                 normaliseData={useNormalisedData}
                             />
                         }
@@ -306,7 +303,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         matches={MISSING_ROWS}
-                                        highlightRows={highlightRows}
+                                        highlightRows={highlightRows && useNormalisedData}
                                         normaliseData={useNormalisedData}
                                     />
                                 }
