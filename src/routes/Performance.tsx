@@ -29,6 +29,7 @@ import PerfChartFilter from '../components/performance/PerfChartFilter';
 import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
 import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
+import 'styles/routes/Performance.scss';
 
 const INITIAL_TAB_ID = 'tab-1';
 
@@ -139,16 +140,18 @@ export default function Performance() {
             <h1 className='page-title'>Performance analysis</h1>
 
             {folderList ? (
-                folderList &&
-                reportSelectors?.map((_, index) => (
-                    <ComparisonReportSelector
-                        key={`${index}-comparison-report-selector`}
-                        folderList={folderList}
-                        reportIndex={index}
-                        label={index === 0 ? <h3 className='label'>Compare</h3> : null}
-                        subLabel={index === 0 ? 'Select a performance report to compare' : ''}
-                    />
-                ))
+                <div className='comparison-selectors'>
+                    {folderList &&
+                        reportSelectors?.map((_, index) => (
+                            <ComparisonReportSelector
+                                key={`${index}-comparison-report-selector`}
+                                folderList={folderList}
+                                reportIndex={index}
+                                label={index === 0 ? <h3 className='label'>Compare</h3> : null}
+                                subLabel={index === 0 ? 'Select from performance reports to compare' : ''}
+                            />
+                        ))}
+                </div>
             ) : (
                 <LoadingSpinner />
             )}
