@@ -44,10 +44,6 @@ const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({ folderLis
                         const updatedReports = [...(comparisonReports || [])];
                         updatedReports[reportIndex] = folder.reportName;
 
-                        if (updatedReports.at(-1) !== '') {
-                            updatedReports.push('');
-                        }
-
                         setComparisonReports(updatedReports);
                     }}
                 />
@@ -56,7 +52,7 @@ const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({ folderLis
                     variant={ButtonVariant.OUTLINED}
                     icon={IconNames.CROSS}
                     onClick={() => {
-                        const updatedReports = [...(comparisonReports || '')];
+                        const updatedReports = [...(comparisonReports || [])];
                         updatedReports.splice(reportIndex, 1);
 
                         setComparisonReports(updatedReports?.length === 0 ? null : updatedReports);

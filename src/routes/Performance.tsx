@@ -131,7 +131,7 @@ export default function Performance() {
 
     const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
     const maxCores = perfData ? getCoreCount(architecture, perfData) : 0;
-    const reportSelectors = comparisonReports ?? [''];
+    const reportSelectors = comparisonReports && comparisonReports?.length > 0 ? [...comparisonReports, null] : [null];
 
     return (
         <div className='performance data-padding'>
@@ -141,8 +141,9 @@ export default function Performance() {
 
             {folderList ? (
                 <div className='comparison-selectors'>
+                    {/* TODO: reportSelectors restricted to 1 for now */}
                     {folderList &&
-                        reportSelectors?.map((_, index) => (
+                        reportSelectors.slice(0, 1)?.map((_, index) => (
                             <ComparisonReportSelector
                                 key={`${index}-comparison-report-selector`}
                                 folderList={folderList}
