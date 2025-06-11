@@ -129,6 +129,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     const filteredDataLength =
         selectedTabId === INITIAL_TAB_ID ? filteredRows?.length : filteredComparisonRows?.length || 0;
 
+    // Resets the state of things if we remove all comparison reports
     useEffect(() => {
         if (!activeComparisonReports) {
             setHighlightRows(false);
