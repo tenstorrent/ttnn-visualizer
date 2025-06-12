@@ -16,13 +16,12 @@ import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/s
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
-    comparisonData?: TypedPerfTableRow[];
+    comparisonData?: TypedPerfTableRow[][];
     filters: Record<TableKeys, string> | null;
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     matches?: TypedPerfTableRow[];
     highlightRows?: boolean;
-    normaliseData?: boolean;
 }
 
 enum COLUMN_HEADERS {
@@ -83,7 +82,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     hiliteHighDispatch,
     matches,
     highlightRows,
-    normaliseData,
 }) => {
     const { activeFilters } = useTableFilter('math_fidelity', data || []);
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
@@ -103,12 +101,15 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         return sortTableFields(parsedRows);
     }, [data, filters, filterableColumnKeys, activeFilters, sortTableFields]);
 
-    const comparisonDataTableFields: TypedPerfTableRow[] = useMemo(() => {
-        const dataToProcess = comparisonData || [];
-        const parsedRows = sortAndFilterPerfTableData(dataToProcess, filters, filterableColumnKeys, activeFilters);
+    const comparisonDataTableFields = useMemo(
+        () =>
+            comparisonData?.map((dataset) => {
+                const parsedRows = sortAndFilterPerfTableData(dataset, filters, filterableColumnKeys, activeFilters);
 
-        return sortTableFields(parsedRows);
-    }, [comparisonData, filters, filterableColumnKeys, activeFilters, sortTableFields]);
+                return sortTableFields(parsedRows);
+            }) || [],
+        [comparisonData, filters, filterableColumnKeys, activeFilters, sortTableFields],
+    );
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
@@ -192,14 +193,12 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                     <Fragment key={i}>
                         <tr
                             className={classNames({
-                                'missing-data': highlightRows && (row.missing || row.raw_op_code.includes('MISSING')),
+                                'missing-data': highlightRows && row.raw_op_code.includes('MISSING'),
                                 'added-data':
                                     highlightRows &&
-                                    !row.missing &&
                                     matches?.some(
                                         (match) => match.id === row.id && match.raw_op_code === row.raw_op_code,
                                     ),
-                                'row-pattern': comparisonData && normaliseData,
                             })}
                         >
                             {visibleHeaders.map((h) => (
@@ -214,48 +213,37 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                             ))}
                         </tr>
 
-                        {comparisonDataTableFields[i] && (
-                            <tr
-                                className={classNames(
-                                    {
-                                        'missing-data':
-                                            highlightRows && (row.missing || row.raw_op_code.includes('MISSING')),
-                                        'added-data':
-                                            highlightRows &&
-                                            !row.missing &&
-                                            matches?.some(
-                                                (match) => match.id === row.id && match.raw_op_code === row.raw_op_code,
-                                            ),
-                                        'row-pattern': comparisonData && normaliseData,
-                                    },
-                                    'comparison-row',
-                                )}
-                            >
-                                {visibleHeaders.map((h) => (
-                                    <td
-                                        key={h.key}
-                                        className={classNames('cell', {
-                                            'align-right': h.key === COLUMN_HEADERS.math_fidelity,
-                                        })}
-                                    >
-                                        {COMPARISON_KEYS.includes(h.key) &&
-                                            comparisonDataTableFields[i] &&
-                                            (h.key !== COLUMN_HEADERS.op_code ||
-                                                (h.key === COLUMN_HEADERS.op_code &&
-                                                    isOpCodeMatmulOrConv(row.op_code))) && (
-                                                <>
-                                                    {formatCell(
-                                                        comparisonDataTableFields[i],
-                                                        h,
-                                                        operations,
-                                                        filters?.[h.key],
-                                                    )}
-                                                </>
-                                            )}
-                                    </td>
-                                ))}
-                            </tr>
-                        )}
+                        {comparisonDataTableFields?.length > 0 &&
+                            comparisonDataTableFields?.map((dataset, index) => (
+                                <tr
+                                    key={`comparison-${i}-${index}`}
+                                    className={classNames(
+                                        {
+                                            'missing-data': highlightRows && dataset[i].raw_op_code.includes('MISSING'),
+                                            'added-data':
+                                                highlightRows &&
+                                                matches?.some(
+                                                    (match) =>
+                                                        match.id === row.id && match.raw_op_code === row.raw_op_code,
+                                                ),
+                                        },
+                                        'comparison-row',
+                                    )}
+                                >
+                                    {visibleHeaders.map((h) => (
+                                        <td
+                                            key={h.key}
+                                            className={classNames('cell', {
+                                                'align-right': h.key === COLUMN_HEADERS.math_fidelity,
+                                            })}
+                                        >
+                                            {COMPARISON_KEYS.includes(h.key) &&
+                                                dataset[i] &&
+                                                formatCell(dataset[i], h, operations, filters?.[h.key])}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
                         {provideMatmulAdvice && row.op_code.includes('Matmul') && (
                             <tr>
                                 <td
@@ -272,8 +260,5 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         </table>
     );
 };
-
-const isOpCodeMatmulOrConv = (opCode: string) =>
-    opCode.toLowerCase().includes('matmul') || opCode.toLowerCase().includes('conv');
 
 export default PerformanceTable;

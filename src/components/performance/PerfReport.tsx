@@ -15,7 +15,7 @@ import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
-import normalisePerformanceData, { MISSING_ROWS } from '../../functions/normalisePerformanceData';
+import alignByOpCode from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
 
 interface PerformanceReportProps {
@@ -118,9 +118,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
     const normalisedData = useMemo(
         () =>
-            processedRows && processedComparisonRows[0]
-                ? normalisePerformanceData(processedRows, processedComparisonRows)
-                : [],
+            processedRows && processedComparisonRows
+                ? alignByOpCode(processedRows, processedComparisonRows)
+                : { data: [], missingRows: [] },
         [processedRows, processedComparisonRows],
     );
 
@@ -132,8 +132,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     // Resets the state of things if we remove all comparison reports
     useEffect(() => {
         if (!activeComparisonReports) {
-            setHighlightRows(false);
-            setUseNormalisedData(false);
+            // setHighlightRows(false);
+            // setUseNormalisedData(false);
             setSelectedTabId(INITIAL_TAB_ID);
         }
     }, [activeComparisonReports]);
@@ -260,56 +260,57 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         icon={IconNames.TH_LIST}
                         panel={
                             <PerfTable
-                                data={useNormalisedData ? normalisedData[0] : filteredRows}
+                                data={useNormalisedData ? normalisedData.data[0] : filteredRows}
                                 comparisonData={
-                                    useNormalisedData && normalisedData?.[1]?.[comparisonIndex]
-                                        ? normalisedData[1][comparisonIndex]
+                                    useNormalisedData && normalisedData.data.length > 1
+                                        ? normalisedData.data.slice(1)
                                         : []
                                 }
                                 filters={filters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
-                                matches={MISSING_ROWS}
+                                matches={normalisedData.missingRows}
                                 highlightRows={highlightRows && useNormalisedData}
-                                normaliseData={useNormalisedData}
                             />
                         }
                     />
 
-                    {activeComparisonReports
-                        ?.filter((report) => report)
-                        .map((report, index) => (
-                            <Tab
-                                id={report}
-                                key={index}
-                                title={report}
-                                icon={IconNames.TH_LIST}
-                                panel={
-                                    <PerfTable
-                                        // TODO: Enforcing restrictions on comparison data based on index
-                                        data={
-                                            useNormalisedData &&
-                                            normalisedData?.[1]?.[comparisonIndex] &&
-                                            comparisonIndex < 1
-                                                ? normalisedData[1][comparisonIndex]
-                                                : filteredComparisonRows
-                                        }
-                                        comparisonData={
-                                            // TODO: Enforcing restrictions on comparison data based on index
-                                            useNormalisedData && normalisedData?.[0] && comparisonIndex < 1
-                                                ? normalisedData[0]
-                                                : []
-                                        }
-                                        filters={filters}
-                                        provideMatmulAdvice={provideMatmulAdvice}
-                                        hiliteHighDispatch={hiliteHighDispatch}
-                                        matches={MISSING_ROWS}
-                                        highlightRows={highlightRows && useNormalisedData}
-                                        normaliseData={useNormalisedData}
-                                    />
-                                }
-                            />
-                        ))}
+                    {activeComparisonReports?.map((report, index) => (
+                        <Tab
+                            id={report}
+                            key={index}
+                            title={report}
+                            icon={IconNames.TH_LIST}
+                            panel={
+                                <PerfTable
+                                    data={
+                                        useNormalisedData && normalisedData.data.length > 1
+                                            ? normalisedData.data.slice(1)[comparisonIndex]
+                                            : filteredComparisonRows
+                                    }
+                                    comparisonData={
+                                        useNormalisedData && normalisedData.data.length > 1
+                                            ? normalisedData.data.filter((_, i) => i !== comparisonIndex + 1)
+                                            : []
+                                    }
+                                    // comparisonData={
+                                    //     // Filter out the item at comparisonIndex from normalisedData[1]
+                                    //     useNormalisedData && normalisedData?.[0] && Array.isArray(normalisedData[1])
+                                    //         ? [
+                                    //               normalisedData[0],
+                                    //               ...normalisedData[1].filter((_, i) => i !== comparisonIndex),
+                                    //           ]
+                                    //         : []
+                                    // }
+                                    filters={filters}
+                                    provideMatmulAdvice={provideMatmulAdvice}
+                                    hiliteHighDispatch={hiliteHighDispatch}
+                                    matches={normalisedData.missingRows}
+                                    highlightRows={highlightRows && useNormalisedData}
+                                />
+                            }
+                        />
+                    ))}
                 </Tabs>
             </div>
 
