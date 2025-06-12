@@ -11,13 +11,13 @@ import 'styles/components/PerfReport.scss';
 import { useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import { formatCell } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
-import useTableFilter from '../../hooks/useTableFilter';
 import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
     comparisonData?: TypedPerfTableRow[][];
     filters: Record<TableKeys, string> | null;
+    mathFidelityFilter: (string | number)[];
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     matches?: TypedPerfTableRow[];
@@ -78,12 +78,12 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     data,
     comparisonData,
     filters,
+    mathFidelityFilter,
     provideMatmulAdvice,
     hiliteHighDispatch,
     matches,
     highlightRows,
 }) => {
-    const { activeFilters } = useTableFilter('math_fidelity', data || []);
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
     const { data: operations } = useOperationsList();
@@ -96,20 +96,25 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     // TODO: Refactor so that sortAndFilterPerfTableData is not used here and PerfReport.
     // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
     const tableFields: TypedPerfTableRow[] = useMemo(() => {
-        const parsedRows = sortAndFilterPerfTableData(data, filters, filterableColumnKeys, activeFilters);
+        const parsedRows = sortAndFilterPerfTableData(data, filters, filterableColumnKeys, mathFidelityFilter);
 
         return sortTableFields(parsedRows);
-    }, [data, filters, filterableColumnKeys, activeFilters, sortTableFields]);
+    }, [data, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields]);
 
-    const comparisonDataTableFields = useMemo(
-        () =>
+    const comparisonDataTableFields = useMemo(() => {
+        return (
             comparisonData?.map((dataset) => {
-                const parsedRows = sortAndFilterPerfTableData(dataset, filters, filterableColumnKeys, activeFilters);
+                const parsedRows = sortAndFilterPerfTableData(
+                    dataset,
+                    filters,
+                    filterableColumnKeys,
+                    mathFidelityFilter,
+                );
 
                 return sortTableFields(parsedRows);
-            }) || [],
-        [comparisonData, filters, filterableColumnKeys, activeFilters, sortTableFields],
-    );
+            }) || []
+        );
+    }, [comparisonData, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields]);
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
@@ -214,12 +219,13 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                         </tr>
 
                         {comparisonDataTableFields?.length > 0 &&
-                            comparisonDataTableFields?.map((dataset, index) => (
+                            comparisonDataTableFields.map((dataset, index) => (
                                 <tr
                                     key={`comparison-${i}-${index}`}
                                     className={classNames(
                                         {
-                                            'missing-data': highlightRows && dataset[i].raw_op_code.includes('MISSING'),
+                                            'missing-data':
+                                                highlightRows && dataset[i]?.raw_op_code.includes('MISSING'),
                                             'added-data':
                                                 highlightRows &&
                                                 matches?.some(

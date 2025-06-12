@@ -96,26 +96,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         return comparisonData ? comparisonData.map((dataset) => enrichRowData(dataset, opIdsMap)) : [];
     }, [comparisonData, opIdsMap]);
 
-    const filteredRows = useMemo(() => {
-        return sortAndFilterPerfTableData(processedRows, filters, filterableColumnKeys, activeFilters);
-    }, [processedRows, filters, filterableColumnKeys, activeFilters]);
-
-    const filteredComparisonRows = useMemo(() => {
-        return sortAndFilterPerfTableData(
-            processedComparisonRows[comparisonIndex],
-            filters,
-            filterableColumnKeys,
-            activeFilters,
-        );
-    }, [comparisonIndex, processedComparisonRows, filters, filterableColumnKeys, activeFilters]);
-
-    const updateColumnFilter = (key: TableKeys, value: string) => {
-        setFilters({
-            ...filters,
-            [key]: value ?? '',
-        } as Record<TableKeys, string>);
-    };
-
     const normalisedData = useMemo(
         () =>
             processedRows && processedComparisonRows
@@ -124,10 +104,54 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         [processedRows, processedComparisonRows],
     );
 
-    const totalDataLength =
-        selectedTabId === INITIAL_TAB_ID ? data?.length : comparisonData?.[comparisonIndex]?.length || 0;
-    const filteredDataLength =
-        selectedTabId === INITIAL_TAB_ID ? filteredRows?.length : filteredComparisonRows?.length || 0;
+    const filteredRows = useMemo(() => {
+        return sortAndFilterPerfTableData(
+            useNormalisedData ? normalisedData.data[0] : processedRows,
+            filters,
+            filterableColumnKeys,
+            activeFilters,
+        );
+    }, [processedRows, filters, filterableColumnKeys, activeFilters, useNormalisedData, normalisedData.data]);
+
+    const filteredComparisonRows = useMemo(() => {
+        return sortAndFilterPerfTableData(
+            useNormalisedData ? normalisedData.data[comparisonIndex] : processedComparisonRows[comparisonIndex],
+            filters,
+            filterableColumnKeys,
+            activeFilters,
+        );
+    }, [
+        comparisonIndex,
+        processedComparisonRows,
+        filters,
+        filterableColumnKeys,
+        activeFilters,
+        useNormalisedData,
+        normalisedData.data,
+    ]);
+
+    const updateColumnFilter = (key: TableKeys, value: string) => {
+        setFilters({
+            ...filters,
+            [key]: value ?? '',
+        } as Record<TableKeys, string>);
+    };
+
+    const totalDataLength = getTotalDataLength(
+        useNormalisedData,
+        normalisedData,
+        selectedTabId,
+        INITIAL_TAB_ID,
+        data,
+        comparisonData,
+        comparisonIndex,
+    );
+    const filteredDataLength = getFilteredDataLength(
+        selectedTabId,
+        INITIAL_TAB_ID,
+        filteredRows,
+        filteredComparisonRows,
+    );
 
     // Resets the state of things if we remove all comparison reports
     useEffect(() => {
@@ -267,6 +291,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                         : []
                                 }
                                 filters={filters}
+                                mathFidelityFilter={activeFilters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
                                 matches={normalisedData.missingRows}
@@ -293,16 +318,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                             ? normalisedData.data.filter((_, i) => i !== comparisonIndex + 1)
                                             : []
                                     }
-                                    // comparisonData={
-                                    //     // Filter out the item at comparisonIndex from normalisedData[1]
-                                    //     useNormalisedData && normalisedData?.[0] && Array.isArray(normalisedData[1])
-                                    //         ? [
-                                    //               normalisedData[0],
-                                    //               ...normalisedData[1].filter((_, i) => i !== comparisonIndex),
-                                    //           ]
-                                    //         : []
-                                    // }
                                     filters={filters}
+                                    mathFidelityFilter={activeFilters}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     matches={normalisedData.missingRows}
@@ -345,5 +362,30 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
         };
     });
 };
+
+const getTotalDataLength = (
+    useNormalisedData: boolean,
+    normalisedData: { data: TypedPerfTableRow[][] },
+    selectedTabId: TabId,
+    initialTabId: TabId,
+    data?: PerfTableRow[],
+    comparisonData?: PerfTableRow[][],
+    comparisonIndex?: number,
+) => {
+    if (useNormalisedData) {
+        return normalisedData.data[0]?.length || 0;
+    }
+    if (selectedTabId === initialTabId) {
+        return data?.length || 0;
+    }
+    return comparisonData?.[comparisonIndex ?? 0]?.length || 0;
+};
+
+const getFilteredDataLength = (
+    selectedTabId: TabId,
+    initialTabId: TabId,
+    filteredRows: TypedPerfTableRow[],
+    filteredComparisonRows: TypedPerfTableRow[],
+) => (selectedTabId === initialTabId ? filteredRows?.length : filteredComparisonRows?.length || 0);
 
 export default PerformanceReport;
