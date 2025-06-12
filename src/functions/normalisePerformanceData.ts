@@ -37,9 +37,11 @@ const MISSING_PREFIX = 'MISSING -';
 function alignByOpCode(
     refData: TypedPerfTableRow[],
     otherDatasets: TypedPerfTableRow[][],
-    threshold = 10,
+    threshold = 5,
+    maxMissingRatio = 0.3,
 ): { data: TypedPerfTableRow[][]; missingRows: TypedPerfTableRow[] } {
     const missingRows = new Map();
+    const missingCounts = new Array(otherDatasets.length).fill(0);
     const aligned: TypedPerfTableRow[][] = [[], ...otherDatasets.map(() => [])];
 
     let refIndex = 0;
@@ -67,6 +69,7 @@ function alignByOpCode(
                 if (otherOp === refOp) {
                     // Found match, insert MISSING for skipped ops
                     for (let k = 0; k < lookahead; k++) {
+                        missingCounts[d]++;
                         aligned[d + 1].push({
                             ...PLACEHOLDER,
                             op_code: `${MISSING_PREFIX} ${refOp}`,
@@ -84,6 +87,7 @@ function alignByOpCode(
             }
 
             if (!matchFound) {
+                missingCounts[d]++;
                 aligned[d + 1].push({
                     ...PLACEHOLDER,
                     op_code: `${MISSING_PREFIX} ${refOp}`,
@@ -99,15 +103,26 @@ function alignByOpCode(
         refIndex++;
     }
 
+    // TODO: Problem with alignment where some datasets have fewer rows than others
+
     // Padding to ensure all arrays are same length
     const maxLen = Math.max(...aligned.map((arr) => arr.length));
     for (const arr of aligned) {
         while (arr.length < maxLen) {
             const largestArr = aligned.reduce((a, b) => (a.length > b.length ? a : b));
-            const opCode = largestArr[arr.length]?.op_code ?? `${MISSING_PREFIX} END`;
-            const rawOpCode = largestArr[arr.length]?.raw_op_code ?? `${MISSING_PREFIX} END RAW`;
+            const opCode = `${MISSING_PREFIX} ${largestArr[arr.length]?.op_code}`;
+            const rawOpCode = `${MISSING_PREFIX} ${largestArr[arr.length]?.raw_op_code}`;
+            const id = largestArr[arr.length]?.id;
 
-            arr.push({ ...PLACEHOLDER, op_code: opCode, raw_op_code: rawOpCode });
+            arr.push({ ...PLACEHOLDER, id, op_code: opCode, raw_op_code: rawOpCode });
+        }
+    }
+
+    // Discard datasets with too many missing rows
+    for (let d = 0; d < otherDatasets.length; d++) {
+        const ratio = missingCounts[d] / maxLen;
+        if (ratio > maxMissingRatio) {
+            aligned[d + 1] = [];
         }
     }
 

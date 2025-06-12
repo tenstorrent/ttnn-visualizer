@@ -4,7 +4,7 @@
 
 import { FC, useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Icon, MenuItem, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
+import { Icon, MenuItem, PopoverPosition, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { PerfTableRow, TableFilter, TableHeader, TableKeys } from '../../definitions/PerfTable';
@@ -153,20 +153,24 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         filteredComparisonRows,
     );
 
-    // Resets the state of things if we remove all comparison reports
+    // Resets various state if we remove all comparison reports
     useEffect(() => {
         if (!activeComparisonReports) {
-            // setHighlightRows(false);
-            // setUseNormalisedData(false);
+            setHighlightRows(false);
+            setUseNormalisedData(false);
             setSelectedTabId(INITIAL_TAB_ID);
         }
     }, [activeComparisonReports]);
 
+    // If currently selected tab is disabled, reset to initial tab
     useEffect(() => {
-        if (activeComparisonReports && !activeComparisonReports.includes(selectedTabId as string)) {
+        const isSelectedTabDisabled =
+            useNormalisedData && normalisedData?.data?.slice(1)?.[comparisonIndex]?.length === 0;
+
+        if (isSelectedTabDisabled) {
             setSelectedTabId(INITIAL_TAB_ID);
         }
-    }, [activeComparisonReports, selectedTabId]);
+    }, [selectedTabId, useNormalisedData, normalisedData, comparisonIndex]);
 
     return (
         <>
@@ -304,8 +308,20 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         <Tab
                             id={report}
                             key={index}
-                            title={report}
                             icon={IconNames.TH_LIST}
+                            disabled={useNormalisedData && normalisedData?.data?.slice(1)?.[index]?.length === 0}
+                            title={
+                                normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
+                                    <Tooltip
+                                        content='Report has too many differences to be normalised'
+                                        position={PopoverPosition.TOP}
+                                    >
+                                        {report}
+                                    </Tooltip>
+                                ) : (
+                                    report
+                                )
+                            }
                             panel={
                                 <PerfTable
                                     data={
