@@ -36,8 +36,6 @@ const PLAYBACK_SPEED_2X = 2;
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [selectedTimestep, setSelectedTimestep] = useState<number>(0);
-    const links = npeData.timestep_data[selectedTimestep];
-    const transfers = npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));
     const [animationInterval, setAnimationInterval] = useState<number | null>(null);
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
@@ -54,6 +52,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
+
+    const links = useMemo(() => {
+        return npeData.timestep_data[selectedTimestep];
+    }, [npeData, selectedTimestep]);
+
+    const transfers = useMemo(() => {
+        return npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));
+    }, [npeData.noc_transfers, links]);
 
     const showNOCType = (value: NoCType) => {
         if (nocFilter === null) {
@@ -388,6 +394,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         return (
                             <div
                                 className='chip'
+                                key={`chip-${clusterChip.id}`}
                                 style={{
                                     gridColumn: clusterChip.coords[CLUSTER_COORDS.X] + 1,
                                     gridRow: clusterChip.coords[CLUSTER_COORDS.Y] + 1,
