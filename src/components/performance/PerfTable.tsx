@@ -20,8 +20,8 @@ interface PerformanceTableProps {
     mathFidelityFilter: (string | number)[];
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
-    matches?: TypedPerfTableRow[];
-    highlightRows?: boolean;
+    missingRows?: TypedPerfTableRow[];
+    shouldHighlightRows: boolean;
 }
 
 enum COLUMN_HEADERS {
@@ -81,8 +81,8 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     mathFidelityFilter,
     provideMatmulAdvice,
     hiliteHighDispatch,
-    matches,
-    highlightRows,
+    missingRows,
+    shouldHighlightRows,
 }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
@@ -198,11 +198,13 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                     <Fragment key={i}>
                         <tr
                             className={classNames({
-                                'missing-data': highlightRows && row.raw_op_code.includes('MISSING'),
+                                'missing-data': shouldHighlightRows && row.raw_op_code.includes('MISSING'),
                                 'added-data':
-                                    highlightRows &&
-                                    matches?.some(
-                                        (match) => match.id === row.id && match.raw_op_code === row.raw_op_code,
+                                    shouldHighlightRows &&
+                                    !row.raw_op_code.includes('MISSING') &&
+                                    missingRows?.some(
+                                        (missingRow) =>
+                                            missingRow.id === row.id && missingRow.raw_op_code === row.raw_op_code,
                                     ),
                             })}
                         >
@@ -225,12 +227,14 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                     className={classNames(
                                         {
                                             'missing-data':
-                                                highlightRows && dataset[i]?.raw_op_code.includes('MISSING'),
+                                                shouldHighlightRows && dataset[i]?.raw_op_code.includes('MISSING'),
                                             'added-data':
-                                                highlightRows &&
-                                                matches?.some(
-                                                    (match) =>
-                                                        match.id === row.id && match.raw_op_code === row.raw_op_code,
+                                                shouldHighlightRows &&
+                                                !dataset[i]?.raw_op_code.includes('MISSING') &&
+                                                missingRows?.some(
+                                                    (missingRow) =>
+                                                        missingRow.id === row.id &&
+                                                        missingRow.raw_op_code === row.raw_op_code,
                                                 ),
                                         },
                                         'comparison-row',
