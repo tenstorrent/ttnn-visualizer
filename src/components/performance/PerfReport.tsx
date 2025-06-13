@@ -298,7 +298,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                 mathFidelityFilter={activeFilters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
-                                missingRows={normalisedData.missingRows}
                                 shouldHighlightRows={highlightRows && useNormalisedData}
                             />
                         }
@@ -338,7 +337,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                     mathFidelityFilter={activeFilters}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
-                                    missingRows={normalisedData.missingRows}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
                                 />
                             }

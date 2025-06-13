@@ -50,7 +50,7 @@ function alignByOpCode(
     while (refIndex < refData.length) {
         const refRow = refData[refIndex];
         const refOp = refRow.raw_op_code;
-        let anyMatched = false;
+        let allMatched = true;
 
         aligned[0].push({ ...refRow });
 
@@ -70,24 +70,18 @@ function alignByOpCode(
                     // Found match, insert MISSING for skipped ops
                     for (let k = 0; k < lookahead; k++) {
                         missingCounts[d]++;
-                        aligned[d + 1].push({
-                            ...PLACEHOLDER,
-                            op_code: `${MISSING_PREFIX} ${refOp}`,
-                            raw_op_code: `${MISSING_PREFIX} ${refOp}`,
-                        });
                     }
 
                     aligned[d + 1].push({ ...dataset[j + lookahead] });
                     otherIndexes[d] = j + lookahead + 1;
                     matchFound = true;
-                    anyMatched = true;
-
                     break;
                 }
             }
 
             if (!matchFound) {
                 missingCounts[d]++;
+                allMatched = false;
                 aligned[d + 1].push({
                     ...PLACEHOLDER,
                     op_code: `${MISSING_PREFIX} ${refOp}`,
@@ -96,14 +90,12 @@ function alignByOpCode(
             }
         }
 
-        if (!anyMatched && !missingRows.has(refOp)) {
+        if (!allMatched && !missingRows.has(refOp)) {
             missingRows.set(refOp, refRow);
         }
 
         refIndex++;
     }
-
-    // TODO: Problem with alignment where some datasets have fewer rows than others
 
     // Padding to ensure all arrays are same length
     const maxLen = Math.max(...aligned.map((arr) => arr.length));

@@ -20,7 +20,6 @@ interface PerformanceTableProps {
     mathFidelityFilter: (string | number)[];
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
-    missingRows?: TypedPerfTableRow[];
     shouldHighlightRows: boolean;
 }
 
@@ -81,7 +80,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     mathFidelityFilter,
     provideMatmulAdvice,
     hiliteHighDispatch,
-    missingRows,
     shouldHighlightRows,
 }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
@@ -199,13 +197,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                         <tr
                             className={classNames({
                                 'missing-data': shouldHighlightRows && row.raw_op_code.includes('MISSING'),
-                                'added-data':
-                                    shouldHighlightRows &&
-                                    !row.raw_op_code.includes('MISSING') &&
-                                    missingRows?.some(
-                                        (missingRow) =>
-                                            missingRow.id === row.id && missingRow.raw_op_code === row.raw_op_code,
-                                    ),
                             })}
                         >
                             {visibleHeaders.map((h) => (
@@ -228,14 +219,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                         {
                                             'missing-data':
                                                 shouldHighlightRows && dataset[i]?.raw_op_code.includes('MISSING'),
-                                            'added-data':
-                                                shouldHighlightRows &&
-                                                !dataset[i]?.raw_op_code.includes('MISSING') &&
-                                                missingRows?.some(
-                                                    (missingRow) =>
-                                                        missingRow.id === row.id &&
-                                                        missingRow.raw_op_code === row.raw_op_code,
-                                                ),
                                         },
                                         'comparison-row',
                                     )}
