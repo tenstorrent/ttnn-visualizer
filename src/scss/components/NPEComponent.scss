@@ -88,6 +88,8 @@
         max-width: 380px;
         padding-left: 10px;
         border-left: 1px solid $tt-slate;
+        height: 100vh;
+        overflow-y: scroll;
 
         h3 {
             display: flex;
