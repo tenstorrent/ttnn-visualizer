@@ -19,7 +19,7 @@
 // Note: we had issues with this approach using svgo v2.x, so for now we stick with v1.x
 // With v2.x, some shapes within the icon SVGs would not get converted to paths correctly,
 // resulting in invalid d="..." attributes rendered by the <Icon> component.
-import SVGO from 'svgo';
+import { optimize } from 'svgo';
 
 // Taken from https://github.com/palantir/blueprint/blob/develop/packages/node-build-scripts/src/sass/sassSvgInliner.mjs
 /*
@@ -42,7 +42,7 @@ import { resolve } from 'node:path';
 import * as sass from 'sass';
 import { OrderedMap } from 'immutable';
 
-const svgOptimizer = new SVGO({ plugins: [{ convertShapeToPath: { convertArcs: true } }] });
+const svgOptimizerOptions = { plugins: [{ convertShapeToPath: { convertArcs: true } }] };
 
 /**
  * @param {sass.LegacyValue} value
@@ -171,7 +171,7 @@ export function sassSvgInlinerFactory(base, opts) {
             }
 
             if (optimize) {
-                svgContents = (await svgOptimizer.optimize(svgContents, { path: resolvedPath })).data;
+                svgContents = optimize(svgContents, { path: resolvedPath, ...svgOptimizerOptions }).data;
             }
 
             return encode(svgContents, { encodingFormat });
