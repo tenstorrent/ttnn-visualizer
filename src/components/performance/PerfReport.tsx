@@ -155,12 +155,16 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
     // Resets various state if we remove all comparison reports
     useEffect(() => {
+        if (!activeComparisonReports?.includes(selectedTabId as string)) {
+            setSelectedTabId(INITIAL_TAB_ID);
+        }
+
         if (!activeComparisonReports) {
             setHighlightRows(false);
             setUseNormalisedData(false);
             setSelectedTabId(INITIAL_TAB_ID);
         }
-    }, [activeComparisonReports]);
+    }, [activeComparisonReports, selectedTabId]);
 
     // If currently selected tab is disabled, reset to initial tab
     useEffect(() => {
