@@ -13,17 +13,23 @@ import { RouterProvider } from 'react-router';
 import ErrorPage from './error-page';
 import Layout from './components/Layout';
 import ROUTES from './definitions/Routes';
+import getServerConfig from './functions/getServerConfig';
 import { SocketProvider } from './libs/SocketProvider';
 import { routeObjectList } from './definitions/RouteObjectList';
 
-const router = createBrowserRouter([
+const router = createBrowserRouter(
+    [
+        {
+            path: ROUTES.HOME,
+            element: <Layout />,
+            errorElement: <ErrorPage />,
+            children: routeObjectList,
+        },
+    ],
     {
-        path: ROUTES.HOME,
-        element: <Layout />,
-        errorElement: <ErrorPage />,
-        children: routeObjectList,
+        basename: getServerConfig().BASE_URL,
     },
-]);
+);
 
 FocusStyleManager.onlyShowFocusOnTabs();
 

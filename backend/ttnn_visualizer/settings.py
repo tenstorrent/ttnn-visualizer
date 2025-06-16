@@ -22,8 +22,7 @@ class DefaultConfig(object):
         o for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000").split(",")
         if o
     ]
-    API_PATH = os.getenv("API_PATH", "/")
-    URL_PREFIX = os.getenv("URL_PREFIX", "/api")
+    BASE_URL = os.getenv("BASE_URL", "/")
 
     # Path Settings
     DB_VERSION = "0.29.0"  # App version when DB schema last changed
