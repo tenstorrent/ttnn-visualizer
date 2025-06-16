@@ -84,7 +84,6 @@ jobs:
               asset_content_type: application/octet-stream
     permissions:
         contents: write
-        packages: write
   publish-to-pypi:
     name: >-
       Publish Python 🐍 distribution 📦 to PyPI
