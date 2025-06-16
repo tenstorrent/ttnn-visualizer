@@ -1101,6 +1101,7 @@ def get_npe_data(instance: Instance):
 def config_js():
     config = {
         "SERVER_MODE": current_app.config["SERVER_MODE"],
+        "API_PATH": current_app.config["API_PATH"],
     }
     js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(config)};"
     return Response(js, mimetype="application/javascript")
