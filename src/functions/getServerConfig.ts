@@ -10,6 +10,7 @@ declare global {
 
 interface ServerConfig {
     SERVER_MODE?: boolean;
+    API_PATH?: string;
 }
 
 const getServerConfig = (): ServerConfig | null => {
