@@ -10,10 +10,17 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import List
 import shutil
+from wsgiref.validate import bad_header_value_re
 
 import zstd
-from flask import Blueprint
-from flask import current_app, session, request
+from flask import (
+    Blueprint,
+    Response,
+    current_app,
+    jsonify,
+    session,
+    request,
+)
 
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries, OpsPerformanceReportQueries
 from ttnn_visualizer.decorators import with_instance
@@ -63,9 +70,22 @@ from ttnn_visualizer.utils import (
     timer,
 )
 
+import yaml
+
 logger = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__, url_prefix="/api")
+
+
+def append_to_session_key(key, value):
+    if key in session:
+        updated_paths = session[key] + [value]
+        session[key] = updated_paths
+    else:
+        session[key] = [value]
+
+    logger.info("Appending {value} to {key}".format(value=value, key=key))
+    logger.info("Session key {key} now: {key_value}".format(key=key, key_value=session[key]))
 
 
 @api.route("/operations", methods=["GET"])
@@ -395,8 +415,11 @@ def get_profiler_data_list(instance: Instance):
     if current_app.config["SERVER_MODE"]:
         session_instances = session.get("instances", [])
         instances = get_instances(session_instances)
+        logger.info("Profiler Data List got session instances: %s", session_instances)
         db_paths = [instance.profiler_path for instance in instances if instance.profiler_path]
         directory_names = [str(Path(db_path).parent.name) for db_path in db_paths]
+        logger.info("Session profiler paths: %s", session.get("profiler_paths", None))
+        logger.info("Session Foo: %s", session.get("foo", None))
     else:
         directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
 
@@ -466,6 +489,9 @@ def delete_profiler_report(profiler_name, instance: Instance):
 @api.route("/performance", methods=["GET"])
 @with_instance
 def get_performance_data_list(instance: Instance):
+    logger.info("In get_performance_data_list - Session contents: %s", dict(session))
+    logger.info("In get_performance_data_list - Session ID: %s", session.sid if hasattr(session, 'sid') else 'No SID')
+    
     is_remote = True if instance.remote_connection else False
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     data_directory = Path(current_app.config[config_key])
@@ -626,6 +652,8 @@ def create_profiler_files():
     folder_name = request.form.get("folderName") # Optional folder name - Used for Safari compatibility
     profiler_directory = current_app.config["LOCAL_DATA_DIRECTORY"] / current_app.config["PROFILER_DIRECTORY_NAME"]
 
+    logger.info("Before session modification - Session contents: %s", dict(session))
+
     if not validate_files(files, {"db.sqlite", "config.json"}, folder_name=folder_name):
         return StatusMessage(
             status=ConnectionTestStates.FAILED,
@@ -668,6 +696,13 @@ def create_profiler_files():
                 report_name = config_data.get("report_name")
         except Exception as e:
             logger.warning(f"Failed to read config.json in {config_file}: {e}")
+
+    # Set session data
+    session["profiler_paths"] = session.get("profiler_paths", []) + [str(profiler_path)]
+    session["foo"] = "bar"
+    session.permanent = True  # Make the session permanent
+
+    logger.info("After session modification - Session contents: %s", dict(session))
 
     return {
         "path": parent_folder_name,
@@ -722,6 +757,8 @@ def create_performance_files():
         performance_path=performance_path,
     )
 
+    append_to_session_key("performance_paths", str(performance_path))
+
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
     ).model_dump()
@@ -751,6 +788,8 @@ def create_npe_files():
     instance_id = request.args.get("instanceId")
     npe_path = str(paths[0])
     update_instance(instance_id=instance_id, npe_name=npe_name, clear_remote=True, npe_path=npe_path)
+
+    append_to_session_key("npe_paths", str(npe_path))
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success"
@@ -803,10 +842,6 @@ def get_remote_folders_performance():
         return [r.model_dump() for r in remote_performance_folders]
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
-
-
-from flask import Response, jsonify
-import yaml
 
 
 @api.route("/cluster-descriptor", methods=["GET"])

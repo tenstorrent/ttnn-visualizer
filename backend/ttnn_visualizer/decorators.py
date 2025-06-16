@@ -2,6 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
+import logging
 import re
 from ttnn_visualizer.enums import ConnectionTestStates
 
@@ -20,6 +21,8 @@ from ttnn_visualizer.exceptions import (
     RemoteSqliteException,
 )
 from ttnn_visualizer.instances import get_or_create_instance
+
+logger = logging.getLogger(__name__)
 
 
 def with_instance(func):
@@ -41,9 +44,11 @@ def with_instance(func):
         if 'instances' not in session:
             session['instances'] = []
 
+        logger.info("With Instance: Session Instances: %s", session["instances"])
         if instance.instance_id not in session['instances']:
             session['instances'] = session.get('instances', []) + [instance.instance_id]
 
+            logger.info("With Instance: Appending, now: %s", session["instances"])
         return func(*args, **kwargs)
 
     return wrapper

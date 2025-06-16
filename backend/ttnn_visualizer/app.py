@@ -12,6 +12,7 @@ from os import environ
 from pathlib import Path
 import sys
 from typing import cast
+from datetime import timedelta
 
 import flask
 from dotenv import load_dotenv
@@ -19,6 +20,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_session import Session
 
 from ttnn_visualizer.exceptions import DatabaseFileNotFoundException, InvalidProfilerPath, InvalidReportPath
 from ttnn_visualizer.instances import create_instance_from_local_paths
@@ -84,9 +86,6 @@ def extensions(app: flask.Flask):
     if app.config["USE_WEBSOCKETS"]:
         socketio.init_app(app)
     db.init_app(app)
-
-    app.config["SESSION_TYPE"] = "sqlalchemy"
-    app.config["SESSION_SQLALCHEMY"] = db
 
     if app.config["USE_WEBSOCKETS"]:
         register_handlers(socketio)
