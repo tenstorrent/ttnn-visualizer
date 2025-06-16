@@ -141,17 +141,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         useNormalisedData,
         normalisedData,
         selectedTabId,
-        INITIAL_TAB_ID,
         data,
-        comparisonData,
-        comparisonIndex,
+        comparisonData[comparisonIndex],
     );
-    const filteredDataLength = getFilteredDataLength(
-        selectedTabId,
-        INITIAL_TAB_ID,
-        filteredRows,
-        filteredComparisonRows,
-    );
+    const filteredDataLength = getFilteredDataLength(selectedTabId, filteredRows, filteredComparisonRows);
 
     // Resets various state if we remove all comparison reports
     useEffect(() => {
@@ -385,25 +378,24 @@ const getTotalDataLength = (
     useNormalisedData: boolean,
     normalisedData: { data: TypedPerfTableRow[][] },
     selectedTabId: TabId,
-    initialTabId: TabId,
     data?: PerfTableRow[],
-    comparisonData?: PerfTableRow[][],
-    comparisonIndex?: number,
+    comparisonData?: PerfTableRow[],
 ) => {
     if (useNormalisedData) {
         return normalisedData.data[0]?.length || 0;
     }
-    if (selectedTabId === initialTabId) {
+
+    if (selectedTabId === INITIAL_TAB_ID) {
         return data?.length || 0;
     }
-    return comparisonData?.[comparisonIndex ?? 0]?.length || 0;
+
+    return comparisonData?.length || 0;
 };
 
 const getFilteredDataLength = (
     selectedTabId: TabId,
-    initialTabId: TabId,
     filteredRows: TypedPerfTableRow[],
     filteredComparisonRows: TypedPerfTableRow[],
-) => (selectedTabId === initialTabId ? filteredRows?.length : filteredComparisonRows?.length || 0);
+) => (selectedTabId === INITIAL_TAB_ID ? filteredRows?.length : filteredComparisonRows?.length || 0);
 
 export default PerformanceReport;
