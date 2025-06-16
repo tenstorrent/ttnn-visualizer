@@ -45,7 +45,7 @@ export default function Performance() {
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
 
-    const isServerMode = getServerConfig()?.SERVER_MODE;
+    const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
 
     useClearSelectedBuffer();
 
@@ -142,7 +142,7 @@ export default function Performance() {
 
             <h1 className='page-title'>Performance analysis</h1>
 
-            {!isServerMode &&
+            {!shouldDisableComparison &&
                 (folderList ? (
                     <div className='comparison-selectors'>
                         {/* TODO: reportSelectors restricted to 1 for now */}
