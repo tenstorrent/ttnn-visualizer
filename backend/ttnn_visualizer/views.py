@@ -65,7 +65,7 @@ from ttnn_visualizer.utils import (
 
 logger = logging.getLogger(__name__)
 
-api = Blueprint("api", __name__, url_prefix="/api")
+api = Blueprint("api", __name__)
 
 
 @api.route("/operations", methods=["GET"])

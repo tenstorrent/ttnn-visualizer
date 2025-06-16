@@ -23,6 +23,7 @@ class DefaultConfig(object):
         if o
     ]
     API_PATH = os.getenv("API_PATH", "/")
+    URL_PREFIX = os.getenv("URL_PREFIX", "/api")
 
     # Path Settings
     DB_VERSION = "0.29.0"  # App version when DB schema last changed

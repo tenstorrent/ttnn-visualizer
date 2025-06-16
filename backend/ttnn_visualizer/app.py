@@ -55,7 +55,7 @@ def create_app(settings_override=None):
 
     middleware(app)
 
-    app.register_blueprint(api)
+    app.register_blueprint(api, url_prefix=app.config["URL_PREFIX"])
 
     extensions(app)
 
