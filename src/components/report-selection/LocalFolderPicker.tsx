@@ -39,7 +39,7 @@ const LocalFolderPicker = ({
         return (
             <div
                 className='folder-picker-menu-item'
-                key={folder.reportName}
+                key={folder.path}
             >
                 <MenuItem
                     textClassName='folder-picker-label'
