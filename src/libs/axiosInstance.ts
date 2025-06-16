@@ -3,10 +3,13 @@
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import axios from 'axios';
+import getServerConfig from '../functions/getServerConfig';
 
-// Create an Axios instance
+const serverConfig = getServerConfig();
+const apiPath = serverConfig?.API_PATH || '/';
+
 const axiosInstance = axios.create({
-    baseURL: '/', // Your API base URL
+    baseURL: apiPath,
 });
 
 export const getOrCreateInstanceId = () => {
