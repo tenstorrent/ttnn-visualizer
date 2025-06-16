@@ -47,7 +47,7 @@ jobs:
   release:
     name: Upload Wheel to GitHub Release
     runs-on: ubuntu-latest
-    needs: build  # Depends on the build job
+    needs: build
 
     steps:
       - name: Checkout code
@@ -80,8 +80,11 @@ jobs:
         with:
               upload_url: ${{ github.event.release.upload_url }}
               asset_path: ${{ env.wheel_name }}
-              asset_name: ${{env.wheel_file_name}}
+              asset_name: ${{ env.wheel_file_name }}
               asset_content_type: application/octet-stream
+    permissions:
+        contents: write
+        packages: write
   publish-to-pypi:
     name: >-
       Publish Python 🐍 distribution 📦 to PyPI
