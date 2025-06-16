@@ -142,7 +142,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         normalisedData,
         selectedTabId,
         data,
-        comparisonData[comparisonIndex],
+        comparisonData?.[comparisonIndex],
     );
     const filteredDataLength = getFilteredDataLength(selectedTabId, filteredRows, filteredComparisonRows);
 
