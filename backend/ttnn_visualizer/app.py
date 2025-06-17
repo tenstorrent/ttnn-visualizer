@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 import argparse
-import json
 import logging
 import os
 import subprocess
@@ -56,30 +55,16 @@ def create_app(settings_override=None):
 
     middleware(app)
 
-    app.register_blueprint(api, url_prefix=f"{app.config['BASE_URL']}/api")
+    app.register_blueprint(api)
 
     extensions(app)
 
     if flask_env == "production":
 
-        @app.route(f"{app.config['BASE_URL']}/", defaults={"path": ""})
+        @app.route("/", defaults={"path": ""})
         @app.route("/<path:path>")
         def catch_all(path):
-            js_config = {
-                "SERVER_MODE": app.config["SERVER_MODE"],
-                "BASE_URL": app.config["BASE_URL"],
-            }
-            js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(js_config)};"
-
-            with open(os.path.join(app.static_folder, "index.html")) as f:
-                html = f.read()
-
-            html_with_config = html.replace(
-                "/* SERVER_CONFIG */",
-                js,
-            )
-
-            return flask.Response(html_with_config, mimetype="text/html")
+            return app.send_static_file("index.html")
 
     return app
 

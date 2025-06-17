@@ -10,13 +10,13 @@ declare global {
 
 interface ServerConfig {
     SERVER_MODE?: boolean;
-    BASE_URL?: string;
+    BASE_PATH?: string;
 }
 
 const getServerConfig = (): ServerConfig => {
     return (
         window?.TTNN_VISUALIZER_CONFIG || {
-            BASE_URL: '/',
+            BASE_PATH: '/',
             SERVER_MODE: false,
         }
     );

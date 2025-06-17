@@ -27,7 +27,7 @@ const router = createBrowserRouter(
         },
     ],
     {
-        basename: getServerConfig().BASE_URL,
+        basename: getServerConfig().BASE_PATH,
     },
 );
 
