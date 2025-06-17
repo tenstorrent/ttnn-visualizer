@@ -43,7 +43,7 @@ const LocalFolderPicker = ({
             >
                 <MenuItem
                     textClassName='folder-picker-label'
-                    text={`/${folder.path}`}
+                    text={`/${getPrettyPath(folder.path)}`}
                     labelElement={folder.reportName}
                     labelClassName='folder-picker-name-label'
                     roleStructure='listoption'
@@ -106,7 +106,7 @@ const LocalFolderPicker = ({
             disabled={!items || !session}
             fill
         >
-            <Tooltip content={path ? `/${path}` : ''}>
+            <Tooltip content={path ? `/${getPrettyPath(path)}` : ''}>
                 <Button
                     className='folder-picker-button'
                     text={items && path ? getReportName(items, path) : defaultLabel}
@@ -125,5 +125,8 @@ const LocalFolderPicker = ({
 const getReportName = (reports: ReportFolder[], path: string | null) => {
     return reports?.find((report) => report.path === path)?.reportName;
 };
+
+const PATH_REGEX = /^\d+_/gm;
+const getPrettyPath = (path: string) => (PATH_REGEX.test(path) ? path.replace(PATH_REGEX, '') : path);
 
 export default LocalFolderPicker;
