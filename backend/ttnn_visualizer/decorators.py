@@ -122,7 +122,7 @@ def with_disable_deletion_in_server_mode(f):
 
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if current_app.config.get("SERVER_MODE", False):
+        if current_app.config["SERVER_MODE"]:
             abort(403, description="Deleting reports is not allowed in server mode.")
         return f(*args, **kwargs)
     return decorated_function
