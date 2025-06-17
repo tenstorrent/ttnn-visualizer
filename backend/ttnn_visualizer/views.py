@@ -437,6 +437,9 @@ def get_profiler_data_list(instance: Instance):
 @api.route("/profiler/<profiler_name>", methods=["DELETE"])
 @with_instance
 def delete_profiler_report(profiler_name, instance: Instance):
+    if current_app.config["SERVER_MODE"]:
+        return Response(status=HTTPStatus.FORBIDDEN, response="Report deletion is not supported in server mode.")
+
     is_remote = bool(instance.remote_connection)
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     data_directory = Path(current_app.config[config_key])
@@ -537,6 +540,9 @@ def get_profiler_performance_data(instance: Instance):
 @api.route("/performance/<performance_name>", methods=["DELETE"])
 @with_instance
 def delete_performance_report(performance_name, instance: Instance):
+    if current_app.config["SERVER_MODE"]:
+        return Response(status=HTTPStatus.FORBIDDEN, response="Report deletion is not supported in server mode.")
+
     is_remote = bool(instance.remote_connection)
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     data_directory = Path(current_app.config[config_key])
