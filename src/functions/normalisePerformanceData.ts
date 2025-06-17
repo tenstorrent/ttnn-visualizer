@@ -36,16 +36,16 @@ const MISSING_PREFIX = 'MISSING -';
 
 function alignByOpCode(
     refData: TypedPerfTableRow[],
-    otherDatasets: TypedPerfTableRow[][],
+    dataToAlign: TypedPerfTableRow[][],
     threshold = 5,
     maxMissingRatio = 0.3,
 ): { data: TypedPerfTableRow[][]; missingRows: TypedPerfTableRow[] } {
     const missingRows = new Map();
-    const missingCounts = new Array(otherDatasets.length).fill(0);
-    const aligned: TypedPerfTableRow[][] = [[], ...otherDatasets.map(() => [])];
+    const missingCounts = new Array(dataToAlign.length).fill(0); // Tracks how many placeholder rows have been inserted for each dataset
+    const currentIndexes = new Array(dataToAlign.length).fill(0); // Tracks the current index/position in each dataset as the alignment proceeds.
+    const aligned: TypedPerfTableRow[][] = [[], ...dataToAlign.map(() => [])];
 
     let refIndex = 0;
-    const otherIndexes = new Array(otherDatasets.length).fill(0);
 
     while (refIndex < refData.length) {
         const refRow = refData[refIndex];
@@ -54,35 +54,35 @@ function alignByOpCode(
 
         aligned[0].push({ ...refRow });
 
-        for (let d = 0; d < otherDatasets.length; d++) {
-            const dataset = otherDatasets[d];
-            const j = otherIndexes[d];
+        for (let dataIndex = 0; dataIndex < dataToAlign.length; dataIndex++) {
+            const dataset = dataToAlign[dataIndex];
+            const currentIndex = currentIndexes[dataIndex];
             let matchFound = false;
 
             for (let lookahead = 0; lookahead <= threshold; lookahead++) {
-                if (j + lookahead >= dataset.length) {
+                if (currentIndex + lookahead >= dataset.length) {
                     break;
                 }
 
-                const otherOp = dataset[j + lookahead].raw_op_code;
+                const otherOp = dataset[currentIndex + lookahead].raw_op_code;
 
                 if (otherOp === refOp) {
                     // Found match, insert MISSING for skipped ops
-                    for (let k = 0; k < lookahead; k++) {
-                        missingCounts[d]++;
+                    for (let current = 0; current < lookahead; current++) {
+                        missingCounts[dataIndex]++;
                     }
 
-                    aligned[d + 1].push({ ...dataset[j + lookahead] });
-                    otherIndexes[d] = j + lookahead + 1;
+                    aligned[dataIndex + 1].push({ ...dataset[currentIndex + lookahead] });
+                    currentIndexes[dataIndex] = currentIndex + lookahead + 1;
                     matchFound = true;
                     break;
                 }
             }
 
             if (!matchFound) {
-                missingCounts[d]++;
+                missingCounts[dataIndex]++;
                 allMatched = false;
-                aligned[d + 1].push({
+                aligned[dataIndex + 1].push({
                     ...PLACEHOLDER,
                     op_code: `${MISSING_PREFIX} ${refOp}`,
                     raw_op_code: `${MISSING_PREFIX} ${refOp}`,
@@ -111,16 +111,16 @@ function alignByOpCode(
     }
 
     // Discard datasets with too many missing rows
-    for (let d = 0; d < otherDatasets.length; d++) {
-        const ratio = missingCounts[d] / maxLen;
+    for (let dataIndex = 0; dataIndex < dataToAlign.length; dataIndex++) {
+        const ratio = missingCounts[dataIndex] / maxLen;
         if (ratio > maxMissingRatio) {
-            aligned[d + 1] = [];
+            aligned[dataIndex + 1] = [];
         }
     }
 
     return {
         data: aligned,
-        missingRows: Array.from(missingRows.values()),
+        missingRows: [...missingRows.values()],
     };
 }
 
