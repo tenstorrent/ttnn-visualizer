@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useState } from 'react';
 import { Alert, Button, ButtonVariant, Intent, MenuItem, Tooltip } from '@blueprintjs/core';
@@ -9,6 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useSession } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
 import { ReportFolder } from '../../definitions/Reports';
+import getServerConfig from '../../functions/getServerConfig';
 
 interface LocalFolderPickerProps {
     items: ReportFolder[];
@@ -30,6 +31,8 @@ const LocalFolderPicker = ({
     const path = value || '';
 
     const [showDeleteAlert, setShowDeleteAlert] = useState<boolean>(false);
+
+    const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
 
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers }) => {
         if (!modifiers.matchesPredicate) {
@@ -54,7 +57,7 @@ const LocalFolderPicker = ({
                     icon={folder.path === path ? IconNames.SAVED : IconNames.DOCUMENT}
                 />
 
-                {handleDelete && (
+                {handleDelete && !isDeleteDisabled && (
                     <>
                         <Button
                             icon={IconNames.TRASH}
