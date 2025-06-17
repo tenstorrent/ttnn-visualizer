@@ -5,7 +5,7 @@ on:
 
 env:
     CIBW_BUILD_VERBOSITY: 1
-    VITE_API_ROOT: api
+    BASE_URL: /api
     NPM_CONFIG_PRODUCTION: false
 
 jobs:
