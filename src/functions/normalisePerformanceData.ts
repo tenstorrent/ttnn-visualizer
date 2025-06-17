@@ -102,11 +102,15 @@ function alignByOpCode(
     for (const arr of aligned) {
         while (arr.length < maxLen) {
             const largestArr = aligned.reduce((a, b) => (a.length > b.length ? a : b));
-            const opCode = `${MISSING_PREFIX} ${largestArr[arr.length]?.op_code}`;
-            const rawOpCode = `${MISSING_PREFIX} ${largestArr[arr.length]?.raw_op_code}`;
-            const id = largestArr[arr.length]?.id;
 
-            arr.push({ ...PLACEHOLDER, id, op_code: opCode, raw_op_code: rawOpCode });
+            const id = largestArr[arr.length]?.id || null;
+            const opCode = largestArr[arr.length]?.op_code || '';
+            const rawOpCode = largestArr[arr.length]?.raw_op_code || '';
+
+            const opCodeMessage = `${MISSING_PREFIX} ${opCode}`;
+            const rawOpCodeMessage = `${MISSING_PREFIX} ${rawOpCode}`;
+
+            arr.push({ ...PLACEHOLDER, id, op_code: opCodeMessage, raw_op_code: rawOpCodeMessage });
         }
     }
 
