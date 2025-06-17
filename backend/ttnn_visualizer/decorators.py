@@ -115,3 +115,14 @@ def remote_exception_handler(func):
             )
 
     return remote_handler
+
+
+def with_disable_deletion_in_server_mode(f):
+    from flask import current_app
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if current_app.config.get("SERVER_MODE", False):
+            abort(403, description="Deleting reports is not allowed in server mode.")
+        return f(*args, **kwargs)
+    return decorated_function
