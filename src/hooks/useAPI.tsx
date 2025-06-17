@@ -38,6 +38,7 @@ import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { NPEData } from '../model/NPEModel';
 import { ChipDesign, ClusterModel } from '../model/ClusterModel';
+import { ReportFolder } from '../definitions/Reports';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -884,7 +885,11 @@ export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';
 
 const fetchReportFolderList = async () => {
     const { data } = await axiosInstance.get('/api/profiler');
-    return data;
+
+    return data.map((folder: ReportFolder) => ({
+        ...folder,
+        path: getPrettyPath(folder.path),
+    }));
 };
 
 export const deleteProfiler = async (report: string) => {
@@ -905,7 +910,11 @@ export const PERFORMANCE_FOLDER_QUERY_KEY = 'fetch-performance-folder-list';
 
 const fetchPerfFolderList = async () => {
     const { data } = await axiosInstance.get('/api/performance');
-    return data;
+
+    return data.map((folder: ReportFolder) => ({
+        ...folder,
+        path: getPrettyPath(folder.path),
+    }));
 };
 
 export const deletePerformance = async (report: string) => {
@@ -921,3 +930,6 @@ export const usePerfFolderList = () => {
         initialData: null,
     });
 };
+
+const PATH_REGEX = /^\d+_/gm;
+const getPrettyPath = (path: string) => (PATH_REGEX.test(path) ? path.replace(PATH_REGEX, '') : path);
