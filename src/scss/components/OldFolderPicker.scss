@@ -102,6 +102,10 @@
 
     .remote-folder-status-icon {
         display: contents;
+
+        .status-icon {
+            margin-left: 5px;
+        }
     }
 }
 

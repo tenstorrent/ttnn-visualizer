@@ -91,7 +91,7 @@ const remoteFolderRenderer =
         const getLabelElement = () => (
             <>
                 <span>{reportName}</span>
-                <span>{!isUsingRemoteQuerying && statusIcon}</span>
+                <span className='status-icon'>{!isUsingRemoteQuerying && statusIcon}</span>
             </>
         );
 

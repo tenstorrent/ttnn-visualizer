@@ -16,7 +16,7 @@ from flask import Blueprint
 from flask import current_app, session, request
 
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries, OpsPerformanceReportQueries
-from ttnn_visualizer.decorators import with_instance
+from ttnn_visualizer.decorators import with_instance, local_only
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.exceptions import RemoteConnectionException
@@ -436,6 +436,7 @@ def get_profiler_data_list(instance: Instance):
 
 @api.route("/profiler/<profiler_name>", methods=["DELETE"])
 @with_instance
+@local_only
 def delete_profiler_report(profiler_name, instance: Instance):
     is_remote = bool(instance.remote_connection)
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
@@ -536,6 +537,7 @@ def get_profiler_performance_data(instance: Instance):
 
 @api.route("/performance/<performance_name>", methods=["DELETE"])
 @with_instance
+@local_only
 def delete_performance_report(performance_name, instance: Instance):
     is_remote = bool(instance.remote_connection)
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"

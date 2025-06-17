@@ -115,3 +115,16 @@ def remote_exception_handler(func):
             )
 
     return remote_handler
+
+
+def local_only(f):
+    from flask import current_app
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if current_app.config["SERVER_MODE"]:
+            abort(403, description="Endpoint not accessible")
+
+        return f(*args, **kwargs)
+
+    return decorated_function
