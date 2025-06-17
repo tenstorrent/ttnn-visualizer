@@ -6,10 +6,10 @@ import axios from 'axios';
 import getServerConfig from '../functions/getServerConfig';
 
 const serverConfig = getServerConfig();
-const apiPath = serverConfig?.API_PATH || '/';
+const baseURL = serverConfig?.BASE_PATH;
 
 const axiosInstance = axios.create({
-    baseURL: apiPath,
+    baseURL,
 });
 
 export const getOrCreateInstanceId = () => {

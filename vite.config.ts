@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import path, { join } from 'path';
 import react from '@vitejs/plugin-react';
 // @ts-expect-error don't have types declaration for node-build-scripts
@@ -12,9 +12,7 @@ import { legacySassSvgInlinerFactory } from './src/libs/blueprintjs/legacySassSv
 import { version } from './package.json';
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, process.cwd(), '');
-
+export default defineConfig(() => {
     return {
         build: {
             outDir: './backend/ttnn_visualizer/static/',
@@ -22,7 +20,6 @@ export default defineConfig(({ mode }) => {
         },
         define: {
             'import.meta.env.APP_VERSION': JSON.stringify(version),
-            'import.meta.env.VITE_API_ROOT': JSON.stringify(env.VITE_API_ROOT) ?? '"http://localhost:8000/api"',
         },
         plugins: [react()],
         server: {

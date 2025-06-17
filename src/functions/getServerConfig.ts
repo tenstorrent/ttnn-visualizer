@@ -10,11 +10,14 @@ declare global {
 
 interface ServerConfig {
     SERVER_MODE?: boolean;
-    API_PATH?: string;
+    BASE_PATH?: string;
 }
 
-const getServerConfig = (): ServerConfig | null => {
-    return window?.TTNN_VISUALIZER_CONFIG || null;
+const getServerConfig = (): ServerConfig => {
+    return {
+        BASE_PATH: window?.TTNN_VISUALIZER_CONFIG?.BASE_PATH || '/',
+        SERVER_MODE: window?.TTNN_VISUALIZER_CONFIG?.SERVER_MODE || false,
+    };
 };
 
 export default getServerConfig;
