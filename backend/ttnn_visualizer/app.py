@@ -74,7 +74,7 @@ def create_app(settings_override=None):
                 html = f.read()
 
                 html_with_config = html.replace(
-              "/* SERVER_CONFIG */",
+                    "/* SERVER_CONFIG */",
                     js,
                 )
 
