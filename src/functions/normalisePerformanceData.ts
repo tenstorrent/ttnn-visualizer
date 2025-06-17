@@ -40,7 +40,7 @@ function alignByOpCode(
     threshold = 5,
     maxMissingRatio = 0.3,
 ): { data: TypedPerfTableRow[][]; missingRows: TypedPerfTableRow[] } {
-    const missingRows = new Map();
+    const missingRows = new Map<string, TypedPerfTableRow>();
     const missingCounts = new Array(dataToAlign.length).fill(0); // Tracks how many placeholder rows have been inserted for each dataset
     const currentIndexes = new Array(dataToAlign.length).fill(0); // Tracks the current index/position in each dataset as the alignment proceeds.
     const aligned: TypedPerfTableRow[][] = [[], ...dataToAlign.map(() => [])];
