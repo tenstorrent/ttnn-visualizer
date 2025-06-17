@@ -13,7 +13,7 @@ const useRemoteConnection = () => {
 
     // TODO Ensure on form that SSH connection is valid first
     const fetchSqlitePath = async (connection: Partial<RemoteConnection>) => {
-        const { data: connectionTestStates } = await axiosInstance.post('/remote/sqlite/detect-path', connection);
+        const { data: connectionTestStates } = await axiosInstance.post('/api/remote/sqlite/detect-path', connection);
         return connectionTestStates;
     };
 
@@ -27,7 +27,7 @@ const useRemoteConnection = () => {
             ];
         }
 
-        const { data: connectionTestStates } = await axiosInstance.post('/remote/test', connection);
+        const { data: connectionTestStates } = await axiosInstance.post('/api/remote/test', connection);
 
         return connectionTestStates;
     };
@@ -37,7 +37,7 @@ const useRemoteConnection = () => {
             throw new Error('No connection provided');
         }
 
-        const response = await axiosInstance.post<RemoteFolder[]>('/remote/profiler', connection);
+        const response = await axiosInstance.post<RemoteFolder[]>('/api/remote/profiler', connection);
 
         return response.data;
     };
@@ -46,7 +46,7 @@ const useRemoteConnection = () => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
-        const response = await axiosInstance.post<RemoteFolder[]>('/remote/performance', {
+        const response = await axiosInstance.post<RemoteFolder[]>('/api/remote/performance', {
             connection,
         });
 
@@ -65,7 +65,7 @@ const useRemoteConnection = () => {
         if (!remoteFolder && !remoteProfile) {
             throw new Error('No remote folder provided');
         }
-        return axiosInstance.post<RemoteFolder>('/remote/sync', {
+        return axiosInstance.post<RemoteFolder>('/api/remote/sync', {
             connection,
             folder: remoteFolder,
             profile: remoteProfile,
@@ -77,7 +77,7 @@ const useRemoteConnection = () => {
         remoteFolder?: RemoteFolder,
         remoteProfile?: RemoteFolder,
     ) => {
-        return axiosInstance.post<MountRemoteFolder>('/remote/use', {
+        return axiosInstance.post<MountRemoteFolder>('/api/remote/use', {
             connection,
             folder: remoteFolder,
             profile: remoteProfile,
@@ -140,7 +140,7 @@ const useRemoteConnection = () => {
 
     const readRemoteFile = async (connection?: RemoteConnection) => {
         try {
-            const response = await axiosInstance.post('/remote/read', connection);
+            const response = await axiosInstance.post('/api/remote/read', connection);
 
             return response.data;
         } catch (error) {

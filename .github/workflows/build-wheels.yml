@@ -5,7 +5,7 @@ on:
 
 env:
     CIBW_BUILD_VERBOSITY: 1
-    BASE_URL: /api
+    BASE_URL: /
     NPM_CONFIG_PRODUCTION: false
 
 jobs:
