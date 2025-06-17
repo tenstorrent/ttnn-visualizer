@@ -170,7 +170,7 @@ def operation_detail(operation_id, instance: Instance):
         )
 
 
-@api.route("operation-history", methods=["GET"])
+@api.route("/operation-history", methods=["GET"])
 @with_instance
 @timer
 def operation_history(instance: Instance):
