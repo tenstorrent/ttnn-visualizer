@@ -145,9 +145,8 @@ export default function Performance() {
             {!shouldDisableComparison &&
                 (folderList ? (
                     <div className='comparison-selectors'>
-                        {/* TODO: reportSelectors restricted to 1 for now */}
                         {folderList &&
-                            reportSelectors.slice(0, 1)?.map((_, index) => (
+                            reportSelectors?.map((_, index) => (
                                 <ComparisonReportSelector
                                     key={`${index}-comparison-report-selector`}
                                     folderList={folderList}
