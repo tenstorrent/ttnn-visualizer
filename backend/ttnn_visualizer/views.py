@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import dataclasses
 import json
@@ -16,7 +16,7 @@ from flask import Blueprint
 from flask import current_app, session, request
 
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries, OpsPerformanceReportQueries
-from ttnn_visualizer.decorators import with_instance
+from ttnn_visualizer.decorators import with_instance, local_only
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.exceptions import RemoteConnectionException
@@ -65,7 +65,7 @@ from ttnn_visualizer.utils import (
 
 logger = logging.getLogger(__name__)
 
-api = Blueprint("api", __name__, url_prefix="/api")
+api = Blueprint("api", __name__)
 
 
 @api.route("/operations", methods=["GET"])
@@ -170,7 +170,7 @@ def operation_detail(operation_id, instance: Instance):
         )
 
 
-@api.route("operation-history", methods=["GET"])
+@api.route("/operation-history", methods=["GET"])
 @with_instance
 @timer
 def operation_history(instance: Instance):
@@ -436,6 +436,7 @@ def get_profiler_data_list(instance: Instance):
 
 @api.route("/profiler/<profiler_name>", methods=["DELETE"])
 @with_instance
+@local_only
 def delete_profiler_report(profiler_name, instance: Instance):
     is_remote = bool(instance.remote_connection)
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
@@ -536,6 +537,7 @@ def get_profiler_performance_data(instance: Instance):
 
 @api.route("/performance/<performance_name>", methods=["DELETE"])
 @with_instance
+@local_only
 def delete_performance_report(performance_name, instance: Instance):
     is_remote = bool(instance.remote_connection)
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
@@ -997,11 +999,13 @@ def use_remote_folder():
     folder = RemoteReportFolder.model_validate(folder, strict=False)
     performance_name = None
     remote_performance_folder = None
+
     if profile:
         remote_performance_folder = RemoteReportFolder.model_validate(profile, strict=False)
         performance_name = remote_performance_folder.reportName
+
     data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-    profiler_name = folder.reportName
+    profiler_name = folder.remotePath.split("/")[-1]
     folder_name = folder.remotePath.split("/")[-1]
 
     connection_directory = Path(data_directory, connection.host, current_app.config["PROFILER_DIRECTORY_NAME"], folder_name)
@@ -1095,12 +1099,3 @@ def get_npe_data(instance: Instance):
             npe_data = json.load(file)
 
     return jsonify(npe_data)
-
-
-@api.route("/config.js", methods=["GET"])
-def config_js():
-    config = {
-        "SERVER_MODE": current_app.config["SERVER_MODE"],
-    }
-    js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(config)};"
-    return Response(js, mimetype="application/javascript")

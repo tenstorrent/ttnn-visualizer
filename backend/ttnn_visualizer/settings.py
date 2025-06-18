@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import os
 from pathlib import Path
@@ -22,6 +22,7 @@ class DefaultConfig(object):
         o for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000").split(",")
         if o
     ]
+    BASE_PATH = os.getenv("BASE_PATH", "/")
 
     # Path Settings
     DB_VERSION = "0.29.0"  # App version when DB schema last changed

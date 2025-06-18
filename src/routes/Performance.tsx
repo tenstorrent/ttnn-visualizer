@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Helmet } from 'react-helmet-async';
 import { useEffect, useMemo, useState } from 'react';
@@ -30,6 +30,7 @@ import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
 import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
+import getServerConfig from '../functions/getServerConfig';
 
 const INITIAL_TAB_ID = 'tab-1';
 
@@ -43,6 +44,8 @@ export default function Performance() {
     const { data: comparisonData } = usePerformanceComparisonReport(comparisonReports || null);
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
+
+    const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
 
     useClearSelectedBuffer();
 
@@ -139,23 +142,23 @@ export default function Performance() {
 
             <h1 className='page-title'>Performance analysis</h1>
 
-            {folderList ? (
-                <div className='comparison-selectors'>
-                    {/* TODO: reportSelectors restricted to 1 for now */}
-                    {folderList &&
-                        reportSelectors.slice(0, 1)?.map((_, index) => (
-                            <ComparisonReportSelector
-                                key={`${index}-comparison-report-selector`}
-                                folderList={folderList}
-                                reportIndex={index}
-                                label={index === 0 ? <h3 className='label'>Compare</h3> : null}
-                                subLabel={index === 0 ? 'Select from performance reports to compare' : ''}
-                            />
-                        ))}
-                </div>
-            ) : (
-                <LoadingSpinner />
-            )}
+            {!shouldDisableComparison &&
+                (folderList ? (
+                    <div className='comparison-selectors'>
+                        {folderList &&
+                            reportSelectors?.map((_, index) => (
+                                <ComparisonReportSelector
+                                    key={`${index}-comparison-report-selector`}
+                                    folderList={folderList}
+                                    reportIndex={index}
+                                    label={index === 0 ? <h3 className='label'>Compare</h3> : null}
+                                    subLabel={index === 0 ? 'Select from performance reports to compare' : ''}
+                                />
+                            ))}
+                    </div>
+                ) : (
+                    <LoadingSpinner />
+                ))}
 
             <Tabs
                 id='performance-tabs'

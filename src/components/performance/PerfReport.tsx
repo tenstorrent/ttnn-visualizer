@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { FC, useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Icon, MenuItem, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
+import { Icon, MenuItem, PopoverPosition, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { PerfTableRow, TableFilter, TableHeader, TableKeys } from '../../definitions/PerfTable';
@@ -15,7 +15,7 @@ import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
 import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
-import normalisePerformanceData, { MISSING_ROWS } from '../../functions/normalisePerformanceData';
+import alignByOpCode from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
 
 interface PerformanceReportProps {
@@ -96,18 +96,39 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         return comparisonData ? comparisonData.map((dataset) => enrichRowData(dataset, opIdsMap)) : [];
     }, [comparisonData, opIdsMap]);
 
-    const filteredRows = useMemo(() => {
-        return sortAndFilterPerfTableData(processedRows, filters, filterableColumnKeys, activeFilters);
-    }, [processedRows, filters, filterableColumnKeys, activeFilters]);
+    const normalisedData = useMemo(
+        () =>
+            processedRows && processedComparisonRows
+                ? alignByOpCode(processedRows, processedComparisonRows)
+                : { data: [], missingRows: [] },
+        [processedRows, processedComparisonRows],
+    );
 
-    const filteredComparisonRows = useMemo(() => {
+    const filteredRows = useMemo(() => {
         return sortAndFilterPerfTableData(
-            processedComparisonRows[comparisonIndex],
+            useNormalisedData ? normalisedData.data[0] : processedRows,
             filters,
             filterableColumnKeys,
             activeFilters,
         );
-    }, [comparisonIndex, processedComparisonRows, filters, filterableColumnKeys, activeFilters]);
+    }, [processedRows, filters, filterableColumnKeys, activeFilters, useNormalisedData, normalisedData.data]);
+
+    const filteredComparisonRows = useMemo(() => {
+        return sortAndFilterPerfTableData(
+            useNormalisedData ? normalisedData.data[comparisonIndex] : processedComparisonRows[comparisonIndex],
+            filters,
+            filterableColumnKeys,
+            activeFilters,
+        );
+    }, [
+        comparisonIndex,
+        processedComparisonRows,
+        filters,
+        filterableColumnKeys,
+        activeFilters,
+        useNormalisedData,
+        normalisedData.data,
+    ]);
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
         setFilters({
@@ -116,33 +137,37 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         } as Record<TableKeys, string>);
     };
 
-    const normalisedData = useMemo(
-        () =>
-            processedRows && processedComparisonRows[0]
-                ? normalisePerformanceData(processedRows, processedComparisonRows)
-                : [],
-        [processedRows, processedComparisonRows],
+    const totalDataLength = getTotalDataLength(
+        useNormalisedData,
+        normalisedData,
+        selectedTabId,
+        data,
+        comparisonData?.[comparisonIndex],
     );
+    const filteredDataLength = getFilteredDataLength(selectedTabId, filteredRows, filteredComparisonRows);
 
-    const totalDataLength =
-        selectedTabId === INITIAL_TAB_ID ? data?.length : comparisonData?.[comparisonIndex]?.length || 0;
-    const filteredDataLength =
-        selectedTabId === INITIAL_TAB_ID ? filteredRows?.length : filteredComparisonRows?.length || 0;
-
-    // Resets the state of things if we remove all comparison reports
+    // Resets various state if we remove all comparison reports
     useEffect(() => {
+        if (!activeComparisonReports?.includes(selectedTabId as string)) {
+            setSelectedTabId(INITIAL_TAB_ID);
+        }
+
         if (!activeComparisonReports) {
             setHighlightRows(false);
             setUseNormalisedData(false);
             setSelectedTabId(INITIAL_TAB_ID);
         }
-    }, [activeComparisonReports]);
+    }, [activeComparisonReports, selectedTabId]);
 
+    // If currently selected tab is disabled, reset to initial tab
     useEffect(() => {
-        if (activeComparisonReports && !activeComparisonReports.includes(selectedTabId as string)) {
+        const isSelectedTabDisabled =
+            useNormalisedData && normalisedData?.data?.slice(1)?.[comparisonIndex]?.length === 0;
+
+        if (isSelectedTabDisabled) {
             setSelectedTabId(INITIAL_TAB_ID);
         }
-    }, [activeComparisonReports, selectedTabId]);
+    }, [selectedTabId, useNormalisedData, normalisedData, comparisonIndex]);
 
     return (
         <>
@@ -260,56 +285,60 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         icon={IconNames.TH_LIST}
                         panel={
                             <PerfTable
-                                data={useNormalisedData ? normalisedData[0] : filteredRows}
+                                data={useNormalisedData ? normalisedData.data[0] : filteredRows}
                                 comparisonData={
-                                    useNormalisedData && normalisedData?.[1]?.[comparisonIndex]
-                                        ? normalisedData[1][comparisonIndex]
+                                    useNormalisedData && normalisedData.data.length > 1
+                                        ? normalisedData.data.slice(1)
                                         : []
                                 }
                                 filters={filters}
+                                mathFidelityFilter={activeFilters}
                                 provideMatmulAdvice={provideMatmulAdvice}
                                 hiliteHighDispatch={hiliteHighDispatch}
-                                matches={MISSING_ROWS}
-                                highlightRows={highlightRows && useNormalisedData}
-                                normaliseData={useNormalisedData}
+                                shouldHighlightRows={highlightRows && useNormalisedData}
                             />
                         }
                     />
 
-                    {activeComparisonReports
-                        ?.filter((report) => report)
-                        .map((report, index) => (
-                            <Tab
-                                id={report}
-                                key={index}
-                                title={report}
-                                icon={IconNames.TH_LIST}
-                                panel={
-                                    <PerfTable
-                                        // TODO: Enforcing restrictions on comparison data based on index
-                                        data={
-                                            useNormalisedData &&
-                                            normalisedData?.[1]?.[comparisonIndex] &&
-                                            comparisonIndex < 1
-                                                ? normalisedData[1][comparisonIndex]
-                                                : filteredComparisonRows
-                                        }
-                                        comparisonData={
-                                            // TODO: Enforcing restrictions on comparison data based on index
-                                            useNormalisedData && normalisedData?.[0] && comparisonIndex < 1
-                                                ? normalisedData[0]
-                                                : []
-                                        }
-                                        filters={filters}
-                                        provideMatmulAdvice={provideMatmulAdvice}
-                                        hiliteHighDispatch={hiliteHighDispatch}
-                                        matches={MISSING_ROWS}
-                                        highlightRows={highlightRows && useNormalisedData}
-                                        normaliseData={useNormalisedData}
-                                    />
-                                }
-                            />
-                        ))}
+                    {activeComparisonReports?.map((report, index) => (
+                        <Tab
+                            id={report}
+                            key={index}
+                            icon={IconNames.TH_LIST}
+                            disabled={useNormalisedData && normalisedData?.data?.slice(1)?.[index]?.length === 0}
+                            title={
+                                normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
+                                    <Tooltip
+                                        content='Report has too many differences to be normalised'
+                                        position={PopoverPosition.TOP}
+                                    >
+                                        {report}
+                                    </Tooltip>
+                                ) : (
+                                    report
+                                )
+                            }
+                            panel={
+                                <PerfTable
+                                    data={
+                                        useNormalisedData && normalisedData.data.length > 1
+                                            ? normalisedData.data.slice(1)[comparisonIndex]
+                                            : filteredComparisonRows
+                                    }
+                                    comparisonData={
+                                        useNormalisedData && normalisedData.data.length > 1
+                                            ? normalisedData.data.filter((_, i) => i !== comparisonIndex + 1)
+                                            : []
+                                    }
+                                    filters={filters}
+                                    mathFidelityFilter={activeFilters}
+                                    provideMatmulAdvice={provideMatmulAdvice}
+                                    hiliteHighDispatch={hiliteHighDispatch}
+                                    shouldHighlightRows={highlightRows && useNormalisedData}
+                                />
+                            }
+                        />
+                    ))}
                 </Tabs>
             </div>
 
@@ -344,5 +373,29 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
         };
     });
 };
+
+const getTotalDataLength = (
+    useNormalisedData: boolean,
+    normalisedData: { data: TypedPerfTableRow[][] },
+    selectedTabId: TabId,
+    data?: PerfTableRow[],
+    comparisonData?: PerfTableRow[],
+) => {
+    if (useNormalisedData) {
+        return normalisedData.data[0]?.length || 0;
+    }
+
+    if (selectedTabId === INITIAL_TAB_ID) {
+        return data?.length || 0;
+    }
+
+    return comparisonData?.length || 0;
+};
+
+const getFilteredDataLength = (
+    selectedTabId: TabId,
+    filteredRows: TypedPerfTableRow[],
+    filteredComparisonRows: TypedPerfTableRow[],
+) => (selectedTabId === INITIAL_TAB_ID ? filteredRows?.length : filteredComparisonRows?.length || 0);
 
 export default PerformanceReport;
