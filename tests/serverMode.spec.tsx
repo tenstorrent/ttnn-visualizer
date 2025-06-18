@@ -59,7 +59,7 @@ it('Disable remote sync in Home route', () => {
     expect(getButtonWithText('(No selection)')).toBeDisabled();
 });
 
-it('Disable comparison in Performance route', () => {
+it('Hide comparison component in Performance route', () => {
     render(
         <QueryProvider>
             <MemoryRouter>
