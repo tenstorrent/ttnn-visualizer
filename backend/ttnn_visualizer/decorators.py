@@ -42,7 +42,8 @@ def with_instance(func):
             session['instances'] = []
 
         if instance.instance_id not in session['instances']:
-            session['instances'].append(instance.instance_id)
+            session['instances'] = session.get('instances', []) + [instance.instance_id]
+
 
         return func(*args, **kwargs)
 
