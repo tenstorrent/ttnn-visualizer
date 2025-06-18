@@ -77,17 +77,6 @@ logger = logging.getLogger(__name__)
 api = Blueprint("api", __name__)
 
 
-def append_to_session_key(key, value):
-    if key in session:
-        updated_paths = session[key] + [value]
-        session[key] = updated_paths
-    else:
-        session[key] = [value]
-
-    logger.info("Appending {value} to {key}".format(value=value, key=key))
-    logger.info("Session key {key} now: {key_value}".format(key=key, key_value=session[key]))
-
-
 @api.route("/operations", methods=["GET"])
 @with_instance
 @timer
@@ -415,11 +404,11 @@ def get_profiler_data_list(instance: Instance):
     if current_app.config["SERVER_MODE"]:
         session_instances = session.get("instances", [])
         instances = get_instances(session_instances)
-        logger.info("Profiler Data List got session instances: %s", session_instances)
         db_paths = [instance.profiler_path for instance in instances if instance.profiler_path]
-        directory_names = [str(Path(db_path).parent.name) for db_path in db_paths]
-        logger.info("Session profiler paths: %s", session.get("profiler_paths", None))
-        logger.info("Session Foo: %s", session.get("foo", None))
+        db_directory_names = [str(Path(db_path).parent.name) for db_path in db_paths]
+        session_paths = session.get("profiler_paths", [])
+        session_directory_names = [str(Path(session_path).parent.name) for session_path in session_paths]
+        directory_names = list(set(db_directory_names + session_directory_names))
     else:
         directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
 
@@ -492,7 +481,7 @@ def delete_profiler_report(profiler_name, instance: Instance):
 def get_performance_data_list(instance: Instance):
     logger.info("In get_performance_data_list - Session contents: %s", dict(session))
     logger.info("In get_performance_data_list - Session ID: %s", session.sid if hasattr(session, 'sid') else 'No SID')
-    
+
     is_remote = True if instance.remote_connection else False
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     data_directory = Path(current_app.config[config_key])
@@ -505,7 +494,10 @@ def get_performance_data_list(instance: Instance):
         session_instances = session.get("instances", [])
         instances = get_instances(session_instances)
         db_paths = [instance.performance_path for instance in instances if instance.performance_path]
-        directory_names = [str(Path(db_path).name) for db_path in db_paths]
+        db_directory_names = [str(Path(db_path).name) for db_path in db_paths]
+        session_paths = session.get("performance_paths", [])
+        session_directory_names = [str(Path(session_path).parent.name) for session_path in session_paths]
+        directory_names = list(set(db_directory_names + session_directory_names))
     else:
         if is_remote:
             connection = RemoteConnection.model_validate(instance.remote_connection, strict=False)
@@ -701,10 +693,7 @@ def create_profiler_files():
 
     # Set session data
     session["profiler_paths"] = session.get("profiler_paths", []) + [str(profiler_path)]
-    session["foo"] = "bar"
-    session.permanent = True  # Make the session permanent
-
-    logger.info("After session modification - Session contents: %s", dict(session))
+    session.permanent = True
 
     return {
         "path": parent_folder_name,
@@ -759,7 +748,8 @@ def create_performance_files():
         performance_path=performance_path,
     )
 
-    append_to_session_key("performance_paths", str(performance_path))
+    session["performance_paths"] = session.get("performance_paths", []) + [str(performance_path)]
+    session.permanent = True
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
