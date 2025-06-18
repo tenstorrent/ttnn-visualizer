@@ -999,11 +999,13 @@ def use_remote_folder():
     folder = RemoteReportFolder.model_validate(folder, strict=False)
     performance_name = None
     remote_performance_folder = None
+
     if profile:
         remote_performance_folder = RemoteReportFolder.model_validate(profile, strict=False)
         performance_name = remote_performance_folder.reportName
+
     data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-    profiler_name = folder.reportName
+    profiler_name = folder.remotePath.split("/")[-1]
     folder_name = folder.remotePath.split("/")[-1]
 
     connection_directory = Path(data_directory, connection.host, current_app.config["PROFILER_DIRECTORY_NAME"], folder_name)

@@ -13,6 +13,7 @@ import {
     activeProfilerReportAtom,
     operationRangeAtom,
     performanceRangeAtom,
+    reportLocationAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
 import SyncStatus from './SyncStatus';
@@ -21,6 +22,8 @@ import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
 import { useReportFolderList } from '../hooks/useAPI';
 import { ReportFolder } from '../definitions/Reports';
+import useRemoteConnection from '../hooks/useRemote';
+import { RemoteFolder } from '../definitions/RemoteConnection';
 
 const MAX_TITLE_LENGTH = 20;
 
@@ -31,9 +34,12 @@ function FooterInfobar() {
     const performanceRange = useAtomValue(performanceRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const connectionType = useAtomValue(reportLocationAtom);
+    const remote = useRemoteConnection();
 
     const { data: reports } = useReportFolderList();
     const location = useLocation();
+    const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
 
     const isOperationDetails = location.pathname.includes(`${ROUTES.OPERATIONS}/`);
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
@@ -53,7 +59,10 @@ function FooterInfobar() {
         return selectedRange && `Selected: ${selectedRange[0]} - ${selectedRange[1]}`;
     };
 
-    const activeReportName = getReportName(reports, activeProfilerReport);
+    const activeReportName =
+        connectionType === 'remote'
+            ? getRemoteReportName(remoteFolders, activeProfilerReport)
+            : getLocalReportName(reports, activeProfilerReport);
 
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
@@ -129,8 +138,10 @@ const hasRangeSelected = (selectedRange: NumberRange | null, operationRange: Num
         selectedRange[1] === operationRange[1]
     );
 
-const getReportName = (reports: ReportFolder[], path: string | null) => {
-    return reports?.find((report) => report.path === path)?.reportName;
-};
+const getLocalReportName = (reports: ReportFolder[], path: string | null) =>
+    reports?.find((report) => report.path === path)?.reportName;
+
+const getRemoteReportName = (remoteFolders: RemoteFolder[], folderName: string | null) =>
+    folderName ? remoteFolders?.find((report) => report.remotePath.includes(folderName))?.reportName : false;
 
 export default FooterInfobar;
