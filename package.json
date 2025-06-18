@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "VITE_SERVER_MODE=1 vite",
     "build": "vite build",
     "serve": "vite build && FLASK_ENV=production pnpm run flask:start",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
