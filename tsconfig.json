@@ -34,11 +34,13 @@
    },
    "include":[
       "vite.config.ts",
+      "vitest.config.ts",
+      "vitest.setup.ts",
       "src",
       "package.json",
       "tests",
       "scripts"
-   ],
+    ],
    "references":[
       {
          "path":"./tsconfig.node.json"
