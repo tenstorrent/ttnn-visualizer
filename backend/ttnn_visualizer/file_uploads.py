@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+# SPDX-FileCopyrightText: © 2025 Tenstorrent Inc.
 
 import logging
 import os
@@ -83,6 +83,7 @@ def save_uploaded_files(
                 dest_path.parent.mkdir(exist_ok=True, parents=True)
 
             logger.info(f"Saving uploaded file (clean): {dest_path}")
+
             shutil.move(temp_path, dest_path)
             saved_paths.append(dest_path)
     else:

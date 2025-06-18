@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { getDefaultStore } from 'jotai';
 import { AxiosProgressEvent } from 'axios';
@@ -109,7 +109,7 @@ const useLocalConnection = () => {
         }
 
         return axiosInstance
-            .post(`${import.meta.env.VITE_API_ROOT}/local/upload/profiler`, formData, {
+            .post('/api/local/upload/profiler', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
@@ -153,7 +153,7 @@ const useLocalConnection = () => {
         }
 
         return axiosInstance
-            .post(`${import.meta.env.VITE_API_ROOT}/local/upload/performance`, formData, {
+            .post('/api/local/upload/performance', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
@@ -192,7 +192,7 @@ const useLocalConnection = () => {
         });
 
         return axiosInstance
-            .post(`${import.meta.env.VITE_API_ROOT}/local/upload/npe`, formData, {
+            .post('/api/local/upload/npe', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },

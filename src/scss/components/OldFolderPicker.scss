@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
 
@@ -19,6 +19,7 @@
     align-items: stretch;
 
     fieldset {
+        position: relative;
         border: solid 1px $tt-grey-5;
         border-radius: 5px;
         padding: 5px 20px 20px;
@@ -58,6 +59,23 @@
         .bp5-form-group-sub-label {
             color: $tt-grey-7;
         }
+
+        .feature-disabled {
+            position: absolute;
+            inset: -10px;
+            top: -40px;
+            background: rgb(62 62 62 / 90%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 20px;
+
+            .callout {
+                a {
+                    white-space: pre;
+                }
+            }
+        }
     }
 
     legend {
@@ -84,6 +102,10 @@
 
     .remote-folder-status-icon {
         display: contents;
+
+        .status-icon {
+            margin-left: 5px;
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import logging
 import re
@@ -47,7 +47,6 @@ def with_instance(func):
         logger.info("With Instance: Session Instances: %s", session["instances"])
         if instance.instance_id not in session['instances']:
             session['instances'] = session.get('instances', []) + [instance.instance_id]
-
             logger.info("With Instance: Appending, now: %s", session["instances"])
         return func(*args, **kwargs)
 
@@ -120,3 +119,16 @@ def remote_exception_handler(func):
             )
 
     return remote_handler
+
+
+def local_only(f):
+    from flask import current_app
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if current_app.config["SERVER_MODE"]:
+            abort(403, description="Endpoint not accessible")
+
+        return f(*args, **kwargs)
+
+    return decorated_function

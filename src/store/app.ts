@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { atomWithStorage } from 'jotai/utils';
 import { atom } from 'jotai';
@@ -33,7 +33,8 @@ export const operationRangeAtom = atom<NumberRange | null>(null);
 export const selectedOperationRangeAtom = atom<NumberRange | null>(null);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
-export const comparisonPerformanceReportAtom = atom<string | null>(null);
+// TODO: Rename to 'reports' because this is an array now
+export const comparisonPerformanceReportAtom = atom<string[] | null>(null);
 
 export const scrollPositionsAtom = atom<ScrollPositions | null>(null);
 

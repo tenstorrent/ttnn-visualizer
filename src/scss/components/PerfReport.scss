@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/variables' as *;
 @use '../definitions/colours' as colours;
@@ -90,26 +90,12 @@ $group-row-pattern: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%
 
     tbody {
         tr {
-            &.row-pattern {
-                &:nth-child(4n-4),
-                &:nth-child(4n-5) {
-                    background-image: $group-row-pattern;
-                    background-size: 5px 5px;
-                }
-            }
-
             &.comparison-row {
                 border-bottom: 1px solid colours.$tt-sand-accent;
-
-                td {
-                    border-bottom: 0;
-                }
+                background-image: $group-row-pattern;
+                background-size: 5px 5px;
             }
         }
-    }
-
-    .added-data {
-        background-color: colours.$tt-green-shade;
     }
 
     .missing-data {

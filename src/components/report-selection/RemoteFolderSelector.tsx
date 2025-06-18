@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Button, Icon, MenuItem, Spinner, Tooltip } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
@@ -91,7 +91,7 @@ const remoteFolderRenderer =
         const getLabelElement = () => (
             <>
                 <span>{reportName}</span>
-                <span>{!isUsingRemoteQuerying && statusIcon}</span>
+                <span className='status-icon'>{!isUsingRemoteQuerying && statusIcon}</span>
             </>
         );
 
@@ -114,6 +114,7 @@ interface RemoteFolderSelectorProps {
     remoteFolder?: RemoteFolder;
     remoteFolderList?: RemoteFolder[];
     loading?: boolean;
+    disabled?: boolean;
     updatingFolderList?: boolean;
     fallbackLabel?: string;
     icon?: string;
@@ -125,6 +126,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     remoteFolder,
     remoteFolderList = [],
     loading = false,
+    disabled = false,
     updatingFolderList = false,
     onSelectFolder,
     children,
@@ -134,6 +136,8 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
 }) => {
     const { persistentState } = useRemoteConnection();
     const remoteConnection = persistentState.selectedConnection;
+
+    const isDisabled = loading || remoteFolderList?.length === 0 || disabled;
 
     return (
         <div className='buttons-container'>
@@ -150,14 +154,14 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
                         roleStructure='listoption'
                     />
                 }
-                disabled={loading || remoteFolderList?.length === 0}
+                disabled={isDisabled}
                 onItemSelect={onSelectFolder}
             >
                 <Button
                     icon={icon as IconName}
                     endIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
-                    disabled={loading || remoteFolderList?.length === 0}
-                    text={remoteFolder ? remoteFolder.reportName : fallbackLabel}
+                    disabled={isDisabled}
+                    text={remoteFolder ? formatRemoteFolderName(remoteFolder, type, remoteConnection) : fallbackLabel}
                 />
             </Select>
 

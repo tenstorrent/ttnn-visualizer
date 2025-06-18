@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 // @eslint-disable jsx-a11y/mouse-events-have-key-events
 
 import 'highlight.js/styles/a11y-dark.css';
@@ -56,7 +56,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
 
     const showNOCType = (value: NoCType) => {
-        if (nocFilter === undefined) {
+        if (nocFilter === null) {
             setNocFilter(value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0);
         } else if (nocFilter !== value) {
             setNocFilter(null);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -193,6 +193,7 @@ const LocalFolderOptions: FC = () => {
 
         createToastNotification('Active memory report', getReportName(reportFolderList, item.path) ?? '');
         setActiveProfilerReport(item.path);
+        setReportLocation('local');
     };
 
     const handleDeleteProfiler = async (folder: ReportFolder) => {

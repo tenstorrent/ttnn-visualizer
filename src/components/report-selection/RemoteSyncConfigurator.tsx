@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { FC, useState } from 'react';
 
@@ -23,10 +23,13 @@ import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import createToastNotification from '../../functions/createToastNotification';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
+import getServerConfig from '../../functions/getServerConfig';
+import getFolderNameFromPath from '../../definitions/getFolderNameFromPath';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
     const queryClient = useQueryClient();
+    const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
 
     const setReportLocation = useSetAtom(reportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
@@ -42,7 +45,7 @@ const RemoteSyncConfigurator: FC = () => {
     const [isSyncingReportFolder, setIsSyncingReportFolder] = useState(false);
     const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(
         activeProfilerReport
-            ? reportFolderList.find((folder) => folder.reportName?.includes(activeProfilerReport))
+            ? reportFolderList.find((folder) => folder.remotePath?.includes(activeProfilerReport))
             : reportFolderList[0],
     );
 
@@ -119,14 +122,14 @@ const RemoteSyncConfigurator: FC = () => {
 
     const isUsingRemoteQuerying = remote.persistentState.selectedConnection?.useRemoteQuerying;
     const isLoading = isSyncingReportFolder || isSyncingPerformanceFolder;
-    const isDisabled = isFetching || isLoading;
+    const isDisabled = isFetching || isLoading || disableRemoteSync;
 
-    const updateReportSelection = (fileName: string) => {
+    const updateReportSelection = (folder: RemoteFolder) => {
         queryClient.clear();
         setReportLocation('remote');
         setSelectedDevice(DEFAULT_DEVICE_ID);
-        setActiveProfilerReport(fileName);
-        createToastNotification('Active memory report', fileName);
+        setActiveProfilerReport(getFolderNameFromPath(folder.remotePath));
+        createToastNotification('Active memory report', folder.reportName);
     };
 
     const updatePerformanceSelection = (fileName: string) => {
@@ -259,6 +262,7 @@ const RemoteSyncConfigurator: FC = () => {
                     remoteFolderList={reportFolderList}
                     loading={isLoading || isFetching}
                     updatingFolderList={isFetching}
+                    disabled={isDisabled}
                     onSelectFolder={async (folder) => {
                         setSelectedReportFolder(folder);
 
@@ -273,7 +277,7 @@ const RemoteSyncConfigurator: FC = () => {
                             );
 
                             if (response.status === 200) {
-                                updateReportSelection(folder.reportName);
+                                updateReportSelection(folder);
                             }
                         }
                     }}
@@ -332,10 +336,9 @@ const RemoteSyncConfigurator: FC = () => {
                                             );
 
                                             if (response.status === 200) {
-                                                const reportFileName = selectedReportFolder.reportName;
                                                 const performanceFileName = selectedPerformanceFolder?.reportName;
 
-                                                updateReportSelection(reportFileName);
+                                                updateReportSelection(selectedReportFolder);
 
                                                 if (performanceFileName) {
                                                     updatePerformanceSelection(performanceFileName);
@@ -361,6 +364,7 @@ const RemoteSyncConfigurator: FC = () => {
                         remoteFolderList={remotePerformanceFolderList}
                         loading={isLoading || isFetching}
                         updatingFolderList={isFetching}
+                        disabled={isDisabled}
                         onSelectFolder={async (folder) => {
                             setSelectedPerformanceFolder(folder);
 
@@ -375,7 +379,7 @@ const RemoteSyncConfigurator: FC = () => {
                                 );
 
                                 if (response.status === 200) {
-                                    const fileName = folder.reportName;
+                                    const fileName = folder.remotePath;
 
                                     updatePerformanceSelection(fileName);
                                 }
