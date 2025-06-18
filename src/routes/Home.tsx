@@ -44,7 +44,10 @@ function Home() {
                     </div>
 
                     {disableRemoteSync ? (
-                        <div className='feature-disabled'>
+                        <div
+                            className='feature-disabled'
+                            data-testid='remote-sync-disabled'
+                        >
                             <Callout
                                 className='callout'
                                 title='Feature unavailable'
