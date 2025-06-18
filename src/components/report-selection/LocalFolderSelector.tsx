@@ -193,6 +193,7 @@ const LocalFolderOptions: FC = () => {
 
         createToastNotification('Active memory report', getReportName(reportFolderList, item.path) ?? '');
         setActiveProfilerReport(item.path);
+        setReportLocation('local');
     };
 
     const handleDeleteProfiler = async (folder: ReportFolder) => {
