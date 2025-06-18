@@ -44,10 +44,9 @@ def with_instance(func):
         if 'instances' not in session:
             session['instances'] = []
 
-        logger.info("With Instance: Session Instances: %s", session["instances"])
         if instance.instance_id not in session['instances']:
             session['instances'] = session.get('instances', []) + [instance.instance_id]
-            logger.info("With Instance: Appending, now: %s", session["instances"])
+
         return func(*args, **kwargs)
 
     return wrapper
