@@ -56,7 +56,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
 
     const links = useMemo(() => {
         return npeData.timestep_data[selectedTimestep];
-    }, [npeData, selectedTimestep]);
+    }, [npeData.timestep_data, selectedTimestep]);
 
     const transfers = useMemo(() => {
         return npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));

@@ -29,13 +29,7 @@ export const useShowActiveTransfers = ({
     return useCallback(
         (linkUtilizationData: LinkUtilization | null, index?: number) => {
             hideAllTransfers();
-            if (linkUtilizationData === null) {
-                setSelectedTransferList([]);
-                setSelectedNode(null);
-                return;
-            }
-
-            if (selectedNode?.index === index) {
+            if (linkUtilizationData === null || selectedNode?.index === index) {
                 setSelectedNode(null);
                 setSelectedTransferList([]);
                 return;
