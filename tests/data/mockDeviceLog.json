@@ -1,0 +1,161 @@
+{
+   "deviceMeta":{
+      "architecture":"wormhole_b0",
+      "frequency":1000
+   },
+   "deviceLog":{
+      "data":[
+         {
+            "PCIe slot":"0",
+            "core_x":"18",
+            "core_y":"18",
+            "RISC processor type":"BRISC",
+            "timer_id":"51633",
+            "time[cycles since reset]":"1737026780979",
+            "data":"0",
+            "run ID":"0",
+            "run host ID":"781",
+            "zone name":"BRISC-FW",
+            "type":"ZONE_START",
+            "source line":"435",
+            "source file":"/home/ttuser/mbahnas/METAL/main_0214/tt-metal/tt_metal/hw/firmware/src/brisc.cc"
+         },
+         {
+            "PCIe slot":"0",
+            "core_x":"18",
+            "core_y":"18",
+            "RISC processor type":"BRISC",
+            "timer_id":"51633",
+            "time[cycles since reset]":"1737026821746",
+            "data":"0",
+            "run ID":"0",
+            "run host ID":"781",
+            "zone name":"BRISC-FW",
+            "type":"ZONE_END",
+            "source line":"435",
+            "source file":"/home/ttuser/mbahnas/METAL/main_0214/tt-metal/tt_metal/hw/firmware/src/brisc.cc"
+         },
+         {
+            "PCIe slot":"0",
+            "core_x":"18",
+            "core_y":"18",
+            "RISC processor type":"BRISC",
+            "timer_id":"67",
+            "time[cycles since reset]":"1737026782009",
+            "data":"0",
+            "run ID":"0",
+            "run host ID":"781",
+            "zone name":"BRISC-KERNEL",
+            "type":"ZONE_START",
+            "source line":"45",
+            "source file":"/home/ttuser/mbahnas/METAL/main_0214/tt-metal/tt_metal/hw/firmware/src/brisck.cc"
+         },
+         {
+            "PCIe slot":"0",
+            "core_x":"18",
+            "core_y":"18",
+            "RISC processor type":"BRISC",
+            "timer_id":"67",
+            "time[cycles since reset]":"1737026786849",
+            "data":"0",
+            "run ID":"0",
+            "run host ID":"781",
+            "zone name":"BRISC-KERNEL",
+            "type":"ZONE_END",
+            "source line":"45",
+            "source file":"/home/ttuser/mbahnas/METAL/main_0214/tt-metal/tt_metal/hw/firmware/src/brisck.cc"
+         },
+         {
+            "PCIe slot":"0",
+            "core_x":"18",
+            "core_y":"18",
+            "RISC processor type":"BRISC",
+            "timer_id":"51633",
+            "time[cycles since reset]":"1737333085247",
+            "data":"0",
+            "run ID":"1",
+            "run host ID":"782",
+            "zone name":"BRISC-FW",
+            "type":"ZONE_START",
+            "source line":"435",
+            "source file":"/home/ttuser/mbahnas/METAL/main_0214/tt-metal/tt_metal/hw/firmware/src/brisc.cc"
+         },
+         {
+            "PCIe slot":"0",
+            "core_x":"18",
+            "core_y":"18",
+            "RISC processor type":"BRISC",
+            "timer_id":"51633",
+            "time[cycles since reset]":"1737333092908",
+            "data":"0",
+            "run ID":"1",
+            "run host ID":"782",
+            "zone name":"BRISC-FW",
+            "type":"ZONE_END",
+            "source line":"435",
+            "source file":"/home/ttuser/mbahnas/METAL/main_0214/tt-metal/tt_metal/hw/firmware/src/brisc.cc"
+         },
+         {
+            "PCIe slot":"0",
+            "core_x":"18",
+            "core_y":"18",
+            "RISC processor type":"BRISC",
+            "timer_id":"51633",
+            "time[cycles since reset]":"1737947893287",
+            "data":"0",
+            "run ID":"2",
+            "run host ID":"783",
+            "zone name":"BRISC-FW",
+            "type":"ZONE_START",
+            "source line":"435",
+            "source file":"/home/ttuser/mbahnas/METAL/main_0214/tt-metal/tt_metal/hw/firmware/src/brisc.cc"
+         },
+         {
+            "PCIe slot":"0",
+            "core_x":"18",
+            "core_y":"18",
+            "RISC processor type":"BRISC",
+            "timer_id":"51633",
+            "time[cycles since reset]":"1737947942424",
+            "data":"0",
+            "run ID":"2",
+            "run host ID":"783",
+            "zone name":"BRISC-FW",
+            "type":"ZONE_END",
+            "source line":"435",
+            "source file":"/home/ttuser/mbahnas/METAL/main_0214/tt-metal/tt_metal/hw/firmware/src/brisc.cc"
+         }
+      ],
+      "errors":[
+         {
+            "type":"FieldMismatch",
+            "code":"TooFewFields",
+            "message":"Too few fields: expected 13 fields but parsed 1",
+            "row":240672
+         }
+      ],
+      "meta":{
+         "delimiter":",",
+         "linebreak":"\n",
+         "aborted":false,
+         "truncated":false,
+         "cursor":36094381,
+         "renamedHeaders":null,
+         "fields":[
+            "PCIe slot",
+            "core_x",
+            "core_y",
+            "RISC processor type",
+            "timer_id",
+            "time[cycles since reset]",
+            "data",
+            "run ID",
+            "run host ID",
+            "zone name",
+            "type",
+            "source line",
+            "source file"
+         ]
+      }
+   }
+}
