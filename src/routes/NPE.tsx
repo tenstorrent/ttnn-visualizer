@@ -3,11 +3,10 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 /* eslint-disable no-nested-ternary */
-// Temporary solution for now
-import React from 'react';
+import React, { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-
 import { useAtomValue } from 'jotai';
+import { Button } from '@blueprintjs/core';
 import NPEFileLoader from '../components/npe/NPEFileLoader';
 import NPEView from '../components/npe/NPEViewComponent';
 import { useNpe } from '../hooks/useAPI';
@@ -15,6 +14,9 @@ import { activeNpeOpTraceAtom } from '../store/app';
 import { NPEData } from '../model/NPEModel';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { semverParse } from '../functions/semverParse';
+import npeDemoDataSinglechip from '../assets/data/npe-demo-single.json';
+import npeDemoDataMultichip from '../assets/data/npe-demo-multi.json';
+import getServerConfig from '../functions/getServerConfig';
 
 const NPE_DATA_VERSION = '1.0.0';
 
@@ -30,8 +32,19 @@ const NPE_REPO_URL = (
 
 const NPE: React.FC = () => {
     const npeFileName = useAtomValue(activeNpeOpTraceAtom);
-    const { data: npeData, isLoading } = useNpe(npeFileName);
+    const { data: loadedData, isLoading } = useNpe(npeFileName);
+    const [demoData, setDemoData] = useState<NPEData | null>(null);
 
+    const loadNPEDemoReport = (type: 'singleChip' | 'multichip') => {
+        const data: NPEData =
+            type === 'multichip'
+                ? (npeDemoDataMultichip as unknown as NPEData)
+                : (npeDemoDataSinglechip as unknown as NPEData);
+        setDemoData(data);
+    };
+
+    const npeData = demoData || loadedData;
+    const isDemoEnabled = getServerConfig()?.SERVER_MODE;
     return (
         <>
             <Helmet title='NPE' />
@@ -69,6 +82,25 @@ const NPE: React.FC = () => {
                 <>
                     <p>Please upload a NPE file for analysis.</p>
                     <p>See {NPE_REPO_URL} for details on how to generate NPE files.</p>
+                    {isDemoEnabled && (
+                        <>
+                            <Button
+                                onClick={() => {
+                                    loadNPEDemoReport('singleChip');
+                                }}
+                            >
+                                NPE single chip demo
+                            </Button>
+                            <br />
+                            <Button
+                                onClick={() => {
+                                    loadNPEDemoReport('multichip');
+                                }}
+                            >
+                                NPE multichip demo
+                            </Button>
+                        </>
+                    )}
                 </>
             )}
         </>
