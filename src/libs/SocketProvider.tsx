@@ -11,20 +11,16 @@ import { fileTransferProgressAtom } from '../store/app';
 import { FileProgress, FileStatus } from '../model/APIData';
 import getServerConfig from '../functions/getServerConfig';
 
-// Define the type for the socket
 type SocketContextType = Socket | null;
 
 const { BASE_PATH } = getServerConfig();
 
-// Initialize the socket connection (replace with your backend URL)
 const socket = io(`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}`);
 
-// Create the SocketContext with a default value of `null`
 const SocketContext = createContext<SocketContextType>(null);
 
-// TypeScript interface for the provider props
 interface SocketProviderProps {
-    children: ReactNode; // React children components
+    children: ReactNode;
 }
 
 export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
@@ -32,7 +28,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     const instanceId = getOrCreateInstanceId();
 
     useEffect(() => {
-        // Debugging: Listen for connection and disconnection events
         socket.on('connect', () => {
             setFileTransferProgress((previous: FileProgress) => ({ ...previous, status: FileStatus.INACTIVE }));
 
@@ -51,7 +46,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
             console.log(`Socket reconnected after ${attemptNumber} attempts`);
         });
 
-        // Handle file transfer progress from the socket
         socket.on('fileTransferProgress', (data) => {
             if (data.instanceId === instanceId) {
                 setFileTransferProgress({
@@ -70,7 +64,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         // })
 
         return () => {
-            // Cleanup socket listeners on unmount
             // socket.offAny();
             socket.off('connect');
             socket.off('disconnect');
