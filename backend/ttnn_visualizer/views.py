@@ -496,7 +496,7 @@ def get_performance_data_list(instance: Instance):
         db_paths = [instance.performance_path for instance in instances if instance.performance_path]
         db_directory_names = [str(Path(db_path).name) for db_path in db_paths]
         session_paths = session.get("performance_paths", [])
-        session_directory_names = [str(Path(session_path).parent.name) for session_path in session_paths]
+        session_directory_names = [str(Path(session_path).name) for session_path in session_paths]
         directory_names = list(set(db_directory_names + session_directory_names))
     else:
         if is_remote:
@@ -781,7 +781,8 @@ def create_npe_files():
     npe_path = str(paths[0])
     update_instance(instance_id=instance_id, npe_name=npe_name, clear_remote=True, npe_path=npe_path)
 
-    append_to_session_key("npe_paths", str(npe_path))
+    session["npe_paths"] = session.get("npe_paths", []) + [str(npe_path)]
+    session.permanent = True
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success"
