@@ -5,14 +5,12 @@
 import { cleanup, render } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { Mock, afterEach, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router';
 import { activePerformanceReportAtom, activeProfilerReportAtom } from '../src/store/app';
-import { AtomProvider } from './helpers/atomProvider';
-import { QueryProvider } from './helpers/queryClientProvider';
 import { useGetClusterDescription } from '../src/hooks/useAPI';
 import clusterDescription from './data/clusterDescription.json';
 import MainNavigation from '../src/components/MainNavigation';
 import getButtonWithText from './helpers/getButtonWithText';
+import { TestProviders } from './helpers/TestProviders';
 
 // Scrub the markup after each test
 afterEach(cleanup);
@@ -27,13 +25,9 @@ it('Main Navigation disables specific options by default', () => {
     (useGetClusterDescription as Mock).mockReturnValue({ data: null });
 
     render(
-        <QueryProvider>
-            <MemoryRouter>
-                <AtomProvider initialValues={[[activeProfilerReportAtom, null]]}>
-                    <MainNavigation />
-                </AtomProvider>
-            </MemoryRouter>
-        </QueryProvider>,
+        <TestProviders initialAtomValues={[[activeProfilerReportAtom, 'test']]}>
+            <MainNavigation />
+        </TestProviders>,
     );
 
     expect(getButtonWithText('reports')).toBeEnabled();
@@ -50,13 +44,9 @@ it('Main Navigation enables specific options when there is an active memory repo
     (useGetClusterDescription as Mock).mockReturnValue({ data: clusterDescription });
 
     render(
-        <QueryProvider>
-            <MemoryRouter>
-                <AtomProvider initialValues={[[activeProfilerReportAtom, 'test']]}>
-                    <MainNavigation />
-                </AtomProvider>
-            </MemoryRouter>
-        </QueryProvider>,
+        <TestProviders initialAtomValues={[[activeProfilerReportAtom, 'test']]}>
+            <MainNavigation />
+        </TestProviders>,
     );
 
     expect(getButtonWithText('reports')).toBeEnabled();
@@ -73,13 +63,9 @@ it('Main Navigation enables specific options when there is an active performance
     (useGetClusterDescription as Mock).mockReturnValue({ data: null });
 
     render(
-        <QueryProvider>
-            <MemoryRouter>
-                <AtomProvider initialValues={[[activePerformanceReportAtom, 'test']]}>
-                    <MainNavigation />
-                </AtomProvider>
-            </MemoryRouter>
-        </QueryProvider>,
+        <TestProviders initialAtomValues={[[activePerformanceReportAtom, 'test']]}>
+            <MainNavigation />
+        </TestProviders>,
     );
 
     expect(getButtonWithText('reports')).toBeEnabled();
