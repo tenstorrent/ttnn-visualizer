@@ -9,12 +9,15 @@ import { useAtom } from 'jotai';
 import { getOrCreateInstanceId } from './axiosInstance';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileProgress, FileStatus } from '../model/APIData';
+import getServerConfig from '../functions/getServerConfig';
 
 // Define the type for the socket
 type SocketContextType = Socket | null;
 
+const { BASE_PATH } = getServerConfig();
+
 // Initialize the socket connection (replace with your backend URL)
-const socket = io(`http://localhost:8000?instanceId=${getOrCreateInstanceId()}`);
+const socket = io(`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}`);
 
 // Create the SocketContext with a default value of `null`
 const SocketContext = createContext<SocketContextType>(null);
