@@ -10,7 +10,7 @@ import { Button, ButtonGroup, Intent, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
-import { LinkUtilization, NPEData, NPE_COORDINATES, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
+import { NPEData, NPE_COORDINATES, NPE_LINK, NoCTransfer, NoCType } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import { NODE_SIZE, calculateLinkCongestionColor, getLines, getLinkPoints, resetRouteColors } from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
@@ -21,6 +21,7 @@ import { CLUSTER_COORDS } from '../../model/ClusterModel';
 import NPEMetadata from './NPEMetadata';
 import { EmptyChipRenderer } from './EmptyChipRenderer';
 import { RouteOriginsRenderer } from './RouteOriginsRenderer';
+import { useSelectedTransferGrouping, useShowActiveTransfers } from './useNPEHandlers';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -36,8 +37,6 @@ const PLAYBACK_SPEED_2X = 2;
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [selectedTimestep, setSelectedTimestep] = useState<number>(0);
-    const links = npeData.timestep_data[selectedTimestep];
-    const transfers = npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));
     const [animationInterval, setAnimationInterval] = useState<number | null>(null);
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
@@ -54,6 +53,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
+
+    const links = useMemo(() => {
+        return npeData.timestep_data[selectedTimestep];
+    }, [npeData.timestep_data, selectedTimestep]);
+
+    const transfers = useMemo(() => {
+        return npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));
+    }, [npeData.noc_transfers, links]);
 
     const showNOCType = (value: NoCType) => {
         if (nocFilter === null) {
@@ -93,54 +100,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [npeData]);
 
-    const transferListSelectionRendering = useMemo(() => {
-        const selectedNoCByDevice: Map<number, Array<Array<Array<{ transfer: number; nocId: NoCID }>>>> = new Map<
-            number,
-            Array<Array<Array<{ transfer: number; nocId: NoCID }>>>
-        >();
-        selectedTransferList.forEach((transfer) => {
-            transfer.route.forEach((route) => {
-                route.links.forEach((link) => {
-                    const [deviceId, row, col] = link;
-                    const list = selectedNoCByDevice.get(deviceId) || [];
-
-                    list[row] = list[row] || [];
-                    list[row][col] = list[row][col] || [];
-                    list[row][col].push({
-                        transfer: transfer.id,
-                        nocId: link[NPE_LINK.NOC_ID],
-                    });
-                    selectedNoCByDevice.set(deviceId, list);
-                });
-            });
-        });
-        return selectedNoCByDevice;
-    }, [selectedTransferList]);
-
-    const groupedTransfersByNoCID = useMemo<Record<NoCID, NoCTransfer[]>>(() => {
-        if (!selectedNode?.coords) {
-            return {} as Record<NoCID, NoCTransfer[]>;
-        }
-
-        const [targetDeviceID, targetRow, targetCol] = selectedNode.coords;
-        const groups: Record<NoCID, NoCTransfer[]> = {} as Record<NoCID, NoCTransfer[]>;
-
-        selectedTransferList.forEach((transfer) => {
-            transfer.route.forEach((route) => {
-                route.links.forEach((link) => {
-                    const [deviceId, row, col] = link;
-                    if (targetRow === row && targetCol === col && targetDeviceID === deviceId) {
-                        const nocId = link[NPE_LINK.NOC_ID];
-                        if (!groups[nocId]) {
-                            groups[nocId] = [];
-                        }
-                        groups[nocId].push(transfer);
-                    }
-                });
-            });
-        });
-        return groups;
-    }, [selectedTransferList, selectedNode]);
+    const { transferListSelectionRendering, groupedTransfersByNoCID } = useSelectedTransferGrouping(
+        selectedTransferList,
+        selectedNode,
+    );
 
     const startAnimation = (speed: number = PLAYBACK_SPEED) => {
         setPlaybackSpeed(speed);
@@ -152,7 +115,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 return prev < range - 1 ? prev + 1 : 0;
             });
         }, 100 / speed);
-        setAnimationInterval(interval as unknown as number);
+        setAnimationInterval(Number(interval));
     };
     const stopAnimation = () => {
         setPlaybackSpeed(0);
@@ -192,65 +155,22 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedNode(null);
         setSelectedTransferList([]);
     };
-    const showActiveTransfers = (linkUtilizationData: LinkUtilization | null, index?: number) => {
-        hideAllTransfers();
-        if (linkUtilizationData === null) {
-            setSelectedTransferList([]);
-            setSelectedNode(null);
-            return;
-        }
-        if (selectedNode?.index === index) {
-            setSelectedNode(null);
-            setSelectedTransferList([]);
-            return;
-        }
-        if (index !== undefined) {
-            setSelectedNode({
-                index,
-                coords: [
-                    linkUtilizationData[NPE_LINK.CHIP_ID],
-                    linkUtilizationData[NPE_LINK.Y],
-                    linkUtilizationData[NPE_LINK.X],
-                ],
-            });
-        }
-
-        onPause();
-
-        const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
-            .map((transferId) => {
-                const transfer = npeData.noc_transfers.find((tr) => tr.id === transferId);
-
-                const routes = transfer?.route
-                    ?.map((r) => {
-                        if (
-                            r.links.some(
-                                (link) =>
-                                    link[NPE_LINK.Y] === linkUtilizationData[NPE_LINK.Y] &&
-                                    link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X] &&
-                                    (nocFilter === null || link[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0),
-                            )
-                        ) {
-                            return r;
-                        }
-                        return null;
-                    })
-                    .filter((r) => r !== null);
-
-                if (routes && routes.length > 0) {
-                    return transfer;
-                }
-                return undefined;
-            })
-            .filter((tr) => tr !== undefined);
-
-        setSelectedTransferList(activeTransfers as NoCTransfer[]);
-    };
 
     const hideAllTransfers = () => {
         setIsShowingAllTransfers(false);
         setSelectedTransferList([]);
     };
+
+    const showActiveTransfers = useShowActiveTransfers({
+        npeData,
+        selectedNode,
+        selectedTimestep,
+        nocFilter,
+        onPause,
+        hideAllTransfers,
+        setSelectedNode,
+        setSelectedTransferList,
+    });
 
     const showAllTransfers = () => {
         setIsShowingAllTransfers(true);
@@ -388,6 +308,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         return (
                             <div
                                 className='chip'
+                                key={`chip-${clusterChip.id}`}
                                 style={{
                                     gridColumn: clusterChip.coords[CLUSTER_COORDS.X] + 1,
                                     gridRow: clusterChip.coords[CLUSTER_COORDS.Y] + 1,

@@ -14,6 +14,14 @@ interface ServerConfig {
 }
 
 const getServerConfig = (): ServerConfig => {
+    // Dev mode configuration
+    if (import.meta.env.DEV) {
+        return {
+            BASE_PATH: '/',
+            SERVER_MODE: !!import.meta.env.VITE_SERVER_MODE || false,
+        };
+    }
+
     return {
         BASE_PATH: window?.TTNN_VISUALIZER_CONFIG?.BASE_PATH || '/',
         SERVER_MODE: window?.TTNN_VISUALIZER_CONFIG?.SERVER_MODE || false,

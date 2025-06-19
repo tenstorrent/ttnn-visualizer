@@ -51,18 +51,18 @@ const NPE: React.FC = () => {
                             Invalid NPE data or version. Current supported version is {NPE_DATA_VERSION} got&nbsp;
                             {npeData.common_info.version || 'null'};
                         </p>
+
+                        {/* TODO: Reorganise this so we're not duplicating matchNpeDataVersion */}
                         <p>
                             Use {NPE_REPO_URL} to generate new NPE dataset
                             {matchNpeDataVersion(npeData.common_info.version) ? (
-                                <>
-                                    {' '}
-                                    or install an older version of the visualizer{' '}
-                                    <pre>
-                                        pip install ttnn-visualizer=={matchNpeDataVersion(npeData.common_info.version)}
-                                    </pre>
-                                </>
+                                <> or install an older version of the visualizer </>
                             ) : null}
                         </p>
+
+                        {matchNpeDataVersion(npeData.common_info.version) ? (
+                            <pre>pip install ttnn-visualizer=={matchNpeDataVersion(npeData.common_info.version)}</pre>
+                        ) : null}
                     </>
                 )
             ) : (

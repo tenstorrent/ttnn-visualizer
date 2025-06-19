@@ -26,6 +26,7 @@ const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({ folderLis
             className='form-group'
             label={label}
             subLabel={subLabel}
+            data-testid='comparison-report-selector'
         >
             <div className='folder-selection'>
                 <LocalFolderPicker
