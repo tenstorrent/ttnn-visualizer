@@ -11,7 +11,7 @@ python-dotenv==1.0.1
 flask-sqlalchemy
 flask-socketio
 gevent==24.10.2
-flask-session
+flask-session==0.8.0
 pandas==2.2.3
 wheel
 build
