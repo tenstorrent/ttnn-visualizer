@@ -155,11 +155,13 @@ def scan_uploaded_files(
 
 
 def construct_dest_path(file, target_directory, folder_name):
+    prefix = f"{int(time.time())}_" if current_app.config["SERVER_MODE"] else ""
+
     if folder_name:
-        prefixed_folder_name = f"{int(time.time())}_{folder_name}"
+        prefixed_folder_name = f"{prefix}{folder_name}"
         dest_path = Path(target_directory) / prefixed_folder_name / str(file.filename)
     else:
-        prefixed_filename = f"{int(time.time())}_{file.filename}"
+        prefixed_filename = f"{prefix}{file.filename}"
         dest_path = Path(target_directory) / prefixed_filename
 
     return dest_path
