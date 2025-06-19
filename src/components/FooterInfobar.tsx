@@ -37,8 +37,6 @@ function FooterInfobar() {
     const connectionType = useAtomValue(reportLocationAtom);
     const remote = useRemoteConnection();
 
-    console.log('activeProfilerReport', activeProfilerReport);
-
     const { data: reports } = useReportFolderList();
     const location = useLocation();
     const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
@@ -77,12 +75,7 @@ function FooterInfobar() {
                         >
                             <div className='title'>
                                 <strong>Report:</strong>
-                                <span
-                                    className='report-name'
-                                    data-testid='infobar-profiler-name'
-                                >
-                                    {activeReportName}
-                                </span>
+                                <span className='report-name'>{activeReportName}</span>
                             </div>
                         </Tooltip>
                     )}
@@ -95,12 +88,7 @@ function FooterInfobar() {
                             >
                                 <div className='title'>
                                     <strong>Performance:</strong>
-                                    <span
-                                        className='report-name'
-                                        data-testid='infobar-performance-name'
-                                    >
-                                        {activePerformanceReport}
-                                    </span>
+                                    <span className='report-name'>{activePerformanceReport}</span>
                                 </div>
                             </Tooltip>
                         ) : (
