@@ -25,7 +25,7 @@ it('Main Navigation disables specific options by default', () => {
     (useGetClusterDescription as Mock).mockReturnValue({ data: null });
 
     render(
-        <TestProviders initialAtomValues={[[activeProfilerReportAtom, 'test']]}>
+        <TestProviders initialAtomValues={[[activeProfilerReportAtom, null]]}>
             <MainNavigation />
         </TestProviders>,
     );
