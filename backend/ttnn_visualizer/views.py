@@ -646,8 +646,6 @@ def create_profiler_files():
     folder_name = request.form.get("folderName") # Optional folder name - Used for Safari compatibility
     profiler_directory = current_app.config["LOCAL_DATA_DIRECTORY"] / current_app.config["PROFILER_DIRECTORY_NAME"]
 
-    logger.info("Before session modification - Session contents: %s", dict(session))
-
     if not validate_files(files, {"db.sqlite", "config.json"}, folder_name=folder_name):
         return StatusMessage(
             status=ConnectionTestStates.FAILED,
