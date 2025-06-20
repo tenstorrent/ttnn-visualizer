@@ -600,13 +600,10 @@ def get_performance_results_report(instance: Instance):
 
     name = request.args.get("name", None)
 
-    if name:
-        if current_app.config["SERVER_MODE"]:
-            return Response(status=HTTPStatus.FORBIDDEN)
-        else:
-            performance_path = Path(instance.performance_path).parent / name
-            instance.performance_path = str(performance_path)
-            logger.info(f"************ Performance path set to {instance.performance_path}")
+    if name and not current_app.config["SERVER_MODE"]:
+        performance_path = Path(instance.performance_path).parent / name
+        instance.performance_path = str(performance_path)
+        logger.info(f"************ Performance path set to {instance.performance_path}")
 
     try:
         report = OpsPerformanceReportQueries.generate_report(instance)
