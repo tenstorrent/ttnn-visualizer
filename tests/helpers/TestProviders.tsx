@@ -6,6 +6,7 @@ import React from 'react';
 import { MemoryRouter } from 'react-router';
 import { HelmetProvider } from 'react-helmet-async';
 import { PrimitiveAtom } from 'jotai';
+import { ToastContainer } from 'react-toastify';
 import { QueryProvider } from './queryClientProvider';
 import { AtomProvider } from './atomProvider';
 
@@ -19,7 +20,20 @@ export function TestProviders({ initialAtomValues = [], children }: TestProvider
         <QueryProvider>
             <MemoryRouter>
                 <HelmetProvider>
-                    <AtomProvider initialValues={initialAtomValues}>{children}</AtomProvider>
+                    <AtomProvider initialValues={initialAtomValues}>
+                        <>
+                            {/* TODO: Look how Layout is used in app so we don't have to specifically add ToastContainer here */}
+                            {children}
+                            <ToastContainer
+                                position='top-right'
+                                autoClose={false}
+                                newestOnTop={false}
+                                closeOnClick
+                                closeButton={false}
+                                theme='light'
+                            />
+                        </>
+                    </AtomProvider>
                 </HelmetProvider>
             </MemoryRouter>
         </QueryProvider>
