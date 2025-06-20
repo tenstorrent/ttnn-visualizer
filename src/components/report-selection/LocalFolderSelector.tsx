@@ -256,6 +256,7 @@ const LocalFolderOptions: FC = () => {
                     >
                         <input
                             id='local-upload'
+                            data-testid='local-profiler-upload'
                             type='file'
                             multiple
                             /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
@@ -311,6 +312,7 @@ const LocalFolderOptions: FC = () => {
                     >
                         <input
                             id='local-performance-upload'
+                            data-testid='local-performance-upload'
                             type='file'
                             multiple
                             /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
