@@ -479,9 +479,6 @@ def delete_profiler_report(profiler_name, instance: Instance):
 @api.route("/performance", methods=["GET"])
 @with_instance
 def get_performance_data_list(instance: Instance):
-    logger.info("In get_performance_data_list - Session contents: %s", dict(session))
-    logger.info("In get_performance_data_list - Session ID: %s", session.sid if hasattr(session, 'sid') else 'No SID')
-
     is_remote = True if instance.remote_connection else False
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     data_directory = Path(current_app.config[config_key])
