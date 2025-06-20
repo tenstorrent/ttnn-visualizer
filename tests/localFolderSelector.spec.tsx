@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
