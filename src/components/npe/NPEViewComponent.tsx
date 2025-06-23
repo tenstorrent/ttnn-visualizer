@@ -325,6 +325,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     showActiveTransfers={showActiveTransfers}
                                     isAnnotatingCores={isAnnotatingCores}
                                     TENSIX_SIZE={TENSIX_SIZE}
+                                    renderChipId={chips.length > 1}
                                 />
                                 <div
                                     className='tensix-grid congestion'
