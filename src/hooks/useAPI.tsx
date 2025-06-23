@@ -891,6 +891,7 @@ export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';
 
 const fetchReportFolderList = async () => {
     const { data } = await axiosInstance.get('/api/profiler');
+
     return data;
 };
 
@@ -912,6 +913,7 @@ export const PERFORMANCE_FOLDER_QUERY_KEY = 'fetch-performance-folder-list';
 
 const fetchPerfFolderList = async () => {
     const { data } = await axiosInstance.get('/api/performance');
+
     return data;
 };
 

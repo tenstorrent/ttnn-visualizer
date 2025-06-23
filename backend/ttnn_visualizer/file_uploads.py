@@ -9,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from flask import current_app
@@ -69,9 +70,11 @@ def save_uploaded_files(
     Save uploaded files to the target directory.
 
     :param files: List of files to be saved.
-    :param target_directory: The base directory for saving the files.
-    :param folder_name: The name to use for the directory.
+    :param base_directory: The base directory for saving the files.
+    :param parent_folder_name: The name to use for the directory.
     """
+    saved_paths = []
+
     if current_app.config["MALWARE_SCANNER"]:
         scanned_files = scan_uploaded_files(files, base_directory, parent_folder_name)
 
@@ -82,6 +85,7 @@ def save_uploaded_files(
             logger.info(f"Saving uploaded file (clean): {dest_path}")
 
             shutil.move(temp_path, dest_path)
+            saved_paths.append(dest_path)
     else:
         for file in files:
             dest_path = construct_dest_path(file, base_directory, parent_folder_name)
@@ -96,17 +100,22 @@ def save_uploaded_files(
 
             logger.info(f"Saving uploaded file: {dest_path}")
             file.save(dest_path)
+            saved_paths.append(dest_path)
 
-            # Update the modified time of the parent directory (for sorting purposes)
-            os.utime(dest_path.parent, None)
+    for saved_path in saved_paths:
+        # Update the modified time of the parent directory (for sorting purposes)
+        os.utime(saved_path.parent, None)
 
     # Update the modified time of the uploaded directory
     if parent_folder_name:
         uploaded_dir = Path(base_directory) / parent_folder_name
     else:
         uploaded_dir = Path(base_directory)
+
     if uploaded_dir.exists():
         os.utime(uploaded_dir, None)
+
+    return saved_paths
 
 
 def scan_uploaded_files(
@@ -146,9 +155,13 @@ def scan_uploaded_files(
 
 
 def construct_dest_path(file, target_directory, folder_name):
+    prefix = f"{int(time.time())}_" if current_app.config["SERVER_MODE"] else ""
+
     if folder_name:
-        dest_path = Path(target_directory) / folder_name / str(file.filename)
+        prefixed_folder_name = f"{prefix}{folder_name}"
+        dest_path = Path(target_directory) / prefixed_folder_name / str(file.filename)
     else:
-        dest_path = Path(target_directory) / str(file.filename)
+        prefixed_filename = f"{prefix}{file.filename}"
+        dest_path = Path(target_directory) / prefixed_filename
 
     return dest_path
