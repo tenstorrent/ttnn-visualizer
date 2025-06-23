@@ -16,6 +16,7 @@ export const reportLocationAtom = atom<ReportLocation>(null);
 export const activeProfilerReportAtom = atom<string | null>(null);
 export const activePerformanceReportAtom = atom<string | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
+export const hasClusterDescriptionAtom = atom<boolean>(false);
 export const showHexAtom = atomWithStorage<boolean>('showHex', false);
 export const showMemoryRegionsAtom = atomWithStorage<boolean>('showMemoryRegions', true);
 export const selectedBufferSummaryTabAtom = atomWithStorage<TAB_IDS>('selectedBufferSummaryTab', TAB_IDS.L1);

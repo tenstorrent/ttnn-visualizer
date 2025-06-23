@@ -9,14 +9,14 @@ import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router-dom';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/MainNavigation.scss';
-import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
-import { useGetClusterDescription } from '../hooks/useAPI';
+import { activePerformanceReportAtom, activeProfilerReportAtom, hasClusterDescriptionAtom } from '../store/app';
 
 function MainNavigation() {
     const navigate = useNavigate();
     const location = useLocation();
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const hasClusterDescription = useAtomValue(hasClusterDescriptionAtom);
 
     const handleNavigate = (path: string) => {
         navigate(path);
@@ -26,10 +26,9 @@ function MainNavigation() {
         navigate(path, { state: { background: location } });
     };
 
-    const clusterData = useGetClusterDescription();
-
     const hasActiveProfiler = !!activeProfilerReport;
     const hasActivePerf = !!activePerformanceReport;
+
     return (
         <Navbar className='navbar'>
             <Navbar.Group align={Alignment.END}>
@@ -109,11 +108,12 @@ function MainNavigation() {
                 >
                     <small>beta</small>
                 </Button>
+
                 <Button
                     text='Topology'
                     onClick={() => handleOpenModal(ROUTES.CLUSTER)}
                     active={hasMatchingPath(ROUTES.CLUSTER)}
-                    disabled={clusterData.data === null}
+                    disabled={!hasClusterDescription}
                     icon={IconNames.LayoutGrid}
                     variant='minimal'
                     size='large'
