@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 /* eslint-disable no-nested-ternary */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { Button, ButtonVariant, MenuItem } from '@blueprintjs/core';
@@ -79,57 +79,63 @@ const NPE: React.FC = () => {
     };
     const npeData = demoData || loadedData;
     const isDemoEnabled = getServerConfig()?.SERVER_MODE;
+    useEffect(() => {
+        if (loadedData) {
+            setSelectedDemo(null);
+            setDemoData(null);
+        }
+    }, [loadedData]);
     return (
         <>
             <Helmet title='NPE' />
 
             <h1 className='page-title'>NOC performance estimator</h1>
+            <div className='npe-inline-loaders'>
+                <NPEFileLoader />
+                {isDemoEnabled && (
+                    <>
+                        <Select
+                            className=''
+                            items={NPE_DEMO_DATA}
+                            itemRenderer={renderItem}
+                            noResults={
+                                <MenuItem
+                                    disabled
+                                    text='No results.'
+                                    roleStructure='listoption'
+                                />
+                            }
+                            onItemSelect={(item) => {
+                                const { data } = item;
+                                setSelectedDemo(item);
+                                setDemoData(data);
+                            }}
+                        >
+                            {selectedDemo ? (
+                                <Button
+                                    className='folder-picker-button'
+                                    text={selectedDemo.label}
+                                    alignText='start'
+                                    icon={IconNames.SAVED}
+                                    endIcon={IconNames.CARET_DOWN}
+                                    variant={ButtonVariant.OUTLINED}
+                                />
+                            ) : (
+                                <Button
+                                    className='folder-picker-button'
+                                    text='Select a demo NPE report'
+                                    alignText='start'
+                                    icon={IconNames.DOCUMENT_OPEN}
+                                    endIcon={IconNames.CARET_DOWN}
+                                    variant={ButtonVariant.OUTLINED}
+                                />
+                            )}
+                        </Select>
 
-            <NPEFileLoader />
-            {!loadedData && isDemoEnabled && (
-                <>
-                    <Select
-                        className=''
-                        items={NPE_DEMO_DATA}
-                        itemRenderer={renderItem}
-                        noResults={
-                            <MenuItem
-                                disabled
-                                text='No results.'
-                                roleStructure='listoption'
-                            />
-                        }
-                        onItemSelect={(item) => {
-                            const { data } = item;
-                            setSelectedDemo(item);
-                            setDemoData(data);
-                        }}
-                    >
-                        {selectedDemo ? (
-                            <Button
-                                className='folder-picker-button'
-                                text={selectedDemo.label}
-                                alignText='start'
-                                icon={IconNames.SAVED}
-                                endIcon={IconNames.CARET_DOWN}
-                                variant={ButtonVariant.OUTLINED}
-                            />
-                        ) : (
-                            <Button
-                                className='folder-picker-button'
-                                text='Select a demo NPE report'
-                                alignText='start'
-                                icon={IconNames.DOCUMENT_OPEN}
-                                endIcon={IconNames.CARET_DOWN}
-                                variant={ButtonVariant.OUTLINED}
-                            />
-                        )}
-                    </Select>
-
-                    <br />
-                </>
-            )}
-
+                        <br />
+                    </>
+                )}
+            </div>
             {isLoading ? (
                 <LoadingSpinner />
             ) : npeData ? (
