@@ -5,9 +5,10 @@
 import React from 'react';
 import { Provider } from 'jotai';
 import { useHydrateAtoms } from 'jotai/utils';
-import type { WritableAtom } from 'jotai/vanilla';
+import type { WritableAtom } from 'jotai';
 
-export type AtomProviderInitialValues = (readonly [WritableAtom<unknown, never[], unknown>, never])[];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AtomProviderInitialValues = Array<[WritableAtom<unknown, any[], unknown>, unknown]>;
 
 export const HydrateAtoms = ({
     initialValues,
