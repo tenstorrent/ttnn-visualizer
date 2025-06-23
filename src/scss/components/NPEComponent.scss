@@ -159,8 +159,6 @@
         overflow: auto;
         scrollbar-gutter: stable;
 
-        // max-width: 100%;
-
         &.details-open {
             width: calc(100% - 300px);
         }
