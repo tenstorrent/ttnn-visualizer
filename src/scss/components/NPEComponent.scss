@@ -160,7 +160,7 @@
         scrollbar-gutter: stable;
 
         &.details-open {
-            max-width: calc(100% - 300px);
+            width: calc(100% - 300px);
         }
     }
 
