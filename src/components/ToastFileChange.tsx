@@ -12,7 +12,7 @@ const ToastFileChange = ({ message, fileName }: ToastFileChangeProps) => {
         <div>
             {message}
             <br />
-            <strong>{fileName}</strong>
+            <strong data-testid='toast-filename'>{fileName}</strong>
         </div>
     );
 };

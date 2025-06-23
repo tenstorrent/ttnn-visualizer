@@ -30,7 +30,7 @@ const LocalFolderPicker = ({
     const isDisabled = !items || items.length === 0;
     const path = value || '';
 
-    const [showDeleteAlert, setShowDeleteAlert] = useState<boolean>(false);
+    const [folderToDelete, setFolderToDelete] = useState<ReportFolder | null>(null);
 
     const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
 
@@ -61,31 +61,30 @@ const LocalFolderPicker = ({
                     <>
                         <Button
                             icon={IconNames.TRASH}
-                            onClick={() => setShowDeleteAlert(true)}
+                            onClick={() => setFolderToDelete(folder)}
                             variant={ButtonVariant.MINIMAL}
                             intent={Intent.DANGER}
                         />
 
-                        <Alert
-                            canEscapeKeyCancel
-                            canOutsideClickCancel
-                            isOpen={showDeleteAlert}
-                            intent={Intent.DANGER}
-                            onCancel={() => setShowDeleteAlert(false)}
-                            onClose={() => setShowDeleteAlert(false)}
-                            onConfirm={() => {
-                                handleDelete(folder);
-                                setShowDeleteAlert(false);
-                            }}
-                            cancelButtonText='Cancel'
-                            confirmButtonText='Delete'
-                            className='bp5-dark'
-                        >
-                            <p>
-                                Are you sure you want to delete <strong>{folder.reportName}</strong>? This action cannot
-                                be undone.
-                            </p>
-                        </Alert>
+                        {folderToDelete && (
+                            <Alert
+                                canEscapeKeyCancel
+                                canOutsideClickCancel
+                                isOpen={!!folderToDelete}
+                                intent={Intent.DANGER}
+                                onCancel={() => setFolderToDelete(null)}
+                                onClose={() => setFolderToDelete(null)}
+                                onConfirm={() => handleDelete(folderToDelete)}
+                                cancelButtonText='Cancel'
+                                confirmButtonText='Delete'
+                                className='bp5-dark'
+                            >
+                                <p>
+                                    Are you sure you want to delete <strong>{folderToDelete.reportName}</strong>? This
+                                    action cannot be undone.
+                                </p>
+                            </Alert>
+                        )}
                     </>
                 )}
             </div>
