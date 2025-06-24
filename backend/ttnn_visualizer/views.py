@@ -5,6 +5,7 @@
 import dataclasses
 import json
 import logging
+import re
 import time
 from http import HTTPStatus
 from pathlib import Path
@@ -408,7 +409,12 @@ def get_profiler_data_list(instance: Instance):
         db_directory_names = [str(Path(db_path).parent.name) for db_path in db_paths]
         session_paths = session.get("profiler_paths", [])
         session_directory_names = [str(Path(session_path).parent.name) for session_path in session_paths]
-        directory_names = list(set(db_directory_names + session_directory_names))
+        demo_directory_names = []
+        demo_pattern = re.compile(r"^demo", re.IGNORECASE)
+        for report in path.glob("*"):
+            if demo_pattern.match(report.name):
+                demo_directory_names.append(str(report))
+        directory_names = list(set(db_directory_names + session_directory_names + demo_directory_names))
     else:
         directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
 
@@ -494,7 +500,12 @@ def get_performance_data_list(instance: Instance):
         db_directory_names = [str(Path(db_path).name) for db_path in db_paths]
         session_paths = session.get("performance_paths", [])
         session_directory_names = [str(Path(session_path).name) for session_path in session_paths]
-        directory_names = list(set(db_directory_names + session_directory_names))
+        demo_directory_names = []
+        demo_pattern = re.compile(r"^demo", re.IGNORECASE)
+        for report in path.glob("*"):
+            if demo_pattern.match(report.name):
+                demo_directory_names.append(str(report))
+        directory_names = list(set(db_directory_names + session_directory_names + demo_directory_names))
     else:
         if is_remote:
             connection = RemoteConnection.model_validate(instance.remote_connection, strict=False)
