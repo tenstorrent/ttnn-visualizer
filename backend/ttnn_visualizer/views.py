@@ -413,7 +413,7 @@ def get_profiler_data_list(instance: Instance):
         demo_pattern = re.compile(r"^demo", re.IGNORECASE)
         for report in path.glob("*"):
             if demo_pattern.match(report.name):
-                demo_directory_names.append(str(report))
+                demo_directory_names.append(report.name)
         directory_names = list(set(db_directory_names + session_directory_names + demo_directory_names))
     else:
         directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
@@ -504,7 +504,7 @@ def get_performance_data_list(instance: Instance):
         demo_pattern = re.compile(r"^demo", re.IGNORECASE)
         for report in path.glob("*"):
             if demo_pattern.match(report.name):
-                demo_directory_names.append(str(report))
+                demo_directory_names.append(report.name)
         directory_names = list(set(db_directory_names + session_directory_names + demo_directory_names))
     else:
         if is_remote:
