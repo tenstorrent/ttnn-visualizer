@@ -5,7 +5,7 @@
 import { cleanup, render } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { Mock, afterEach, expect, it, vi } from 'vitest';
-import { activePerformanceReportAtom, activeProfilerReportAtom } from '../src/store/app';
+import { activePerformanceReportAtom, activeProfilerReportAtom, hasClusterDescriptionAtom } from '../src/store/app';
 import { useGetClusterDescription } from '../src/hooks/useAPI';
 import clusterDescription from './data/clusterDescription.json';
 import MainNavigation from '../src/components/MainNavigation';
@@ -44,7 +44,12 @@ it('Main Navigation enables specific options when there is an active memory repo
     (useGetClusterDescription as Mock).mockReturnValue({ data: clusterDescription });
 
     render(
-        <TestProviders initialAtomValues={[[activeProfilerReportAtom, 'test']]}>
+        <TestProviders
+            initialAtomValues={[
+                [activeProfilerReportAtom, 'test'],
+                [hasClusterDescriptionAtom, true],
+            ]}
+        >
             <MainNavigation />
         </TestProviders>,
     );

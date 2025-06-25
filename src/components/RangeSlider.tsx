@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import {
     activePerformanceReportAtom,
     comparisonPerformanceReportAtom,
+    hasClusterDescriptionAtom,
     operationRangeAtom,
     performanceRangeAtom,
     selectedOperationRangeAtom,
@@ -18,6 +19,7 @@ import {
 import ROUTES from '../definitions/Routes';
 import 'styles/components/RangeSlider.scss';
 import {
+    useGetClusterDescription,
     useGetDeviceOperationListPerf,
     useOpToPerfIdFiltered,
     useOperationListRange,
@@ -40,9 +42,11 @@ function Range() {
     const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
     const [isUserOpChange, setIsUserOpChange] = useState(false);
     const [isUserPerfChange, setIsUserPerfChange] = useState(false);
+    const setHasClusterDescription = useSetAtom(hasClusterDescriptionAtom);
 
     const { data: operations } = useOperationsList();
     const { data: perfData } = usePerformanceReport(activePerformanceReport);
+    const { data: clusterData } = useGetClusterDescription();
     const location = useLocation();
     const listPerf = useGetDeviceOperationListPerf();
     const isInSync = listPerf?.length > 0;
@@ -147,6 +151,10 @@ function Range() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isInSync, selectedPerformanceRange]);
+
+    useEffect(() => {
+        setHasClusterDescription(!!clusterData);
+    }, [clusterData, setHasClusterDescription]);
 
     return selectedOperationRange || selectedPerformanceRange ? (
         <div className='range-slider'>

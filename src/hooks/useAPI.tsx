@@ -357,6 +357,7 @@ export const useGetClusterDescription = () => {
         queryFn: () => fetchClusterDescription(),
         queryKey: ['get-cluster-description', activeProfilerReport],
         initialData: null,
+        retry: false,
     });
 };
 

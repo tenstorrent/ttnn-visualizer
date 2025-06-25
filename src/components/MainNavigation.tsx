@@ -10,8 +10,7 @@ import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router-dom';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/MainNavigation.scss';
-import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
-import { useGetClusterDescription } from '../hooks/useAPI';
+import { activePerformanceReportAtom, activeProfilerReportAtom, hasClusterDescriptionAtom } from '../store/app';
 import getServerConfig from '../functions/getServerConfig';
 
 const MEMORY_PROFILER_DISABLED = 'Upload or select an active memory report to enable this feature';
@@ -23,6 +22,7 @@ function MainNavigation() {
     const location = useLocation();
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const hasClusterDescription = useAtomValue(hasClusterDescriptionAtom);
     const [showBanner, setShowBanner] = useState(false);
 
     const handleNavigate = (path: string) => {
@@ -33,10 +33,9 @@ function MainNavigation() {
         navigate(path, { state: { background: location } });
     };
 
-    const clusterData = useGetClusterDescription();
-
     const hasActiveProfiler = !!activeProfilerReport;
     const hasActivePerf = !!activePerformanceReport;
+
     const serverMode = getServerConfig().SERVER_MODE;
 
     useEffect(() => {
@@ -187,13 +186,13 @@ function MainNavigation() {
                 <Tooltip
                     content={CLUSTER_DISABLED}
                     position='bottom'
-                    disabled={clusterData.data !== null}
+                    disabled={hasClusterDescription}
                 >
                     <Button
                         text='Topology'
                         onClick={() => handleOpenModal(ROUTES.CLUSTER)}
                         active={hasMatchingPath(ROUTES.CLUSTER)}
-                        disabled={clusterData.data === null}
+                        disabled={!hasClusterDescription}
                         icon={IconNames.LayoutGrid}
                         variant='minimal'
                         size='large'
