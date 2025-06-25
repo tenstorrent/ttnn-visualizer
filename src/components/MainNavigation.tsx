@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { useEffect, useState } from 'react';
 import { Alignment, Button, Navbar, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
@@ -11,6 +12,7 @@ import ROUTES from '../definitions/Routes';
 import 'styles/components/MainNavigation.scss';
 import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
 import { useGetClusterDescription } from '../hooks/useAPI';
+import getServerConfig from '../functions/getServerConfig';
 
 const MEMORY_PROFILER_DISABLED = 'Upload or select an active memory report to enable this feature';
 const PERFORMANCE_PROFILER_DISABLED = 'Upload or select an active performance report to enable this feature';
@@ -21,6 +23,7 @@ function MainNavigation() {
     const location = useLocation();
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const [showBanner, setShowBanner] = useState(false);
 
     const handleNavigate = (path: string) => {
         navigate(path);
@@ -34,8 +37,45 @@ function MainNavigation() {
 
     const hasActiveProfiler = !!activeProfilerReport;
     const hasActivePerf = !!activePerformanceReport;
+    const serverMode = getServerConfig().SERVER_MODE;
+
+    useEffect(() => {
+        if (!serverMode) {
+            return () => {};
+        }
+        const handleMouseMove = (e: MouseEvent) => {
+            if (e.clientY < 80) {
+                setShowBanner(true);
+            } else {
+                setShowBanner(false);
+            }
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+        };
+    }, [serverMode]);
+
     return (
         <Navbar className='navbar'>
+            {serverMode && (
+                <div
+                    className='server-mode-banner'
+                    style={{
+                        transform: showBanner ? 'translateY(0)' : 'translateY(-100%)',
+                    }}
+                >
+                    For full featured application, please install from PyPi or head over to&nbsp;{' '}
+                    <a
+                        href='https://github.com/tenstorrent/ttnn-visualizer'
+                        target='_blank'
+                        rel='noreferrer'
+                    >
+                        GitHub
+                    </a>
+                </div>
+            )}
             <Navbar.Group align={Alignment.END}>
                 <Button
                     text='Reports'
