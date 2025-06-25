@@ -9,11 +9,12 @@ import RemoteSyncConfigurator from '../components/report-selection/RemoteSyncCon
 import 'styles/routes/Home.scss';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import getServerConfig from '../functions/getServerConfig';
+import InitialMessage from '../components/InitialMessage';
 
 function Home() {
     useClearSelectedBuffer();
 
-    const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
+    const isServerMode = !!getServerConfig()?.SERVER_MODE;
 
     return (
         <div className='home'>
@@ -43,7 +44,7 @@ function Home() {
                         <RemoteSyncConfigurator />
                     </div>
 
-                    {disableRemoteSync ? (
+                    {isServerMode ? (
                         <div
                             className='feature-disabled'
                             data-testid='remote-sync-disabled'
@@ -70,6 +71,8 @@ function Home() {
                     ) : null}
                 </fieldset>
             </div>
+
+            {isServerMode && <InitialMessage />}
         </div>
     );
 }
