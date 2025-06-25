@@ -11,7 +11,6 @@ import { useLocation } from 'react-router-dom';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/MainNavigation.scss';
 import { activePerformanceReportAtom, activeProfilerReportAtom, hasClusterDescriptionAtom } from '../store/app';
-import { useGetClusterDescription } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
 
 const MEMORY_PROFILER_DISABLED = 'Upload or select an active memory report to enable this feature';
@@ -37,7 +36,7 @@ function MainNavigation() {
     const hasActiveProfiler = !!activeProfilerReport;
     const hasActivePerf = !!activePerformanceReport;
 
-      const serverMode = getServerConfig().SERVER_MODE;
+    const serverMode = getServerConfig().SERVER_MODE;
 
     useEffect(() => {
         if (!serverMode) {
@@ -187,13 +186,13 @@ function MainNavigation() {
                 <Tooltip
                     content={CLUSTER_DISABLED}
                     position='bottom'
-                    disabled={clusterData.data !== null}
+                    disabled={hasClusterDescription}
                 >
                     <Button
                         text='Topology'
                         onClick={() => handleOpenModal(ROUTES.CLUSTER)}
                         active={hasMatchingPath(ROUTES.CLUSTER)}
-                        disabled={clusterData.data === null}
+                        disabled={!hasClusterDescription}
                         icon={IconNames.LayoutGrid}
                         variant='minimal'
                         size='large'
