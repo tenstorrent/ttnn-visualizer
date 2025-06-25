@@ -5,15 +5,23 @@
 import dataclasses
 import json
 import logging
+import re
 import time
 from http import HTTPStatus
 from pathlib import Path
 from typing import List
 import shutil
+from wsgiref.validate import bad_header_value_re
 
 import zstd
-from flask import Blueprint
-from flask import current_app, session, request
+from flask import (
+    Blueprint,
+    Response,
+    current_app,
+    jsonify,
+    session,
+    request,
+)
 
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries, OpsPerformanceReportQueries
 from ttnn_visualizer.decorators import with_instance, local_only
@@ -62,6 +70,8 @@ from ttnn_visualizer.utils import (
     read_last_synced_file,
     timer,
 )
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -396,7 +406,15 @@ def get_profiler_data_list(instance: Instance):
         session_instances = session.get("instances", [])
         instances = get_instances(session_instances)
         db_paths = [instance.profiler_path for instance in instances if instance.profiler_path]
-        directory_names = [str(Path(db_path).parent.name) for db_path in db_paths]
+        db_directory_names = [str(Path(db_path).parent.name) for db_path in db_paths]
+        session_paths = session.get("profiler_paths", [])
+        session_directory_names = [str(Path(session_path).parent.name) for session_path in session_paths]
+        demo_directory_names = []
+        demo_pattern = re.compile(r"^demo", re.IGNORECASE)
+        for report in path.glob("*"):
+            if demo_pattern.match(report.name):
+                demo_directory_names.append(str(report))
+        directory_names = list(set(db_directory_names + session_directory_names + demo_directory_names))
     else:
         directory_names = [directory.name for directory in path.iterdir() if directory.is_dir()]
 
@@ -479,7 +497,15 @@ def get_performance_data_list(instance: Instance):
         session_instances = session.get("instances", [])
         instances = get_instances(session_instances)
         db_paths = [instance.performance_path for instance in instances if instance.performance_path]
-        directory_names = [str(Path(db_path).name) for db_path in db_paths]
+        db_directory_names = [str(Path(db_path).name) for db_path in db_paths]
+        session_paths = session.get("performance_paths", [])
+        session_directory_names = [str(Path(session_path).name) for session_path in session_paths]
+        demo_directory_names = []
+        demo_pattern = re.compile(r"^demo", re.IGNORECASE)
+        for report in path.glob("*"):
+            if demo_pattern.match(report.name):
+                demo_directory_names.append(str(report))
+        directory_names = list(set(db_directory_names + session_directory_names + demo_directory_names))
     else:
         if is_remote:
             connection = RemoteConnection.model_validate(instance.remote_connection, strict=False)
@@ -584,9 +610,9 @@ def get_performance_results_report(instance: Instance):
         return Response(status=HTTPStatus.NOT_FOUND)
 
     name = request.args.get("name", None)
-    performance_path = Path(instance.performance_path)
-    if name:
-        performance_path = performance_path.parent / name
+
+    if name and not current_app.config["SERVER_MODE"]:
+        performance_path = Path(instance.performance_path).parent / name
         instance.performance_path = str(performance_path)
         logger.info(f"************ Performance path set to {instance.performance_path}")
 
@@ -652,12 +678,20 @@ def create_profiler_files():
     logger.info(f"Writing report files to {profiler_directory}/{parent_folder_name}")
 
     try:
-        save_uploaded_files(files, profiler_directory, folder_name)
+        paths = save_uploaded_files(files, profiler_directory, folder_name)
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
+    profiler_path = next((p for p in paths if Path(p).name == "db.sqlite"), None)
+
     instance_id = request.args.get("instanceId")
-    update_instance(instance_id=instance_id, profiler_name=parent_folder_name, clear_remote=True)
+
+    update_instance(
+        instance_id=instance_id,
+        profiler_name=parent_folder_name,
+        clear_remote=True,
+        profiler_path=str(profiler_path) if profiler_path else None,
+    )
 
     config_file = profiler_directory / parent_folder_name / "config.json"
     report_name = None
@@ -670,13 +704,17 @@ def create_profiler_files():
         except Exception as e:
             logger.warning(f"Failed to read config.json in {config_file}: {e}")
 
+    # Set session data
+    session["profiler_paths"] = session.get("profiler_paths", []) + [str(profiler_path)]
+    session.permanent = True
+
     return {
         "path": parent_folder_name,
         "reportName": report_name,
     }
 
 @api.route("/local/upload/performance", methods=["POST"])
-def create_profile_files():
+def create_performance_files():
     files = request.files.getlist("files")
     folder_name = request.form.get("folderName") # Optional folder name
     data_directory = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
@@ -702,21 +740,29 @@ def create_profile_files():
     else:
         parent_folder_name = extract_folder_name_from_files(files)
 
-    logger.info(f"Writing performance files to {target_directory}/{parent_folder_name}")
+    logger.info(f"Saving performance report files {parent_folder_name}")
 
     try:
-        save_uploaded_files(
+        paths = save_uploaded_files(
             files,
             target_directory,
-            folder_name
+            folder_name,
         )
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
+    performance_path = str(paths[0].parent)
+
     instance_id = request.args.get("instanceId")
     update_instance(
-        instance_id=instance_id, performance_name=parent_folder_name, clear_remote=True
+        instance_id=instance_id,
+        performance_name=parent_folder_name,
+        clear_remote=True,
+        performance_path=performance_path,
     )
+
+    session["performance_paths"] = session.get("performance_paths", []) + [str(performance_path)]
+    session.permanent = True
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success."
@@ -740,12 +786,16 @@ def create_npe_files():
     target_directory.mkdir(parents=True, exist_ok=True)
 
     try:
-        save_uploaded_files(files, target_directory)
+        paths = save_uploaded_files(files, target_directory)
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
     instance_id = request.args.get("instanceId")
-    update_instance(instance_id=instance_id, npe_name=npe_name, clear_remote=True)
+    npe_path = str(paths[0])
+    update_instance(instance_id=instance_id, npe_name=npe_name, clear_remote=True, npe_path=npe_path)
+
+    session["npe_paths"] = session.get("npe_paths", []) + [str(npe_path)]
+    session.permanent = True
 
     return StatusMessage(
         status=ConnectionTestStates.OK, message="Success"
@@ -798,10 +848,6 @@ def get_remote_folders_performance():
         return [r.model_dump() for r in remote_performance_folders]
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
-
-
-from flask import Response, jsonify
-import yaml
 
 
 @api.route("/cluster-descriptor", methods=["GET"])
@@ -1082,14 +1128,21 @@ def get_npe_data(instance: Instance):
         logger.error("NPE path is not set in the instance.")
         return Response(status=HTTPStatus.NOT_FOUND)
 
-    compressed_path = Path(f"{instance.npe_path}/{instance.active_report.npe_name}.npeviz.zst")
-    uncompressed_path = Path(f"{instance.npe_path}/{instance.active_report.npe_name}.json")
+    if instance.npe_path.endswith(".zst"):
+        compressed_path = Path(instance.npe_path)
+        uncompressed_path = None
+    elif instance.npe_path.endswith(".json"):
+        compressed_path = None
+        uncompressed_path = Path(instance.npe_path)
+    else:
+        compressed_path = Path(instance.npe_path)
+        uncompressed_path = Path(instance.npe_path)
 
-    if not compressed_path.exists() and not uncompressed_path.exists():
+    if not (compressed_path and compressed_path.exists()) and not (uncompressed_path and uncompressed_path.exists()):
         logger.error(f"NPE file does not exist: {compressed_path} / {uncompressed_path}")
         return Response(status=HTTPStatus.NOT_FOUND)
 
-    if compressed_path.exists():
+    if compressed_path and compressed_path.exists():
        with open(compressed_path, "rb") as file:
             compressed_data = file.read()
             uncompressed_data = zstd.uncompress(compressed_data)

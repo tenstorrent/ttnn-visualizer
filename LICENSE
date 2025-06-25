@@ -116,7 +116,6 @@ The following separate and independent dependencies are utilized by this project
 - python-dotenv – BSD‑3‑Clause – https://github.com/theskumar/python-dotenv/blob/main/LICENSE
 - flask-sqlalchemy – BSD‑3‑Clause – https://github.com/pallets-eco/flask-sqlalchemy/blob/main/LICENSE
 - flask-socketio – MIT – https://github.com/miguelgrinberg/Flask-SocketIO/blob/main/LICENSE
-- flask-session – BSD‑3‑Clause – https://github.com/pallets-eco/flask-session/blob/development/LICENSE.rst
 - PyYAML – MIT – https://github.com/yaml/pyyaml/blob/main/LICENSE
 - gevent – MIT – https://github.com/gevent/gevent/blob/master/LICENSE
 - pandas – BSD‑3‑Clause – https://github.com/pandas-dev/pandas/blob/main/LICENSE

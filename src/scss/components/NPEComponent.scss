@@ -3,6 +3,12 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 @use '../definitions/colours' as *;
 
+.npe-inline-loaders {
+    display: inline-flex;
+    flex-direction: row;
+    gap: 5px;
+}
+
 .npe {
     position: relative;
 
@@ -154,7 +160,7 @@
         scrollbar-gutter: stable;
 
         &.details-open {
-            max-width: calc(100% - 300px);
+            width: calc(100% - 300px);
         }
     }
 

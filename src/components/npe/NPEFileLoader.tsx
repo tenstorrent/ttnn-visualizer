@@ -61,7 +61,7 @@ const NPEFileLoader: React.FC = () => {
     return (
         <div className='npe-file-loader'>
             <FileInput
-                text={npeFileName ?? 'Choose file...'}
+                text={npeFileName ?? 'Upload an NPE report file for analysis...'}
                 onInputChange={handleFileChange}
             />
 
