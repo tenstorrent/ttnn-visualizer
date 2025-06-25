@@ -23,6 +23,9 @@ class DefaultConfig(object):
         if o
     ]
     BASE_PATH = os.getenv("BASE_PATH", "/")
+    MAX_CONTENT_LENGTH = (
+        None if not (v := os.getenv("MAX_CONTENT_LENGTH")) else int(v)
+    )
 
     # Path Settings
     DB_VERSION = "0.29.0"  # App version when DB schema last changed

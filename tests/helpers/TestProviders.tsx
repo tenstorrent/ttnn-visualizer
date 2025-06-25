@@ -5,13 +5,12 @@
 import React from 'react';
 import { MemoryRouter } from 'react-router';
 import { HelmetProvider } from 'react-helmet-async';
-import { PrimitiveAtom } from 'jotai';
 import { ToastContainer } from 'react-toastify';
 import { QueryProvider } from './queryClientProvider';
-import { AtomProvider } from './atomProvider';
+import { AtomProvider, AtomProviderInitialValues } from './atomProvider';
 
 interface TestProvidersProps {
-    initialAtomValues?: [PrimitiveAtom<string | null>, string | null][];
+    initialAtomValues?: AtomProviderInitialValues;
     children: React.ReactNode;
 }
 

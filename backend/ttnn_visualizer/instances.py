@@ -71,17 +71,32 @@ def update_existing_instance(
 
     if profiler_path is not _sentinel:
         instance_data.profiler_path = profiler_path
+    else:
+        if active_report.get("profiler_name"):
+            instance_data.profiler_path = get_profiler_path(
+                profiler_name=active_report["profiler_name"],
+                current_app=current_app,
+                remote_connection=remote_connection,
+            )
 
     if performance_path is not _sentinel:
         instance_data.performance_path = performance_path
+    else:
+        if active_report.get("performance_name"):
+            instance_data.performance_path = get_performance_path(
+                performance_name=active_report["performance_name"],
+                current_app=current_app,
+                remote_connection=remote_connection,
+            )
 
     if npe_path is not _sentinel:
         instance_data.npe_path = npe_path
-
-    if remote_connection and not clear_remote:
-        update_paths(
-            instance_data, active_report, remote_connection
-        )
+    else:
+        if active_report.get("npe_name"):
+            instance_data.npe_path = get_npe_path(
+                npe_name=active_report["npe_name"],
+                current_app=current_app
+            )
 
 
 def clear_remote_data(instance_data):
@@ -102,30 +117,6 @@ def commit_and_log_session(instance_data, instance_id):
     current_app.logger.info(
         f"Data for instance {instance_id}: {json.dumps(instance_data.to_dict(), indent=4)}"
     )
-
-
-def update_paths(
-    instance_data, active_report, remote_connection
-):
-    if active_report.get("performance_name"):
-        instance_data.performance_path = get_performance_path(
-            performance_name=active_report["performance_name"],
-            current_app=current_app,
-            remote_connection=remote_connection,
-        )
-
-    if active_report.get("profiler_name"):
-        instance_data.profiler_path = get_profiler_path(
-            profiler_name=active_report["profiler_name"],
-            current_app=current_app,
-            remote_connection=remote_connection,
-        )
-
-    if active_report.get("npe_name"):
-        instance_data.npe_path = get_npe_path(
-            npe_name=active_report["npe_name"],
-            current_app=current_app
-        )
 
 
 def create_new_instance(
