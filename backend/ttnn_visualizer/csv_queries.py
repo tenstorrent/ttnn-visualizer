@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+# SPDX-FileCopyrightText: © 2025 Tenstorrent Inc.
 import csv
 import os
 import tempfile
@@ -277,38 +277,38 @@ class DeviceLogProfilerQueries:
         "source file",
     ]
 
-    def __init__(self, session: Instance):
+    def __init__(self, instance: Instance):
         """
-        Initialize the profiler with a session object.
-        The session determines whether to use a local or remote runner.
+        Initialize the profiler with a instance object.
+        The instance determines whether to use a local or remote runner.
         """
-        self.session = session
+        self.instance = instance
         self.runner = None
 
     def __enter__(self):
         """
-        Determine the appropriate query runner based on the session's remote connection.
+        Determine the appropriate query runner based on the instance's remote connection.
         """
 
-        is_remote = self.session.remote_connection
+        is_remote = self.instance.remote_connection
         use_remote_querying = False
 
         # Disabled until we resolve the issue with sqlite versions
         # if is_remote:
-        #     use_remote_querying = self.session.remote_connection.useRemoteQuerying
+        #     use_remote_querying = self.instance.remote_connection.useRemoteQuerying
 
         # Determine if this is a local or remote operation
         if is_remote and use_remote_querying:
-            remote_profiler_folder = self.session.remote_profile_folder
+            remote_profiler_folder = self.instance.remote_profile_folder
             file_path = f"{remote_profiler_folder.remotePath}/{self.DEVICE_LOG_FILE}"
             self.runner = RemoteCSVQueryRunner(
                 file_path=file_path,
-                remote_connection=self.session.remote_connection,
+                remote_connection=self.instance.remote_connection,
                 offset=1,  # Skip the first line for device log files
             )
         else:
             self.runner = LocalCSVQueryRunner(
-                file_path=Path(self.session.performance_path).joinpath(
+                file_path=Path(self.instance.performance_path).joinpath(
                     self.DEVICE_LOG_FILE
                 ),
                 offset=1,  # Skip the first line for device log files
@@ -365,23 +365,23 @@ class DeviceLogProfilerQueries:
         )
 
     @staticmethod
-    def get_raw_csv(session: Instance):
+    def get_raw_csv(instance: Instance):
         from ttnn_visualizer.sftp_operations import read_remote_file
 
         if (
-            not session.remote_connection
-            or session.remote_connection
-            and not session.remote_connection.useRemoteQuerying
+            not instance.remote_connection
+            or instance.remote_connection
+            and not instance.remote_connection.useRemoteQuerying
         ):
             file_path = Path(
-                session.performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE
+                instance.performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE
             )
             with open(file_path, "r") as f:
                 return f.read()
         else:
-            profiler_folder = session.remote_profile_folder
+            profiler_folder = instance.remote_profile_folder
             return read_remote_file(
-                session.remote_connection,
+                instance.remote_connection,
                 f"{profiler_folder.remotePath}/{DeviceLogProfilerQueries.DEVICE_LOG_FILE}",
             )
 
@@ -454,11 +454,11 @@ class OpsPerformanceQueries:
         "HWCommandQueue_write_buffer_TT_HOST_FUNC [ns]",
     ]
 
-    def __init__(self, session: Instance):
+    def __init__(self, instance: Instance):
         """
-        Initialize the performance profiler with a session object.
+        Initialize the performance profiler with a instance object.
         """
-        self.session = session
+        self.instance = instance
         self.runner = None
 
     def __enter__(self):
@@ -466,7 +466,7 @@ class OpsPerformanceQueries:
 
         :return:
         """
-        file_path = OpsPerformanceQueries.get_local_ops_perf_file_path(self.session)
+        file_path = OpsPerformanceQueries.get_local_ops_perf_file_path(self.instance)
         self.runner = LocalCSVQueryRunner(file_path=file_path, offset=1)
         self.runner.__enter__()
 
@@ -477,8 +477,8 @@ class OpsPerformanceQueries:
         return self
 
     @staticmethod
-    def get_local_ops_perf_file_path(session):
-        performance_path = Path(session.performance_path)
+    def get_local_ops_perf_file_path(instance):
+        performance_path = Path(instance.performance_path)
 
         # Find the latest file with the correct prefix
         perf_files = list(
@@ -494,29 +494,29 @@ class OpsPerformanceQueries:
         return str(latest_file)
 
     @staticmethod
-    def get_remote_ops_perf_file_path(session):
+    def get_remote_ops_perf_file_path(instance):
         from ttnn_visualizer.sftp_operations import resolve_file_path
 
-        remote_profile_folder = session.remote_profile_folder.remotePath
+        remote_profile_folder = instance.remote_profile_folder.remotePath
         return resolve_file_path(
-            session.remote_connection,
+            instance.remote_connection,
             f"{remote_profile_folder}/{OpsPerformanceQueries.PERF_RESULTS_PREFIX}*",
         )
 
     @staticmethod
-    def get_raw_csv(session):
+    def get_raw_csv(instance):
         from ttnn_visualizer.sftp_operations import read_remote_file
 
         if (
-            not session.remote_connection
-            or session.remote_connection
-            and not session.remote_connection.useRemoteQuerying
+            not instance.remote_connection
+            or instance.remote_connection
+            and not instance.remote_connection.useRemoteQuerying
         ):
-            with open(OpsPerformanceQueries.get_local_ops_perf_file_path(session)) as f:
+            with open(OpsPerformanceQueries.get_local_ops_perf_file_path(instance)) as f:
                 return f.read()
         else:
-            path = OpsPerformanceQueries.get_remote_ops_perf_file_path(session)
-            return read_remote_file(session.remote_connection, path)
+            path = OpsPerformanceQueries.get_remote_ops_perf_file_path(instance)
+            return read_remote_file(instance.remote_connection, path)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
@@ -600,8 +600,8 @@ class OpsPerformanceReportQueries:
     DEFAULT_TRACING_MODE = False
 
     @classmethod
-    def generate_report(cls, session):
-        raw_csv = OpsPerformanceQueries.get_raw_csv(session)
+    def generate_report(cls, instance):
+        raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
         csv_file = StringIO(raw_csv)
         csv_output_file = tempfile.mktemp(suffix=".csv")
         perf_report.generate_perf_report(

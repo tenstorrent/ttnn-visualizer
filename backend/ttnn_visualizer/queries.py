@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import json
 from typing import Generator, Dict, Any, Union
@@ -31,20 +31,20 @@ import paramiko
 
 
 class LocalQueryRunner:
-    def __init__(self, session: Optional[Instance] = None, connection=None):
+    def __init__(self, instance: Optional[Instance] = None, connection=None):
 
         if connection:
             self.connection = connection
         else:
-            if not session or not session.profiler_path:
+            if not instance or not instance.profiler_path:
                 raise ValueError("Report path must be provided for local queries")
-            db_path = str(session.profiler_path)
+            db_path = str(instance.profiler_path)
             if not Path(db_path).exists():
                 raise DatabaseFileNotFoundException(
                     f"Database not found at path: {db_path}"
                 )
             self.connection = sqlite3.connect(
-                session.profiler_path, isolation_level=None, timeout=30
+                instance.profiler_path, isolation_level=None, timeout=30
             )
 
     def execute_query(self, query: str, params: Optional[List] = None) -> List:
@@ -66,24 +66,24 @@ class LocalQueryRunner:
 class RemoteQueryRunner:
     column_delimiter = "|||"
 
-    def __init__(self, session: Instance):
-        self.session = session
-        self._validate_session()
-        self.ssh_client = self._get_ssh_client(self.session.remote_connection)
-        self.sqlite_binary = self.session.remote_connection.sqliteBinaryPath
+    def __init__(self, instance: Instance):
+        self.instance = instance
+        self._validate_instance()
+        self.ssh_client = self._get_ssh_client(self.instance.remote_connection)
+        self.sqlite_binary = self.instance.remote_connection.sqliteBinaryPath
         self.remote_db_path = str(
-            Path(self.session.remote_profiler_folder.remotePath, "db.sqlite")
+            Path(self.instance.remote_profiler_folder.remotePath, "db.sqlite")
         )
 
-    def _validate_session(self):
+    def _validate_instance(self):
         """
-        Validate that the session has all required remote connection attributes.
+        Validate that the instance has all required remote connection attributes.
         """
         if (
-            not self.session.remote_connection
-            or not self.session.remote_connection.sqliteBinaryPath
-            or not self.session.remote_profiler_folder
-            or not self.session.remote_profiler_folder.remotePath
+            not self.instance.remote_connection
+            or not self.instance.remote_connection.sqliteBinaryPath
+            or not self.instance.remote_profiler_folder
+            or not self.instance.remote_profiler_folder.remotePath
         ):
             raise ValueError(
                 "Remote connections require remote path and sqliteBinaryPath"
@@ -141,9 +141,9 @@ class RemoteQueryRunner:
 
     def execute_query(self, query: str, params: Optional[List] = None) -> List:
         """
-        Execute a remote SQLite query using the session's SSH client.
+        Execute a remote SQLite query using the instance's SSH client.
         """
-        self._validate_session()
+        self._validate_instance()
         formatted_query = self._format_query(query, params)
         command = self._build_command(formatted_query)
         output, error_output = self._execute_ssh_command(command)
@@ -165,25 +165,25 @@ class RemoteQueryRunner:
 
 class DatabaseQueries:
 
-    session: Optional[Instance] = None
+    instance: Optional[Instance] = None
     ssh_client = None
     query_runner: LocalQueryRunner | RemoteQueryRunner
 
-    def __init__(self, session: Optional[Instance] = None, connection=None):
-        self.session = session
+    def __init__(self, instance: Optional[Instance] = None, connection=None):
+        self.instance = instance
 
         if connection:
             self.query_runner = LocalQueryRunner(connection=connection)
         else:
-            if not session:
+            if not instance:
                 raise ValueError(
-                    "Must provide either an existing connection or session"
+                    "Must provide either an existing connection or instance"
                 )
-            remote_connection = session.remote_connection if session else None
+            remote_connection = instance.remote_connection if instance else None
             if remote_connection and remote_connection.useRemoteQuerying:
-                self.query_runner = RemoteQueryRunner(session=session)
+                self.query_runner = RemoteQueryRunner(instance=instance)
             else:
-                self.query_runner = LocalQueryRunner(session=session)
+                self.query_runner = LocalQueryRunner(instance=instance)
 
     def _check_table_exists(self, table_name: str) -> bool:
         """

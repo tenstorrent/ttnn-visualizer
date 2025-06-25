@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import argparse
+import json
 import logging
 import os
 import subprocess
@@ -21,7 +22,7 @@ from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from ttnn_visualizer.exceptions import DatabaseFileNotFoundException, InvalidProfilerPath, InvalidReportPath
-from ttnn_visualizer.sessions import create_instance_from_local_paths
+from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
 
 logger = logging.getLogger(__name__)
@@ -55,16 +56,29 @@ def create_app(settings_override=None):
 
     middleware(app)
 
-    app.register_blueprint(api)
+    app.register_blueprint(api, url_prefix=f"{app.config['BASE_PATH']}/api")
 
     extensions(app)
 
     if flask_env == "production":
-
-        @app.route("/", defaults={"path": ""})
+        @app.route(f"{app.config['BASE_PATH']}/", defaults={"path": ""})
         @app.route("/<path:path>")
         def catch_all(path):
-            return app.send_static_file("index.html")
+            js_config = {
+                "SERVER_MODE": app.config["SERVER_MODE"],
+                "BASE_PATH": app.config["BASE_PATH"],
+            }
+            js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(js_config)};"
+
+            with open(os.path.join(app.static_folder, "index.html")) as f:
+                html = f.read()
+
+                html_with_config = html.replace(
+                    "/* SERVER_CONFIG */",
+                    js,
+                )
+
+            return flask.Response(html_with_config, mimetype="text/html")
 
     return app
 
@@ -84,9 +98,6 @@ def extensions(app: flask.Flask):
     if app.config["USE_WEBSOCKETS"]:
         socketio.init_app(app)
     db.init_app(app)
-
-    app.config["SESSION_TYPE"] = "sqlalchemy"
-    app.config["SESSION_SQLALCHEMY"] = db
 
     if app.config["USE_WEBSOCKETS"]:
         register_handlers(socketio)
@@ -127,7 +138,7 @@ def middleware(app: flask.Flask):
         app.wsgi_app = ProxyFix(app.wsgi_app)
 
     # CORS configuration
-    origins = ["http://localhost:5173", "http://localhost:8000"]
+    origins = app.config["ALLOWED_ORIGINS"]
 
     CORS(
         app,

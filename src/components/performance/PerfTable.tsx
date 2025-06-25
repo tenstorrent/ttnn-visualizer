@@ -1,50 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { FC, Fragment, useMemo } from 'react';
 import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
+import { TableHeader, TableKeys } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
-import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
+import { useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import { formatCell } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
-import useTableFilter from '../../hooks/useTableFilter';
+import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
 
 interface PerformanceTableProps {
-    data: PerfTableRow[];
-    comparisonData?: PerfTableRow[];
+    data: TypedPerfTableRow[];
+    comparisonData?: TypedPerfTableRow[][];
     filters: Record<TableKeys, string> | null;
+    mathFidelityFilter: (string | number)[];
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
-    matches?: PerfTableRow[];
-    highlightRows?: boolean;
-}
-
-interface TypedPerfTableRow
-    extends Omit<
-        PerfTableRow,
-        | 'id'
-        | 'total_percent'
-        | 'device_time'
-        | 'op_to_op_gap'
-        | 'cores'
-        | 'dram'
-        | 'dram_percent'
-        | 'flops'
-        | 'flops_percent'
-    > {
-    id: number;
-    total_percent: number;
-    device_time: number;
-    op_to_op_gap: number | null;
-    cores: number;
-    dram: number;
-    dram_percent: number;
-    flops: number;
-    flops_percent: number;
+    shouldHighlightRows: boolean;
 }
 
 enum COLUMN_HEADERS {
@@ -91,6 +67,7 @@ const COMPARISON_KEYS: TableKeys[] = [
     COLUMN_HEADERS.flops,
     COLUMN_HEADERS.flops_percent,
     COLUMN_HEADERS.math_fidelity,
+    COLUMN_HEADERS.HIGH_DISPATCH,
 ];
 
 const OP_ID_INSERTION_POINT = 1;
@@ -100,14 +77,13 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     data,
     comparisonData,
     filters,
+    mathFidelityFilter,
     provideMatmulAdvice,
     hiliteHighDispatch,
-    matches,
-    highlightRows,
+    shouldHighlightRows,
 }) => {
-    const { activeFilters } = useTableFilter('math_fidelity', data || []);
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
-    const opIdsMap = useOptoPerfIdFiltered();
+    const opIdsMap = useOpToPerfIdFiltered();
     const { data: operations } = useOperationsList();
 
     const filterableColumnKeys = useMemo(
@@ -115,87 +91,28 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         [],
     );
 
-    const tableFields: PerfTableRow[] = useMemo(() => {
-        let filteredRows = data;
-
-        if (areFiltersActive(filters) && filterableColumnKeys) {
-            filteredRows = filteredRows.filter((row) => {
-                const isFilteredOut =
-                    filters &&
-                    Object.entries(filters)
-                        .filter(([_key, filterValue]) => String(filterValue).length)
-                        .some(([key, filterValue]) => {
-                            const bufferValue = getCellText(row, key as TableKeys);
-
-                            return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
-                        });
-
-                return !isFilteredOut;
-            });
-        }
-
-        if (activeFilters?.length > 0) {
-            filteredRows = filteredRows.filter(
-                (tensor) => tensor?.math_fidelity !== null && activeFilters.includes(tensor.math_fidelity),
-            );
-        }
-
-        const parsedRows = filteredRows.map((row) => ({
-            ...row,
-            id: row.id ? parseInt(row.id, 10) : null,
-            total_percent: row.total_percent ? parseFloat(row.total_percent) : null,
-            device_time: row.device_time ? parseFloat(row.device_time) : null,
-            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
-            cores: row.cores ? parseInt(row.cores, 10) : null,
-            dram: row.dram ? parseFloat(row.dram) : null,
-            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
-            flops: row.flops ? parseFloat(row.flops) : null,
-            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
-        })) as TypedPerfTableRow[];
+    // TODO: Refactor so that sortAndFilterPerfTableData is not used here and PerfReport.
+    // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
+    const tableFields: TypedPerfTableRow[] = useMemo(() => {
+        const parsedRows = sortAndFilterPerfTableData(data, filters, filterableColumnKeys, mathFidelityFilter);
 
         return sortTableFields(parsedRows);
-    }, [data, sortTableFields, filters, filterableColumnKeys, activeFilters]);
+    }, [data, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields]);
 
-    const comparisonDataTableFields: PerfTableRow[] = useMemo(() => {
-        let filteredRows = comparisonData || [];
+    const comparisonDataTableFields = useMemo(() => {
+        return (
+            comparisonData?.map((dataset) => {
+                const parsedRows = sortAndFilterPerfTableData(
+                    dataset,
+                    filters,
+                    filterableColumnKeys,
+                    mathFidelityFilter,
+                );
 
-        if (areFiltersActive(filters) && filterableColumnKeys) {
-            filteredRows = filteredRows.filter((row) => {
-                const isFilteredOut =
-                    filters &&
-                    Object.entries(filters)
-                        .filter(([_key, filterValue]) => String(filterValue).length)
-                        .some(([key, filterValue]) => {
-                            const bufferValue = getCellText(row, key as TableKeys);
-
-                            return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
-                        });
-
-                return !isFilteredOut;
-            });
-        }
-
-        if (activeFilters?.length > 0) {
-            filteredRows = filteredRows.filter(
-                (tensor) => tensor?.math_fidelity !== null && activeFilters.includes(tensor.math_fidelity),
-            );
-        }
-
-        const parsedRows = filteredRows.map((row) => ({
-            ...row,
-            id: row.id ? parseInt(row.id, 10) : null,
-            total_percent: row.total_percent ? parseFloat(row.total_percent) : null,
-            device_time: row.device_time ? parseFloat(row.device_time) : null,
-            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
-            cores: row.cores ? parseInt(row.cores, 10) : null,
-            dram: row.dram ? parseFloat(row.dram) : null,
-            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
-            flops: row.flops ? parseFloat(row.flops) : null,
-            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
-        })) as TypedPerfTableRow[];
-
-        return sortTableFields(parsedRows);
-    }, [comparisonData, sortTableFields, filters, filterableColumnKeys, activeFilters]);
+                return sortTableFields(parsedRows);
+            }) || []
+        );
+    }, [comparisonData, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields]);
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
@@ -275,20 +192,11 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             </thead>
 
             <tbody>
-                {tableFields.map((row, i) => (
+                {tableFields?.map((row, i) => (
                     <Fragment key={i}>
                         <tr
                             className={classNames({
-                                'missing-data': highlightRows && (row.missing || row.raw_op_code.includes('MISSING')),
-                                'added-data':
-                                    highlightRows &&
-                                    !row.missing &&
-                                    matches?.some(
-                                        (match) =>
-                                            parseInt(match.id, 10) === parseInt(row.id, 10) &&
-                                            match.raw_op_code === row.raw_op_code,
-                                    ),
-                                'row-pattern': comparisonData,
+                                'missing-data': shouldHighlightRows && row.raw_op_code.includes('MISSING'),
                             })}
                         >
                             {visibleHeaders.map((h) => (
@@ -303,50 +211,32 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                             ))}
                         </tr>
 
-                        {comparisonDataTableFields[i] && (
-                            <tr
-                                className={classNames(
-                                    {
-                                        'missing-data':
-                                            highlightRows && (row.missing || row.raw_op_code.includes('MISSING')),
-                                        'added-data':
-                                            highlightRows &&
-                                            !row.missing &&
-                                            matches?.some(
-                                                (match) =>
-                                                    parseInt(match.id, 10) === parseInt(row.id, 10) &&
-                                                    match.raw_op_code === row.raw_op_code,
-                                            ),
-                                        'row-pattern': comparisonData,
-                                    },
-                                    'comparison-row',
-                                )}
-                            >
-                                {visibleHeaders.map((h) => (
-                                    <td
-                                        key={h.key}
-                                        className={classNames('cell', {
-                                            'align-right': h.key === COLUMN_HEADERS.math_fidelity,
-                                        })}
-                                    >
-                                        {COMPARISON_KEYS.includes(h.key) &&
-                                            comparisonDataTableFields[i] &&
-                                            (h.key !== COLUMN_HEADERS.op_code ||
-                                                (h.key === COLUMN_HEADERS.op_code &&
-                                                    isOpCodeMatmulOrConv(row.op_code))) && (
-                                                <>
-                                                    {formatCell(
-                                                        comparisonDataTableFields[i],
-                                                        h,
-                                                        operations,
-                                                        filters?.[h.key],
-                                                    )}
-                                                </>
-                                            )}
-                                    </td>
-                                ))}
-                            </tr>
-                        )}
+                        {comparisonDataTableFields?.length > 0 &&
+                            comparisonDataTableFields.map((dataset, index) => (
+                                <tr
+                                    key={`comparison-${i}-${index}`}
+                                    className={classNames(
+                                        {
+                                            'missing-data':
+                                                shouldHighlightRows && dataset[i]?.raw_op_code.includes('MISSING'),
+                                        },
+                                        'comparison-row',
+                                    )}
+                                >
+                                    {visibleHeaders.map((h) => (
+                                        <td
+                                            key={h.key}
+                                            className={classNames('cell', {
+                                                'align-right': h.key === COLUMN_HEADERS.math_fidelity,
+                                            })}
+                                        >
+                                            {COMPARISON_KEYS.includes(h.key) &&
+                                                dataset[i] &&
+                                                formatCell(dataset[i], h, operations, filters?.[h.key])}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
                         {provideMatmulAdvice && row.op_code.includes('Matmul') && (
                             <tr>
                                 <td
@@ -363,18 +253,5 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         </table>
     );
 };
-
-function areFiltersActive(filters: Record<TableKeys, string> | null) {
-    return filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
-}
-
-const getCellText = (buffer: PerfTableRow, key: TableKeys) => {
-    const textValue = buffer[key]?.toString() || '';
-
-    return textValue;
-};
-
-const isOpCodeMatmulOrConv = (opCode: string) =>
-    opCode.toLowerCase().includes('matmul') || opCode.toLowerCase().includes('conv');
 
 export default PerformanceTable;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { atomWithStorage } from 'jotai/utils';
 import { atom } from 'jotai';
@@ -16,6 +16,7 @@ export const reportLocationAtom = atom<ReportLocation>(null);
 export const activeProfilerReportAtom = atom<string | null>(null);
 export const activePerformanceReportAtom = atom<string | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
+export const hasClusterDescriptionAtom = atom<boolean>(false);
 export const showHexAtom = atomWithStorage<boolean>('showHex', false);
 export const showMemoryRegionsAtom = atomWithStorage<boolean>('showMemoryRegions', true);
 export const selectedBufferSummaryTabAtom = atomWithStorage<TAB_IDS>('selectedBufferSummaryTab', TAB_IDS.L1);
@@ -33,7 +34,8 @@ export const operationRangeAtom = atom<NumberRange | null>(null);
 export const selectedOperationRangeAtom = atom<NumberRange | null>(null);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
-export const comparisonPerformanceReportAtom = atom<string | null>(null);
+// TODO: Rename to 'reports' because this is an array now
+export const comparisonPerformanceReportAtom = atom<string[] | null>(null);
 
 export const scrollPositionsAtom = atom<ScrollPositions | null>(null);
 

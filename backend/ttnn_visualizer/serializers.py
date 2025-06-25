@@ -1,14 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 import dataclasses
 from collections import defaultdict
 from typing import List
 
 from ttnn_visualizer.models import BufferType, Operation, TensorComparisonRecord
-
-
-# SPDX-License-Identifier: Apache-2.0
-#
-# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
-
 
 def serialize_operations(
     inputs,

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Switch } from '@blueprintjs/core';
 import { useState } from 'react';
@@ -53,7 +53,6 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
     return (
         <div className='expandable-argument'>
             <Switch
-                className='expand-button'
                 label={isExpanded ? 'Hide full tensor' : 'Show full tensor'}
                 onChange={() => handleExpandToggle()}
                 checked={isExpanded}
@@ -67,7 +66,6 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
 
                     {onCollapse && (
                         <Switch
-                            className='expand-button'
                             label='Hide full tensor'
                             onChange={() => handleExpandToggle()}
                             checked={isExpanded}

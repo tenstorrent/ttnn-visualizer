@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Button, Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -24,7 +24,7 @@ const ActiveTransferDetails = ({
     highlightedTransfer: NoCTransfer | null;
     setHighlightedTransfer: (transfer: NoCTransfer | null) => void;
     congestionData: LinkUtilization[];
-    nocType: NoCType | undefined;
+    nocType: NoCType | null;
 }) => {
     return (
         <div className='side-data'>

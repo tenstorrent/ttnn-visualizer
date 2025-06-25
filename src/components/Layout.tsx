@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Classes } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { useSetAtom } from 'jotai';
@@ -54,8 +54,8 @@ function Layout() {
 
             <header className='app-header'>
                 <nav className='nav-container'>
-                    <a
-                        href={ROUTES.HOME}
+                    <Link
+                        to={ROUTES.HOME}
                         className='title'
                     >
                         <h1>
@@ -67,7 +67,8 @@ function Layout() {
                             <span className='visualizer-title'>TT-NN Visualizer</span>
                         </h1>
                         <sup className='version'>v{appVersion}</sup>
-                    </a>
+                    </Link>
+
                     <MainNavigation />
                 </nav>
             </header>

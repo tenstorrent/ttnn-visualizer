@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { PerfTableRow } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from './sortAndFilterPerfTableData';
 
-const PLACEHOLDER: PerfTableRow = {
-    id: '',
+const PLACEHOLDER: TypedPerfTableRow = {
+    id: null,
     advice: [],
-    total_percent: '',
+    total_percent: null,
     bound: '',
     op_code: 'MISSING',
     raw_op_code: 'MISSING',
-    device_time: '',
-    op_to_op_gap: '',
-    cores: '',
-    dram: '',
-    dram_percent: '',
-    flops: '',
-    flops_percent: '',
+    device_time: null,
+    op_to_op_gap: null,
+    cores: null,
+    dram: null,
+    dram_percent: null,
+    flops: null,
+    flops_percent: null,
     math_fidelity: '',
     output_datatype: '',
     output_0_memory: '',
@@ -32,81 +32,100 @@ const PLACEHOLDER: PerfTableRow = {
     pm_ideal_ns: '',
 };
 
-const MISSING_ROWS: PerfTableRow[] = [];
-const MISSING_PREFIX = 'MISSING - ';
+const MISSING_PREFIX = 'MISSING -';
 
-function normalisePerformanceData(arr1: PerfTableRow[], arr2: PerfTableRow[]) {
-    MISSING_ROWS.length = 0; // Clear array
-    const result1 = [];
-    const result2 = [];
+function alignByOpCode(
+    refData: TypedPerfTableRow[],
+    dataToAlign: TypedPerfTableRow[][],
+    threshold = 5,
+    maxMissingRatio = 0.3,
+): { data: TypedPerfTableRow[][]; missingRows: TypedPerfTableRow[] } {
+    const missingRows = new Map<string, TypedPerfTableRow>();
+    const missingCounts = new Array(dataToAlign.length).fill(0); // Tracks how many placeholder rows have been inserted for each dataset
+    const currentIndexes = new Array(dataToAlign.length).fill(0); // Tracks the current index/position in each dataset as the alignment proceeds.
+    const aligned: TypedPerfTableRow[][] = [[], ...dataToAlign.map(() => [])];
 
-    let i = 0;
-    let j = 0;
+    let refIndex = 0;
 
-    while (i < arr1.length && j < arr2.length) {
-        const item1 = arr1[i];
-        const item2 = arr2[j];
-        const code1 = item1.raw_op_code;
-        const code2 = item2.raw_op_code;
+    while (refIndex < refData.length) {
+        const refRow = refData[refIndex];
+        const refOp = refRow.raw_op_code;
+        let allMatched = true;
 
-        // Op code match, continue on
-        if (code1 === code2) {
-            result1.push(item1);
-            result2.push(item2);
-            i++;
-            j++;
-        } else {
-            // Look ahead to find matching op_code in remaining items
-            const nextMatchIn1 = arr1.slice(i + 1).findIndex((el) => el.raw_op_code === code2);
-            const nextMatchIn2 = arr2.slice(j + 1).findIndex((el) => el.raw_op_code === code1);
+        aligned[0].push({ ...refRow });
 
-            const indexIn1 = nextMatchIn1 >= 0 ? i + 1 + nextMatchIn1 : null;
-            const indexIn2 = nextMatchIn2 >= 0 ? j + 1 + nextMatchIn2 : null;
+        for (let dataIndex = 0; dataIndex < dataToAlign.length; dataIndex++) {
+            const dataset = dataToAlign[dataIndex];
+            const currentIndex = currentIndexes[dataIndex];
+            let matchFound = false;
 
-            if (indexIn1 !== null && (indexIn2 === null || indexIn1 - i <= indexIn2 - j)) {
-                // Add placeholders until match is found (arr1)
-                while (i < indexIn1) {
-                    result1.push(arr1[i]);
-                    result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr1[i].raw_op_code}` });
-                    MISSING_ROWS.push(arr1[i]);
-                    i++;
+            for (let lookahead = 0; lookahead <= threshold; lookahead++) {
+                if (currentIndex + lookahead >= dataset.length) {
+                    break;
                 }
-            } else if (indexIn2 !== null) {
-                // Add placeholders until match is found (arr2)
-                while (j < indexIn2) {
-                    result2.push(arr2[j]);
-                    result1.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr2[j].raw_op_code}` });
-                    MISSING_ROWS.push(arr2[j]);
-                    j++;
+
+                const otherOp = dataset[currentIndex + lookahead].raw_op_code;
+
+                if (otherOp === refOp) {
+                    // Found match, insert MISSING for skipped ops
+                    for (let current = 0; current < lookahead; current++) {
+                        missingCounts[dataIndex]++;
+                    }
+
+                    aligned[dataIndex + 1].push({ ...dataset[currentIndex + lookahead] });
+                    currentIndexes[dataIndex] = currentIndex + lookahead + 1;
+                    matchFound = true;
+                    break;
                 }
-            } else {
-                // No match found
-                result1.push(item1);
-                result2.push(item2);
-                i++;
-                j++;
             }
+
+            if (!matchFound) {
+                missingCounts[dataIndex]++;
+                allMatched = false;
+                aligned[dataIndex + 1].push({
+                    ...PLACEHOLDER,
+                    op_code: `${MISSING_PREFIX} ${refOp}`,
+                    raw_op_code: `${MISSING_PREFIX} ${refOp}`,
+                });
+            }
+        }
+
+        if (!allMatched && !missingRows.has(refOp)) {
+            missingRows.set(refOp, refRow);
+        }
+
+        refIndex++;
+    }
+
+    // Padding to ensure all arrays are same length
+    const maxLen = Math.max(...aligned.map((arr) => arr.length));
+    for (const arr of aligned) {
+        while (arr.length < maxLen) {
+            const largestArr = aligned.reduce((a, b) => (a.length > b.length ? a : b));
+
+            const id = largestArr[arr.length]?.id || null;
+            const opCode = largestArr[arr.length]?.op_code || '';
+            const rawOpCode = largestArr[arr.length]?.raw_op_code || '';
+
+            const opCodeMessage = `${MISSING_PREFIX} ${opCode}`;
+            const rawOpCodeMessage = `${MISSING_PREFIX} ${rawOpCode}`;
+
+            arr.push({ ...PLACEHOLDER, id, op_code: opCodeMessage, raw_op_code: rawOpCodeMessage });
         }
     }
 
-    // Fill any remaining items (arr1)
-    while (i < arr1.length) {
-        result1.push(arr1[i]);
-        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr1[i].raw_op_code}` });
-        MISSING_ROWS.push(arr1[i]);
-        i++;
+    // Discard datasets with too many missing rows
+    for (let dataIndex = 0; dataIndex < dataToAlign.length; dataIndex++) {
+        const ratio = missingCounts[dataIndex] / maxLen;
+        if (ratio > maxMissingRatio) {
+            aligned[dataIndex + 1] = [];
+        }
     }
 
-    // Fill any remaining items (arr2)
-    while (j < arr2.length) {
-        result1.push(PLACEHOLDER);
-        result2.push({ ...PLACEHOLDER, op_code: `${MISSING_PREFIX} ${arr2[j].raw_op_code}` });
-        MISSING_ROWS.push(arr2[j]);
-        j++;
-    }
-
-    return [result1, result2];
+    return {
+        data: aligned,
+        missingRows: [...missingRows.values()],
+    };
 }
 
-export default normalisePerformanceData;
-export { MISSING_ROWS };
+export default alignByOpCode;

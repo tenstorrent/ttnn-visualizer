@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { ClusterCoordinates } from './ClusterModel';
 
@@ -86,10 +86,13 @@ export const NPE_KPI_METADATA = {
 type row = number;
 type col = number;
 type device_id = number;
-// TODO: change to enum
+
 type NoCTransferId = number;
 
-export type NoCType = 'NOC0' | 'NOC1';
+export enum NoCType {
+    NOC0 = 'NOC0',
+    NOC1 = 'NOC1',
+}
 
 export enum NoCID {
     NOC1_NORTH = 'NOC1_NORTH',

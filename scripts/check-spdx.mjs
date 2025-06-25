@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
@@ -5,48 +6,97 @@
 import fs from 'fs';
 import path from 'path';
 
-const targetString = '// SPDX-License-Identifier';
-const ignoredDirs = ['node_modules', '.git', '.github', '.idea', '.vscode', 'dist', 'build', 'backend', 'ttnn_env'];
-const nonCompliantFiles = [];
+// License formats
+const SPDX_JS_LICENSE = '// SPDX-License-Identifier: Apache-2.0';
+const SPDX_PYTHON_LICENSE = '# SPDX-License-Identifier: Apache-2.0';
+const SPDX_PACKAGE_JSON_LICENSE = {
+    license: 'Apache-2.0',
+    author: {
+        name: 'Tenstorrent AI ULC',
+        url: 'https://tenstorrent.com/',
+    },
+};
 
-function isTextFile(filePath) {
-    const ext = path.extname(filePath).toLowerCase();
-    return ['.js', '.ts', '.jsx', '.tsx', '.mjs', '.css', '.scss', '.xml'].includes(ext);
-}
+// File extensions
+const JS_FILE_EXTENSIONS = ['.js', '.ts', '.jsx', '.tsx', '.mjs', '.css', '.scss', '.xml'];
+const PYTHON_FILE_EXTENSIONS = ['.py'];
+const JSON_FILE_EXTENSIONS = ['.json'];
 
-function checkFile(filePath) {
+const IGNORED_DIRS = [
+    '.git',
+    '.github',
+    '.idea',
+    '.vscode',
+    'dist',
+    'build',
+    'backend/data/',
+    'backend/ttnn_visualizer/data',
+    'backend/ttnn_visualizer/static',
+    'node_modules',
+    'ttnn_env',
+];
+const NON_COMPLIANT_FILES = [];
+
+const isFileType = (filePath, extensions) => extensions.includes(path.extname(filePath).toLowerCase());
+
+const checkLicenseString = (filePath, licenseType) => {
     const content = fs.readFileSync(filePath, 'utf8');
-    const firstFewLines = content.split('\n').slice(0, 5).join('\n');
-    if (!firstFewLines.includes(targetString)) {
-        nonCompliantFiles.push(filePath);
+    const firstFewLines = content.split('\n').slice(0, 3).join('\n');
+
+    if (!firstFewLines.includes(licenseType)) {
+        NON_COMPLIANT_FILES.push(filePath);
     }
-}
+};
+
+const checkLicenseObject = (filePath, licenseType) => {
+    try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const json = JSON.parse(content);
+        const authors = json.author || {};
+        const requiredAuthorShape = licenseType.author;
+        const hasAllAuthorKeys = Object.keys(requiredAuthorShape).every(
+            (key) => authors[key] === requiredAuthorShape[key],
+        );
+        const hasLicense = json.license === licenseType.license;
+        if (!hasAllAuthorKeys || !hasLicense) {
+            NON_COMPLIANT_FILES.push(filePath);
+        }
+    } catch (err) {
+        console.error(`Error processing file ${filePath}:`, err);
+        NON_COMPLIANT_FILES.push(filePath);
+    }
+};
 
 function walkDirectory(dir) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
-
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
+        const relativePath = path.relative(process.cwd(), fullPath);
 
-        if (entry.isDirectory()) {
-            if (!ignoredDirs.includes(entry.name)) {
-                walkDirectory(fullPath);
+        if (
+            entry.isDirectory() &&
+            !IGNORED_DIRS.some((ignoredDirectory) => relativePath.startsWith(ignoredDirectory))
+        ) {
+            walkDirectory(fullPath);
+        } else if (entry.isFile()) {
+            if (isFileType(relativePath, JS_FILE_EXTENSIONS)) {
+                checkLicenseString(relativePath, SPDX_JS_LICENSE);
+            } else if (isFileType(relativePath, PYTHON_FILE_EXTENSIONS)) {
+                checkLicenseString(relativePath, SPDX_PYTHON_LICENSE);
+            } else if (isFileType(relativePath, JSON_FILE_EXTENSIONS) && relativePath.includes('package.json')) {
+                checkLicenseObject(relativePath, SPDX_PACKAGE_JSON_LICENSE);
             }
-        } else if (entry.isFile() && isTextFile(fullPath)) {
-            checkFile(fullPath);
         }
     }
 }
 
-const startDir = process.cwd();
-walkDirectory(startDir);
+walkDirectory(process.cwd());
 
-if (nonCompliantFiles.length > 0) {
-    // eslint-disable-next-line no-console
-    console.log(`${nonCompliantFiles.length} files missing the SPDX-License-Identifier string:`);
-    // eslint-disable-next-line no-console
-    nonCompliantFiles.forEach((file) => console.log(file));
+if (NON_COMPLIANT_FILES.length > 0) {
+    console.error(`${NON_COMPLIANT_FILES.length} files missing the SPDX-License-Identifier string:`);
+    NON_COMPLIANT_FILES.forEach((file) => console.log(file));
+    process.exit(1);
 } else {
-    // eslint-disable-next-line no-console
-    console.log('All files contain the SPDX-License-Identifier string.');
+    console.log('All scanned files contain the SPDX-License-Identifier string.');
+    process.exit(0);
 }

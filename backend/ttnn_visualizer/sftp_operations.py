@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import json
 import logging
@@ -52,7 +52,7 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     """
     Resolve the file path if it contains a wildcard ('*') by using glob on the remote machine.
 
-    :param session: A session object containing the remote connection information.
+    :param remote_connection: A RemoteConnection object containing the remote connection information.
     :param file_path: The file path, which may include wildcards.
     :return: The resolved file path.
     :raises FileNotFoundError: If no files match the pattern.
@@ -286,9 +286,13 @@ def get_remote_profiler_folder_from_config_path(
     attributes = sftp.lstat(str(config_path))
     with sftp.open(str(config_path), "rb") as config_file:
         data = json.loads(config_file.read())
+
+        report_name = data.get("report_name")
+        logger.info(f"********* report_name: {report_name}")
+
         return RemoteReportFolder(
             remotePath=str(Path(config_path).parent),
-            testName=data["report_name"], # Config file includes "report_name"
+            reportName=report_name,
             lastModified=(
                 int(attributes.st_mtime) if attributes.st_mtime else int(time.time())
             ),
@@ -307,7 +311,7 @@ def get_remote_performance_folder(
     )
     return RemoteReportFolder(
         remotePath=str(remote_path),
-        testName=str(performance_name),
+        reportName=str(performance_name),
         lastModified=last_modified,
     )
 

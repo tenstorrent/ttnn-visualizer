@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { JSX } from 'react';
 
@@ -15,6 +15,7 @@ interface EmptyChipRendererProps {
     showActiveTransfers: (arg: null) => void;
     isAnnotatingCores: boolean;
     TENSIX_SIZE: number;
+    renderChipId: boolean;
 }
 
 export const EmptyChipRenderer: React.FC<EmptyChipRendererProps> = ({
@@ -28,6 +29,7 @@ export const EmptyChipRenderer: React.FC<EmptyChipRendererProps> = ({
     showActiveTransfers,
     isAnnotatingCores,
     TENSIX_SIZE,
+    renderChipId = true,
 }: EmptyChipRendererProps) => {
     const getNodeType = (location: number[]): JSX.Element => {
         const [y, x] = location;
@@ -55,7 +57,7 @@ export const EmptyChipRenderer: React.FC<EmptyChipRendererProps> = ({
                 gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
             }}
         >
-            <div className='chip-id'>{id}</div>
+            {renderChipId && <div className='chip-id'>{id}</div>}
 
             {Array.from({ length: width }).map((_, x) =>
                 Array.from({ length: height }).map((__, y) => (

@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import logging
 import re
 from ttnn_visualizer.enums import ConnectionTestStates
 
 
 from functools import wraps
-from flask import request, abort
+from flask import abort, request, session
 from paramiko.ssh_exception import (
     AuthenticationException,
     NoValidConnectionsError,
@@ -19,10 +20,12 @@ from ttnn_visualizer.exceptions import (
     NoProjectsException,
     RemoteSqliteException,
 )
-from ttnn_visualizer.sessions import get_or_create_instance
+from ttnn_visualizer.instances import get_or_create_instance
+
+logger = logging.getLogger(__name__)
 
 
-def with_session(func):
+def with_instance(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         from flask import current_app
@@ -33,10 +36,17 @@ def with_session(func):
             current_app.logger.error("No instanceId present on request, returning 404")
             abort(404)
 
-        session_query_data = get_or_create_instance(instance_id=instance_id)
-        session = session_query_data.to_pydantic()
+        instance_query_data = get_or_create_instance(instance_id=instance_id)
+        instance = instance_query_data.to_pydantic()
 
-        kwargs["session"] = session
+        kwargs["instance"] = instance
+
+        if 'instances' not in session:
+            session['instances'] = []
+
+        if instance.instance_id not in session['instances']:
+            session['instances'] = session.get('instances', []) + [instance.instance_id]
+
         return func(*args, **kwargs)
 
     return wrapper
@@ -108,3 +118,16 @@ def remote_exception_handler(func):
             )
 
     return remote_handler
+
+
+def local_only(f):
+    from flask import current_app
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if current_app.config["SERVER_MODE"]:
+            abort(403, description="Endpoint not accessible")
+
+        return f(*args, **kwargs)
+
+    return decorated_function

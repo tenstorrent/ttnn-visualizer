@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Button, InputGroup, RangeSlider, Tooltip } from '@blueprintjs/core';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import {
     activePerformanceReportAtom,
     comparisonPerformanceReportAtom,
+    hasClusterDescriptionAtom,
     operationRangeAtom,
     performanceRangeAtom,
     selectedOperationRangeAtom,
@@ -18,10 +19,11 @@ import {
 import ROUTES from '../definitions/Routes';
 import 'styles/components/RangeSlider.scss';
 import {
+    useGetClusterDescription,
     useGetDeviceOperationListPerf,
+    useOpToPerfIdFiltered,
     useOperationListRange,
     useOperationsList,
-    useOptoPerfIdFiltered,
     usePerformanceRange,
     usePerformanceReport,
 } from '../hooks/useAPI';
@@ -40,13 +42,15 @@ function Range() {
     const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
     const [isUserOpChange, setIsUserOpChange] = useState(false);
     const [isUserPerfChange, setIsUserPerfChange] = useState(false);
+    const setHasClusterDescription = useSetAtom(hasClusterDescriptionAtom);
 
     const { data: operations } = useOperationsList();
     const { data: perfData } = usePerformanceReport(activePerformanceReport);
+    const { data: clusterData } = useGetClusterDescription();
     const location = useLocation();
     const listPerf = useGetDeviceOperationListPerf();
     const isInSync = listPerf?.length > 0;
-    const opIdsMap = useOptoPerfIdFiltered();
+    const opIdsMap = useOpToPerfIdFiltered();
     const operationRange = useOperationListRange();
     const perfRange = usePerformanceRange();
 
@@ -147,6 +151,10 @@ function Range() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isInSync, selectedPerformanceRange]);
+
+    useEffect(() => {
+        setHasClusterDescription(!!clusterData);
+    }, [clusterData, setHasClusterDescription]);
 
     return selectedOperationRange || selectedPerformanceRange ? (
         <div className='range-slider'>

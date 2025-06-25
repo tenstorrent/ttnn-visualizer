@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 interface ToastFileChangeProps {
     message: string;
@@ -12,7 +12,7 @@ const ToastFileChange = ({ message, fileName }: ToastFileChangeProps) => {
         <div>
             {message}
             <br />
-            <strong>{fileName}</strong>
+            <strong data-testid='toast-filename'>{fileName}</strong>
         </div>
     );
 };

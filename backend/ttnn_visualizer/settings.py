@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import os
 from pathlib import Path
@@ -16,16 +16,27 @@ class DefaultConfig(object):
     DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))
     TESTING = False
     PRINT_ENV = True
+    SERVER_MODE = str_to_bool(os.getenv("SERVER_MODE", "false"))
+    MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
+    ALLOWED_ORIGINS = [
+        o for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000").split(",")
+        if o
+    ]
+    BASE_PATH = os.getenv("BASE_PATH", "/")
+    MAX_CONTENT_LENGTH = (
+        None if not (v := os.getenv("MAX_CONTENT_LENGTH")) else int(v)
+    )
 
     # Path Settings
     DB_VERSION = "0.29.0"  # App version when DB schema last changed
-    REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
+    REPORT_DATA_DIRECTORY = os.getenv("REPORT_DATA_DIRECTORY", Path(__file__).parent.absolute().joinpath("data"))
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
     REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
     PROFILER_DIRECTORY_NAME = "profiler-reports"
     PERFORMANCE_DIRECTORY_NAME = "performance-reports"
     NPE_DIRECTORY_NAME = "npe-reports"
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
+    APP_DATA_DIRECTORY = os.getenv("APP_DATA_DIRECTORY", APPLICATION_DIR)
     STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0
 
@@ -40,7 +51,7 @@ class DefaultConfig(object):
 
     # SQL Alchemy Settings
     SQLALCHEMY_DATABASE_URI = (
-        f"sqlite:///{os.path.join(APPLICATION_DIR, f'ttnn_{DB_VERSION}.db')}"
+        f"sqlite:///{os.path.join(APP_DATA_DIRECTORY, f'ttnn_{DB_VERSION}.db')}"
     )
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_size": 10,  # Adjust pool size as needed (default is 5)

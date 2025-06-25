@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
@@ -10,10 +10,10 @@ import { NPE_LINK, NoCType, TimestepData } from '../../model/NPEModel';
 interface NPEHeatMapProps {
     timestepList: TimestepData[];
     canvasWidth: number;
-    nocType?: NoCType;
+    nocType?: NoCType | null;
 }
 
-const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasWidth, nocType = undefined }) => {
+const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasWidth, nocType = null }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const canvasHeight = 30;
 

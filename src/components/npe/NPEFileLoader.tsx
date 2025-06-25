@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { useState } from 'react';
 import { useAtom } from 'jotai';
@@ -61,7 +61,7 @@ const NPEFileLoader: React.FC = () => {
     return (
         <div className='npe-file-loader'>
             <FileInput
-                text={npeFileName ?? 'Choose file...'}
+                text={npeFileName ?? 'Upload an NPE report file for analysis...'}
                 onInputChange={handleFileChange}
             />
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import axios from 'axios';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
@@ -13,10 +13,7 @@ const useRemoteConnection = () => {
 
     // TODO Ensure on form that SSH connection is valid first
     const fetchSqlitePath = async (connection: Partial<RemoteConnection>) => {
-        const { data: connectionTestStates } = await axiosInstance.post(
-            `${import.meta.env.VITE_API_ROOT}/remote/sqlite/detect-path`,
-            connection,
-        );
+        const { data: connectionTestStates } = await axiosInstance.post('/api/remote/sqlite/detect-path', connection);
         return connectionTestStates;
     };
 
@@ -30,10 +27,7 @@ const useRemoteConnection = () => {
             ];
         }
 
-        const { data: connectionTestStates } = await axiosInstance.post(
-            `${import.meta.env.VITE_API_ROOT}/remote/test`,
-            connection,
-        );
+        const { data: connectionTestStates } = await axiosInstance.post('/api/remote/test', connection);
 
         return connectionTestStates;
     };
@@ -43,10 +37,7 @@ const useRemoteConnection = () => {
             throw new Error('No connection provided');
         }
 
-        const response = await axiosInstance.post<RemoteFolder[]>(
-            `${import.meta.env.VITE_API_ROOT}/remote/profiler`,
-            connection,
-        );
+        const response = await axiosInstance.post<RemoteFolder[]>('/api/remote/profiler', connection);
 
         return response.data;
     };
@@ -55,12 +46,9 @@ const useRemoteConnection = () => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
-        const response = await axiosInstance.post<RemoteFolder[]>(
-            `${import.meta.env.VITE_API_ROOT}/remote/performance`,
-            {
-                connection,
-            },
-        );
+        const response = await axiosInstance.post<RemoteFolder[]>('/api/remote/performance', {
+            connection,
+        });
 
         return response.data;
     };
@@ -77,7 +65,7 @@ const useRemoteConnection = () => {
         if (!remoteFolder && !remoteProfile) {
             throw new Error('No remote folder provided');
         }
-        return axiosInstance.post<RemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/sync`, {
+        return axiosInstance.post<RemoteFolder>('/api/remote/sync', {
             connection,
             folder: remoteFolder,
             profile: remoteProfile,
@@ -89,7 +77,7 @@ const useRemoteConnection = () => {
         remoteFolder?: RemoteFolder,
         remoteProfile?: RemoteFolder,
     ) => {
-        return axiosInstance.post<MountRemoteFolder>(`${import.meta.env.VITE_API_ROOT}/remote/use`, {
+        return axiosInstance.post<MountRemoteFolder>('/api/remote/use', {
             connection,
             folder: remoteFolder,
             profile: remoteProfile,
@@ -152,7 +140,7 @@ const useRemoteConnection = () => {
 
     const readRemoteFile = async (connection?: RemoteConnection) => {
         try {
-            const response = await axiosInstance.post(`${import.meta.env.VITE_API_ROOT}/remote/read`, connection);
+            const response = await axiosInstance.post('/api/remote/read', connection);
 
             return response.data;
         } catch (error) {
