@@ -14,8 +14,7 @@ import InitialMessage from '../components/InitialMessage';
 function Home() {
     useClearSelectedBuffer();
 
-    const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
-    const isDialogEnabled = !!getServerConfig()?.SERVER_MODE;
+    const isServerMode = !!getServerConfig()?.SERVER_MODE;
 
     return (
         <div className='home'>
@@ -45,7 +44,7 @@ function Home() {
                         <RemoteSyncConfigurator />
                     </div>
 
-                    {disableRemoteSync ? (
+                    {isServerMode ? (
                         <div
                             className='feature-disabled'
                             data-testid='remote-sync-disabled'
@@ -73,7 +72,7 @@ function Home() {
                 </fieldset>
             </div>
 
-            {isDialogEnabled && <InitialMessage />}
+            {isServerMode && <InitialMessage />}
         </div>
     );
 }
