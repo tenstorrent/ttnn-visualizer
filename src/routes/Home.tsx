@@ -52,8 +52,7 @@ function Home() {
                             <Callout
                                 className='callout'
                                 title='Feature unavailable'
-                                icon={IconNames.WARNING_SIGN}
-                                intent={Intent.WARNING}
+                                intent={Intent.NONE}
                             >
                                 <p>
                                     This feature is not available in the server version of the app. Download{' '}
