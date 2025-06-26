@@ -71,7 +71,7 @@ function MainNavigation() {
                         target='_blank'
                         rel='noreferrer'
                     >
-                        PyPi
+                        PyPI
                     </a>
                     or head over to{' '}
                     <a
