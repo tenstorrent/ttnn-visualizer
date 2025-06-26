@@ -78,7 +78,15 @@ def create_app(settings_override=None):
                     js,
                 )
 
-            return flask.Response(html_with_config, mimetype="text/html")
+            return flask.Response(
+                html_with_config,
+                mimetype="text/html",
+                headers={
+                    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                },
+            )
 
     return app
 
