@@ -363,7 +363,6 @@ export const useGetClusterDescription = () => {
 
 export const useOperationsList = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
-
     return useQuery<OperationDescription[], AxiosError>({
         queryFn: () => (activeProfilerReport !== null ? fetchOperations() : Promise.resolve([])),
         queryKey: ['get-operations', activeProfilerReport],
@@ -377,8 +376,9 @@ export const useOperationListRange = (): NumberRange | null => {
 
     return useMemo(
         () => (response?.data?.length ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [response.isLoading],
+        // TODO: this used to rely on response.isLoading... which iis an invalid dependency. will have to wait for david to come  bakc.
+        // this fixes #613 https://github.com/tenstorrent/ttnn-visualizer/issues/613
+        [response.data],
     );
 };
 
