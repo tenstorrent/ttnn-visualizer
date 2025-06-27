@@ -16,7 +16,7 @@ from typing import cast
 
 import flask
 from dotenv import load_dotenv
-from flask import Flask, jsonify
+from flask import Flask, abort, jsonify
 from flask_cors import CORS
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -46,7 +46,11 @@ def create_app(settings_override=None):
 
     config = cast(DefaultConfig, Config())
 
-    app = Flask(__name__, static_folder=config.STATIC_ASSETS_DIR, static_url_path="/")
+    app = Flask(
+        __name__,
+        static_folder=config.STATIC_ASSETS_DIR,
+        static_url_path=f"{config.BASE_PATH}static",
+    )
     logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
 
     app.config.from_object(config)
@@ -56,14 +60,17 @@ def create_app(settings_override=None):
 
     middleware(app)
 
-    app.register_blueprint(api, url_prefix=f"{app.config['BASE_PATH']}/api")
+    app.register_blueprint(api, url_prefix=f"{app.config['BASE_PATH']}api")
 
     extensions(app)
 
     if flask_env == "production":
-        @app.route(f"{app.config['BASE_PATH']}/", defaults={"path": ""})
-        @app.route("/<path:path>")
+        @app.route(f"{app.config['BASE_PATH']}", defaults={"path": ""})
+        @app.route(f"{app.config['BASE_PATH']}<path:path>")
         def catch_all(path):
+            if path.startswith("static/"):
+                abort(404)  # Pass control to Flask's static view
+
             js_config = {
                 "SERVER_MODE": app.config["SERVER_MODE"],
                 "BASE_PATH": app.config["BASE_PATH"],

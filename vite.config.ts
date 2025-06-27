@@ -12,12 +12,13 @@ import { legacySassSvgInlinerFactory } from './src/libs/blueprintjs/legacySassSv
 import { version } from './package.json';
 
 // https://vitejs.dev/config/
-export default defineConfig(() => {
+export default defineConfig(({ command }) => {
     return {
         build: {
             outDir: './backend/ttnn_visualizer/static/',
             emptyOutDir: true,
         },
+        base: command === 'serve' ? '/' : '/static/',
         define: {
             'import.meta.env.APP_VERSION': JSON.stringify(version),
         },
