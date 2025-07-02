@@ -2,6 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent Inc.
 import csv
+import json
 import os
 import tempfile
 from io import StringIO
@@ -14,7 +15,7 @@ from tt_perf_report import perf_report
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.ssh_client import get_client
-
+from ttnn_visualizer.sftp_operations import read_remote_file
 
 class LocalCSVQueryRunner:
     def __init__(self, file_path: str, offset: int = 0):
@@ -211,7 +212,7 @@ class RemoteCSVQueryRunner:
         if error:
             raise RuntimeError(f"Error fetching raw rows: {error}")
 
-        return output.splitlines()[self.offset :]
+        return output.splitlines()[self.offset:]
 
     def get_csv_header(self) -> Dict[str, int]:
         """
@@ -257,6 +258,32 @@ class RemoteCSVQueryRunner:
         """
         if self.ssh_client:
             self.ssh_client.close()
+
+
+class NPEQueries:
+    NPE_FOLDER = "npe_viz"
+    MANIFEST_FILE = "manifest.json"
+
+    @staticmethod
+    def get_npe_manifest(instance: Instance):
+
+
+        if (
+            not instance.remote_connection
+            or instance.remote_connection
+            and not instance.remote_connection.useRemoteQuerying
+        ):
+            file_path = Path(
+                instance.performance_path, NPEQueries.NPE_FOLDER, NPEQueries.MANIFEST_FILE
+            )
+            with open(file_path, "r") as f:
+                return json.load(f)
+        else:
+            profiler_folder = instance.remote_profile_folder
+            return read_remote_file(
+                instance.remote_connection,
+                f"{profiler_folder.remotePath}/{NPEQueries.NPE_FOLDER}/{NPEQueries.MANIFEST_FILE}",
+            )
 
 
 class DeviceLogProfilerQueries:
@@ -640,7 +667,7 @@ class OpsPerformanceReportQueries:
 
                     for key, value in cls.PASSTHROUGH_COLUMNS.items():
                         op_id = int(row[0])
-                        idx = op_id - 2 # IDs in result column one correspond to row numbers in ops perf results csv
+                        idx = op_id - 2  # IDs in result column one correspond to row numbers in ops perf results csv
                         processed_row[key] = ops_perf_results[idx][value]
 
                     report.append(processed_row)
