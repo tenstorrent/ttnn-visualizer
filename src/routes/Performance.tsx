@@ -48,8 +48,7 @@ export default function Performance() {
 
     const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
 
-    // @ts-expect-error we want this here for now to get triggered
-    const _npeManifest = useGetNPEManifest();
+    const { data: _npeManifest } = useGetNPEManifest();
 
     useClearSelectedBuffer();
 
