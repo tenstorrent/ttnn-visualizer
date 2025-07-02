@@ -36,7 +36,7 @@ import {
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import { NPEData } from '../model/NPEModel';
+import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
@@ -304,6 +304,21 @@ const fetchPerformanceReport = async (name?: string | null): Promise<PerfTableRo
     });
 
     return data;
+};
+
+const fetchNPEManifest = async (): Promise<NPEManifestEntry[]> => {
+    const { data } = await axiosInstance.get<NPEManifestEntry[]>(`/api/performance/npe/manifest`);
+    return data;
+};
+
+export const useGetNPEManifest = () => {
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+
+    return useQuery<NPEManifestEntry[], AxiosError>({
+        queryFn: () => fetchNPEManifest(),
+        queryKey: ['get-npe-manifest', activePerformanceReport],
+        retry: false,
+    });
 };
 
 interface MetaData {

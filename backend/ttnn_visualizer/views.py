@@ -6,13 +6,13 @@ import dataclasses
 import json
 import logging
 import re
+import shutil
 import time
 from http import HTTPStatus
 from pathlib import Path
 from typing import List
-import shutil
-from wsgiref.validate import bad_header_value_re
 
+import yaml
 import zstd
 from flask import (
     Blueprint,
@@ -23,7 +23,8 @@ from flask import (
     request,
 )
 
-from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries, OpsPerformanceReportQueries
+from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, OpsPerformanceQueries, OpsPerformanceReportQueries, \
+    NPEQueries
 from ttnn_visualizer.decorators import with_instance, local_only
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import DataFormatError
@@ -33,6 +34,9 @@ from ttnn_visualizer.file_uploads import (
     extract_npe_name,
     save_uploaded_files,
     validate_files,
+)
+from ttnn_visualizer.instances import (
+    get_instances, update_instance,
 )
 from ttnn_visualizer.models import (
     RemoteReportFolder,
@@ -51,9 +55,6 @@ from ttnn_visualizer.serializers import (
     serialize_operations_buffers,
     serialize_devices, serialize_buffer,
 )
-from ttnn_visualizer.instances import (
-    get_instances, update_instance,
-)
 from ttnn_visualizer.sftp_operations import (
     sync_remote_profiler_folders,
     read_remote_file,
@@ -70,8 +71,6 @@ from ttnn_visualizer.utils import (
     read_last_synced_file,
     timer,
 )
-
-import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -635,6 +634,18 @@ def get_performance_data_raw(instance: Instance):
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=profile_log_device.csv"},
     )
+
+@api.route("/performance/npe/manifest", methods=["GET"])
+@with_instance
+def get_npe_manifest(instance: Instance):
+    if not instance.performance_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+    try:
+        content = NPEQueries.get_npe_manifest(instance)
+    except FileNotFoundError:
+        return jsonify([])
+
+    return jsonify(content)
 
 
 @api.route("/performance/device-log/zone/<zone>", methods=["GET"])
