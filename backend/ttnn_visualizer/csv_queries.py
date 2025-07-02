@@ -15,7 +15,7 @@ from tt_perf_report import perf_report
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.ssh_client import get_client
-
+from ttnn_visualizer.sftp_operations import read_remote_file
 
 class LocalCSVQueryRunner:
     def __init__(self, file_path: str, offset: int = 0):
@@ -266,7 +266,7 @@ class NPEQueries:
 
     @staticmethod
     def get_npe_manifest(instance: Instance):
-        from ttnn_visualizer.sftp_operations import read_remote_file
+
 
         if (
             not instance.remote_connection
