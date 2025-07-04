@@ -106,7 +106,7 @@ def calculate_folder_size(client: SSHClient, folder_path: str) -> int:
     return int(size_info)
 
 
-def get_cluster_desc_path(ssh_client) -> Optional[str]:
+def get_cluster_desc_path(remote_connection: RemoteConnection) -> Optional[str]:
     """
     List all folders matching '/tmp/umd_*' on the remote machine, filter for those containing
     'cluster_descriptor.yaml', and return the full path to the most recently modified YAML file.
@@ -119,37 +119,71 @@ def get_cluster_desc_path(ssh_client) -> Optional[str]:
     cluster_desc_file = "cluster_descriptor.yaml"
 
     try:
-        # Command to list all folders matching '/tmp/umd_*'
-        list_folders_command = "ls -1d /tmp/umd_* 2>/dev/null"
-        stdin, stdout, stderr = ssh_client.exec_command(list_folders_command)
+        # Build SSH command to list folders matching '/tmp/umd_*'
+        ssh_cmd = [
+            "ssh",
+            f"{remote_connection.username}@{remote_connection.host}",
+        ]
+
+        # Handle non-standard SSH port
+        if remote_connection.port != 22:
+            ssh_cmd.extend(["-p", str(remote_connection.port)])
+
+        # Add the ls command
+        ssh_cmd.append("ls -1d /tmp/umd_* 2>/dev/null")
+
+        # Execute SSH command to list folders
+        result = subprocess.run(
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=False  # Don't raise exception on non-zero exit (in case no folders found)
+        )
 
         # Get the list of folders
-        folder_paths = stdout.read().decode().splitlines()
+        folder_paths = result.stdout.strip().splitlines() if result.stdout.strip() else []
 
         if not folder_paths:
             logger.info("No folders found matching the pattern '/tmp/umd_*'")
             return None
 
         # Check each folder for 'cluster_descriptor.yaml' and track the most recent one
-        with ssh_client.open_sftp() as sftp:
-            for folder in folder_paths:
-                yaml_file_path = f"{folder}/{cluster_desc_file}"
-                try:
-                    # Check if 'cluster_descriptor.yaml' exists and get its modification time
-                    attributes = sftp.stat(yaml_file_path)
-                    mod_time = attributes.st_mtime  # Modification time
+        for folder in folder_paths:
+            yaml_file_path = f"{folder}/{cluster_desc_file}"
 
-                    # Update the latest file if this one is newer
-                    if mod_time > latest_mod_time:
-                        latest_mod_time = mod_time
-                        latest_yaml_path = yaml_file_path
-                        logger.info(
-                            f"Found newer {cluster_desc_file}': {yaml_file_path}"
-                        )
+            # Build SSH command to check if file exists and get its modification time
+            stat_cmd = [
+                "ssh",
+                f"{remote_connection.username}@{remote_connection.host}",
+            ]
 
-                except FileNotFoundError:
-                    logger.debug(f"'{cluster_desc_file}' not found in: {folder}")
-                    continue
+            if remote_connection.port != 22:
+                stat_cmd.extend(["-p", str(remote_connection.port)])
+
+            # Use stat to get modification time (seconds since epoch)
+            stat_cmd.append(f"stat -c %Y '{yaml_file_path}' 2>/dev/null")
+
+            try:
+                stat_result = subprocess.run(
+                    stat_cmd,
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+
+                mod_time = float(stat_result.stdout.strip())
+
+                # Update the latest file if this one is newer
+                if mod_time > latest_mod_time:
+                    latest_mod_time = mod_time
+                    latest_yaml_path = yaml_file_path
+                    logger.info(
+                        f"Found newer {cluster_desc_file}: {yaml_file_path}"
+                    )
+
+            except (subprocess.CalledProcessError, ValueError):
+                logger.debug(f"'{cluster_desc_file}' not found in: {folder}")
+                continue
 
         if latest_yaml_path:
             logger.info(
@@ -167,14 +201,11 @@ def get_cluster_desc_path(ssh_client) -> Optional[str]:
             message=f"Failed to get '{cluster_desc_file}' path",
             status=ConnectionTestStates.FAILED,
         )
-    finally:
-        ssh_client.close()
 
 
 @remote_exception_handler
 def get_cluster_desc(remote_connection: RemoteConnection):
-    client = get_client(remote_connection)
-    cluster_path = get_cluster_desc_path(client)
+    cluster_path = get_cluster_desc_path(remote_connection)
     if cluster_path:
         return read_remote_file(remote_connection, cluster_path)
     else:
