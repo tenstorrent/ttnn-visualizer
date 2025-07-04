@@ -37,6 +37,12 @@ def with_instance(func):
             abort(404)
 
         instance_query_data = get_or_create_instance(instance_id=instance_id)
+        
+        # Handle case where get_or_create_instance returns None due to database error
+        if instance_query_data is None:
+            current_app.logger.error(f"Failed to get or create instance with ID: {instance_id}")
+            abort(500)
+            
         instance = instance_query_data.to_pydantic()
 
         kwargs["instance"] = instance
