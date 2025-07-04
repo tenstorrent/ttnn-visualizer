@@ -58,19 +58,43 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     :return: The resolved file path.
     :raises FileNotFoundError: If no files match the pattern.
     """
-    ssh_client = get_client(remote_connection)
-
     if "*" in file_path:
-        command = f"ls -1 {file_path}"
-        stdin, stdout, stderr = ssh_client.exec_command(command)
-        files = stdout.read().decode().splitlines()
-        ssh_client.close()
+        # Build SSH command to list files matching the pattern
+        ssh_cmd = [
+            "ssh",
+            f"{remote_connection.username}@{remote_connection.host}",
+        ]
 
-        if not files:
+        # Handle non-standard SSH port
+        if remote_connection.port != 22:
+            ssh_cmd.extend(["-p", str(remote_connection.port)])
+
+        # Add the ls command
+        ssh_cmd.append(f"ls -1 {file_path}")
+
+        try:
+            result = subprocess.run(
+                ssh_cmd,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            files = result.stdout.strip().splitlines()
+
+            if not files or (len(files) == 1 and files[0] == ""):
+                raise FileNotFoundError(f"No files found matching pattern: {file_path}")
+
+            # Return the first file found
+            return files[0]
+
+        except subprocess.CalledProcessError as e:
+            logger.error(f"SSH command failed: {e}")
+            logger.error(f"stderr: {e.stderr}")
             raise FileNotFoundError(f"No files found matching pattern: {file_path}")
-
-        # Return the first file found
-        return files[0]
+        except Exception as e:
+            logger.error(f"Error resolving file path: {e}")
+            raise FileNotFoundError(f"Error resolving file path: {file_path}")
 
     return file_path
 
