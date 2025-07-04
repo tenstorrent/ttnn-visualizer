@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import time
+import subprocess
 from pathlib import Path
 from stat import S_ISDIR
 from threading import Thread
@@ -172,110 +173,145 @@ def is_excluded(file_path, exclude_patterns):
     return any(re.search(pattern, file_path) for pattern in exclude_patterns)
 
 
+def parse_rsync_progress(line):
+    """Parse rsync progress output and extract file info and progress percentage."""
+    # rsync progress line format: "filename\n    transferred/total bytes  XX%  speed  time_remaining"
+    # Example: "     32,768  10%  123.45kB/s    0:00:02"
+
+    # Check for file transfer progress (contains percentage)
+    if "%" in line and any(char.isdigit() for char in line):
+        # Extract percentage
+        percent_match = re.search(r'(\d+)%', line)
+        if percent_match:
+            return float(percent_match.group(1))
+
+    return None
+
+
+def parse_rsync_file_info(line):
+    """Extract current file being transferred from rsync output."""
+    # rsync outputs the filename, often followed by progress info on the next line
+    # Skip lines that are just progress info (start with spaces and contain numbers/%)
+    if line.strip() and not line.startswith(' ') and not '%' in line:
+        # This is likely a filename
+        return line.strip()
+    return None
+
+
 @remote_exception_handler
 def sync_files_and_directories(
-    client, remote_profiler_folder: str, destination_dir: Path, exclude_patterns=None, sid=None
+    remote_connection: RemoteConnection, remote_profiler_folder: str, destination_dir: Path, exclude_patterns=None, sid=None
 ):
-    """Download files and directories sequentially in one unified loop."""
-    exclude_patterns = (
-        exclude_patterns or []
-    )  # Default to an empty list if not provided
+    """Download files and directories using rsync with progress reporting."""
+    exclude_patterns = exclude_patterns or []
 
-    with client.open_sftp() as sftp:
-        # Ensure the destination directory exists
-        destination_dir.mkdir(parents=True, exist_ok=True)
-        finished_files = 0  # Initialize finished files counter
+    # Ensure the destination directory exists
+    destination_dir.mkdir(parents=True, exist_ok=True)
 
-        # Recursively handle files and folders in the current directory
-        def download_directory_contents(remote_dir, local_dir):
-            # Ensure the local directory exists
-            local_dir.mkdir(parents=True, exist_ok=True)
+    # Build rsync command
+    cmd = [
+        "rsync",
+        "-avz",           # archive mode, verbose, compress
+        "--progress",     # show progress for each file
+        "--human-readable",  # human readable output
+    ]
 
-            # Get files and folders in the remote directory
-            files, folders = walk_sftp_directory(sftp, remote_dir)
-            total_files = len(files)
+    # Add exclude patterns
+    for pattern in exclude_patterns:
+        cmd.extend(["--exclude", pattern])
 
-            # Function to download a file with progress reporting
-            def download_file(remote_file_path, local_file_path, index):
-                nonlocal finished_files
-                # Download file with progress callback
-                logger.info(f"Downloading {remote_file_path}")
-                download_file_with_progress(
-                    sftp,
-                    remote_file_path,
-                    local_file_path,
-                    sid,
-                    total_files,
-                    finished_files,
-                )
-                logger.info(f"Finished downloading {remote_file_path}")
-                finished_files += 1
+    # Build source and destination
+    source = f"{remote_connection.username}@{remote_connection.host}:{remote_profiler_folder}/"
+    cmd.extend([source, str(destination_dir)])
 
-            # Download all files in the current directory
-            for index, file in enumerate(files, start=1):
-                remote_file_path = f"{remote_dir}/{file}"
-                local_file_path = Path(local_dir, file)
+    # Handle non-standard SSH port
+    if remote_connection.port != 22:
+        cmd.extend(["-e", f"ssh -p {remote_connection.port}"])
 
-                # Skip files that match any exclusion pattern
-                if is_excluded(remote_file_path, exclude_patterns):
-                    logger.info(f"Skipping {remote_file_path} (excluded by pattern)")
-                    continue
+    logger.info(f"Starting rsync with command: {' '.join(cmd)}")
 
-                download_file(remote_file_path, local_file_path, index)
+    # Execute rsync with progress monitoring
+    sync_with_rsync_progress(cmd, sid)
 
-            # Recursively handle subdirectories
-            for folder in folders:
-                remote_subdir = f"{remote_dir}/{folder}"
-                local_subdir = local_dir / folder
-                if is_excluded(remote_subdir, exclude_patterns):
-                    logger.info(
-                        f"Skipping directory {remote_subdir} (excluded by pattern)"
-                    )
-                    continue
-                download_directory_contents(remote_subdir, local_subdir)
+    # Create a .last-synced file in directory
+    update_last_synced(destination_dir)
 
-        # Start downloading from the root folder
-        download_directory_contents(remote_profiler_folder, destination_dir)
+    # Emit final status
+    final_progress = FileProgress(
+        current_file_name="",
+        number_of_files=0,
+        percent_of_current=100,
+        finished_files=0,
+        status=FileStatus.FINISHED,
+    )
 
-        # Create a .last-synced file in directory
-        update_last_synced(destination_dir)
+    if current_app.config["USE_WEBSOCKETS"]:
+        emit_file_status(final_progress, sid)
+    logger.info("rsync completed. Final progress emitted.")
 
-        # Emit final status
-        final_progress = FileProgress(
-            current_file_name="",  # No specific file for the final status
-            number_of_files=0,
-            percent_of_current=100,
-            finished_files=finished_files,
-            status=FileStatus.FINISHED,
+
+def sync_with_rsync_progress(cmd, sid):
+    """Execute rsync and parse progress output for websocket updates."""
+    try:
+        # Start rsync process
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
         )
 
-        if current_app.config["USE_WEBSOCKETS"]:
-            emit_file_status(final_progress, sid)
-        logger.info("All files downloaded. Final progress emitted.")
+        current_file = ""
+        finished_files = 0
 
+        # Read output line by line
+        if process.stdout:
+            for line in process.stdout:
+                if line.strip():
+                    logger.debug(f"rsync output: {line.strip()}")
 
-def download_file_with_progress(
-    sftp, remote_path, local_path, sid, total_files, finished_files
-):
-    """Download a file and emit progress using FileProgress."""
-    try:
+                # Check if this is a filename
+                filename = parse_rsync_file_info(line)
+                if filename:
+                    current_file = filename
+                    logger.info(f"Started transferring: {current_file}")
 
-        def download_progress_callback(transferred, total):
-            percent_of_current = (transferred / total) * 100
-            progress = FileProgress(
-                current_file_name=remote_path,
-                number_of_files=total_files,
-                percent_of_current=percent_of_current,
-                finished_files=finished_files,
-                status=FileStatus.DOWNLOADING,
-            )
-            emit_file_status(progress, sid)
+                # Check for progress percentage
+                progress_percent = parse_rsync_progress(line)
+                if progress_percent is not None and current_file:
+                    # Emit progress update
+                    progress = FileProgress(
+                        current_file_name=current_file,
+                        number_of_files=0,  # rsync doesn't give us total count upfront
+                        percent_of_current=progress_percent,
+                        finished_files=finished_files,
+                        status=FileStatus.DOWNLOADING,
+                    )
 
-        # Perform the download
-        sftp.get(remote_path, str(local_path), callback=download_progress_callback)
+                    if current_app.config["USE_WEBSOCKETS"]:
+                        emit_file_status(progress, sid)
 
-    except OSError as e:
-        logger.error(f"Error downloading file {remote_path} to {local_path}: {str(e)}")
+                    # If we reached 100%, increment finished files
+                    if progress_percent >= 100:
+                        finished_files += 1
+                        logger.info(f"Finished transferring: {current_file}")
+
+        # Wait for process to complete
+        return_code = process.wait()
+
+        if return_code != 0:
+            logger.error(f"rsync failed with return code {return_code}")
+            raise subprocess.CalledProcessError(return_code, cmd)
+
+        logger.info("rsync completed successfully")
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"rsync command failed: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Error during rsync execution: {e}")
         raise
 
 
@@ -452,7 +488,6 @@ def sync_remote_profiler_folders(
     sid=None,
 ):
     """Main function to sync test folders, handles both compressed and individual syncs."""
-    client = get_client(remote_connection)
     profiler_folder = Path(remote_folder_path).name
     destination_dir = Path(
         REPORT_DATA_DIRECTORY, path_prefix, remote_connection.host, current_app.config["PROFILER_DIRECTORY_NAME"], profiler_folder
@@ -460,7 +495,7 @@ def sync_remote_profiler_folders(
     destination_dir.mkdir(parents=True, exist_ok=True)
 
     sync_files_and_directories(
-        client, remote_folder_path, destination_dir, exclude_patterns, sid
+        remote_connection, remote_folder_path, destination_dir, exclude_patterns, sid
     )
 
 
@@ -472,7 +507,6 @@ def sync_remote_performance_folders(
     exclude_patterns: Optional[List[str]] = None,
     sid=None,
 ):
-    client = get_client(remote_connection)
     remote_folder_path = profile.remotePath
     profile_folder = Path(remote_folder_path).name
     destination_dir = Path(
@@ -483,7 +517,6 @@ def sync_remote_performance_folders(
         profile_folder,
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
-
     sync_files_and_directories(
-        client, remote_folder_path, destination_dir, exclude_patterns, sid
+        remote_connection, remote_folder_path, destination_dir, exclude_patterns, sid
     )
