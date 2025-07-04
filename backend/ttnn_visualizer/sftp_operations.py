@@ -371,22 +371,78 @@ def sync_with_rsync_progress(cmd, sid):
 
 
 def get_remote_profiler_folder_from_config_path(
-    sftp: SFTPClient, config_path: str
+    remote_connection: RemoteConnection, config_path: str
 ) -> RemoteReportFolder:
     """Read a remote config file and return RemoteFolder object."""
-    attributes = sftp.lstat(str(config_path))
-    with sftp.open(str(config_path), "rb") as config_file:
-        data = json.loads(config_file.read())
+    try:
+        # Build SSH command to get file modification time
+        stat_cmd = [
+            "ssh",
+            f"{remote_connection.username}@{remote_connection.host}",
+        ]
 
+        # Handle non-standard SSH port
+        if remote_connection.port != 22:
+            stat_cmd.extend(["-p", str(remote_connection.port)])
+
+        # Get modification time using stat command
+        stat_cmd.append(f"stat -c %Y '{config_path}' 2>/dev/null")
+
+        stat_result = subprocess.run(
+            stat_cmd,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        last_modified = int(float(stat_result.stdout.strip()))
+
+        # Build SSH command to read file content
+        cat_cmd = [
+            "ssh",
+            f"{remote_connection.username}@{remote_connection.host}",
+        ]
+
+        if remote_connection.port != 22:
+            cat_cmd.extend(["-p", str(remote_connection.port)])
+
+        # Read file content using cat command
+        cat_cmd.append(f"cat '{config_path}'")
+
+        cat_result = subprocess.run(
+            cat_cmd,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        # Parse JSON data
+        data = json.loads(cat_result.stdout)
         report_name = data.get("report_name")
         logger.info(f"********* report_name: {report_name}")
 
         return RemoteReportFolder(
             remotePath=str(Path(config_path).parent),
             reportName=report_name,
-            lastModified=(
-                int(attributes.st_mtime) if attributes.st_mtime else int(time.time())
-            ),
+            lastModified=last_modified,
+        )
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"SSH command failed while reading config: {e}")
+        logger.error(f"stderr: {e.stderr}")
+        # Fall back to current time if we can't get modification time
+        return RemoteReportFolder(
+            remotePath=str(Path(config_path).parent),
+            reportName="",
+            lastModified=int(time.time()),
+        )
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error(f"Error parsing config file {config_path}: {e}")
+        # Fall back to current time and no report name
+        return RemoteReportFolder(
+            remotePath=str(Path(config_path).parent),
+            reportName="",
+            lastModified=int(time.time()),
         )
 
 
@@ -525,12 +581,11 @@ def get_remote_profiler_folders(
         logger.info(error)
         raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
     remote_folder_data = []
-    with client.open_sftp() as sftp:
-        for config_path in remote_config_paths:
-            remote_folder = get_remote_profiler_folder_from_config_path(
-                sftp, str(Path(config_path).joinpath(TEST_CONFIG_FILE))
-            )
-            remote_folder_data.append(remote_folder)
+    for config_path in remote_config_paths:
+        remote_folder = get_remote_profiler_folder_from_config_path(
+            remote_connection, str(Path(config_path).joinpath(TEST_CONFIG_FILE))
+        )
+        remote_folder_data.append(remote_folder)
     return remote_folder_data
 
 
