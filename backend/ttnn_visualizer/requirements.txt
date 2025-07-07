@@ -20,4 +20,3 @@ zstd==1.5.7.0
 
 # Dev dependencies
 mypy
-types-paramiko
