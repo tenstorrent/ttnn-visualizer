@@ -109,7 +109,6 @@ The following separate and independent dependencies are utilized by this project
 - Flask – BSD‑3‑Clause – https://github.com/pallets/flask/blob/main/LICENSE.txt
 - gunicorn – MIT – https://github.com/benoitc/gunicorn/blob/master/LICENSE
 - uvicorn – BSD‑3‑Clause – https://github.com/encode/uvicorn/blob/master/LICENSE.md
-- paramiko~=3.4.0 – LGPL‑2.1+ – https://github.com/paramiko/paramiko/blob/main/LICENSE
 - flask_cors – MIT – https://github.com/corydolphin/flask-cors/blob/main/LICENSE
 - pydantic – MIT – https://github.com/pydantic/pydantic-settings/blob/main/LICENSE
 - setuptools – MIT – https://github.com/pypa/setuptools/blob/main/LICENSE
