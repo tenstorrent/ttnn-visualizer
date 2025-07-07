@@ -18,7 +18,13 @@ from paramiko.sftp_client import SFTPClient
 
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
-from ttnn_visualizer.exceptions import NoProjectsException, RemoteConnectionException
+from ttnn_visualizer.exceptions import (
+    NoProjectsException,
+    RemoteConnectionException,
+    SSHException,
+    AuthenticationException,
+    NoValidConnectionsError
+)
 from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
 from ttnn_visualizer.sockets import (
     FileProgress,
@@ -33,6 +39,45 @@ logger = logging.getLogger(__name__)
 TEST_CONFIG_FILE = "config.json"
 TEST_PROFILER_FILE = "profile_log_device.csv"
 REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
+
+
+def handle_ssh_subprocess_error(e: subprocess.CalledProcessError, remote_connection: RemoteConnection):
+    """
+    Convert subprocess SSH errors to appropriate SSH exceptions.
+
+    :param e: The subprocess.CalledProcessError
+    :param remote_connection: The RemoteConnection object for context
+    :raises: SSHException, AuthenticationException, or NoValidConnectionsError
+    """
+    stderr = e.stderr.lower() if e.stderr else ""
+
+    # Check for authentication failures
+    if any(auth_err in stderr for auth_err in [
+        "permission denied",
+        "authentication failed",
+        "publickey",
+        "password",
+        "host key verification failed"
+    ]):
+        raise AuthenticationException(f"SSH authentication failed: {e.stderr}")
+
+    # Check for connection failures
+    elif any(conn_err in stderr for conn_err in [
+        "connection refused",
+        "network is unreachable",
+        "no route to host",
+        "name or service not known",
+        "connection timed out"
+    ]):
+        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
+
+    # Check for general SSH protocol errors
+    elif "ssh:" in stderr or "protocol" in stderr:
+        raise SSHException(f"SSH protocol error: {e.stderr}")
+
+    # Default to generic SSH exception
+    else:
+        raise SSHException(f"SSH command failed: {e.stderr}")
 
 
 def start_background_task(task, *args):
@@ -91,7 +136,13 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
         except subprocess.CalledProcessError as e:
             logger.error(f"SSH command failed: {e}")
             logger.error(f"stderr: {e.stderr}")
-            raise FileNotFoundError(f"No files found matching pattern: {file_path}")
+
+            # Check if it's an SSH-specific error (authentication, connection, etc.)
+            if e.returncode == 255:  # SSH returns 255 for SSH protocol errors
+                handle_ssh_subprocess_error(e, remote_connection)
+            else:
+                # File not found or other command error
+                raise FileNotFoundError(f"No files found matching pattern: {file_path}")
         except Exception as e:
             logger.error(f"Error resolving file path: {e}")
             raise FileNotFoundError(f"Error resolving file path: {file_path}")
@@ -181,7 +232,15 @@ def get_cluster_desc_path(remote_connection: RemoteConnection) -> Optional[str]:
                         f"Found newer {cluster_desc_file}: {yaml_file_path}"
                     )
 
-            except (subprocess.CalledProcessError, ValueError):
+            except subprocess.CalledProcessError as e:
+                # Check if it's an SSH-specific error
+                if e.returncode == 255:  # SSH returns 255 for SSH protocol errors
+                    handle_ssh_subprocess_error(e, remote_connection)
+                else:
+                    # File not found or other command error
+                    logger.debug(f"'{cluster_desc_file}' not found in: {folder}")
+                    continue
+            except ValueError:
                 logger.debug(f"'{cluster_desc_file}' not found in: {folder}")
                 continue
 
@@ -286,7 +345,7 @@ def sync_files_and_directories(
     logger.info(f"Starting rsync with command: {' '.join(cmd)}")
 
     # Execute rsync with progress monitoring
-    sync_with_rsync_progress(cmd, sid)
+    sync_with_rsync_progress(cmd, sid, remote_connection)
 
     # Create a .last-synced file in directory
     update_last_synced(destination_dir)
@@ -305,7 +364,7 @@ def sync_files_and_directories(
     logger.info("rsync completed. Final progress emitted.")
 
 
-def sync_with_rsync_progress(cmd, sid):
+def sync_with_rsync_progress(cmd, sid, remote_connection):
     """Execute rsync and parse progress output for websocket updates."""
     try:
         # Start rsync process
@@ -364,7 +423,13 @@ def sync_with_rsync_progress(cmd, sid):
 
     except subprocess.CalledProcessError as e:
         logger.error(f"rsync command failed: {e}")
-        raise
+
+        # Check if it's an SSH-specific error (authentication, connection, etc.)
+        if e.returncode == 255:  # SSH returns 255 for SSH protocol errors
+            handle_ssh_subprocess_error(e, remote_connection)
+        else:
+            # Other rsync errors (file not found, permission issues, etc.)
+            raise
     except Exception as e:
         logger.error(f"Error during rsync execution: {e}")
         raise
@@ -430,12 +495,23 @@ def get_remote_profiler_folder_from_config_path(
     except subprocess.CalledProcessError as e:
         logger.error(f"SSH command failed while reading config: {e}")
         logger.error(f"stderr: {e.stderr}")
-        # Fall back to current time if we can't get modification time
-        return RemoteReportFolder(
-            remotePath=str(Path(config_path).parent),
-            reportName="",
-            lastModified=int(time.time()),
-        )
+
+        # Check if it's an SSH-specific error (authentication, connection, etc.)
+        if e.returncode == 255:  # SSH returns 255 for SSH protocol errors
+            handle_ssh_subprocess_error(e, remote_connection)
+            # This line never executes as handle_ssh_subprocess_error raises an exception
+            return RemoteReportFolder(
+                remotePath=str(Path(config_path).parent),
+                reportName="",
+                lastModified=int(time.time()),
+            )
+        else:
+            # Fall back to current time if we can't get modification time
+            return RemoteReportFolder(
+                remotePath=str(Path(config_path).parent),
+                reportName="",
+                lastModified=int(time.time()),
+            )
     except (json.JSONDecodeError, ValueError) as e:
         logger.error(f"Error parsing config file {config_path}: {e}")
         # Fall back to current time and no report name

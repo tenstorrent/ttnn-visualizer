@@ -43,5 +43,22 @@ class DataFormatError(Exception):
 class InvalidReportPath(Exception):
     pass
 
+
 class InvalidProfilerPath(Exception):
+    pass
+
+
+# SSH-related exceptions to replace paramiko imports
+class SSHException(Exception):
+    """Base SSH exception for subprocess SSH operations"""
+    pass
+
+
+class AuthenticationException(SSHException):
+    """Raised when SSH authentication fails"""
+    pass
+
+
+class NoValidConnectionsError(SSHException):
+    """Raised when SSH connection cannot be established"""
     pass

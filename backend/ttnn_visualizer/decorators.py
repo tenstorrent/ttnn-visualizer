@@ -9,13 +9,10 @@ from ttnn_visualizer.enums import ConnectionTestStates
 
 from functools import wraps
 from flask import abort, request, session
-from paramiko.ssh_exception import (
+from ttnn_visualizer.exceptions import (
     AuthenticationException,
     NoValidConnectionsError,
     SSHException,
-)
-
-from ttnn_visualizer.exceptions import (
     RemoteConnectionException,
     NoProjectsException,
     RemoteSqliteException,
