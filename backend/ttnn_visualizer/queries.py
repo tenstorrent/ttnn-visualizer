@@ -2,7 +2,6 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import json
 from typing import Generator, Dict, Any, Union
 
 from ttnn_visualizer.exceptions import (
@@ -27,7 +26,6 @@ from ttnn_visualizer.ssh_client import get_client
 import sqlite3
 from typing import List, Optional
 from pathlib import Path
-import paramiko
 
 
 class LocalQueryRunner:
