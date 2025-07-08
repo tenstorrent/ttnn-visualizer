@@ -523,15 +523,33 @@ def get_remote_profiler_folder_from_config_path(
 
 
 def get_remote_performance_folder(
-    sftp: SFTPClient, profile_folder: str
+    remote_connection: RemoteConnection, profile_folder: str
 ) -> RemoteReportFolder:
-    """Read a remote config file and return RemoteFolder object."""
-    attributes = sftp.stat(str(profile_folder))
+    """Get remote performance folder info and return RemoteFolder object."""
     performance_name = profile_folder.split("/")[-1]
     remote_path = profile_folder
-    last_modified = (
-        int(attributes.st_mtime) if attributes.st_mtime else int(time.time())
-    )
+
+    # Get modification time using subprocess SSH command
+    try:
+        ssh_command = ["ssh"]
+        if remote_connection.port != 22:
+            ssh_command.extend(["-p", str(remote_connection.port)])
+        ssh_command.extend([f"{remote_connection.username}@{remote_connection.host}", f"stat -c %Y '{profile_folder}'"])
+
+        result = subprocess.run(ssh_command, capture_output=True, text=True, timeout=30)
+
+        if result.returncode == 0:
+            last_modified = int(result.stdout.strip())
+        else:
+            # If stat fails, handle SSH errors
+            if result.returncode == 255:
+                handle_ssh_subprocess_error(subprocess.CalledProcessError(result.returncode, ssh_command, result.stdout, result.stderr), remote_connection)
+            logger.warning(f"Could not get modification time for {profile_folder}, using current time")
+            last_modified = int(time.time())
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, ValueError) as e:
+        logger.warning(f"Error getting modification time for {profile_folder}: {e}, using current time")
+        last_modified = int(time.time())
+
     return RemoteReportFolder(
         remotePath=str(remote_path),
         reportName=str(performance_name),
@@ -637,10 +655,9 @@ def get_remote_performance_folders(
         logger.info(error)
         raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
     remote_folder_data = []
-    with client.open_sftp() as sftp:
-        for path in performance_paths:
-            remote_folder_data.append(get_remote_performance_folder(sftp, path))
-        return remote_folder_data
+    for path in performance_paths:
+        remote_folder_data.append(get_remote_performance_folder(remote_connection, path))
+    return remote_folder_data
 
 
 @remote_exception_handler
