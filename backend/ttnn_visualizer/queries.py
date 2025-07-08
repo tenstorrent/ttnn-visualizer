@@ -63,111 +63,11 @@ class LocalQueryRunner:
             self.connection.close()
 
 
-class RemoteQueryRunner:
-    column_delimiter = "|||"
-
-    def __init__(self, instance: Instance):
-        self.instance = instance
-        self._validate_instance()
-        self.ssh_client = self._get_ssh_client(self.instance.remote_connection)
-        self.sqlite_binary = self.instance.remote_connection.sqliteBinaryPath
-        self.remote_db_path = str(
-            Path(self.instance.remote_profiler_folder.remotePath, "db.sqlite")
-        )
-
-    def _validate_instance(self):
-        """
-        Validate that the instance has all required remote connection attributes.
-        """
-        if (
-            not self.instance.remote_connection
-            or not self.instance.remote_connection.sqliteBinaryPath
-            or not self.instance.remote_profiler_folder
-            or not self.instance.remote_profiler_folder.remotePath
-        ):
-            raise ValueError(
-                "Remote connections require remote path and sqliteBinaryPath"
-            )
-
-    def _get_ssh_client(self, remote_connection) -> paramiko.SSHClient:
-        """
-        Retrieve the SSH client for the given remote connection.
-        """
-        return get_client(remote_connection=remote_connection)
-
-    def _format_query(self, query: str, params: Optional[List] = None) -> str:
-        """
-        Format the query by replacing placeholders with properly quoted parameters.
-        """
-        if not params:
-            return query
-
-        formatted_params = [
-            f"'{param}'" if isinstance(param, str) else str(param) for param in params
-        ]
-        return query.replace("?", "{}").format(*formatted_params)
-
-    def _build_command(self, formatted_query: str) -> str:
-        """
-        Build the remote SQLite command.
-        """
-        return f'{self.sqlite_binary} {self.remote_db_path} "{formatted_query}" -json'
-
-    def _execute_ssh_command(self, command: str) -> tuple:
-        """
-        Execute the SSH command and return the standard output and error.
-        """
-        stdin, stdout, stderr = self.ssh_client.exec_command(command)
-        output = stdout.read().decode("utf-8").strip()
-        error_output = stderr.read().decode("utf-8").strip()
-        return output, error_output
-
-    def _parse_output(self, output: str, command: str) -> List:
-        """
-        Parse the output from the SQLite command. Attempt JSON parsing first,
-        then fall back to line-based parsing.
-        """
-        if not output.strip():
-            return []
-
-        try:
-            rows = json.loads(output)
-            return [tuple(row.values()) for row in rows]
-        except json.JSONDecodeError:
-            print(
-                f"Output is not valid JSON, attempting manual parsing.\nCommand: {command}"
-            )
-            return [tuple(line.split("|")) for line in output.splitlines()]
-
-    def execute_query(self, query: str, params: Optional[List] = None) -> List:
-        """
-        Execute a remote SQLite query using the instance's SSH client.
-        """
-        self._validate_instance()
-        formatted_query = self._format_query(query, params)
-        command = self._build_command(formatted_query)
-        output, error_output = self._execute_ssh_command(command)
-
-        if error_output:
-            raise RuntimeError(
-                f"Error executing query remotely: {error_output}\nCommand: {command}"
-            )
-
-        return self._parse_output(output, command)
-
-    def close(self):
-        """
-        Close the SSH connection.
-        """
-        if self.ssh_client:
-            self.ssh_client.close()
-
-
 class DatabaseQueries:
 
     instance: Optional[Instance] = None
     ssh_client = None
-    query_runner: LocalQueryRunner | RemoteQueryRunner
+    query_runner: LocalQueryRunner
 
     def __init__(self, instance: Optional[Instance] = None, connection=None):
         self.instance = instance
@@ -181,7 +81,7 @@ class DatabaseQueries:
                 )
             remote_connection = instance.remote_connection if instance else None
             if remote_connection and remote_connection.useRemoteQuerying:
-                self.query_runner = RemoteQueryRunner(instance=instance)
+                raise NotImplementedError("Remote querying is not implemented yet")
             else:
                 self.query_runner = LocalQueryRunner(instance=instance)
 
@@ -382,7 +282,5 @@ class DatabaseQueries:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if isinstance(self.query_runner, RemoteQueryRunner):
-            self.query_runner.close()
-        elif isinstance(self.query_runner, LocalQueryRunner):
+        if isinstance(self.query_runner, LocalQueryRunner):
             self.query_runner.close()
