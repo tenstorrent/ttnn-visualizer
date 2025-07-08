@@ -48,7 +48,6 @@ class InvalidProfilerPath(Exception):
     pass
 
 
-# SSH-related exceptions to replace paramiko imports
 class SSHException(Exception):
     """Base SSH exception for subprocess SSH operations"""
     pass
