@@ -29,7 +29,6 @@ from ttnn_visualizer.sockets import (
     FileStatus,
     emit_file_status,
 )
-from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.utils import update_last_synced
 
 logger = logging.getLogger(__name__)
@@ -543,37 +542,55 @@ def read_remote_file(
     remote_connection,
     remote_path=None,
 ):
-    """Read a remote file."""
-    ssh_client = get_client(remote_connection)
-    with ssh_client.open_sftp() as sftp:
-        if remote_path:
-            path = Path(remote_path)
+    """Read a remote file using SSH cat command."""
+    if remote_path:
+        path = Path(remote_path)
+    else:
+        path = Path(remote_connection.profilerPath)
+
+    logger.info(f"Reading remote file {path}")
+    
+    # Build SSH command to read the file
+    ssh_cmd = ["ssh"]
+    
+    # Handle non-standard SSH port
+    if remote_connection.port != 22:
+        ssh_cmd.extend(["-p", str(remote_connection.port)])
+    
+    ssh_cmd.extend([
+        f"{remote_connection.username}@{remote_connection.host}",
+        f"cat '{path}'"
+    ])
+    
+    try:
+        result = subprocess.run(
+            ssh_cmd,
+            capture_output=True,
+            check=True,
+            timeout=30
+        )
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 255:  # SSH protocol errors
+            handle_ssh_subprocess_error(e, remote_connection)
+            return None
         else:
-            path = Path(remote_connection.profilerPath)
-
-        logger.info(f"Opening remote file {path}")
-        directory_path = str(path.parent)
-        file_name = str(path.name)
-
-        try:
-            sftp.chdir(path=directory_path)
-            with sftp.open(filename=file_name) as file:
-                content = file.read()
-                return content
-        except FileNotFoundError:
-            logger.error(f"File not found: {path}")
+            # File not found or other command error
+            logger.error(f"File not found or cannot be read: {path}")
             return None
-        except IOError as e:
-            logger.error(f"Error reading remote file {path}: {e}")
-            return None
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout reading remote file: {path}")
+        return None
+    except Exception as e:
+        logger.error(f"Error reading remote file {path}: {e}")
+        return None
 
 
 @remote_exception_handler
 def check_remote_path_for_reports(remote_connection):
     """Check the remote path for config files."""
-    ssh_client = get_client(remote_connection)
     remote_config_paths = find_folders_by_files(
-        ssh_client, remote_connection.profilerPath, [TEST_CONFIG_FILE]
+        remote_connection, remote_connection.profilerPath, [TEST_CONFIG_FILE]
     )
     if not remote_config_paths:
         raise NoProjectsException(
@@ -584,42 +601,131 @@ def check_remote_path_for_reports(remote_connection):
 
 @remote_exception_handler
 def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str):
-    client = get_client(remote_connection)
-    sftp = client.open_sftp()
-    # Attempt to list the directory to see if it exists
+    """Check if a remote path exists using SSH test command."""
+    path = getattr(remote_connection, path_key)
+    
+    # Build SSH command to test if path exists
+    ssh_cmd = ["ssh"]
+    
+    # Handle non-standard SSH port
+    if remote_connection.port != 22:
+        ssh_cmd.extend(["-p", str(remote_connection.port)])
+    
+    ssh_cmd.extend([
+        f"{remote_connection.username}@{remote_connection.host}",
+        f"test -d '{path}'"
+    ])
+    
     try:
-        sftp.stat(getattr(remote_connection, path_key))
-    except IOError as e:
-        # Directory does not exist or is inaccessible
-        if path_key == "performancePath":
-            message = "Performance directory does not exist or cannot be accessed"
+        result = subprocess.run(
+            ssh_cmd,
+            capture_output=True,
+            check=True,
+            timeout=10
+        )
+        # If command succeeds, directory exists
+        return True
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 255:  # SSH protocol errors
+            handle_ssh_subprocess_error(e, remote_connection)
         else:
-            message = "Profiler directory does not exist or cannot be accessed"
+            # Directory does not exist or is inaccessible
+            if path_key == "performancePath":
+                message = "Performance directory does not exist or cannot be accessed"
+            else:
+                message = "Profiler directory does not exist or cannot be accessed"
 
-        logger.error(message)
+            logger.error(message)
+            raise RemoteConnectionException(
+                message=message, status=ConnectionTestStates.FAILED
+            )
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout checking remote path: {path}")
         raise RemoteConnectionException(
-            message=message, status=ConnectionTestStates.FAILED
+            message=f"Timeout checking remote path: {path}",
+            status=ConnectionTestStates.FAILED
         )
 
 
 def find_folders_by_files(
-    ssh_client, root_folder: str, file_names: List[str]
+    remote_connection: RemoteConnection, root_folder: str, file_names: List[str]
 ) -> List[str]:
     """Given a remote path, return a list of top-level folders that contain any of the specified files."""
     matched_folders: List[str] = []
-    with ssh_client.open_sftp() as sftp:
-        all_files = sftp.listdir_attr(root_folder)
-        top_level_directories = filter(lambda e: S_ISDIR(e.st_mode), all_files)
-
-        for directory in top_level_directories:
-            dirname = Path(root_folder, directory.filename)
-            directory_files = sftp.listdir(str(dirname))
-
-            # Check if any of the specified file names exist in the directory
-            if any(file_name in directory_files for file_name in file_names):
-                matched_folders.append(str(dirname))
-
-    return matched_folders
+    
+    # Build SSH command to find directories in root_folder
+    ssh_cmd = ["ssh"]
+    
+    # Handle non-standard SSH port
+    if remote_connection.port != 22:
+        ssh_cmd.extend(["-p", str(remote_connection.port)])
+    
+    ssh_cmd.extend([
+        f"{remote_connection.username}@{remote_connection.host}",
+        f"find '{root_folder}' -maxdepth 1 -type d -not -path '{root_folder}'"
+    ])
+    
+    try:
+        result = subprocess.run(
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30
+        )
+        
+        directories = result.stdout.strip().splitlines()
+        
+        # For each directory, check if it contains any of the specified files
+        for directory in directories:
+            directory = directory.strip()
+            if not directory:
+                continue
+                
+            # Build SSH command to check for files in this directory
+            file_checks = []
+            for file_name in file_names:
+                file_checks.append(f"test -f '{directory}/{file_name}'")
+            
+            # Use OR logic to check if any of the files exist
+            check_cmd = ["ssh"]
+            if remote_connection.port != 22:
+                check_cmd.extend(["-p", str(remote_connection.port)])
+            
+            check_cmd.extend([
+                f"{remote_connection.username}@{remote_connection.host}",
+                f"({' || '.join(file_checks)})"
+            ])
+            
+            try:
+                check_result = subprocess.run(
+                    check_cmd,
+                    capture_output=True,
+                    check=True,
+                    timeout=10
+                )
+                # If command succeeds, at least one file exists
+                matched_folders.append(directory)
+            except subprocess.CalledProcessError:
+                # None of the files exist in this directory, skip it
+                continue
+        
+        return matched_folders
+        
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 255:  # SSH protocol errors
+            handle_ssh_subprocess_error(e, remote_connection)
+            # This line should never be reached as handle_ssh_subprocess_error raises an exception
+            return []
+        else:
+            logger.error(f"Error finding folders: {e.stderr}")
+            return []
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout finding folders in: {root_folder}")
+        return []
+    except Exception as e:
+        logger.error(f"Error finding folders: {e}")
+        return []
 
 
 @remote_exception_handler
@@ -627,9 +733,8 @@ def get_remote_performance_folders(
     remote_connection: RemoteConnection,
 ) -> List[RemoteReportFolder]:
     """Return a list of remote folders containing a profile_log_device file."""
-    client = get_client(remote_connection)
     performance_paths = find_folders_by_files(
-        client, remote_connection.performancePath, [TEST_PROFILER_FILE]
+        remote_connection, remote_connection.performancePath, [TEST_PROFILER_FILE]
     )
     if not performance_paths:
         error = f"No profiler paths found at {remote_connection.performancePath}"
@@ -646,9 +751,8 @@ def get_remote_profiler_folders(
     remote_connection: RemoteConnection,
 ) -> List[RemoteReportFolder]:
     """Return a list of remote folders containing a config.json file."""
-    client = get_client(remote_connection)
     remote_config_paths = find_folders_by_files(
-        client, remote_connection.profilerPath, [TEST_CONFIG_FILE]
+        remote_connection, remote_connection.profilerPath, [TEST_CONFIG_FILE]
     )
     if not remote_config_paths:
         error = f"No projects found at {remote_connection.profilerPath}"

@@ -22,7 +22,6 @@ from ttnn_visualizer.models import (
     ProducersConsumers,
     TensorComparisonRecord,
 )
-from ttnn_visualizer.ssh_client import get_client
 import sqlite3
 from typing import List, Optional
 from pathlib import Path
@@ -64,7 +63,6 @@ class LocalQueryRunner:
 class DatabaseQueries:
 
     instance: Optional[Instance] = None
-    ssh_client = None
     query_runner: LocalQueryRunner
 
     def __init__(self, instance: Optional[Instance] = None, connection=None):
