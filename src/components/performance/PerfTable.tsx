@@ -251,7 +251,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                     })}
                                 >
                                     {cellFormattingProxy(row, h, operations, filters?.[h.key])}
-                                    {/* {formatCell(row, h, operations, filters?.[h.key])} */}
                                 </td>
                             ))}
                         </tr>

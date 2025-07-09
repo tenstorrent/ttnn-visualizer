@@ -334,6 +334,7 @@ export const useNPETimelineFile = (fileName: string | null) => {
         queryFn: () => fetchNPETimeline(fileName!),
         queryKey: ['get-npe-timeline', fileName],
         retry: false,
+        enabled: !!fileName,
     });
 };
 
