@@ -4,6 +4,7 @@
 import csv
 import json
 import os
+import subprocess
 import tempfile
 from io import StringIO
 from pathlib import Path
@@ -13,10 +14,49 @@ import pandas as pd
 from tt_perf_report import perf_report
 
 from ttnn_visualizer.exceptions import DataFormatError
+from ttnn_visualizer.models import Instance, RemoteConnection
+from ttnn_visualizer.exceptions import SSHException, AuthenticationException, NoValidConnectionsError
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.sftp_operations import read_remote_file
-from ttnn_visualizer.ssh_client import get_client
 
+
+def handle_ssh_subprocess_error(e: subprocess.CalledProcessError, remote_connection: RemoteConnection):
+    """
+    Convert subprocess SSH errors to appropriate SSH exceptions.
+
+    :param e: The subprocess.CalledProcessError
+    :param remote_connection: The RemoteConnection object for context
+    :raises: SSHException, AuthenticationException, or NoValidConnectionsError
+    """
+    stderr = e.stderr.lower() if e.stderr else ""
+
+    # Check for authentication failures
+    if any(auth_err in stderr for auth_err in [
+        "permission denied",
+        "authentication failed",
+        "publickey",
+        "password",
+        "host key verification failed"
+    ]):
+        raise AuthenticationException(f"SSH authentication failed: {e.stderr}")
+
+    # Check for connection failures
+    elif any(conn_err in stderr for conn_err in [
+        "connection refused",
+        "network is unreachable",
+        "no route to host",
+        "name or service not known",
+        "connection timed out"
+    ]):
+        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
+
+    # Check for general SSH protocol errors
+    elif "ssh:" in stderr or "protocol" in stderr:
+        raise SSHException(f"SSH protocol error: {e.stderr}")
+
+    # Default to generic SSH exception
+    else:
+        raise SSHException(f"SSH command failed: {e.stderr}")
 
 class LocalCSVQueryRunner:
     def __init__(self, file_path: str, offset: int = 0):
@@ -111,7 +151,38 @@ class RemoteCSVQueryRunner:
         self.remote_connection = remote_connection
         self.sep = sep
         self.offset = offset
-        self.ssh_client = get_client(remote_connection)
+
+    def _execute_ssh_command(self, command: str) -> str:
+        """Execute an SSH command and return the output."""
+        ssh_cmd = ["ssh"]
+        
+        # Handle non-standard SSH port
+        if self.remote_connection.port != 22:
+            ssh_cmd.extend(["-p", str(self.remote_connection.port)])
+        
+        ssh_cmd.extend([
+            f"{self.remote_connection.username}@{self.remote_connection.host}",
+            command
+        ])
+        
+        try:
+            result = subprocess.run(
+                ssh_cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=30
+            )
+            return result.stdout
+        except subprocess.CalledProcessError as e:
+            if e.returncode == 255:  # SSH protocol errors
+                handle_ssh_subprocess_error(e, self.remote_connection)
+                # This line should never be reached as handle_ssh_subprocess_error raises an exception
+                raise RuntimeError(f"SSH command failed: {e.stderr}")
+            else:
+                raise RuntimeError(f"SSH command failed: {e.stderr}")
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"SSH command timed out: {command}")
 
     def execute_query(
         self,
@@ -129,12 +200,7 @@ class RemoteCSVQueryRunner:
         """
         # Fetch header row, accounting for the offset
         header_cmd = f"head -n {self.offset + 1} {self.file_path} | tail -n 1"
-        stdin, stdout, stderr = self.ssh_client.exec_command(header_cmd)
-        raw_header = stdout.read().decode("utf-8").strip()
-        error = stderr.read().decode("utf-8").strip()
-
-        if error:
-            raise RuntimeError(f"Error fetching header row: {error}")
+        raw_header = self._execute_ssh_command(header_cmd).strip()
 
         # Sanitize headers
         headers = [
@@ -161,12 +227,7 @@ class RemoteCSVQueryRunner:
         limit_clause = f"| head -n {limit}" if limit else ""
         awk_cmd = f"awk -F'{self.sep}' 'NR > {self.offset + 1} {f'&& {awk_filter}' if awk_filter else ''} {{print}}' {self.file_path} {limit_clause}"
 
-        stdin, stdout, stderr = self.ssh_client.exec_command(awk_cmd)
-        output = stdout.read().decode("utf-8").strip()
-        error = stderr.read().decode("utf-8").strip()
-
-        if error:
-            raise RuntimeError(f"Error executing AWK command: {error}")
+        output = self._execute_ssh_command(awk_cmd).strip()
 
         # Split rows into lists of strings
         rows = [
@@ -206,12 +267,7 @@ class RemoteCSVQueryRunner:
             if total_lines
             else f"cat {self.file_path}"
         )
-        stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
-        output = stdout.read().decode("utf-8").strip()
-        error = stderr.read().decode("utf-8").strip()
-
-        if error:
-            raise RuntimeError(f"Error fetching raw rows: {error}")
+        output = self._execute_ssh_command(cmd).strip()
 
         return output.splitlines()[self.offset:]
 
@@ -221,12 +277,7 @@ class RemoteCSVQueryRunner:
         :return: Dictionary of headers.
         """
         header_cmd = f"head -n {self.offset + 1} {self.file_path} | tail -n 1"
-        stdin, stdout, stderr = self.ssh_client.exec_command(header_cmd)
-        header = stdout.read().decode("utf-8").strip()
-        error = stderr.read().decode("utf-8").strip()
-
-        if error:
-            raise RuntimeError(f"Error reading CSV header: {error}")
+        header = self._execute_ssh_command(header_cmd).strip()
 
         # Trim spaces in header names
         column_names = [name.strip() for name in header.split(self.sep)]
@@ -255,10 +306,9 @@ class RemoteCSVQueryRunner:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
-        Clean up the SSH connection when exiting context.
+        Clean up resources when exiting context.
         """
-        if self.ssh_client:
-            self.ssh_client.close()
+        pass
 
 
 class NPEQueries:

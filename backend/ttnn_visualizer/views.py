@@ -65,12 +65,91 @@ from ttnn_visualizer.sftp_operations import (
     sync_remote_performance_folders,
     get_cluster_desc,
 )
-from ttnn_visualizer.ssh_client import get_client
+from ttnn_visualizer.exceptions import SSHException, AuthenticationException, NoValidConnectionsError
+import subprocess
 from ttnn_visualizer.utils import (
     get_cluster_descriptor_path,
     read_last_synced_file,
     timer,
 )
+
+
+def handle_ssh_subprocess_error(e: subprocess.CalledProcessError, remote_connection):
+    """
+    Convert subprocess SSH errors to appropriate SSH exceptions.
+
+    :param e: The subprocess.CalledProcessError
+    :param remote_connection: The RemoteConnection object for context
+    :raises: SSHException, AuthenticationException, or NoValidConnectionsError
+    """
+    stderr = e.stderr.lower() if e.stderr else ""
+
+    # Check for authentication failures
+    if any(auth_err in stderr for auth_err in [
+        "permission denied",
+        "authentication failed",
+        "publickey",
+        "password",
+        "host key verification failed"
+    ]):
+        raise AuthenticationException(f"SSH authentication failed: {e.stderr}")
+
+    # Check for connection failures
+    elif any(conn_err in stderr for conn_err in [
+        "connection refused",
+        "network is unreachable",
+        "no route to host",
+        "name or service not known",
+        "connection timed out"
+    ]):
+        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
+
+    # Check for general SSH protocol errors
+    elif "ssh:" in stderr or "protocol" in stderr:
+        raise SSHException(f"SSH protocol error: {e.stderr}")
+
+    # Default to generic SSH exception
+    else:
+        raise SSHException(f"SSH command failed: {e.stderr}")
+
+
+def test_ssh_connection(connection) -> bool:
+    """Test SSH connection by running a simple command."""
+    ssh_cmd = ["ssh"]
+
+    # Handle non-standard SSH port
+    if connection.port != 22:
+        ssh_cmd.extend(["-p", str(connection.port)])
+
+    ssh_cmd.extend([
+        f"{connection.username}@{connection.host}",
+        "echo 'SSH connection test'"
+    ])
+
+    try:
+        result = subprocess.run(
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10
+        )
+        return True
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 255:  # SSH protocol errors
+            handle_ssh_subprocess_error(e, connection)
+        else:
+            raise RemoteConnectionException(
+                message=f"SSH connection test failed: {e.stderr}",
+                status=ConnectionTestStates.FAILED
+            )
+        return False
+    except subprocess.TimeoutExpired:
+        raise RemoteConnectionException(
+            message="SSH connection test timed out",
+            status=ConnectionTestStates.FAILED
+        )
+        return False
 
 logger = logging.getLogger(__name__)
 
@@ -928,7 +1007,7 @@ def test_remote_folder():
 
     # Test SSH Connection
     try:
-        get_client(connection)
+        test_ssh_connection(connection)
         add_status(ConnectionTestStates.OK.value, "SSH connection established")
     except RemoteConnectionException as e:
         add_status(ConnectionTestStates.FAILED.value, e.message)

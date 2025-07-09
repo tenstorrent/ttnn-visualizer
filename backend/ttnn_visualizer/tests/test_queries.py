@@ -16,7 +16,6 @@ from ttnn_visualizer.models import (
 )
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.queries import LocalQueryRunner
-from ttnn_visualizer.queries import RemoteQueryRunner
 
 
 class TestQueryTable(unittest.TestCase):
@@ -222,14 +221,6 @@ class TestDatabaseQueries(unittest.TestCase):
             str(context.exception),
         )
 
-    @patch("ttnn_visualizer.queries.get_client")
-    def test_init_with_valid_remote_instance(self, _mock_client):
-        mock_instance = Mock()
-        mock_instance.remote_connection = Mock(useRemoteQuerying=True)
-        mock_instance.remote_connection.sqliteBinaryPath = "/usr/bin/sqlite3"
-        mock_instance.remote_profiler_folder = Mock(remotePath="/remote/path")
-        db_queries = DatabaseQueries(instance=mock_instance)
-        self.assertIsInstance(db_queries.query_runner, RemoteQueryRunner)
 
     def test_init_with_valid_local_instance(self):
         with tempfile.NamedTemporaryFile(suffix=".sqlite") as temp_db_file:
@@ -379,65 +370,6 @@ class TestDatabaseQueries(unittest.TestCase):
         result = self.db_queries.query_next_buffer(operation_id=1, address=100)
         self.assertIsNotNone(result)
         self.assertEqual(result.operation_id, 2)
-
-
-class TestRemoteQueryRunner(unittest.TestCase):
-
-    def setUp(self):
-        self.mock_instance = Mock()
-        self.mock_instance.remote_connection.sqliteBinaryPath = "/usr/bin/sqlite3"
-        self.mock_instance.remote_connection.host = "mockhost"
-        self.mock_instance.remote_connection.user = "mockuser"
-        self.mock_instance.remote_profiler_folder.remotePath = "/remote/db"
-
-    @patch("ttnn_visualizer.queries.get_client")
-    def test_init_with_mock_get_client(self, mock_get_client):
-        # Mock the SSHClient returned by get_client
-        mock_ssh_client = Mock()
-        mock_get_client.return_value = mock_ssh_client
-
-        runner = RemoteQueryRunner(instance=self.mock_instance)
-        self.assertEqual(runner.ssh_client, mock_ssh_client)
-        mock_get_client.assert_called_once_with(
-            remote_connection=self.mock_instance.remote_connection
-        )
-
-    @patch("ttnn_visualizer.queries.get_client")
-    def test_execute_query(self, mock_get_client):
-        # Mock the SSH client
-        mock_ssh_client = Mock()
-        mock_get_client.return_value = mock_ssh_client
-
-        mock_stdout = Mock()
-        mock_stdout.read.return_value = b'[{"col1": "value1", "col2": "value2"}]'
-        mock_stderr = Mock()
-        mock_stderr.read.return_value = b""
-        mock_ssh_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
-
-        runner = RemoteQueryRunner(instance=self.mock_instance)
-
-        query = "SELECT * FROM table WHERE id = ?"
-        params = [1]
-        results = runner.execute_query(query, params)
-
-        # Validate results
-        self.assertEqual(results, [("value1", "value2")])
-        mock_get_client.assert_called_once()
-        mock_ssh_client.exec_command.assert_called_once()
-
-    @patch("ttnn_visualizer.queries.get_client")
-    def test_close(self, mock_get_client):
-        # Mock the SSH client
-        mock_ssh_client = Mock()
-        mock_get_client.return_value = mock_ssh_client
-
-        runner = RemoteQueryRunner(instance=self.mock_instance)
-
-        runner.close()
-        mock_ssh_client.close.assert_called_once()
-
-    def tearDown(self):
-        pass
 
 
 if __name__ == "__main__":
