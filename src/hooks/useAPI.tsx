@@ -321,6 +321,22 @@ export const useGetNPEManifest = () => {
     });
 };
 
+const fetchNPETimeline = async (fileName: string): Promise<NPEData> => {
+    const { data } = await axiosInstance.get<NPEData>(`/api/performance/npe/timeline`, {
+        params: { filename: fileName },
+    });
+
+    return data;
+};
+
+export const useNPETimelineFile = (fileName: string | null) => {
+    return useQuery<NPEData, AxiosError>({
+        queryFn: () => fetchNPETimeline(fileName!),
+        queryKey: ['get-npe-timeline', fileName],
+        retry: false,
+    });
+};
+
 interface MetaData {
     architecture: string | null;
     frequency: number | null;
