@@ -9,9 +9,10 @@ import { useAtomValue } from 'jotai';
 import { Button, ButtonVariant, MenuItem } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
+import { useParams } from 'react-router';
 import NPEFileLoader from '../components/npe/NPEFileLoader';
 import NPEView from '../components/npe/NPEViewComponent';
-import { useNpe } from '../hooks/useAPI';
+import { useNPETimelineFile, useNpe } from '../hooks/useAPI';
 import { activeNpeOpTraceAtom } from '../store/app';
 import { NPEData } from '../model/NPEModel';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -57,8 +58,10 @@ const NPE_DEMO_DATA: NPEDemoData[] = [
 ];
 
 const NPE: React.FC = () => {
+    const { filepath } = useParams<{ filepath?: string }>();
     const npeFileName = useAtomValue(activeNpeOpTraceAtom);
     const { data: loadedData, isLoading } = useNpe(npeFileName);
+    const { data: loadedTimeline, isLoading: isLoadingTimeline } = useNPETimelineFile(filepath);
     const [demoData, setDemoData] = useState<NPEData | null>(null);
     const [selectedDemo, setSelectedDemo] = useState<NPEDemoData | null>(null);
 
@@ -77,21 +80,21 @@ const NPE: React.FC = () => {
             />
         );
     };
-    const npeData = demoData || loadedData;
+    const npeData = demoData || loadedData || loadedTimeline;
     const isDemoEnabled = getServerConfig()?.SERVER_MODE;
     useEffect(() => {
-        if (loadedData) {
+        if (loadedData || loadedTimeline) {
             setSelectedDemo(null);
             setDemoData(null);
         }
-    }, [loadedData]);
+    }, [loadedData, loadedTimeline]);
     return (
         <>
             <Helmet title='NPE' />
 
             <h1 className='page-title'>NOC performance estimator</h1>
             <div className='npe-inline-loaders'>
-                <NPEFileLoader />
+                {!filepath && <NPEFileLoader />}
                 {isDemoEnabled && (
                     <>
                         <Select
@@ -136,7 +139,7 @@ const NPE: React.FC = () => {
                     </>
                 )}
             </div>
-            {isLoading ? (
+            {isLoading || isLoadingTimeline ? (
                 <LoadingSpinner />
             ) : npeData ? (
                 isValidNpeData(npeData) ? (

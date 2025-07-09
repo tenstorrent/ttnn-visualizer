@@ -15,7 +15,7 @@ wheel
 build
 PyYAML==6.0.2
 python-dotenv==1.0.1
-tt-perf-report==1.0.6
+tt-perf-report==1.0.7
 zstd==1.5.7.0
 
 # Dev dependencies
