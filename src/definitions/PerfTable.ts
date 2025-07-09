@@ -18,6 +18,7 @@ export interface TableHeader {
 
 export interface PerfTableRow {
     id: string;
+    global_call_count: number;
     advice: string[];
     total_percent: string;
     bound: string;
@@ -45,41 +46,6 @@ export interface PerfTableRow {
     pm_ideal_ns: string;
     op?: number;
     missing?: boolean;
-}
-
-export interface RowData {
-    ID: number;
-    'DEVICE ID'?: number;
-    'HOST START TS'?: number;
-    'DEVICE FW DURATION [ns]'?: number;
-    'DEVICE KERNEL DURATION [ns]'?: string;
-    'OP CODE'?: string;
-    'OP TO OP LATENCY [ns]'?: number;
-    'CORE COUNT'?: string;
-    INPUT_0_W?: number;
-    INPUT_0_X?: number;
-    INPUT_0_Y?: number;
-    INPUT_0_Z?: number;
-    INPUT_0_MEMORY?: string;
-    INPUT_0_DATATYPE?: string;
-    INPUT_1_W?: number;
-    INPUT_1_X?: number;
-    INPUT_1_Y?: number;
-    INPUT_1_Z?: number;
-    INPUT_1_MEMORY?: string;
-    INPUT_1_DATATYPE?: string;
-    OUTPUT_0_W?: number;
-    OUTPUT_0_X?: number;
-    OUTPUT_0_Y?: number;
-    OUTPUT_0_Z?: number;
-    OUTPUT_0_MEMORY?: string;
-    OUTPUT_0_DATATYPE?: string;
-    'MATH FIDELITY'?: string;
-    ATTRIBUTES?: string;
-    'OP TYPE'?: string;
-    'PM IDEAL [ns]'?: string;
-
-    ORIGINAL_ID?: number;
 }
 
 export type MathFidelity = 'HiFi4' | 'HiFi2' | 'LoFi';

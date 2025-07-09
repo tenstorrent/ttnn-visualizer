@@ -47,7 +47,7 @@ export const routeObjectList = [
         element: <Performance />,
     },
     {
-        path: ROUTES.NPE,
+        path: `${ROUTES.NPE}/:filepath?`,
         element: <NPE />,
     },
     {

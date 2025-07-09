@@ -9,7 +9,6 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import {
     useDeviceLog,
-    useGetNPEManifest,
     usePerfFolderList,
     usePerformanceComparisonReport,
     usePerformanceRange,
@@ -47,8 +46,6 @@ export default function Performance() {
     const perfRange = usePerformanceRange();
 
     const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
-
-    const { data: _npeManifest } = useGetNPEManifest();
 
     useClearSelectedBuffer();
 

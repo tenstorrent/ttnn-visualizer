@@ -648,6 +648,22 @@ def get_npe_manifest(instance: Instance):
     return jsonify(content)
 
 
+@api.route("/performance/npe/timeline", methods=["GET"])
+@with_instance
+def get_npe_timeline(instance: Instance):
+    if not instance.performance_path:
+        return Response(status=HTTPStatus.NOT_FOUND)
+
+    filename = request.args.get("filename", default=None)
+
+    try:
+        content = NPEQueries.get_npe_timeline(instance, filename=filename)
+    except FileNotFoundError:
+        return jsonify({})
+
+    return jsonify(content)
+
+
 @api.route("/performance/device-log/zone/<zone>", methods=["GET"])
 @with_instance
 def get_zone_statistics(zone, instance: Instance):

@@ -14,8 +14,9 @@ from tt_perf_report import perf_report
 
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
-from ttnn_visualizer.ssh_client import get_client
 from ttnn_visualizer.sftp_operations import read_remote_file
+from ttnn_visualizer.ssh_client import get_client
+
 
 class LocalCSVQueryRunner:
     def __init__(self, file_path: str, offset: int = 0):
@@ -267,7 +268,6 @@ class NPEQueries:
     @staticmethod
     def get_npe_manifest(instance: Instance):
 
-
         if (
             not instance.remote_connection
             or instance.remote_connection
@@ -284,6 +284,31 @@ class NPEQueries:
                 instance.remote_connection,
                 f"{profiler_folder.remotePath}/{NPEQueries.NPE_FOLDER}/{NPEQueries.MANIFEST_FILE}",
             )
+
+    @staticmethod
+    def get_npe_timeline(instance: Instance, filename: str):
+        if not filename:
+            raise ValueError("filename parameter is required and cannot be None or empty")
+
+        if (
+            not instance.remote_connection
+            or not instance.remote_connection.useRemoteQuerying
+        ):
+            if not instance.performance_path:
+                raise ValueError("instance.performance_path is None")
+
+            file_path = Path(
+                instance.performance_path, NPEQueries.NPE_FOLDER, filename
+            )
+            with open(file_path, "r") as f:
+                return json.load(f)
+        else:
+            profiler_folder = instance.remote_profile_folder
+            return read_remote_file(
+                instance.remote_connection,
+                f"{profiler_folder.remotePath}/{NPEQueries.NPE_FOLDER}/{filename}",
+            )
+
 
 
 class DeviceLogProfilerQueries:
@@ -611,6 +636,7 @@ class OpsPerformanceReportQueries:
         "inner_dim_block_size",
         "output_subblock_h",
         "output_subblock_w",
+        "global_call_count",
         "advice",
         "raw_op_code"
     ]
