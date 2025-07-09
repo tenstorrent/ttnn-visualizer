@@ -140,6 +140,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         const { key } = header;
 
         if (key === 'global_call_count') {
+            // TODO: this is an imefficient way of doing things but its also temporary. will update next iteration
             const value = parseInt(String(row[key]), 10) || 0;
             const manifestRecord = npeManifest?.find((el) => {
                 return el.id === value;
