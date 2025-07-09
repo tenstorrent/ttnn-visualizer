@@ -14,7 +14,6 @@ from typing import List, Optional
 
 from flask import current_app
 from paramiko.client import SSHClient
-from paramiko.sftp_client import SFTPClient
 
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
@@ -269,17 +268,6 @@ def get_cluster_desc(remote_connection: RemoteConnection):
         return read_remote_file(remote_connection, cluster_path)
     else:
         return None
-
-
-def walk_sftp_directory(sftp: SFTPClient, remote_path: str):
-    """SFTP implementation of os.walk."""
-    files, folders = [], []
-    for f in sftp.listdir_attr(remote_path):
-        if S_ISDIR(f.st_mode if f.st_mode else 0):
-            folders.append(f.filename)
-        else:
-            files.append(f.filename)
-    return files, folders
 
 
 def is_excluded(file_path, exclude_patterns):
