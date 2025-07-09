@@ -149,12 +149,6 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     return file_path
 
 
-def calculate_folder_size(client: SSHClient, folder_path: str) -> int:
-    """Calculate the total size of the folder before compression."""
-    stdin, stdout, stderr = client.exec_command(f"du -sb {folder_path}")
-    size_info = stdout.read().decode().strip().split("\t")[0]
-    return int(size_info)
-
 
 def get_cluster_desc_path(remote_connection: RemoteConnection) -> Optional[str]:
     """
