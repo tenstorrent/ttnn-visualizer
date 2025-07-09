@@ -46,7 +46,6 @@ enum COLUMN_HEADERS {
 
 const TABLE_HEADERS: TableHeader[] = [
     { label: 'ID', key: COLUMN_HEADERS.id, sortable: true },
-    { label: 'COUNT', key: COLUMN_HEADERS.id, sortable: true },
     { label: 'Total %', key: COLUMN_HEADERS.total_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Bound', key: COLUMN_HEADERS.bound, colour: 'yellow' },
     { label: 'OP Code', key: COLUMN_HEADERS.op_code, colour: 'blue', sortable: true, filterable: true },
