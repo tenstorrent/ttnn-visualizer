@@ -13,7 +13,6 @@ from threading import Thread
 from typing import List, Optional
 
 from flask import current_app
-from paramiko.client import SSHClient
 
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
