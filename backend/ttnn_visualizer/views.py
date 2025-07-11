@@ -115,7 +115,7 @@ def handle_ssh_subprocess_error(e: subprocess.CalledProcessError, remote_connect
 
 def test_ssh_connection(connection) -> bool:
     """Test SSH connection by running a simple command."""
-    ssh_cmd = ["ssh"]
+    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
 
     # Handle non-standard SSH port
     if connection.port != 22:
