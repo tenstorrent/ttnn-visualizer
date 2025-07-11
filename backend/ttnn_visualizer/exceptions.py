@@ -3,22 +3,39 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 from http import HTTPStatus
+from typing import Optional
 
 from ttnn_visualizer.enums import ConnectionTestStates
 
 
 class RemoteConnectionException(Exception):
-    def __init__(self, message, status: ConnectionTestStates):
+    def __init__(self, message, status: ConnectionTestStates, http_status_code: Optional[HTTPStatus] = None):
         super().__init__(message)
         self.message = message
         self.status = status
+        self._http_status_code = http_status_code
 
     @property
     def http_status(self):
+        # Use custom HTTP status code if provided
+        if self._http_status_code is not None:
+            return self._http_status_code
+        
+        # Default behavior
         if self.status == ConnectionTestStates.FAILED:
             return HTTPStatus.INTERNAL_SERVER_ERROR
         if self.status == ConnectionTestStates.OK:
             return HTTPStatus.OK
+
+
+class AuthenticationFailedException(RemoteConnectionException):
+    """Exception for SSH authentication failures that should return HTTP 422"""
+    def __init__(self, message, status: ConnectionTestStates = ConnectionTestStates.FAILED):
+        super().__init__(
+            message=message,
+            status=status,
+            http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY  # 422
+        )
 
 
 class NoProjectsException(RemoteConnectionException):

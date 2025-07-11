@@ -4,6 +4,22 @@ TT-NN Visualizer includes the option to remotely query reports instead of syncin
 
 ## Requirements
 
+### SSH Key Authentication
+**Important**: Remote querying requires SSH key-based authentication. Password authentication is not supported.
+
+Before using remote querying, ensure that:
+1. Your SSH public key is added to the `~/.ssh/authorized_keys` file on the remote server
+2. You can successfully connect to the remote server using SSH without a password prompt
+3. Your SSH agent is running and has your private key loaded (if using a passphrase-protected key)
+
+To test SSH key authentication:
+```bash
+ssh username@hostname
+```
+
+If you're prompted for a password, SSH key authentication is not properly configured.
+
+### Software Requirements
 ```
 glibc=>2.28.0 (`ldd --version`)
 sqlite3=>3.38.0 (`sqlite3 --version`)
@@ -14,6 +30,27 @@ If your machine already has SQLite3 installed you can simply use the path provid
 If you do not have SQLite3  installed you can download the SQLite3 binary, extract it and use the path. For instance:
 
 `/home/user/bin/sqlite3`
+
+## Setting Up SSH Key Authentication
+
+If you haven't set up SSH key authentication yet, follow these steps:
+
+### 1. Generate SSH Key Pair (if you don't have one)
+```bash
+ssh-keygen -t ed25519 -C "your_email@example.com"
+```
+
+### 2. Copy Public Key to Remote Server
+```bash
+ssh-copy-id username@hostname
+```
+
+### 3. Verify SSH Key Authentication
+```bash
+ssh username@hostname
+```
+
+You should be able to connect without entering a password.
 
 ## Installing SQLite 3.38 on Ubuntu 18.04 and 20.04
 

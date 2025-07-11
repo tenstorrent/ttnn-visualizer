@@ -154,7 +154,7 @@ class RemoteCSVQueryRunner:
 
     def _execute_ssh_command(self, command: str) -> str:
         """Execute an SSH command and return the output."""
-        ssh_cmd = ["ssh"]
+        ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
         
         # Handle non-standard SSH port
         if self.remote_connection.port != 22:
