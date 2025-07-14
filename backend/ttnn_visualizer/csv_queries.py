@@ -353,7 +353,7 @@ class NPEQueries:
                 instance.performance_path, NPEQueries.NPE_FOLDER, filename
             )
 
-            if (filename.endswith(".zst")):
+            if filename.endswith(".zst"):
                 with open(file_path, "rb") as file:
                     compressed_data = file.read()
                     uncompressed_data = zstd.uncompress(compressed_data)
@@ -364,10 +364,21 @@ class NPEQueries:
 
         else:
             profiler_folder = instance.remote_profile_folder
-            return read_remote_file(
+            remote_path = f"{profiler_folder.remotePath}/{NPEQueries.NPE_FOLDER}/{filename}"
+            remote_data = read_remote_file(
                 instance.remote_connection,
-                f"{profiler_folder.remotePath}/{NPEQueries.NPE_FOLDER}/{filename}",
+                remote_path
             )
+
+            if filename.endswith(".zst"):
+                if isinstance(remote_data, str):
+                    remote_data = remote_data.encode("utf-8")
+                uncompressed_data = zstd.decompress(remote_data)
+                return json.loads(uncompressed_data)
+            else:
+                if isinstance(remote_data, bytes):
+                    remote_data = remote_data.decode("utf-8")
+                return json.loads(remote_data)
 
 
 class DeviceLogProfilerQueries:
