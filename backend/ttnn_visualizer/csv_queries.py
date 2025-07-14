@@ -16,8 +16,7 @@ from tt_perf_report import perf_report
 
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.exceptions import SSHException, AuthenticationException, NoValidConnectionsError
-from ttnn_visualizer.models import Instance
-from ttnn_visualizer.models import RemoteConnection
+from ttnn_visualizer.models import Instance, RemoteConnection
 from ttnn_visualizer.sftp_operations import read_remote_file
 
 
