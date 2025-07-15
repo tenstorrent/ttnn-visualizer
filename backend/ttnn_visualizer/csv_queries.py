@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import List, Dict, Union, Optional
 
 import pandas as pd
+import zstd
 from tt_perf_report import perf_report
 
 from ttnn_visualizer.exceptions import DataFormatError
-from ttnn_visualizer.models import Instance, RemoteConnection
 from ttnn_visualizer.exceptions import SSHException, AuthenticationException, NoValidConnectionsError
-from ttnn_visualizer.models import Instance
+from ttnn_visualizer.models import Instance, RemoteConnection
 from ttnn_visualizer.sftp_operations import read_remote_file
 
 
@@ -57,6 +57,7 @@ def handle_ssh_subprocess_error(e: subprocess.CalledProcessError, remote_connect
     # Default to generic SSH exception
     else:
         raise SSHException(f"SSH command failed: {e.stderr}")
+
 
 class LocalCSVQueryRunner:
     def __init__(self, file_path: str, offset: int = 0):
@@ -155,16 +156,16 @@ class RemoteCSVQueryRunner:
     def _execute_ssh_command(self, command: str) -> str:
         """Execute an SSH command and return the output."""
         ssh_cmd = ["ssh"]
-        
+
         # Handle non-standard SSH port
         if self.remote_connection.port != 22:
             ssh_cmd.extend(["-p", str(self.remote_connection.port)])
-        
+
         ssh_cmd.extend([
             f"{self.remote_connection.username}@{self.remote_connection.host}",
             command
         ])
-        
+
         try:
             result = subprocess.run(
                 ssh_cmd,
@@ -350,15 +351,33 @@ class NPEQueries:
             file_path = Path(
                 instance.performance_path, NPEQueries.NPE_FOLDER, filename
             )
-            with open(file_path, "r") as f:
-                return json.load(f)
+
+            if filename.endswith(".zst"):
+                with open(file_path, "rb") as file:
+                    compressed_data = file.read()
+                    uncompressed_data = zstd.uncompress(compressed_data)
+                    return json.loads(uncompressed_data)
+            else:
+                with open(file_path, "r") as f:
+                    return json.load(f)
+
         else:
             profiler_folder = instance.remote_profile_folder
-            return read_remote_file(
+            remote_path = f"{profiler_folder.remotePath}/{NPEQueries.NPE_FOLDER}/{filename}"
+            remote_data = read_remote_file(
                 instance.remote_connection,
-                f"{profiler_folder.remotePath}/{NPEQueries.NPE_FOLDER}/{filename}",
+                remote_path
             )
 
+            if filename.endswith(".zst"):
+                if isinstance(remote_data, str):
+                    remote_data = remote_data.encode("utf-8")
+                uncompressed_data = zstd.decompress(remote_data)
+                return json.loads(uncompressed_data)
+            else:
+                if isinstance(remote_data, bytes):
+                    remote_data = remote_data.decode("utf-8")
+                return json.loads(remote_data)
 
 
 class DeviceLogProfilerQueries:
