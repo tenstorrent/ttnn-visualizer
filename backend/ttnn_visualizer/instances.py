@@ -94,8 +94,7 @@ def update_existing_instance(
     else:
         if active_report.get("npe_name"):
             instance_data.npe_path = get_npe_path(
-                npe_name=active_report["npe_name"],
-                current_app=current_app
+                npe_name=active_report["npe_name"], current_app=current_app
             )
 
 
@@ -148,17 +147,25 @@ def create_new_instance(
     instance_data = InstanceTable(
         instance_id=instance_id,
         active_report=active_report,
-        profiler_path=profiler_path if profiler_path is not _sentinel else get_profiler_path(
-            active_report["profiler_name"],
-            current_app=current_app,
-            remote_connection=remote_connection,
+        profiler_path=(
+            profiler_path
+            if profiler_path is not _sentinel
+            else get_profiler_path(
+                active_report["profiler_name"],
+                current_app=current_app,
+                remote_connection=remote_connection,
+            )
         ),
         remote_connection=(
             remote_connection.model_dump() if remote_connection else None
         ),
-        remote_profiler_folder=remote_profiler_folder.model_dump() if remote_profiler_folder else None,
+        remote_profiler_folder=(
+            remote_profiler_folder.model_dump() if remote_profiler_folder else None
+        ),
         remote_performance_folder=(
-            remote_performance_folder.model_dump() if remote_performance_folder else None
+            remote_performance_folder.model_dump()
+            if remote_performance_folder
+            else None
         ),
     )
 
@@ -255,10 +262,18 @@ def get_or_create_instance(
                 db.session.commit()
             except IntegrityError:
                 db.session.rollback()
-                instance_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
+                instance_data = InstanceTable.query.filter_by(
+                    instance_id=instance_id
+                ).first()
 
         # Update the instance if any new data is provided
-        if profiler_name or performance_name or npe_name or remote_connection or remote_profiler_folder:
+        if (
+            profiler_name
+            or performance_name
+            or npe_name
+            or remote_connection
+            or remote_profiler_folder
+        ):
             update_instance(
                 instance_id=instance_id,
                 profiler_name=profiler_name,
@@ -269,7 +284,9 @@ def get_or_create_instance(
             )
 
             # Query again to get the updated instance data
-            instance_data = InstanceTable.query.filter_by(instance_id=instance_id).first()
+            instance_data = InstanceTable.query.filter_by(
+                instance_id=instance_id
+            ).first()
 
         return instance_data
 
@@ -318,7 +335,7 @@ def init_instances(app):
 
 
 def create_random_instance_id():
-    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=45))
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=45))
 
 
 def create_instance_from_local_paths(profiler_path, performance_path):
@@ -328,11 +345,21 @@ def create_instance_from_local_paths(profiler_path, performance_path):
     if _profiler_path and (not _profiler_path.exists() or not _profiler_path.is_dir()):
         raise InvalidReportPath()
 
-    if _performance_path and (not _performance_path.exists() or not _performance_path.is_dir()):
+    if _performance_path and (
+        not _performance_path.exists() or not _performance_path.is_dir()
+    ):
         raise InvalidProfilerPath()
 
-    profiler_name = _profiler_path.parts[-1] if _profiler_path and len(_profiler_path.parts) > 2 else ""
-    performance_name = _performance_path.parts[-1] if _performance_path and len(_performance_path.parts) > 2 else ""
+    profiler_name = (
+        _profiler_path.parts[-1]
+        if _profiler_path and len(_profiler_path.parts) > 2
+        else ""
+    )
+    performance_name = (
+        _performance_path.parts[-1]
+        if _performance_path and len(_performance_path.parts) > 2
+        else ""
+    )
     instance_data = InstanceTable(
         instance_id=create_random_instance_id(),
         active_report={

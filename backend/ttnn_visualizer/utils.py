@@ -88,12 +88,15 @@ def get_profiler_path(profiler_name, current_app, remote_connection=None):
         else:
             base_dir = local_dir
 
-        profiler_path = base_dir / current_app.config["PROFILER_DIRECTORY_NAME"] / profiler_name
+        profiler_path = (
+            base_dir / current_app.config["PROFILER_DIRECTORY_NAME"] / profiler_name
+        )
         target_path = profiler_path / database_file_name
 
         return str(target_path)
     else:
         return ""
+
 
 def get_npe_path(npe_name, current_app):
     local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
@@ -107,7 +110,9 @@ def get_cluster_descriptor_path(instance):
     if not instance.profiler_path:
         return None
 
-    cluster_descriptor_path = Path(instance.profiler_path).parent / Path("cluster_descriptor.yaml")
+    cluster_descriptor_path = Path(instance.profiler_path).parent / Path(
+        "cluster_descriptor.yaml"
+    )
 
     if not cluster_descriptor_path.exists():
         return None
@@ -191,4 +196,3 @@ def read_version_from_package_json() -> str:
         raise FileNotFoundError(f"The file {file_path} was not found.")
     except KeyError:
         raise KeyError("The 'version' key was not found in the package.json file.")
-

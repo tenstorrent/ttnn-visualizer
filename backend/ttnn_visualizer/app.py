@@ -21,7 +21,11 @@ from flask_cors import CORS
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from ttnn_visualizer.exceptions import DatabaseFileNotFoundException, InvalidProfilerPath, InvalidReportPath
+from ttnn_visualizer.exceptions import (
+    DatabaseFileNotFoundException,
+    InvalidProfilerPath,
+    InvalidReportPath,
+)
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
 
@@ -65,6 +69,7 @@ def create_app(settings_override=None):
     extensions(app)
 
     if flask_env == "production":
+
         @app.route(f"{app.config['BASE_PATH']}", defaults={"path": ""})
         @app.route(f"{app.config['BASE_PATH']}<path:path>")
         def catch_all(path):
@@ -179,9 +184,15 @@ def open_browser(host, port, instance_id=None):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="A tool for visualizing the Tenstorrent Neural Network model (TT-NN)")
-    parser.add_argument("--profiler-path", type=str, help="Specify a profiler path", default=None)
-    parser.add_argument("--performance-path", help="Specify a performance path", default=None)
+    parser = argparse.ArgumentParser(
+        description="A tool for visualizing the Tenstorrent Neural Network model (TT-NN)"
+    )
+    parser.add_argument(
+        "--profiler-path", type=str, help="Specify a profiler path", default=None
+    )
+    parser.add_argument(
+        "--performance-path", help="Specify a performance path", default=None
+    )
     return parser.parse_args()
 
 

@@ -7,11 +7,18 @@ import subprocess
 
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
-from ttnn_visualizer.exceptions import RemoteSqliteException, SSHException, AuthenticationException, NoValidConnectionsError
+from ttnn_visualizer.exceptions import (
+    RemoteSqliteException,
+    SSHException,
+    AuthenticationException,
+    NoValidConnectionsError,
+)
 from ttnn_visualizer.models import RemoteConnection
 
 
-def handle_ssh_subprocess_error(e: subprocess.CalledProcessError, remote_connection: RemoteConnection):
+def handle_ssh_subprocess_error(
+    e: subprocess.CalledProcessError, remote_connection: RemoteConnection
+):
     """
     Convert subprocess SSH errors to appropriate SSH exceptions.
 
@@ -22,23 +29,29 @@ def handle_ssh_subprocess_error(e: subprocess.CalledProcessError, remote_connect
     stderr = e.stderr.lower() if e.stderr else ""
 
     # Check for authentication failures
-    if any(auth_err in stderr for auth_err in [
-        "permission denied",
-        "authentication failed",
-        "publickey",
-        "password",
-        "host key verification failed"
-    ]):
+    if any(
+        auth_err in stderr
+        for auth_err in [
+            "permission denied",
+            "authentication failed",
+            "publickey",
+            "password",
+            "host key verification failed",
+        ]
+    ):
         raise AuthenticationException(f"SSH authentication failed: {e.stderr}")
 
     # Check for connection failures
-    elif any(conn_err in stderr for conn_err in [
-        "connection refused",
-        "network is unreachable",
-        "no route to host",
-        "name or service not known",
-        "connection timed out"
-    ]):
+    elif any(
+        conn_err in stderr
+        for conn_err in [
+            "connection refused",
+            "network is unreachable",
+            "no route to host",
+            "name or service not known",
+            "connection timed out",
+        ]
+    ):
         raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
 
     # Check for general SSH protocol errors
@@ -49,29 +62,23 @@ def handle_ssh_subprocess_error(e: subprocess.CalledProcessError, remote_connect
     else:
         raise SSHException(f"SSH command failed: {e.stderr}")
 
+
 MINIMUM_SQLITE_VERSION = "3.38.0"
 
 
 def _execute_ssh_command(remote_connection: RemoteConnection, command: str) -> str:
     """Execute an SSH command and return the output."""
     ssh_cmd = ["ssh"]
-    
+
     # Handle non-standard SSH port
     if remote_connection.port != 22:
         ssh_cmd.extend(["-p", str(remote_connection.port)])
-    
-    ssh_cmd.extend([
-        f"{remote_connection.username}@{remote_connection.host}",
-        command
-    ])
-    
+
+    ssh_cmd.extend([f"{remote_connection.username}@{remote_connection.host}", command])
+
     try:
         result = subprocess.run(
-            ssh_cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=30
+            ssh_cmd, capture_output=True, text=True, check=True, timeout=30
         )
         return result.stdout
     except subprocess.CalledProcessError as e:
@@ -118,7 +125,7 @@ def is_sqlite_executable(remote_connection: RemoteConnection, binary_path):
     try:
         output = _execute_ssh_command(remote_connection, f"{binary_path} --version")
         version_output = output.strip()
-        
+
         version = get_sqlite_version(version_output)
         if not is_version_at_least(version, MINIMUM_SQLITE_VERSION):
             raise Exception(

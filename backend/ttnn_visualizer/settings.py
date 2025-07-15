@@ -10,6 +10,7 @@ from ttnn_visualizer.utils import str_to_bool
 
 load_dotenv()
 
+
 class DefaultConfig(object):
     # General Settings
     SECRET_KEY = os.getenv("SECRET_KEY", "90909")
@@ -19,17 +20,20 @@ class DefaultConfig(object):
     SERVER_MODE = str_to_bool(os.getenv("SERVER_MODE", "false"))
     MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
     ALLOWED_ORIGINS = [
-        o for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000").split(",")
+        o
+        for o in os.getenv(
+            "ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000"
+        ).split(",")
         if o
     ]
     BASE_PATH = os.getenv("BASE_PATH", "/")
-    MAX_CONTENT_LENGTH = (
-        None if not (v := os.getenv("MAX_CONTENT_LENGTH")) else int(v)
-    )
+    MAX_CONTENT_LENGTH = None if not (v := os.getenv("MAX_CONTENT_LENGTH")) else int(v)
 
     # Path Settings
     DB_VERSION = "0.29.0"  # App version when DB schema last changed
-    REPORT_DATA_DIRECTORY = os.getenv("REPORT_DATA_DIRECTORY", Path(__file__).parent.absolute().joinpath("data"))
+    REPORT_DATA_DIRECTORY = os.getenv(
+        "REPORT_DATA_DIRECTORY", Path(__file__).parent.absolute().joinpath("data")
+    )
     LOCAL_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("local")
     REMOTE_DATA_DIRECTORY = Path(REPORT_DATA_DIRECTORY).joinpath("remote")
     PROFILER_DIRECTORY_NAME = "profiler-reports"

@@ -54,6 +54,7 @@ def extract_folder_name_from_files(files):
     unsplit_name = str(files[0].filename)
     return unsplit_name.split("/")[0]
 
+
 def extract_npe_name(files):
     if not files:
         return None

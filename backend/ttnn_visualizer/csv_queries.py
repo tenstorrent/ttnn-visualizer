@@ -15,12 +15,18 @@ from tt_perf_report import perf_report
 
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance, RemoteConnection
-from ttnn_visualizer.exceptions import SSHException, AuthenticationException, NoValidConnectionsError
+from ttnn_visualizer.exceptions import (
+    SSHException,
+    AuthenticationException,
+    NoValidConnectionsError,
+)
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.sftp_operations import read_remote_file
 
 
-def handle_ssh_subprocess_error(e: subprocess.CalledProcessError, remote_connection: RemoteConnection):
+def handle_ssh_subprocess_error(
+    e: subprocess.CalledProcessError, remote_connection: RemoteConnection
+):
     """
     Convert subprocess SSH errors to appropriate SSH exceptions.
 
@@ -31,23 +37,29 @@ def handle_ssh_subprocess_error(e: subprocess.CalledProcessError, remote_connect
     stderr = e.stderr.lower() if e.stderr else ""
 
     # Check for authentication failures
-    if any(auth_err in stderr for auth_err in [
-        "permission denied",
-        "authentication failed",
-        "publickey",
-        "password",
-        "host key verification failed"
-    ]):
+    if any(
+        auth_err in stderr
+        for auth_err in [
+            "permission denied",
+            "authentication failed",
+            "publickey",
+            "password",
+            "host key verification failed",
+        ]
+    ):
         raise AuthenticationException(f"SSH authentication failed: {e.stderr}")
 
     # Check for connection failures
-    elif any(conn_err in stderr for conn_err in [
-        "connection refused",
-        "network is unreachable",
-        "no route to host",
-        "name or service not known",
-        "connection timed out"
-    ]):
+    elif any(
+        conn_err in stderr
+        for conn_err in [
+            "connection refused",
+            "network is unreachable",
+            "no route to host",
+            "name or service not known",
+            "connection timed out",
+        ]
+    ):
         raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
 
     # Check for general SSH protocol errors
@@ -57,6 +69,7 @@ def handle_ssh_subprocess_error(e: subprocess.CalledProcessError, remote_connect
     # Default to generic SSH exception
     else:
         raise SSHException(f"SSH command failed: {e.stderr}")
+
 
 class LocalCSVQueryRunner:
     def __init__(self, file_path: str, offset: int = 0):
@@ -155,23 +168,21 @@ class RemoteCSVQueryRunner:
     def _execute_ssh_command(self, command: str) -> str:
         """Execute an SSH command and return the output."""
         ssh_cmd = ["ssh"]
-        
+
         # Handle non-standard SSH port
         if self.remote_connection.port != 22:
             ssh_cmd.extend(["-p", str(self.remote_connection.port)])
-        
-        ssh_cmd.extend([
-            f"{self.remote_connection.username}@{self.remote_connection.host}",
-            command
-        ])
-        
+
+        ssh_cmd.extend(
+            [
+                f"{self.remote_connection.username}@{self.remote_connection.host}",
+                command,
+            ]
+        )
+
         try:
             result = subprocess.run(
-                ssh_cmd,
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=30
+                ssh_cmd, capture_output=True, text=True, check=True, timeout=30
             )
             return result.stdout
         except subprocess.CalledProcessError as e:
@@ -269,7 +280,7 @@ class RemoteCSVQueryRunner:
         )
         output = self._execute_ssh_command(cmd).strip()
 
-        return output.splitlines()[self.offset:]
+        return output.splitlines()[self.offset :]
 
     def get_csv_header(self) -> Dict[str, int]:
         """
@@ -324,7 +335,9 @@ class NPEQueries:
             and not instance.remote_connection.useRemoteQuerying
         ):
             file_path = Path(
-                instance.performance_path, NPEQueries.NPE_FOLDER, NPEQueries.MANIFEST_FILE
+                instance.performance_path,
+                NPEQueries.NPE_FOLDER,
+                NPEQueries.MANIFEST_FILE,
             )
             with open(file_path, "r") as f:
                 return json.load(f)
@@ -338,7 +351,9 @@ class NPEQueries:
     @staticmethod
     def get_npe_timeline(instance: Instance, filename: str):
         if not filename:
-            raise ValueError("filename parameter is required and cannot be None or empty")
+            raise ValueError(
+                "filename parameter is required and cannot be None or empty"
+            )
 
         if (
             not instance.remote_connection
@@ -347,9 +362,7 @@ class NPEQueries:
             if not instance.performance_path:
                 raise ValueError("instance.performance_path is None")
 
-            file_path = Path(
-                instance.performance_path, NPEQueries.NPE_FOLDER, filename
-            )
+            file_path = Path(instance.performance_path, NPEQueries.NPE_FOLDER, filename)
             with open(file_path, "r") as f:
                 return json.load(f)
         else:
@@ -358,7 +371,6 @@ class NPEQueries:
                 instance.remote_connection,
                 f"{profiler_folder.remotePath}/{NPEQueries.NPE_FOLDER}/{filename}",
             )
-
 
 
 class DeviceLogProfilerQueries:
@@ -614,7 +626,9 @@ class OpsPerformanceQueries:
             or instance.remote_connection
             and not instance.remote_connection.useRemoteQuerying
         ):
-            with open(OpsPerformanceQueries.get_local_ops_perf_file_path(instance)) as f:
+            with open(
+                OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+            ) as f:
                 return f.read()
         else:
             path = OpsPerformanceQueries.get_remote_ops_perf_file_path(instance)
@@ -656,9 +670,7 @@ class OpsPerformanceQueries:
         """
         try:
             return [
-                folder.name
-                for folder in Path(directory).iterdir()
-                if folder.is_dir()
+                folder.name for folder in Path(directory).iterdir() if folder.is_dir()
             ]
         except Exception as e:
             raise RuntimeError(f"Error accessing directory: {e}")
@@ -688,7 +700,7 @@ class OpsPerformanceReportQueries:
         "output_subblock_w",
         "global_call_count",
         "advice",
-        "raw_op_code"
+        "raw_op_code",
     ]
 
     PASSTHROUGH_COLUMNS = {
@@ -734,7 +746,9 @@ class OpsPerformanceReportQueries:
                 next(reader, None)
                 for row in reader:
                     processed_row = {
-                        column: row[index] for index, column in enumerate(cls.REPORT_COLUMNS) if index < len(row)
+                        column: row[index]
+                        for index, column in enumerate(cls.REPORT_COLUMNS)
+                        if index < len(row)
                     }
                     if "advice" in processed_row and processed_row["advice"]:
                         processed_row["advice"] = processed_row["advice"].split(" • ")
@@ -743,7 +757,9 @@ class OpsPerformanceReportQueries:
 
                     for key, value in cls.PASSTHROUGH_COLUMNS.items():
                         op_id = int(row[0])
-                        idx = op_id - 2  # IDs in result column one correspond to row numbers in ops perf results csv
+                        idx = (
+                            op_id - 2
+                        )  # IDs in result column one correspond to row numbers in ops perf results csv
                         processed_row[key] = ops_perf_results[idx][value]
 
                     report.append(processed_row)
