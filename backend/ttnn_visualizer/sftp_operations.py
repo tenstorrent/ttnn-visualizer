@@ -200,7 +200,8 @@ def get_cluster_desc_path(remote_connection: RemoteConnection) -> Optional[str]:
             # Build SSH command to check if file exists and get its modification time
             stat_cmd = [
                 "ssh",
-                "-o", "PasswordAuthentication=no",
+                "-o",
+                "PasswordAuthentication=no",
                 f"{remote_connection.username}@{remote_connection.host}",
             ]
 
@@ -532,7 +533,8 @@ def get_remote_profiler_folder_from_config_path(
         # Build SSH command to get file modification time
         stat_cmd = [
             "ssh",
-            "-o", "PasswordAuthentication=no",
+            "-o",
+            "PasswordAuthentication=no",
             f"{remote_connection.username}@{remote_connection.host}",
         ]
 
@@ -552,7 +554,8 @@ def get_remote_profiler_folder_from_config_path(
         # Build SSH command to read file content
         cat_cmd = [
             "ssh",
-            "-o", "PasswordAuthentication=no",
+            "-o",
+            "PasswordAuthentication=no",
             f"{remote_connection.username}@{remote_connection.host}",
         ]
 
