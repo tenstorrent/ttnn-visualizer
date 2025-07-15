@@ -767,6 +767,7 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
         }
 
         return response;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [range, response.data, useRange]);
 };
 
@@ -797,6 +798,7 @@ export const usePerformanceReport = (name: string | null) => {
         }
 
         return response;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [response.data]);
 };
 
