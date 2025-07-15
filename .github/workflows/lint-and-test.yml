@@ -7,7 +7,7 @@ on:
 
 jobs:
   lint-and-test:
-    name: Lint and Test
+    name: Lint and Test (Frontend)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -28,6 +28,7 @@ jobs:
           pnpm run lint
           pnpm run test
   backend-lint-and-test:
+    name: Lint and Test (Backend)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
