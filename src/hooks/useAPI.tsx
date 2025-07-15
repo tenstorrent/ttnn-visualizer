@@ -767,7 +767,7 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
         }
 
         return response;
-    }, [range, response, useRange]);
+    }, [range, response.data, useRange]);
 };
 
 export const useDeviceLog = () => {
