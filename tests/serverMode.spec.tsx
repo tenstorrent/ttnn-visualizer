@@ -30,6 +30,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useOpToPerfIdFiltered: () => [],
     useOperationsList: () => ({ data: [] }),
     useReportFolderList: () => ({ data: mockProfilerFolderList }),
+    useGetNPEManifest: () => ({ data: null }),
 }));
 
 vi.mock('../src/functions/getServerConfig.ts', () => ({
