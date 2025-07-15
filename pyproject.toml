@@ -35,6 +35,7 @@ classifiers = [
 dev = [
     "black==25.1.0",
     "mypy",
+    "pytest==8.4.1",
 ]
 
 [tool.setuptools]
