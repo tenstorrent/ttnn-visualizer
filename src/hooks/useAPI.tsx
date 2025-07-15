@@ -797,7 +797,7 @@ export const usePerformanceReport = (name: string | null) => {
         }
 
         return response;
-    }, [response]);
+    }, [response.data]);
 };
 
 export const usePerformanceComparisonReport = (reportNames: string[] | null) => {
