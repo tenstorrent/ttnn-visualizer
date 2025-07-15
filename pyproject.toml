@@ -31,6 +31,11 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "black==25.1.0",
+    "mypy",
+]
 
 [tool.setuptools]
 package-dir = { "" = "backend" }
@@ -48,7 +53,6 @@ ttnn-visualizer = "ttnn_visualizer.app:main"
 [tool.black]
 line-length = 88
 target-version = ['py310']
-include = 'backend/\.pyi?$'
 exclude = '''
 /(
     \.git
