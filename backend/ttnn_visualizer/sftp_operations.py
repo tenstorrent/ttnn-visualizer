@@ -200,6 +200,7 @@ def get_cluster_desc_path(remote_connection: RemoteConnection) -> Optional[str]:
             # Build SSH command to check if file exists and get its modification time
             stat_cmd = [
                 "ssh",
+                "-o", "PasswordAuthentication=no",
                 f"{remote_connection.username}@{remote_connection.host}",
             ]
 
@@ -378,7 +379,7 @@ def get_remote_file_list(
     exclude_patterns = exclude_patterns or []
 
     # Build SSH command to find all files recursively
-    ssh_cmd = ["ssh"]
+    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
 
     # Handle non-standard SSH port
     if remote_connection.port != 22:
@@ -428,7 +429,7 @@ def get_remote_directory_list(
     exclude_patterns = exclude_patterns or []
 
     # Build SSH command to find all directories recursively
-    ssh_cmd = ["ssh"]
+    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
 
     # Handle non-standard SSH port
     if remote_connection.port != 22:
@@ -479,7 +480,7 @@ def download_single_file_sftp(
     local_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Build SFTP command
-    sftp_cmd = ["sftp"]
+    sftp_cmd = ["sftp", "-o", "PasswordAuthentication=no"]
 
     # Handle non-standard SSH port
     if remote_connection.port != 22:
@@ -531,6 +532,7 @@ def get_remote_profiler_folder_from_config_path(
         # Build SSH command to get file modification time
         stat_cmd = [
             "ssh",
+            "-o", "PasswordAuthentication=no",
             f"{remote_connection.username}@{remote_connection.host}",
         ]
 
@@ -550,6 +552,7 @@ def get_remote_profiler_folder_from_config_path(
         # Build SSH command to read file content
         cat_cmd = [
             "ssh",
+            "-o", "PasswordAuthentication=no",
             f"{remote_connection.username}@{remote_connection.host}",
         ]
 
@@ -611,7 +614,7 @@ def get_remote_performance_folder(
 
     # Get modification time using subprocess SSH command
     try:
-        ssh_command = ["ssh"]
+        ssh_command = ["ssh", "-o", "PasswordAuthentication=no"]
         if remote_connection.port != 22:
             ssh_command.extend(["-p", str(remote_connection.port)])
         ssh_command.extend(
@@ -665,7 +668,7 @@ def read_remote_file(
     logger.info(f"Reading remote file {path}")
 
     # Build SSH command to read the file
-    ssh_cmd = ["ssh"]
+    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
 
     # Handle non-standard SSH port
     if remote_connection.port != 22:
@@ -713,7 +716,7 @@ def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str)
     path = getattr(remote_connection, path_key)
 
     # Build SSH command to test if path exists
-    ssh_cmd = ["ssh"]
+    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
 
     # Handle non-standard SSH port
     if remote_connection.port != 22:
@@ -756,7 +759,7 @@ def find_folders_by_files(
     matched_folders: List[str] = []
 
     # Build SSH command to find directories in root_folder
-    ssh_cmd = ["ssh"]
+    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
 
     # Handle non-standard SSH port
     if remote_connection.port != 22:
@@ -788,7 +791,7 @@ def find_folders_by_files(
                 file_checks.append(f"test -f '{directory}/{file_name}'")
 
             # Use OR logic to check if any of the files exist
-            check_cmd = ["ssh"]
+            check_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
             if remote_connection.port != 22:
                 check_cmd.extend(["-p", str(remote_connection.port)])
 

@@ -14,6 +14,7 @@ from ttnn_visualizer.exceptions import (
     NoValidConnectionsError,
     SSHException,
     RemoteConnectionException,
+    AuthenticationFailedException,
     NoProjectsException,
     RemoteSqliteException,
 )
@@ -70,10 +71,19 @@ def remote_exception_handler(func):
         try:
             return func(*args, **kwargs)
         except AuthenticationException as err:
-            current_app.logger.error(f"Authentication failed {err}")
-            raise RemoteConnectionException(
+            # Log the detailed error for debugging, but don't show full traceback
+            current_app.logger.warning(f"SSH authentication failed for {connection.username}@{connection.host}: SSH key authentication required")
+            
+            # Return user-friendly error message about SSH keys
+            user_message = (
+                "SSH authentication failed. This application requires SSH key-based authentication. "
+                "Please ensure your SSH public key is added to the authorized_keys file on the remote server. "
+                "Password authentication is not supported."
+            )
+            
+            raise AuthenticationFailedException(
+                message=user_message,
                 status=ConnectionTestStates.FAILED,
-                message=f"Unable to authenticate: {str(err)}",
             )
         except FileNotFoundError as err:
             current_app.logger.error(f"File not found: {str(err)}")
@@ -88,11 +98,18 @@ def remote_exception_handler(func):
                 message=f"No projects found at remote location: {connection.path}",
             )
         except NoValidConnectionsError as err:
-            current_app.logger.error(f"No valid connections: {str(err)}")
-            message = re.sub(r"\[.*?]", "", str(err)).strip()
+            current_app.logger.warning(f"SSH connection failed for {connection.username}@{connection.host}: {str(err)}")
+
+            # Provide user-friendly message for connection issues
+            user_message = (
+                f"Unable to establish SSH connection to {connection.host}. "
+                "Please check the hostname, port, and network connectivity. "
+                "Ensure SSH key-based authentication is properly configured."
+            )
+
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
-                message=f"{message}",
+                message=user_message,
             )
 
         except RemoteSqliteException as err:
@@ -113,10 +130,10 @@ def remote_exception_handler(func):
             )
         except SSHException as err:
             if str(err) == "No existing session":
-                message = "Authentication failed - check credentials and ssh-agent"
+                message = "SSH authentication failed. Please ensure SSH keys are configured and ssh-agent is running."
             else:
                 err_message = re.sub(r"\[.*?]", "", str(err)).strip()
-                message = f"Error connecting to host {connection.host}: {err_message}"
+                message = f"SSH connection error to {connection.host}: {err_message}. Ensure SSH key-based authentication is properly configured."
 
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED, message=message
