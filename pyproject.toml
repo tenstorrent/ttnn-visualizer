@@ -9,7 +9,7 @@ dependencies = [
     "Flask==3.1.1",
     "gunicorn~=23.0.0",
     "uvicorn==0.30.1",
-    "flask_cors==4.0.1",
+    "Flask-Cors==4.0.1",
     "pydantic==2.7.3",
     "pydantic_core==2.18.4",
     "Flask-Static-Digest==0.4.1",
