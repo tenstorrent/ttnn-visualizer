@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import shutil
+import subprocess
 import time
 from http import HTTPStatus
 from pathlib import Path
@@ -33,6 +34,12 @@ from ttnn_visualizer.decorators import with_instance, local_only
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.exceptions import RemoteConnectionException
+from ttnn_visualizer.exceptions import (
+    SSHException,
+    AuthenticationException,
+    NoValidConnectionsError,
+    AuthenticationFailedException,
+)
 from ttnn_visualizer.file_uploads import (
     extract_folder_name_from_files,
     extract_npe_name,
@@ -71,13 +78,6 @@ from ttnn_visualizer.sftp_operations import (
     sync_remote_performance_folders,
     get_cluster_desc,
 )
-from ttnn_visualizer.exceptions import (
-    SSHException,
-    AuthenticationException,
-    NoValidConnectionsError,
-    AuthenticationFailedException,
-)
-import subprocess
 from ttnn_visualizer.utils import (
     get_cluster_descriptor_path,
     read_last_synced_file,
@@ -846,6 +846,11 @@ def get_npe_timeline(instance: Instance):
         return Response(status=HTTPStatus.NOT_FOUND)
 
     filename = request.args.get("filename", default=None)
+
+    if not filename:
+        return jsonify({})
+
+    filename = Path(filename).name
 
     try:
         content = NPEQueries.get_npe_timeline(instance, filename=filename)
