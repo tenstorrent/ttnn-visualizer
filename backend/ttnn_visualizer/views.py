@@ -20,25 +20,24 @@ from flask import (
     Response,
     current_app,
     jsonify,
-    session,
     request,
+    session,
 )
-
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
+    NPEQueries,
     OpsPerformanceQueries,
     OpsPerformanceReportQueries,
-    NPEQueries,
 )
-from ttnn_visualizer.decorators import with_instance, local_only
+from ttnn_visualizer.decorators import local_only, with_instance
 from ttnn_visualizer.enums import ConnectionTestStates
-from ttnn_visualizer.exceptions import DataFormatError
-from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.exceptions import (
-    SSHException,
     AuthenticationException,
-    NoValidConnectionsError,
     AuthenticationFailedException,
+    DataFormatError,
+    NoValidConnectionsError,
+    RemoteConnectionException,
+    SSHException,
 )
 from ttnn_visualizer.file_uploads import (
     extract_folder_name_from_files,
@@ -51,32 +50,32 @@ from ttnn_visualizer.instances import (
     update_instance,
 )
 from ttnn_visualizer.models import (
-    RemoteReportFolder,
-    RemoteConnection,
-    StatusMessage,
     Instance,
+    RemoteConnection,
+    RemoteReportFolder,
+    StatusMessage,
 )
 from ttnn_visualizer.queries import DatabaseQueries
-from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path, check_sqlite_path
+from ttnn_visualizer.remote_sqlite_setup import check_sqlite_path, get_sqlite_path
 from ttnn_visualizer.serializers import (
-    serialize_operations,
-    serialize_tensors,
-    serialize_operation,
-    serialize_buffer_pages,
-    serialize_operation_buffers,
-    serialize_operations_buffers,
-    serialize_devices,
     serialize_buffer,
+    serialize_buffer_pages,
+    serialize_devices,
+    serialize_operation,
+    serialize_operation_buffers,
+    serialize_operations,
+    serialize_operations_buffers,
+    serialize_tensors,
 )
 from ttnn_visualizer.sftp_operations import (
-    sync_remote_profiler_folders,
-    read_remote_file,
-    check_remote_path_for_reports,
-    get_remote_profiler_folders,
     check_remote_path_exists,
-    get_remote_performance_folders,
-    sync_remote_performance_folders,
+    check_remote_path_for_reports,
     get_cluster_desc,
+    get_remote_performance_folders,
+    get_remote_profiler_folders,
+    read_remote_file,
+    sync_remote_performance_folders,
+    sync_remote_profiler_folders,
 )
 from ttnn_visualizer.utils import (
     get_cluster_descriptor_path,

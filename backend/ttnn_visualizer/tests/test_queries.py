@@ -3,19 +3,13 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 
-import tempfile
 import sqlite3
 import tempfile
 import unittest
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from ttnn_visualizer.models import (
-    DeviceOperation,
-    TensorComparisonRecord,
-)
-from ttnn_visualizer.queries import DatabaseQueries
-from ttnn_visualizer.queries import LocalQueryRunner
+from ttnn_visualizer.models import DeviceOperation, TensorComparisonRecord
+from ttnn_visualizer.queries import DatabaseQueries, LocalQueryRunner
 
 
 class TestQueryTable(unittest.TestCase):

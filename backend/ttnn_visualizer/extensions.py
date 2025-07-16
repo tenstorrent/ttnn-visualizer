@@ -3,9 +3,8 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 from flask_socketio import SocketIO
-from flask_static_digest import FlaskStaticDigest
 from flask_sqlalchemy import SQLAlchemy
-
+from flask_static_digest import FlaskStaticDigest
 
 flask_static_digest = FlaskStaticDigest()
 # Initialize Flask SQLAlchemy

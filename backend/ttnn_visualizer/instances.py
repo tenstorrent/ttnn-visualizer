@@ -9,19 +9,15 @@ from logging import getLogger
 from pathlib import Path
 
 from flask import request
-
-from ttnn_visualizer.exceptions import InvalidReportPath, InvalidProfilerPath
-from ttnn_visualizer.utils import get_profiler_path, get_performance_path, get_npe_path
-from ttnn_visualizer.models import (
-    InstanceTable,
-)
+from ttnn_visualizer.exceptions import InvalidProfilerPath, InvalidReportPath
 from ttnn_visualizer.extensions import db
+from ttnn_visualizer.models import InstanceTable
+from ttnn_visualizer.utils import get_npe_path, get_performance_path, get_profiler_path
 
 logger = getLogger(__name__)
 
-from flask import jsonify, current_app
+from flask import current_app, jsonify
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-
 
 _sentinel = object()
 

@@ -6,13 +6,12 @@ import dataclasses
 import enum
 import json
 import logging
+import re
+import time
 from functools import wraps
 from pathlib import Path
-import time
-import re
 from timeit import default_timer
-from typing import Callable, Optional, Dict, Any
-
+from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

@@ -4,8 +4,8 @@
 
 import os
 from pathlib import Path
-from dotenv import load_dotenv
 
+from dotenv import load_dotenv
 from ttnn_visualizer.utils import str_to_bool
 
 load_dotenv()

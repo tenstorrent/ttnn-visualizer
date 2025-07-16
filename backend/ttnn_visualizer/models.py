@@ -6,17 +6,14 @@ import dataclasses
 import enum
 import json
 from json import JSONDecodeError
-from typing import Optional, Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
-from sqlalchemy import Integer, Column, String, JSON
+from sqlalchemy import JSON, Column, Integer, String
 from sqlalchemy.ext.mutable import MutableDict
-
-from ttnn_visualizer.utils import SerializeableDataclass
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
-
-from ttnn_visualizer.utils import parse_memory_config
+from ttnn_visualizer.utils import SerializeableDataclass, parse_memory_config
 
 
 class BufferType(enum.Enum):

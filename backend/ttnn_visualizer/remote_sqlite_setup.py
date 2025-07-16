@@ -8,10 +8,10 @@ import subprocess
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
-    RemoteSqliteException,
-    SSHException,
     AuthenticationException,
     NoValidConnectionsError,
+    RemoteSqliteException,
+    SSHException,
 )
 from ttnn_visualizer.models import RemoteConnection
 
