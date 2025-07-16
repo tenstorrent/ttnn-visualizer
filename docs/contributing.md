@@ -33,7 +33,7 @@ source myenv/bin/activate
 install dependencies
 
 ```shell
-pip install .
+pip install '.[dev]'
 ```
 
 Starting the server
