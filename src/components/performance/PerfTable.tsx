@@ -287,7 +287,11 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                     colSpan={visibleHeaders.length}
                                     className='cell advice'
                                 >
-                                    <ul>{row?.advice.map((advice, j) => <li key={`advice-${j}`}>{advice}</li>)}</ul>
+                                    <ul>
+                                        {row?.advice.map((advice, j) => (
+                                            <li key={`advice-${j}`}>{advice}</li>
+                                        ))}
+                                    </ul>
                                 </td>
                             </tr>
                         )}
