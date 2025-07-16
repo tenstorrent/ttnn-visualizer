@@ -5,7 +5,7 @@ flask_cors==4.0.1
 pydantic==2.7.3
 pydantic_core==2.18.4
 flask_static_digest==0.4.1
-setuptools==65.5.0
+setuptools==78.1.1
 python-dotenv==1.0.1
 flask-sqlalchemy
 flask-socketio
