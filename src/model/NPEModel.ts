@@ -164,3 +164,9 @@ export enum NPE_LINK {
     NOC_ID,
     DEMAND,
 }
+
+export interface NPEManifestEntry {
+    id: number; // @deprecated use `global_call_count` instead unless we will augment this in the future
+    global_call_count: number;
+    file: string;
+}

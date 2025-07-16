@@ -7,23 +7,26 @@ import json
 import logging
 import os
 import subprocess
+import sys
 import threading
 import webbrowser
 from os import environ
 from pathlib import Path
-import sys
 from typing import cast
 
 import flask
 from dotenv import load_dotenv
-from flask import Flask, jsonify
+from flask import Flask, abort, jsonify
 from flask_cors import CORS
-from werkzeug.debug import DebuggedApplication
-from werkzeug.middleware.proxy_fix import ProxyFix
-
-from ttnn_visualizer.exceptions import DatabaseFileNotFoundException, InvalidProfilerPath, InvalidReportPath
+from ttnn_visualizer.exceptions import (
+    DatabaseFileNotFoundException,
+    InvalidProfilerPath,
+    InvalidReportPath,
+)
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
+from werkzeug.debug import DebuggedApplication
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +49,11 @@ def create_app(settings_override=None):
 
     config = cast(DefaultConfig, Config())
 
-    app = Flask(__name__, static_folder=config.STATIC_ASSETS_DIR, static_url_path="/")
+    app = Flask(
+        __name__,
+        static_folder=config.STATIC_ASSETS_DIR,
+        static_url_path=f"{config.BASE_PATH}static",
+    )
     logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
 
     app.config.from_object(config)
@@ -56,14 +63,18 @@ def create_app(settings_override=None):
 
     middleware(app)
 
-    app.register_blueprint(api, url_prefix=f"{app.config['BASE_PATH']}/api")
+    app.register_blueprint(api, url_prefix=f"{app.config['BASE_PATH']}api")
 
     extensions(app)
 
     if flask_env == "production":
-        @app.route(f"{app.config['BASE_PATH']}/", defaults={"path": ""})
-        @app.route("/<path:path>")
+
+        @app.route(f"{app.config['BASE_PATH']}", defaults={"path": ""})
+        @app.route(f"{app.config['BASE_PATH']}<path:path>")
         def catch_all(path):
+            if path.startswith("static/"):
+                abort(404)  # Pass control to Flask's static view
+
             js_config = {
                 "SERVER_MODE": app.config["SERVER_MODE"],
                 "BASE_PATH": app.config["BASE_PATH"],
@@ -78,13 +89,21 @@ def create_app(settings_override=None):
                     js,
                 )
 
-            return flask.Response(html_with_config, mimetype="text/html")
+            return flask.Response(
+                html_with_config,
+                mimetype="text/html",
+                headers={
+                    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                },
+            )
 
     return app
 
 
 def extensions(app: flask.Flask):
-    from ttnn_visualizer.extensions import flask_static_digest, db, socketio
+    from ttnn_visualizer.extensions import db, flask_static_digest, socketio
     from ttnn_visualizer.sockets import register_handlers
 
     """
@@ -164,9 +183,15 @@ def open_browser(host, port, instance_id=None):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="A tool for visualizing the Tenstorrent Neural Network model (TT-NN)")
-    parser.add_argument("--profiler-path", type=str, help="Specify a profiler path", default=None)
-    parser.add_argument("--performance-path", help="Specify a performance path", default=None)
+    parser = argparse.ArgumentParser(
+        description="A tool for visualizing the Tenstorrent Neural Network model (TT-NN)"
+    )
+    parser.add_argument(
+        "--profiler-path", type=str, help="Specify a profiler path", default=None
+    )
+    parser.add_argument(
+        "--performance-path", help="Specify a performance path", default=None
+    )
     return parser.parse_args()
 
 

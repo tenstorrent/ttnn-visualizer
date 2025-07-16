@@ -7,7 +7,7 @@ on:
 
 jobs:
   lint-and-test:
-    name: Lint and Test
+    name: Lint and Test (Frontend)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -27,3 +27,24 @@ jobs:
         run: |
           pnpm run lint
           pnpm run test
+  backend-lint-and-test:
+    name: Lint and Test (Backend)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10.16'
+
+      - name: Install dependencies
+        run: pip install .[dev]
+
+      - name: Run Black
+        run: black --check backend/ttnn_visualizer
+
+      - name: Run Backend Tests
+        run: pytest backend/ttnn_visualizer
+    

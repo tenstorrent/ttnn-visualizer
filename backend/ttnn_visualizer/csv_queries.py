@@ -2,18 +2,72 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent Inc.
 import csv
+import json
 import os
+import subprocess
 import tempfile
 from io import StringIO
 from pathlib import Path
-from typing import List, Dict, Union, Optional
+from typing import Dict, List, Optional, Union
 
 import pandas as pd
+import zstd
 from tt_perf_report import perf_report
+from ttnn_visualizer.exceptions import (
+    AuthenticationException,
+    DataFormatError,
+    NoValidConnectionsError,
+    SSHException,
+)
+from ttnn_visualizer.models import Instance, RemoteConnection
+from ttnn_visualizer.sftp_operations import read_remote_file
 
-from ttnn_visualizer.exceptions import DataFormatError
-from ttnn_visualizer.models import Instance
-from ttnn_visualizer.ssh_client import get_client
+
+def handle_ssh_subprocess_error(
+    e: subprocess.CalledProcessError, remote_connection: RemoteConnection
+):
+    """
+    Convert subprocess SSH errors to appropriate SSH exceptions.
+
+    :param e: The subprocess.CalledProcessError
+    :param remote_connection: The RemoteConnection object for context
+    :raises: SSHException, AuthenticationException, or NoValidConnectionsError
+    """
+    stderr = e.stderr.lower() if e.stderr else ""
+
+    # Check for authentication failures
+    if any(
+        auth_err in stderr
+        for auth_err in [
+            "permission denied",
+            "authentication failed",
+            "publickey",
+            "password",
+            "host key verification failed",
+        ]
+    ):
+        raise AuthenticationException(f"SSH authentication failed: {e.stderr}")
+
+    # Check for connection failures
+    elif any(
+        conn_err in stderr
+        for conn_err in [
+            "connection refused",
+            "network is unreachable",
+            "no route to host",
+            "name or service not known",
+            "connection timed out",
+        ]
+    ):
+        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
+
+    # Check for general SSH protocol errors
+    elif "ssh:" in stderr or "protocol" in stderr:
+        raise SSHException(f"SSH protocol error: {e.stderr}")
+
+    # Default to generic SSH exception
+    else:
+        raise SSHException(f"SSH command failed: {e.stderr}")
 
 
 class LocalCSVQueryRunner:
@@ -109,7 +163,36 @@ class RemoteCSVQueryRunner:
         self.remote_connection = remote_connection
         self.sep = sep
         self.offset = offset
-        self.ssh_client = get_client(remote_connection)
+
+    def _execute_ssh_command(self, command: str) -> str:
+        """Execute an SSH command and return the output."""
+        ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
+
+        # Handle non-standard SSH port
+        if self.remote_connection.port != 22:
+            ssh_cmd.extend(["-p", str(self.remote_connection.port)])
+
+        ssh_cmd.extend(
+            [
+                f"{self.remote_connection.username}@{self.remote_connection.host}",
+                command,
+            ]
+        )
+
+        try:
+            result = subprocess.run(
+                ssh_cmd, capture_output=True, text=True, check=True, timeout=30
+            )
+            return result.stdout
+        except subprocess.CalledProcessError as e:
+            if e.returncode == 255:  # SSH protocol errors
+                handle_ssh_subprocess_error(e, self.remote_connection)
+                # This line should never be reached as handle_ssh_subprocess_error raises an exception
+                raise RuntimeError(f"SSH command failed: {e.stderr}")
+            else:
+                raise RuntimeError(f"SSH command failed: {e.stderr}")
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"SSH command timed out: {command}")
 
     def execute_query(
         self,
@@ -127,12 +210,7 @@ class RemoteCSVQueryRunner:
         """
         # Fetch header row, accounting for the offset
         header_cmd = f"head -n {self.offset + 1} {self.file_path} | tail -n 1"
-        stdin, stdout, stderr = self.ssh_client.exec_command(header_cmd)
-        raw_header = stdout.read().decode("utf-8").strip()
-        error = stderr.read().decode("utf-8").strip()
-
-        if error:
-            raise RuntimeError(f"Error fetching header row: {error}")
+        raw_header = self._execute_ssh_command(header_cmd).strip()
 
         # Sanitize headers
         headers = [
@@ -159,12 +237,7 @@ class RemoteCSVQueryRunner:
         limit_clause = f"| head -n {limit}" if limit else ""
         awk_cmd = f"awk -F'{self.sep}' 'NR > {self.offset + 1} {f'&& {awk_filter}' if awk_filter else ''} {{print}}' {self.file_path} {limit_clause}"
 
-        stdin, stdout, stderr = self.ssh_client.exec_command(awk_cmd)
-        output = stdout.read().decode("utf-8").strip()
-        error = stderr.read().decode("utf-8").strip()
-
-        if error:
-            raise RuntimeError(f"Error executing AWK command: {error}")
+        output = self._execute_ssh_command(awk_cmd).strip()
 
         # Split rows into lists of strings
         rows = [
@@ -204,12 +277,7 @@ class RemoteCSVQueryRunner:
             if total_lines
             else f"cat {self.file_path}"
         )
-        stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
-        output = stdout.read().decode("utf-8").strip()
-        error = stderr.read().decode("utf-8").strip()
-
-        if error:
-            raise RuntimeError(f"Error fetching raw rows: {error}")
+        output = self._execute_ssh_command(cmd).strip()
 
         return output.splitlines()[self.offset :]
 
@@ -219,12 +287,7 @@ class RemoteCSVQueryRunner:
         :return: Dictionary of headers.
         """
         header_cmd = f"head -n {self.offset + 1} {self.file_path} | tail -n 1"
-        stdin, stdout, stderr = self.ssh_client.exec_command(header_cmd)
-        header = stdout.read().decode("utf-8").strip()
-        error = stderr.read().decode("utf-8").strip()
-
-        if error:
-            raise RuntimeError(f"Error reading CSV header: {error}")
+        header = self._execute_ssh_command(header_cmd).strip()
 
         # Trim spaces in header names
         column_names = [name.strip() for name in header.split(self.sep)]
@@ -253,10 +316,78 @@ class RemoteCSVQueryRunner:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
-        Clean up the SSH connection when exiting context.
+        Clean up resources when exiting context.
         """
-        if self.ssh_client:
-            self.ssh_client.close()
+        pass
+
+
+class NPEQueries:
+    NPE_FOLDER = "npe_viz"
+    MANIFEST_FILE = "manifest.json"
+
+    @staticmethod
+    def get_npe_manifest(instance: Instance):
+
+        if (
+            not instance.remote_connection
+            or instance.remote_connection
+            and not instance.remote_connection.useRemoteQuerying
+        ):
+            file_path = Path(
+                instance.performance_path,
+                NPEQueries.NPE_FOLDER,
+                NPEQueries.MANIFEST_FILE,
+            )
+            with open(file_path, "r") as f:
+                return json.load(f)
+        else:
+            profiler_folder = instance.remote_profile_folder
+            return read_remote_file(
+                instance.remote_connection,
+                f"{profiler_folder.remotePath}/{NPEQueries.NPE_FOLDER}/{NPEQueries.MANIFEST_FILE}",
+            )
+
+    @staticmethod
+    def get_npe_timeline(instance: Instance, filename: str):
+        if not filename:
+            raise ValueError(
+                "filename parameter is required and cannot be None or empty"
+            )
+
+        if (
+            not instance.remote_connection
+            or not instance.remote_connection.useRemoteQuerying
+        ):
+            if not instance.performance_path:
+                raise ValueError("instance.performance_path is None")
+
+            file_path = Path(instance.performance_path, NPEQueries.NPE_FOLDER, filename)
+
+            if filename.endswith(".zst"):
+                with open(file_path, "rb") as file:
+                    compressed_data = file.read()
+                    uncompressed_data = zstd.uncompress(compressed_data)
+                    return json.loads(uncompressed_data)
+            else:
+                with open(file_path, "r") as f:
+                    return json.load(f)
+
+        else:
+            profiler_folder = instance.remote_profile_folder
+            remote_path = (
+                f"{profiler_folder.remotePath}/{NPEQueries.NPE_FOLDER}/{filename}"
+            )
+            remote_data = read_remote_file(instance.remote_connection, remote_path)
+
+            if filename.endswith(".zst"):
+                if isinstance(remote_data, str):
+                    remote_data = remote_data.encode("utf-8")
+                uncompressed_data = zstd.decompress(remote_data)
+                return json.loads(uncompressed_data)
+            else:
+                if isinstance(remote_data, bytes):
+                    remote_data = remote_data.decode("utf-8")
+                return json.loads(remote_data)
 
 
 class DeviceLogProfilerQueries:
@@ -512,7 +643,9 @@ class OpsPerformanceQueries:
             or instance.remote_connection
             and not instance.remote_connection.useRemoteQuerying
         ):
-            with open(OpsPerformanceQueries.get_local_ops_perf_file_path(instance)) as f:
+            with open(
+                OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+            ) as f:
                 return f.read()
         else:
             path = OpsPerformanceQueries.get_remote_ops_perf_file_path(instance)
@@ -554,9 +687,7 @@ class OpsPerformanceQueries:
         """
         try:
             return [
-                folder.name
-                for folder in Path(directory).iterdir()
-                if folder.is_dir()
+                folder.name for folder in Path(directory).iterdir() if folder.is_dir()
             ]
         except Exception as e:
             raise RuntimeError(f"Error accessing directory: {e}")
@@ -584,8 +715,9 @@ class OpsPerformanceReportQueries:
         "inner_dim_block_size",
         "output_subblock_h",
         "output_subblock_w",
+        "global_call_count",
         "advice",
-        "raw_op_code"
+        "raw_op_code",
     ]
 
     PASSTHROUGH_COLUMNS = {
@@ -631,7 +763,9 @@ class OpsPerformanceReportQueries:
                 next(reader, None)
                 for row in reader:
                     processed_row = {
-                        column: row[index] for index, column in enumerate(cls.REPORT_COLUMNS) if index < len(row)
+                        column: row[index]
+                        for index, column in enumerate(cls.REPORT_COLUMNS)
+                        if index < len(row)
                     }
                     if "advice" in processed_row and processed_row["advice"]:
                         processed_row["advice"] = processed_row["advice"].split(" • ")
@@ -640,7 +774,9 @@ class OpsPerformanceReportQueries:
 
                     for key, value in cls.PASSTHROUGH_COLUMNS.items():
                         op_id = int(row[0])
-                        idx = op_id - 2 # IDs in result column one correspond to row numbers in ops perf results csv
+                        idx = (
+                            op_id - 2
+                        )  # IDs in result column one correspond to row numbers in ops perf results csv
                         processed_row[key] = ops_perf_results[idx][value]
 
                     report.append(processed_row)

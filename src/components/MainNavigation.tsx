@@ -65,7 +65,15 @@ function MainNavigation() {
                         transform: showBanner ? 'translateY(0)' : 'translateY(-100%)',
                     }}
                 >
-                    For full featured application, please install from PyPi or head over to&nbsp;{' '}
+                    For full featured application, please install from
+                    <a
+                        href='https://pypi.org/project/ttnn-visualizer/'
+                        target='_blank'
+                        rel='noreferrer'
+                    >
+                        PyPI
+                    </a>
+                    or head over to{' '}
                     <a
                         href='https://github.com/tenstorrent/ttnn-visualizer'
                         target='_blank'

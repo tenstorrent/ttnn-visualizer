@@ -36,7 +36,7 @@ import {
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import { NPEData } from '../model/NPEModel';
+import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
@@ -306,6 +306,38 @@ const fetchPerformanceReport = async (name?: string | null): Promise<PerfTableRo
     return data;
 };
 
+const fetchNPEManifest = async (): Promise<NPEManifestEntry[]> => {
+    const { data } = await axiosInstance.get<NPEManifestEntry[]>(`/api/performance/npe/manifest`);
+    return data;
+};
+
+export const useGetNPEManifest = () => {
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+
+    return useQuery<NPEManifestEntry[], AxiosError>({
+        queryFn: () => fetchNPEManifest(),
+        queryKey: ['get-npe-manifest', activePerformanceReport],
+        retry: false,
+    });
+};
+
+const fetchNPETimeline = async (fileName: string): Promise<NPEData> => {
+    const { data } = await axiosInstance.get<NPEData>(`/api/performance/npe/timeline`, {
+        params: { filename: fileName },
+    });
+
+    return data;
+};
+
+export const useNPETimelineFile = (fileName: string | null) => {
+    return useQuery<NPEData, AxiosError>({
+        queryFn: () => fetchNPETimeline(fileName!),
+        queryKey: ['get-npe-timeline', fileName],
+        retry: false,
+        enabled: !!fileName,
+    });
+};
+
 interface MetaData {
     architecture: string | null;
     frequency: number | null;
@@ -363,7 +395,6 @@ export const useGetClusterDescription = () => {
 
 export const useOperationsList = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
-
     return useQuery<OperationDescription[], AxiosError>({
         queryFn: () => (activeProfilerReport !== null ? fetchOperations() : Promise.resolve([])),
         queryKey: ['get-operations', activeProfilerReport],
@@ -377,8 +408,9 @@ export const useOperationListRange = (): NumberRange | null => {
 
     return useMemo(
         () => (response?.data?.length ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [response.isLoading],
+        // TODO: this used to rely on response.isLoading... which iis an invalid dependency. will have to wait for david to come  bakc.
+        // this fixes #613 https://github.com/tenstorrent/ttnn-visualizer/issues/613
+        [response.data],
     );
 };
 
@@ -570,8 +602,7 @@ const useProxyPerformanceReport = (): PerfTableRow[] => {
             return [];
         }
         return response.data;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.isLoading]);
+    }, [response.data]);
 };
 
 export const useGetDeviceOperationListPerf = () => {
@@ -737,7 +768,7 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
 
         return response;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [range, response.isLoading, useRange]);
+    }, [range, response.data, useRange]);
 };
 
 export const useDeviceLog = () => {
@@ -749,14 +780,6 @@ export const useDeviceLog = () => {
         staleTime: Infinity,
     });
 };
-
-// Not currently used
-// export const usePerformance = () => {
-//     return useQuery({
-//         queryFn: () => fetchPerformanceDataRaw(),
-//         queryKey: 'get-performance-data-raw',
-//     });
-// };
 
 export const usePerformanceReport = (name: string | null) => {
     const response = useQuery({
@@ -776,7 +799,7 @@ export const usePerformanceReport = (name: string | null) => {
 
         return response;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.isLoading]);
+    }, [response.data]);
 };
 
 export const usePerformanceComparisonReport = (reportNames: string[] | null) => {
@@ -803,8 +826,7 @@ export const usePerformanceComparisonReport = (reportNames: string[] | null) => 
             response.data = filtered;
         }
         return response;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.isLoading, reportNames]);
+    }, [response]);
 };
 
 export const useSession = () => {

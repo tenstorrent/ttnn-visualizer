@@ -4,14 +4,17 @@
 
 import { FC, Fragment, useMemo } from 'react';
 import classNames from 'classnames';
-import { Button, ButtonVariant, Icon, Size } from '@blueprintjs/core';
+import { Button, ButtonVariant, Icon, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { useNavigate } from 'react-router';
 import { TableHeader, TableKeys } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
-import { useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
+import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import { formatCell } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
+import { OperationDescription } from '../../model/APIData';
+import ROUTES from '../../definitions/Routes';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -38,6 +41,7 @@ enum COLUMN_HEADERS {
     math_fidelity = 'math_fidelity',
     OP = 'op',
     HIGH_DISPATCH = 'high_dispatch',
+    GLOBAL_CALL_COUNT = 'global_call_count',
 }
 
 const TABLE_HEADERS: TableHeader[] = [
@@ -68,6 +72,7 @@ const COMPARISON_KEYS: TableKeys[] = [
     COLUMN_HEADERS.flops_percent,
     COLUMN_HEADERS.math_fidelity,
     COLUMN_HEADERS.HIGH_DISPATCH,
+    COLUMN_HEADERS.GLOBAL_CALL_COUNT,
 ];
 
 const OP_ID_INSERTION_POINT = 1;
@@ -85,6 +90,8 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
     const { data: operations } = useOperationsList();
+    const { data: npeManifest } = useGetNPEManifest();
+    const navigate = useNavigate();
 
     const filterableColumnKeys = useMemo(
         () => TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key),
@@ -120,7 +127,44 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         ...TABLE_HEADERS.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
         ...(hiliteHighDispatch ? [{ label: 'Slow', key: COLUMN_HEADERS.HIGH_DISPATCH }] : []),
         ...TABLE_HEADERS.slice(HIGH_DISPATCH_INSERTION_POINT),
+        ...(npeManifest && npeManifest.length > 0 ? [{ label: 'NPE', key: COLUMN_HEADERS.GLOBAL_CALL_COUNT }] : []),
     ] as TableHeader[];
+
+    const cellFormattingProxy = (
+        row: TypedPerfTableRow,
+        header: TableHeader,
+        // eslint-disable-next-line @typescript-eslint/no-shadow
+        operations?: OperationDescription[],
+        highlight?: string | null,
+    ) => {
+        const { key } = header;
+
+        if (key === 'global_call_count') {
+            // TODO: this is an imefficient way of doing things but its also temporary. will update next iteration
+            const value = parseInt(String(row[key]), 10) || 0;
+            const manifestRecord = npeManifest?.find((el) => {
+                return el.id === value;
+            });
+
+            if (manifestRecord) {
+                return (
+                    npeManifest &&
+                    npeManifest.length > 0 && (
+                        <Tooltip content={`Launch NPE timeline for ${row.raw_op_code}`}>
+                            <Button
+                                icon={IconNames.Random}
+                                onClick={() => navigate(`${ROUTES.NPE}/${manifestRecord.file}`)}
+                                variant='minimal'
+                                className='graph-button'
+                            />
+                        </Tooltip>
+                    )
+                );
+            }
+            return null;
+        }
+        return formatCell(row, header, operations, highlight);
+    };
 
     return (
         <table className='perf-table monospace'>
@@ -206,7 +250,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                         'align-right': h.key === COLUMN_HEADERS.math_fidelity,
                                     })}
                                 >
-                                    {formatCell(row, h, operations, filters?.[h.key])}
+                                    {cellFormattingProxy(row, h, operations, filters?.[h.key])}
                                 </td>
                             ))}
                         </tr>
@@ -243,7 +287,11 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                     colSpan={visibleHeaders.length}
                                     className='cell advice'
                                 >
-                                    <ul>{row?.advice.map((advice, j) => <li key={`advice-${j}`}>{advice}</li>)}</ul>
+                                    <ul>
+                                        {row?.advice.map((advice, j) => (
+                                            <li key={`advice-${j}`}>{advice}</li>
+                                        ))}
+                                    </ul>
                                 </td>
                             </tr>
                         )}

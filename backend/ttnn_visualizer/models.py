@@ -6,17 +6,14 @@ import dataclasses
 import enum
 import json
 from json import JSONDecodeError
-from typing import Optional, Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
-from sqlalchemy import Integer, Column, String, JSON
+from sqlalchemy import JSON, Column, Integer, String
 from sqlalchemy.ext.mutable import MutableDict
-
-from ttnn_visualizer.utils import SerializeableDataclass
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
-
-from ttnn_visualizer.utils import parse_memory_config
+from ttnn_visualizer.utils import SerializeableDataclass, parse_memory_config
 
 
 class BufferType(enum.Enum):
@@ -118,6 +115,7 @@ class Tensor(SerializeableDataclass):
 
     def __post_init__(self):
         self.memory_config = parse_memory_config(self.memory_config)
+
 
 @dataclasses.dataclass
 class InputTensor(SerializeableDataclass):
@@ -246,19 +244,21 @@ class InstanceTable(db.Model):
             "remote_performance_folder": self.remote_performance_folder,
             "profiler_path": self.profiler_path,
             "performance_path": self.performance_path,
-            "npe_path": self.npe_path
+            "npe_path": self.npe_path,
         }
 
     def to_pydantic(self) -> Instance:
         return Instance(
             instance_id=str(self.instance_id),
-            profiler_path=str(self.profiler_path) if self.profiler_path is not None else None,
+            profiler_path=(
+                str(self.profiler_path) if self.profiler_path is not None else None
+            ),
             performance_path=(
-                str(self.performance_path) if self.performance_path is not None else None
+                str(self.performance_path)
+                if self.performance_path is not None
+                else None
             ),
-            npe_path=(
-                str(self.npe_path) if self.npe_path is not None else None
-            ),
+            npe_path=(str(self.npe_path) if self.npe_path is not None else None),
             active_report=(
                 (ActiveReports(**self.active_report) if self.active_report else None)
                 if isinstance(self.active_report, dict)
@@ -270,7 +270,9 @@ class InstanceTable(db.Model):
                 else None
             ),
             remote_profiler_folder=(
-                RemoteReportFolder.model_validate(self.remote_profiler_folder, strict=False)
+                RemoteReportFolder.model_validate(
+                    self.remote_profiler_folder, strict=False
+                )
                 if self.remote_profiler_folder is not None
                 else None
             ),

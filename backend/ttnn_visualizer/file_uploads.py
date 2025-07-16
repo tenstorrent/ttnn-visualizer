@@ -13,7 +13,6 @@ import time
 from pathlib import Path
 
 from flask import current_app
-
 from ttnn_visualizer.exceptions import DataFormatError
 
 logger = logging.getLogger(__name__)
@@ -53,6 +52,7 @@ def extract_folder_name_from_files(files):
         return None
     unsplit_name = str(files[0].filename)
     return unsplit_name.split("/")[0]
+
 
 def extract_npe_name(files):
     if not files:
