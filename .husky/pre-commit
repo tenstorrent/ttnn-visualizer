@@ -1,2 +1,2 @@
 npx lint-staged
-pnpm run flask:lint
+

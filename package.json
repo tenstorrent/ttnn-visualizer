@@ -116,7 +116,8 @@
       "eslint ./src --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0 --no-ignore"
     ],
     "**/*.scss": "npx stylelint --fix",
-    "**/*.{js,jsx,ts,tsx,css,scss}": "pnpm run format"
+    "**/*.{js,jsx,ts,tsx,css,scss}": "pnpm run format",
+    "backend/ttnn_visualizer/**/*.py": "pnpm run flask:lint"
   },
   "license": "Apache-2.0",
   "author": {
