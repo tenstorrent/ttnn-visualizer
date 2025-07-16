@@ -221,7 +221,6 @@ class TestDatabaseQueries(unittest.TestCase):
             str(context.exception),
         )
 
-
     def test_init_with_valid_local_instance(self):
         with tempfile.NamedTemporaryFile(suffix=".sqlite") as temp_db_file:
             connection = sqlite3.connect(temp_db_file.name)

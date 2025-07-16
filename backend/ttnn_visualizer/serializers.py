@@ -8,6 +8,7 @@ from typing import List
 
 from ttnn_visualizer.models import BufferType, Operation, TensorComparisonRecord
 
+
 def serialize_operations(
     inputs,
     operation_arguments,

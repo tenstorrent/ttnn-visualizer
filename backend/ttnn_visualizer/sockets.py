@@ -90,11 +90,15 @@ def register_handlers(socketio_instance):
         sid = getattr(request, "sid", "")
 
         instance_id = request.args.get("instanceId")
-        print(f"Received instanceId: {instance_id}, socket ID: {sid}")  # Log for debugging
+        print(
+            f"Received instanceId: {instance_id}, socket ID: {sid}"
+        )  # Log for debugging
 
         if instance_id:
             join_room(instance_id)  # Join the room identified by the instanceId
-            tab_clients[instance_id] = sid  # Store the socket ID associated with this instanceId
+            tab_clients[instance_id] = (
+                sid  # Store the socket ID associated with this instanceId
+            )
             print(f"Joined room: {instance_id}")
         else:
             print("No instanceId provided, disconnecting client.")
@@ -115,4 +119,6 @@ def register_handlers(socketio_instance):
         if instance_id:
             leave_room(instance_id)
             del tab_clients[instance_id]
-            print(f"Client disconnected from instanceId: {instance_id}, Socket ID: {sid}")
+            print(
+                f"Client disconnected from instanceId: {instance_id}, Socket ID: {sid}"
+            )

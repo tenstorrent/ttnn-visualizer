@@ -361,7 +361,7 @@ class TestSerializers(unittest.TestCase):
                 1,
                 1000,
                 BufferType.DRAM,
-                [200, 300]
+                [200, 300],
             )
         ]
         devices = [
@@ -415,7 +415,7 @@ class TestSerializers(unittest.TestCase):
                     "operation_id": 1,
                     "producers": [2],
                     "shape": "shape1",
-                    "device_addresses": [200, 300]
+                    "device_addresses": [200, 300],
                 }
             ],
             "l1_sizes": [256],

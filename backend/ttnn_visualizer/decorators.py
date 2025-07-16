@@ -35,21 +35,23 @@ def with_instance(func):
             abort(404)
 
         instance_query_data = get_or_create_instance(instance_id=instance_id)
-        
+
         # Handle case where get_or_create_instance returns None due to database error
         if instance_query_data is None:
-            current_app.logger.error(f"Failed to get or create instance with ID: {instance_id}")
+            current_app.logger.error(
+                f"Failed to get or create instance with ID: {instance_id}"
+            )
             abort(500)
-            
+
         instance = instance_query_data.to_pydantic()
 
         kwargs["instance"] = instance
 
-        if 'instances' not in session:
-            session['instances'] = []
+        if "instances" not in session:
+            session["instances"] = []
 
-        if instance.instance_id not in session['instances']:
-            session['instances'] = session.get('instances', []) + [instance.instance_id]
+        if instance.instance_id not in session["instances"]:
+            session["instances"] = session.get("instances", []) + [instance.instance_id]
 
         return func(*args, **kwargs)
 
@@ -70,15 +72,17 @@ def remote_exception_handler(func):
             return func(*args, **kwargs)
         except AuthenticationException as err:
             # Log the detailed error for debugging, but don't show full traceback
-            current_app.logger.warning(f"SSH authentication failed for {connection.username}@{connection.host}: SSH key authentication required")
-            
+            current_app.logger.warning(
+                f"SSH authentication failed for {connection.username}@{connection.host}: SSH key authentication required"
+            )
+
             # Return user-friendly error message about SSH keys
             user_message = (
                 "SSH authentication failed. This application requires SSH key-based authentication. "
                 "Please ensure your SSH public key is added to the authorized_keys file on the remote server. "
                 "Password authentication is not supported."
             )
-            
+
             raise AuthenticationFailedException(
                 message=user_message,
                 status=ConnectionTestStates.FAILED,
@@ -96,7 +100,9 @@ def remote_exception_handler(func):
                 message=f"No projects found at remote location: {connection.path}",
             )
         except NoValidConnectionsError as err:
-            current_app.logger.warning(f"SSH connection failed for {connection.username}@{connection.host}: {str(err)}")
+            current_app.logger.warning(
+                f"SSH connection failed for {connection.username}@{connection.host}: {str(err)}"
+            )
 
             # Provide user-friendly message for connection issues
             user_message = (
