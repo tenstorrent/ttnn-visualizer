@@ -34,6 +34,7 @@ classifiers = [
 [project.optional-dependencies]
 dev = [
     "black==25.1.0",
+    "isort==6.0.1",
     "mypy",
     "pytest==8.4.1",
 ]
@@ -72,3 +73,6 @@ exclude = '''
 )/
 '''
 
+[tool.isort]
+profile = "black"
+line_length = 88

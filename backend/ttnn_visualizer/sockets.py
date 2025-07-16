@@ -9,10 +9,8 @@ from datetime import datetime
 from enum import Enum
 from logging import getLogger
 
-from flask_socketio import join_room, disconnect, leave_room
-
+from flask_socketio import disconnect, join_room, leave_room
 from ttnn_visualizer.utils import SerializeableDataclass
-
 
 logger = getLogger(__name__)
 

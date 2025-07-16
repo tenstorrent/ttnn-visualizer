@@ -13,7 +13,6 @@ import time
 from pathlib import Path
 
 from flask import current_app
-
 from ttnn_visualizer.exceptions import DataFormatError
 
 logger = logging.getLogger(__name__)
