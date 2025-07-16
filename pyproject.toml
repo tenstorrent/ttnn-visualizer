@@ -19,7 +19,7 @@ dependencies = [
     "pydantic==2.7.3",
     "python-dotenv==1.0.1",
     "PyYAML==6.0.2",
-    "setuptools==65.5.0",
+    "setuptools==78.1.1",
     "tt-perf-report==1.0.7",
     "uvicorn==0.30.1",
     "wheel",
@@ -47,7 +47,7 @@ package-dir = { "" = "backend" }
 where = ["backend"]
 
 [build-system]
-requires = ["setuptools==69.5.1", "setuptools-scm==7.1.0", "wheel"]
+requires = ["setuptools>=7", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project.scripts]
