@@ -15,7 +15,14 @@ from typing import List
 
 import yaml
 import zstd
-from flask import Blueprint, Response, current_app, jsonify, request, session
+from flask import (
+    Blueprint,
+    Response,
+    current_app,
+    jsonify,
+    request,
+    session,
+)
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
     NPEQueries,
@@ -38,7 +45,10 @@ from ttnn_visualizer.file_uploads import (
     save_uploaded_files,
     validate_files,
 )
-from ttnn_visualizer.instances import get_instances, update_instance
+from ttnn_visualizer.instances import (
+    get_instances,
+    update_instance,
+)
 from ttnn_visualizer.models import (
     Instance,
     RemoteConnection,
@@ -835,6 +845,11 @@ def get_npe_timeline(instance: Instance):
         return Response(status=HTTPStatus.NOT_FOUND)
 
     filename = request.args.get("filename", default=None)
+
+    if not filename:
+        return jsonify({})
+
+    filename = Path(filename).name
 
     try:
         content = NPEQueries.get_npe_timeline(instance, filename=filename)
