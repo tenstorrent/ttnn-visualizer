@@ -12,7 +12,7 @@ dependencies = [
     "flask_cors==4.0.1",
     "pydantic==2.7.3",
     "pydantic_core==2.18.4",
-    "flask_static_digest==0.4.1",
+    "Flask-Static-Digest==0.4.1",
     "setuptools==65.5.0",
     "python-dotenv==1.0.1",
     "flask-sqlalchemy==3.1.1",
