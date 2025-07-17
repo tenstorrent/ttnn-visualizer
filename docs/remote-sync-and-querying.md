@@ -1,13 +1,18 @@
-# Remote Querying
+# Remote Sync and Querying
 
-TT-NN Visualizer includes the option to remotely query reports instead of syncing them to the local machine.
+TT-NN Visualizer supports two methods for working with remote data via SSH:
 
-## Requirements
+1. **Remote Sync**: Downloads files from the remote server to your local machine using SSH/SFTP
+2. **Remote Querying**: Queries data directly on the remote server without downloading files locally
 
-### SSH Key Authentication
-**Important**: Remote querying requires SSH key-based authentication. Password authentication is not supported.
+Both features require SSH key-based authentication.
 
-Before using remote querying, ensure that:
+## SSH Setup (Required for Both Features)
+
+### Prerequisites
+**Important**: Both remote sync and remote querying require SSH key-based authentication. Password authentication is not supported.
+
+Before using either remote feature, ensure that:
 1. Your SSH public key is added to the `~/.ssh/authorized_keys` file on the remote server
 2. You can successfully connect to the remote server using SSH without a password prompt
 3. Your SSH agent is running and has your private key loaded (if using a passphrase-protected key)
@@ -19,49 +24,90 @@ ssh username@hostname
 
 If you're prompted for a password, SSH key authentication is not properly configured.
 
-### Software Requirements
-```
-glibc=>2.28.0 (`ldd --version`)
-sqlite3=>3.38.0 (`sqlite3 --version`)
-```
-
-If your machine already has SQLite3 installed you can simply use the path provided by the command `which sqlite3`.
-
-If you do not have SQLite3  installed you can download the SQLite3 binary, extract it and use the path. For instance:
-
-`/home/user/bin/sqlite3`
-
-## Setting Up SSH Key Authentication
+### Setting Up SSH Key Authentication
 
 If you haven't set up SSH key authentication yet, follow these steps:
 
-### 1. Generate SSH Key Pair (if you don't have one)
+#### 1. Generate SSH Key Pair (if you don't have one)
 ```bash
 ssh-keygen -t ed25519 -C "your_email@example.com"
 ```
 
-### 2. Copy Public Key to Remote Server
+#### 2. Copy Public Key to Remote Server
 ```bash
 ssh-copy-id username@hostname
 ```
 
-### 3. Verify SSH Key Authentication
+#### 3. Verify SSH Key Authentication
 ```bash
 ssh username@hostname
 ```
 
 You should be able to connect without entering a password.
 
+#### 4. Troubleshooting SSH Key Issues
+
+If you encounter a 'no keys found' error:
+
+<img width="492" alt="Screenshot 2025-01-30 at 1 55 10 PM" src="https://github.com/user-attachments/assets/3f7f9983-f92d-4900-9321-9d46c6355c36" />
+
+Check your local ssh agent has your ssh key by running:
+
+```shell
+ssh-add -L
+```
+
+If your key isn't present, run the following on your local machine:
+
+```shell
+ssh-add
+```
+
+## Remote Sync
+
+Remote sync downloads files from the remote server to your local machine using SSH/SFTP. This is the default behavior when connecting to a remote server.
+
+**Use remote sync when:**
+- You want to work with files locally after downloading
+- You have sufficient local storage space
+- You prefer faster access to data once downloaded
+- You want to work offline after the initial sync
+
+The sync process will transfer all necessary files from the remote directories to your local machine, allowing you to work with them as if they were generated locally.
+
+## Remote Querying
+
+Remote querying allows you to analyze data directly on the remote server without downloading files to your local machine. This feature requires additional setup on the remote server.
+
+**Use remote querying when:**
+- You want to minimize local storage usage
+- Files are very large and you only need to query specific data
+- You want to avoid the time required for file transfers
+- The remote server has sufficient resources for query processing
+
+### Additional Requirements for Remote Querying
+
+Remote querying requires SQLite3 to be installed on the **remote server** with the following minimum versions:
+
+```
+glibc>=2.28.0 (check with: ldd --version)
+sqlite3>=3.38.0 (check with: sqlite3 --version)
+```
+
+If your machine already has SQLite3 installed you can simply use the path provided by the command `which sqlite3`.
+
+If you do not have SQLite3 installed you can download the SQLite3 binary, extract it and use the path. For instance:
+
+`/home/user/bin/sqlite3`
+
 ## Installing SQLite 3.38 on Ubuntu 18.04 and 20.04
 
-This guide provides two methods for installing SQLite 3.38 on Ubuntu 18.04 and 20.04, depending on the version available in the official repository.
-
----
+This guide provides methods for installing SQLite 3.38 on Ubuntu 18.04 and 20.04, which is required for remote querying functionality.
 
 ### Option 1: Install from Official Repository
 
 1. **Update the Package List**
-   Update your system’s package list to check for the latest versions.
+   Update your system's package list to check for the latest versions.
 
    ```bash
    sudo apt-get update
@@ -84,15 +130,13 @@ This guide provides two methods for installing SQLite 3.38 on Ubuntu 18.04 and 2
    - **If the installed version is 3.38 or higher**, your setup is complete.
    - **If the installed version is older than 3.38**, proceed to Option 2 to download a pre-compiled binary or Option 3 to build from source.
 
----
-
 ### Option 2: Downloading SQLite Binary on a Remote Linux Machine
 
-This guide provides instructions for downloading the SQLite binary on a remote Linux machine. The instructions include determining your operating system architecture and using `wget` or `curl` to download the appropriate binary.
+This guide provides instructions for downloading the SQLite binary on a remote Linux machine.
 
 #### Step 1: Determine System Architecture
 
-First, determine the architecture of your Linux system. This is important to ensure you download the correct SQLite binary.
+First, determine the architecture of your Linux system.
 
 ```bash
 uname -m
@@ -167,7 +211,7 @@ This command should output the version of SQLite, confirming the installation wa
 
 ### Option 3: Build from Source (If Official Repository Version Is Outdated)
 
-If your system’s `apt-get` package does not include SQLite 3.38 or later, follow these steps to install it from source.
+If your system's `apt-get` package does not include SQLite 3.38 or later, follow these steps to install it from source.
 
 #### Step 1: Update and Install Build Dependencies
 
@@ -179,7 +223,7 @@ sudo apt-get install -y build-essential wget libreadline-dev
 #### Step 2: Download SQLite 3.38 Source Code
 
 1. **Navigate to a Download Directory**
-   Move to a directory where you’d like to download the source code.
+   Move to a directory where you'd like to download the source code.
 
    ```bash
    cd /tmp
@@ -231,4 +275,4 @@ Finally, confirm the installation of SQLite 3.38.
 sqlite3 --version
 ```
 
-You should now have SQLite 3.38 installed on your system.
+You should now have SQLite 3.38 installed on your system. 
