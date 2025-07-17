@@ -329,7 +329,7 @@ const fetchNPETimeline = async (fileName: string): Promise<NPEData> => {
     return data;
 };
 
-export const useNPETimelineFile = (fileName: string | null) => {
+export const useNPETimelineFile = (fileName: string | undefined) => {
     return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNPETimeline(fileName!),
         queryKey: ['get-npe-timeline', fileName],
