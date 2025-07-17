@@ -1,27 +1,26 @@
 [project]
 name = "ttnn_visualizer"
 authors = []
-version = "0.42.0"
+version = "0.43.1"
 description = "TT-NN Visualizer"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "Flask==3.1.1",
+    "build",
     "Flask-Cors==4.0.1",
+    "flask-socketio==5.4.1",
+    "flask-sqlalchemy==3.1.1",
     "Flask-Static-Digest==0.4.1",
-    "Flask-SocketIO==5.4.1",
-    "Flask-SQLAlchemy==3.1.1",
+    "Flask==3.1.1",
+    "gevent==24.10.2",
+    "gunicorn~=23.0.0",
     "pandas==2.2.3",
-    "gunicorn~=22.0.0",
-    "pydantic==2.7.3",
     "pydantic_core==2.18.4",
-    "setuptools==65.5.0",
-    "gevent===24.10.2",
+    "pydantic==2.7.3",
     "python-dotenv==1.0.1",
-    "sqlalchemy==2.0.34",
     "PyYAML==6.0.2",
-    "python-dotenv==1.0.1",
     "tt-perf-report==1.0.7",
+    "uvicorn==0.30.1",
     "zstd==1.5.7.0"
 ]
 
@@ -34,6 +33,7 @@ classifiers = [
 [project.optional-dependencies]
 dev = [
     "black==25.1.0",
+    "isort==6.0.1",
     "mypy",
     "pytest==8.4.1",
 ]
@@ -45,7 +45,7 @@ package-dir = { "" = "backend" }
 where = ["backend"]
 
 [build-system]
-requires = ["setuptools==69.5.1", "setuptools-scm==7.1.0", "wheel"]
+requires = ["setuptools==78.1.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project.scripts]
@@ -72,3 +72,6 @@ exclude = '''
 )/
 '''
 
+[tool.isort]
+profile = "black"
+line_length = 88

@@ -8,17 +8,16 @@ import subprocess
 import tempfile
 from io import StringIO
 from pathlib import Path
-from typing import List, Dict, Union, Optional
+from typing import Dict, List, Optional, Union
 
 import pandas as pd
 import zstd
 from tt_perf_report import perf_report
-
-from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.exceptions import (
-    SSHException,
     AuthenticationException,
+    DataFormatError,
     NoValidConnectionsError,
+    SSHException,
 )
 from ttnn_visualizer.models import Instance, RemoteConnection
 from ttnn_visualizer.sftp_operations import read_remote_file

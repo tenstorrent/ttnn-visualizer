@@ -5,28 +5,28 @@
 import unittest
 
 from ttnn_visualizer.models import (
+    Buffer,
+    BufferPage,
+    BufferType,
+    Device,
+    DeviceOperation,
+    InputTensor,
     Operation,
     OperationArgument,
-    Tensor,
-    Device,
-    InputTensor,
     OutputTensor,
     ProducersConsumers,
     StackTrace,
-    DeviceOperation,
-    Buffer,
-    BufferType,
-    BufferPage,
+    Tensor,
 )
 from ttnn_visualizer.serializers import (
-    serialize_operations,
+    serialize_buffer_pages,
+    serialize_devices,
     serialize_inputs_outputs,
     serialize_operation,
-    serialize_tensors,
-    serialize_buffer_pages,
     serialize_operation_buffers,
+    serialize_operations,
     serialize_operations_buffers,
-    serialize_devices,
+    serialize_tensors,
 )
 
 

@@ -7,20 +7,17 @@ import json
 import logging
 import os
 import subprocess
+import sys
 import threading
 import webbrowser
 from os import environ
 from pathlib import Path
-import sys
 from typing import cast
 
 import flask
 from dotenv import load_dotenv
 from flask import Flask, abort, jsonify
 from flask_cors import CORS
-from werkzeug.debug import DebuggedApplication
-from werkzeug.middleware.proxy_fix import ProxyFix
-
 from ttnn_visualizer.exceptions import (
     DatabaseFileNotFoundException,
     InvalidProfilerPath,
@@ -28,6 +25,8 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
+from werkzeug.debug import DebuggedApplication
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +103,7 @@ def create_app(settings_override=None):
 
 
 def extensions(app: flask.Flask):
-    from ttnn_visualizer.extensions import flask_static_digest, db, socketio
+    from ttnn_visualizer.extensions import db, flask_static_digest, socketio
     from ttnn_visualizer.sockets import register_handlers
 
     """

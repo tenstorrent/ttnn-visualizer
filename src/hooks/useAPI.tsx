@@ -329,7 +329,7 @@ const fetchNPETimeline = async (fileName: string): Promise<NPEData> => {
     return data;
 };
 
-export const useNPETimelineFile = (fileName: string | null) => {
+export const useNPETimelineFile = (fileName: string | undefined) => {
     return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNPETimeline(fileName!),
         queryKey: ['get-npe-timeline', fileName],
@@ -602,8 +602,7 @@ const useProxyPerformanceReport = (): PerfTableRow[] => {
             return [];
         }
         return response.data;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.isLoading]);
+    }, [response.data]);
 };
 
 export const useGetDeviceOperationListPerf = () => {
@@ -769,7 +768,7 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
 
         return response;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [range, response.isLoading, useRange]);
+    }, [range, response.data, useRange]);
 };
 
 export const useDeviceLog = () => {
@@ -781,14 +780,6 @@ export const useDeviceLog = () => {
         staleTime: Infinity,
     });
 };
-
-// Not currently used
-// export const usePerformance = () => {
-//     return useQuery({
-//         queryFn: () => fetchPerformanceDataRaw(),
-//         queryKey: 'get-performance-data-raw',
-//     });
-// };
 
 export const usePerformanceReport = (name: string | null) => {
     const response = useQuery({
@@ -808,7 +799,7 @@ export const usePerformanceReport = (name: string | null) => {
 
         return response;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.isLoading]);
+    }, [response.data]);
 };
 
 export const usePerformanceComparisonReport = (reportNames: string[] | null) => {
@@ -835,8 +826,7 @@ export const usePerformanceComparisonReport = (reportNames: string[] | null) => 
             response.data = filtered;
         }
         return response;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.isLoading, reportNames]);
+    }, [response]);
 };
 
 export const useSession = () => {

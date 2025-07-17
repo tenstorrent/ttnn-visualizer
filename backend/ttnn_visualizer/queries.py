@@ -2,29 +2,26 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-from typing import Generator, Dict, Any, Union
+import sqlite3
+from pathlib import Path
+from typing import Any, Dict, Generator, List, Optional, Union
 
-from ttnn_visualizer.exceptions import (
-    DatabaseFileNotFoundException,
-)
+from ttnn_visualizer.exceptions import DatabaseFileNotFoundException
 from ttnn_visualizer.models import (
-    Operation,
-    DeviceOperation,
     Buffer,
     BufferPage,
-    Instance,
-    Tensor,
-    OperationArgument,
-    StackTrace,
-    InputTensor,
-    OutputTensor,
     Device,
+    DeviceOperation,
+    InputTensor,
+    Instance,
+    Operation,
+    OperationArgument,
+    OutputTensor,
     ProducersConsumers,
+    StackTrace,
+    Tensor,
     TensorComparisonRecord,
 )
-import sqlite3
-from typing import List, Optional
-from pathlib import Path
 
 
 class LocalQueryRunner:

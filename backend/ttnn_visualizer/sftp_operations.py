@@ -5,30 +5,25 @@
 import json
 import logging
 import re
-import time
 import subprocess
+import time
 from pathlib import Path
 from stat import S_ISDIR
 from threading import Thread
 from typing import List, Optional
 
 from flask import current_app
-
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
+    AuthenticationException,
     NoProjectsException,
+    NoValidConnectionsError,
     RemoteConnectionException,
     SSHException,
-    AuthenticationException,
-    NoValidConnectionsError,
 )
 from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
-from ttnn_visualizer.sockets import (
-    FileProgress,
-    FileStatus,
-    emit_file_status,
-)
+from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
 from ttnn_visualizer.utils import update_last_synced
 
 logger = logging.getLogger(__name__)

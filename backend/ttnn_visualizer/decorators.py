@@ -4,19 +4,18 @@
 
 import logging
 import re
-from ttnn_visualizer.enums import ConnectionTestStates
-
-
 from functools import wraps
+
 from flask import abort, request, session
+from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
-    NoValidConnectionsError,
-    SSHException,
-    RemoteConnectionException,
     AuthenticationFailedException,
     NoProjectsException,
+    NoValidConnectionsError,
+    RemoteConnectionException,
     RemoteSqliteException,
+    SSHException,
 )
 from ttnn_visualizer.instances import get_or_create_instance
 
