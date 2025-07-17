@@ -76,7 +76,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
         height: configuration.height,
         xaxis: {
             autorange: false,
-            title: configuration.title || '',
+            title: { text: configuration.title || '' },
             range,
             showgrid: true,
             fixedrange: true,
