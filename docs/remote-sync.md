@@ -1,6 +1,8 @@
 # Remote Sync
 
-TT-NN Visualizer supports syncing data from remote servers via SSH. This feature downloads files from the remote server to your local machine using SSH/SFTP, allowing you to work with them as if they were generated locally.
+TT-NN Visualizer supports syncing data from remote servers via SSH. This feature downloads files
+from the remote server to your local machine using SSH/SFTP, allowing you to work with them as
+if they were generated locally.
 
 ## SSH Setup
 
@@ -60,7 +62,8 @@ ssh-add
 
 ## How Remote Sync Works
 
-Remote sync downloads files from the remote server to your local machine using SSH/SFTP. This is the default behavior when connecting to a remote server in TT-NN Visualizer.
+Remote sync downloads files from the remote server to your local machine using SSH/SFTP. This is
+the default behavior when connecting to a remote server in TT-NN Visualizer.
 
 **Benefits of remote sync:**
 - Work with files locally after downloading for faster access
@@ -68,11 +71,13 @@ Remote sync downloads files from the remote server to your local machine using S
 - Full access to all file data and features
 - No additional server-side requirements
 
-The sync process will transfer all necessary files from the remote directories to your local machine, allowing you to work with them as if they were generated locally.
+The sync process will transfer all necessary files from the remote directories to your local
+machine, allowing you to work with them as if they were generated locally.
 
 ## Using Remote Sync
 
-To use remote sync you must first add the SSH connection details, and sync the individual reports you would like to use.
+To use remote sync you must first add the SSH connection details, set the remote report paths, and
+sync the individual reports you would like to use.
 
 ### Add SSH Connection
 
@@ -84,7 +89,22 @@ To use remote sync you must first add the SSH connection details, and sync the i
 
 Make sure you have sufficient local storage space for the files you want to sync.
 
+### Report Paths
+
+When adding the SSH connection, you must specify a _Memory report folder path_. This is either a
+folder outside of tt-metal where you have stored reports, or you can point it directly to the
+`generated` directory in `tt-metal`. If syncing directly from the generated directory, point
+it to the `generated/ttnn/reports/` directory: `/home/username/tt-metal/generated/ttnn/reports/`.
+
+You may optionally specify a _Performance report folder path_. As with memory reports, this can
+either be any folder on the remote machine where you have a sub-folders with reports you have
+stored there yourself, or you can point it at the generated directory in `tt-metal`:
+`/home/username/tt-metal/generated/profiler/reports/`.
+
+
 ### Sync Folders
 
-After saving the SSH connection details, you must fetch the list of remote folders. Any memory and performance reports that were found at the provided report paths will appear in the respective dropdowns. Choose which
-report you would like to sync, and press the sync button beside the dropdown to perform the sync.
+After saving the SSH connection details, you must fetch the list of remote folders. Any memory
+and performance reports that were found at the provided report paths will appear in the respective
+dropdowns. Choose which report you would like to sync, and press the sync button beside the
+dropdown to perform the sync.
