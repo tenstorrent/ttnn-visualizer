@@ -72,10 +72,10 @@ The sync process will transfer all necessary files from the remote directories t
 
 ## Using Remote Sync
 
-1. Open TT-NN Visualizer and navigate to the data loading interface
-2. Select "Remote" as your data source
-3. Enter your SSH connection details (hostname, username, and paths)
-4. The application will connect via SSH and sync the files to your local machine
-5. Once syncing is complete, you can work with the data normally
+1. Open TT-NN Visualizer and navigate to the Reports tab
+2. In the "Remote Sync" section, click the "+ Add New Connection" button
+3. Enter your SSH connection details (hostname, username, and report paths)
+4. Click the "Test Connection" button to ensure a connection can be made
+5. If connection is valid, click the "Add connection" button to save the connection details
 
 Make sure you have sufficient local storage space for the files you want to sync. 
