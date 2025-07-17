@@ -72,10 +72,19 @@ The sync process will transfer all necessary files from the remote directories t
 
 ## Using Remote Sync
 
+To use remote sync you must first add the SSH connection details, and sync the individual reports you would like to use.
+
+### Add SSH Connection
+
 1. Open TT-NN Visualizer and navigate to the Reports tab
 2. In the "Remote Sync" section, click the "+ Add New Connection" button
 3. Enter your SSH connection details (hostname, username, and report paths)
 4. Click the "Test Connection" button to ensure a connection can be made
 5. If connection is valid, click the "Add connection" button to save the connection details
 
-Make sure you have sufficient local storage space for the files you want to sync. 
+Make sure you have sufficient local storage space for the files you want to sync.
+
+### Sync Folders
+
+After saving the SSH connection details, you must fetch the list of remote folders. Any memory and performance reports that were found at the provided report paths will appear in the respective dropdowns. Choose which
+report you would like to sync, and press the sync button beside the dropdown to perform the sync.
