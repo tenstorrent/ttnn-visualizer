@@ -6,6 +6,7 @@ import { TypedPerfTableRow } from './sortAndFilterPerfTableData';
 
 const PLACEHOLDER: TypedPerfTableRow = {
     id: null,
+    global_call_count: null,
     advice: [],
     total_percent: null,
     bound: '',
@@ -30,7 +31,6 @@ const PLACEHOLDER: TypedPerfTableRow = {
     output_subblock_h: '',
     output_subblock_w: '',
     pm_ideal_ns: '',
-    global_call_count: 0,
 };
 
 const MISSING_PREFIX = 'MISSING -';

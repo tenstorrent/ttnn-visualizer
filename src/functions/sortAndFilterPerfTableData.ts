@@ -8,6 +8,7 @@ export interface TypedPerfTableRow
     extends Omit<
         PerfTableRow,
         | 'id'
+        | 'global_call_count'
         | 'total_percent'
         | 'device_time'
         | 'op_to_op_gap'
@@ -18,6 +19,7 @@ export interface TypedPerfTableRow
         | 'flops_percent'
     > {
     id: number | null;
+    global_call_count: number | null;
     total_percent: number | null;
     device_time: number | null;
     op_to_op_gap: number | null;

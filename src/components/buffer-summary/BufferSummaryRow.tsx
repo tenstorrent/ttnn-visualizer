@@ -23,7 +23,7 @@ interface BufferSummaryRowProps {
     memoryEnd: number;
     memoryPadding: number;
     tensorList: Map<number, Tensor>;
-    showMemoryLayout: boolean;
+    showMemoryLayout?: boolean;
     className?: string;
     tensorDeallocationReport?: TensorDeallocationReport[];
 }
