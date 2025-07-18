@@ -409,6 +409,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                         <div
                                                             key={`selected-transfer-${rowIndex}-${colIndex}`}
                                                             className={
+                                                                selectedNode?.coords[NPE_LINK.CHIP_ID] ===
+                                                                    clusterChip.id &&
                                                                 selectedNode?.coords[NPE_LINK.Y] === rowIndex &&
                                                                 selectedNode?.coords[NPE_LINK.X] === colIndex
                                                                     ? 'selected tensix no-click'
