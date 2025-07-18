@@ -4,8 +4,8 @@
 
 @use 'styles/definitions/colours' as *;
 
-$breakpoint-medium: 1300px;
-$breakpoint-small: 1100px;
+$bp-nav-large: 1300px;
+$bp-nav-medium: 1100px;
 
 @mixin button-styles($color, $colorActive, $icon) {
     color: $color;
@@ -118,7 +118,7 @@ $breakpoint-small: 1100px;
         gap: 7px;
     }
 
-    @media screen and (width <= $breakpoint-medium) {
+    @media screen and (width <= $bp-nav-large) {
         .bp5-button-text {
             font-size: 13px;
         }
@@ -133,7 +133,7 @@ $breakpoint-small: 1100px;
         }
     }
 
-    @media screen and (width <= $breakpoint-small) {
+    @media screen and (width <= $bp-nav-medium) {
         .bp5-button-text {
             display: none;
         }
