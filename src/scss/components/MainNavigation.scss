@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use 'styles/definitions/colours' as *;
+@use 'styles/definitions/variables' as variables;
 
 $bp-nav-large: 1300px;
 $bp-nav-medium: 1100px;
@@ -118,7 +119,7 @@ $bp-nav-medium: 1100px;
         gap: 7px;
     }
 
-    @media screen and (width <= $bp-nav-large) {
+    @media screen and (width <= #{variables.$bp-large}) {
         .bp5-button-text {
             font-size: 13px;
         }
@@ -133,7 +134,7 @@ $bp-nav-medium: 1100px;
         }
     }
 
-    @media screen and (width <= $bp-nav-medium) {
+    @media screen and (width <= #{variables.$bp-medium}) {
         .bp5-button-text {
             display: none;
         }
