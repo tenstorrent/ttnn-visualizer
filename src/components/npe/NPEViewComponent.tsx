@@ -190,7 +190,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return 1;
         }
         if (highlightedTransfer !== null) {
-            return 0.15;
+            return 0;
         }
         if (selectedTransferList.length === 0) {
             return 0; // 0.45;
