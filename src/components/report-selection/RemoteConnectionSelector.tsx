@@ -37,59 +37,61 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
     const selectedConnection = connection ?? connectionList[0];
 
     return (
-        <div className='buttons-container'>
-            <Select
-                className='remote-connection-select'
-                items={connectionList}
-                itemRenderer={(item, itemProps) => renderRemoteConnection(item, itemProps, selectedConnection)}
-                disabled={disabled}
-                filterable
-                itemPredicate={filterRemoteConnections}
-                noResults={
-                    <MenuItem
-                        disabled
-                        text='No results'
-                        roleStructure='listoption'
-                    />
-                }
-                onItemSelect={onSelectConnection}
-            >
-                <Button
-                    icon={offline ? IconNames.BAN_CIRCLE : IconNames.CLOUD}
-                    endIcon={IconNames.CARET_DOWN}
+        <>
+            <div className='buttons-container'>
+                <Select
+                    className='remote-connection-select'
+                    items={connectionList}
+                    itemRenderer={(item, itemProps) => renderRemoteConnection(item, itemProps, selectedConnection)}
                     disabled={disabled}
-                    text={formatConnectionString(selectedConnection)}
-                />
-            </Select>
-            <Tooltip content='Edit selected connection'>
-                <AnchorButton
-                    icon={IconNames.EDIT}
-                    disabled={disabled || !selectedConnection}
-                    onClick={() => setIsEditDialogOpen(true)}
-                />
-            </Tooltip>
-            <Tooltip content='Remove selected connection'>
-                <AnchorButton
-                    icon={IconNames.TRASH}
-                    disabled={disabled || !selectedConnection}
-                    onClick={() => onRemoveConnection(selectedConnection)}
-                />
-            </Tooltip>
+                    filterable
+                    itemPredicate={filterRemoteConnections}
+                    noResults={
+                        <MenuItem
+                            disabled
+                            text='No results'
+                            roleStructure='listoption'
+                        />
+                    }
+                    onItemSelect={onSelectConnection}
+                >
+                    <Button
+                        icon={offline ? IconNames.BAN_CIRCLE : IconNames.CLOUD}
+                        endIcon={IconNames.CARET_DOWN}
+                        disabled={disabled}
+                        text={formatConnectionString(selectedConnection)}
+                    />
+                </Select>
+                <Tooltip content='Edit selected connection'>
+                    <AnchorButton
+                        icon={IconNames.EDIT}
+                        disabled={disabled || !selectedConnection}
+                        onClick={() => setIsEditDialogOpen(true)}
+                    />
+                </Tooltip>
+                <Tooltip content='Remove selected connection'>
+                    <AnchorButton
+                        icon={IconNames.TRASH}
+                        disabled={disabled || !selectedConnection}
+                        onClick={() => onRemoveConnection(selectedConnection)}
+                    />
+                </Tooltip>
 
-            <RemoteConnectionDialog
-                key={`${selectedConnection?.name}${selectedConnection?.host}${selectedConnection?.port}${selectedConnection?.profilerPath}`}
-                open={isEditdialogOpen}
-                onAddConnection={(updatedConnection) => {
-                    setIsEditDialogOpen(false);
-                    onEditConnection(updatedConnection, connection);
-                }}
-                onClose={() => {
-                    setIsEditDialogOpen(false);
-                }}
-                title='Edit remote connection'
-                buttonLabel='Save connection'
-                remoteConnection={selectedConnection}
-            />
+                <RemoteConnectionDialog
+                    key={`${selectedConnection?.name}${selectedConnection?.host}${selectedConnection?.port}${selectedConnection?.profilerPath}`}
+                    open={isEditdialogOpen}
+                    onAddConnection={(updatedConnection) => {
+                        setIsEditDialogOpen(false);
+                        onEditConnection(updatedConnection, connection);
+                    }}
+                    onClose={() => {
+                        setIsEditDialogOpen(false);
+                    }}
+                    title='Edit remote connection'
+                    buttonLabel='Save connection'
+                    remoteConnection={selectedConnection}
+                />
+            </div>
 
             <Button
                 icon={IconNames.LOCATE}
@@ -98,7 +100,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                 text='Fetch remote folders list'
                 onClick={() => onSyncRemoteFolderList(selectedConnection)}
             />
-        </div>
+        </>
     );
 };
 

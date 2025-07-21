@@ -148,6 +148,7 @@ export default function Performance() {
                         {folderList &&
                             reportSelectors?.map((_, index) => (
                                 <ComparisonReportSelector
+                                    className='report-selector'
                                     key={`${index}-comparison-report-selector`}
                                     folderList={folderList}
                                     reportIndex={index}
