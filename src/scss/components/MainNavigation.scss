@@ -5,9 +5,6 @@
 @use 'styles/definitions/colours' as *;
 @use 'styles/definitions/variables' as variables;
 
-$bp-nav-large: 1300px;
-$bp-nav-medium: 1100px;
-
 @mixin button-styles($color, $colorActive, $icon) {
     color: $color;
 
