@@ -7,7 +7,6 @@ import { BufferPage } from '../../model/APIData';
 import { pageDataToChunkArray } from '../../functions/getChartData';
 
 interface SVGBufferRendererProps {
-    width: number;
     height: number;
     data: BufferPage[];
     memorySize: number;
@@ -15,28 +14,27 @@ interface SVGBufferRendererProps {
 }
 
 const SVGBufferRenderer: React.FC<SVGBufferRendererProps> = ({
-    width,
     height,
     data,
     memorySize,
     memoryStart,
 }: SVGBufferRendererProps) => {
-    const ratio = width / (memorySize - memoryStart);
+    const memoryRange = memorySize - memoryStart;
     const mergedRange = pageDataToChunkArray(data);
 
     return (
-        <svg
-            width={width}
-            height={height}
-        >
+        <svg height={height}>
             <g>
                 {mergedRange.map((range) => {
+                    const xPercent = ((range.address - memoryStart) / memoryRange) * 100;
+                    const widthPercent = (range.size / memoryRange) * 100;
+
                     return (
                         <rect
                             key={range.address}
-                            x={ratio * (range.address - memoryStart)}
+                            x={`${xPercent}%`}
                             y={0}
-                            width={ratio * range.size}
+                            width={`${widthPercent}%`}
                             height={height}
                             fill={range.color || 'red'}
                         />
