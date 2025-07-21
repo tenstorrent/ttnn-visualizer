@@ -169,7 +169,6 @@ class RemoteConnection(SerializeableModel):
     profilerPath: str
     performancePath: Optional[str] = None
     sqliteBinaryPath: Optional[str] = None
-    useRemoteQuerying: bool = False
 
 
 class StatusMessage(SerializeableModel):
