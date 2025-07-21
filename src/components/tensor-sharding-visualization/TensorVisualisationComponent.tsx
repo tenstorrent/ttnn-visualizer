@@ -159,22 +159,17 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                     type='button'
                                     key={index}
                                     className={classNames('tensix', {
-                                        active:
-                                            selectedTensix ===
-                                            coordsByBankId.findIndex((coord) => coord?.x === x && coord?.y === y),
+                                        active: selectedTensix === matchIndex,
                                     })}
                                     style={{
                                         gridColumn: match.x + 1,
                                         gridRow: match.y + 1,
                                     }}
                                     onClick={() => {
-                                        const tensixIndex = coordsByBankId.findIndex(
-                                            (coord) => coord?.x === x && coord?.y === y,
-                                        );
-                                        setSelectedTensix(tensixIndex);
+                                        setSelectedTensix(matchIndex);
                                         setChartData(
                                             getChartData(
-                                                pageDataToChunkArray(buffersByBankId[tensixIndex]),
+                                                pageDataToChunkArray(buffersByBankId[matchIndex]),
                                                 (id) => tensorByAddress?.get(id) || null,
                                             ),
                                         );

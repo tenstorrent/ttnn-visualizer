@@ -23,7 +23,10 @@ const SVGBufferRenderer: React.FC<SVGBufferRendererProps> = ({
     const mergedRange = pageDataToChunkArray(data);
 
     return (
-        <svg height={height}>
+        <svg
+            height={height}
+            width='100%'
+        >
             <g>
                 {mergedRange.map((range) => {
                     const xPercent = ((range.address - memoryStart) / memoryRange) * 100;
