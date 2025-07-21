@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, ButtonGroup, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup } from '@blueprintjs/core';
+import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup } from '@blueprintjs/core';
 import { FC, useState } from 'react';
 import 'styles/components/RemoteConnectionDialog.scss';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
@@ -40,23 +40,11 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     ];
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
-    const { testConnection, fetchSqlitePath } = useRemoteConnection();
+    const { testConnection } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
-    const [isDetectingBinaryPath, setIsDetectingBinaryPath] = useState(false);
+    const [isDetectingBinaryPath] = useState(false);
 
     const isValidConnection = connectionTests.every((status) => status.status === ConnectionTestStates.OK);
-
-    const getSqlitePath = async () => {
-        setIsDetectingBinaryPath(true);
-        const status = await fetchSqlitePath(connection);
-        if (status.status === ConnectionTestStates.OK) {
-            setConnection({ ...connection, sqliteBinaryPath: status.message });
-        }
-        if (status.status === ConnectionTestStates.FAILED) {
-            setConnection({ ...connection, sqliteBinaryPath: 'Path Not Found' });
-        }
-        setIsDetectingBinaryPath(false);
-    };
 
     const testConnectionStatus = async () => {
         setIsTestingconnection(true);
@@ -176,40 +164,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                         onChange={(e) => setConnection({ ...connection, performancePath: e.target.value })}
                     />
                 </FormGroup>
-
-                {/* TODO: Disabled for now until we have a solution for out of date sqlite versions */}
-                {/* <FormGroup>
-                    <Checkbox
-                        checked={connection.useRemoteQuerying}
-                        label='Use Remote Querying'
-                        onChange={(e) => setConnection({ ...connection, useRemoteQuerying: e.target.checked })}
-                    />
-                </FormGroup> */}
-                {connection.useRemoteQuerying && (
-                    <fieldset className='remote-querying-fieldset'>
-                        <legend>Remote Querying Configuration</legend>
-
-                        <FormGroup
-                            label='Remote SQLite Binary Location'
-                            subLabel='SQLite Binary Location'
-                        >
-                            <InputGroup
-                                key='sqliteBinaryPath'
-                                value={connection.sqliteBinaryPath}
-                                onChange={(e) => setConnection({ ...connection, sqliteBinaryPath: e.target.value })}
-                            />
-                        </FormGroup>
-
-                        <ButtonGroup className='remote-sql-test-buttons'>
-                            <Button
-                                text='Detect Path'
-                                disabled={isDetectingBinaryPath}
-                                loading={isDetectingBinaryPath}
-                                onClick={getSqlitePath}
-                            />
-                        </ButtonGroup>
-                    </fieldset>
-                )}
 
                 <fieldset>
                     <legend>Test Connection</legend>

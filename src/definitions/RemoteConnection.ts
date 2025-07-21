@@ -13,7 +13,6 @@ export interface RemoteConnection {
     profilerPath: string;
     performancePath?: string;
     sqliteBinaryPath?: string;
-    useRemoteQuerying: boolean;
 }
 
 export interface RemoteFolder {
