@@ -9,7 +9,7 @@
     gap: 30px;
 
     .charts {
-        min-width: 800px;
+        min-width: 800px; // Ensures charts are wide enough to display properly and allows overflow
         overflow: auto;
     }
 }
