@@ -2,9 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, Fragment, useMemo } from 'react';
+import React, { FC, Fragment, useMemo } from 'react';
 import classNames from 'classnames';
-import { Button, ButtonVariant, Icon, Size, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Icon, Intent, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { TableHeader, TableKeys } from '../../definitions/PerfTable';
@@ -90,7 +90,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
     const { data: operations } = useOperationsList();
-    const { data: npeManifest } = useGetNPEManifest();
+    const { data: npeManifest, error: npeManifestError } = useGetNPEManifest();
     const navigate = useNavigate();
 
     const filterableColumnKeys = useMemo(
@@ -166,58 +166,71 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     };
 
     return (
-        <table className='perf-table monospace'>
-            <thead>
-                <tr>
-                    {visibleHeaders.map((h) => {
-                        const targetSortDirection =
-                            // eslint-disable-next-line no-nested-ternary
-                            sortingColumn === h.key
-                                ? sortDirection === SortingDirection.ASC
-                                    ? SortingDirection.DESC
-                                    : SortingDirection.ASC
-                                : sortDirection;
+        <>
+            {npeManifestError && (
+                <div className='error-message'>
+                    <Icon
+                        className='connection-status-icon'
+                        icon={IconNames.ERROR}
+                        size={20}
+                        intent={Intent.WARNING}
+                    />
+                    <p>Invalid NPE manifest: {npeManifestError.message}</p>
+                </div>
+            )}
 
-                        return (
-                            <th
-                                key={h.key}
-                                className='cell-header'
-                            >
-                                {h.sortable ? (
-                                    <Button
-                                        onClick={() => changeSorting(h.key)(targetSortDirection)}
-                                        variant={ButtonVariant.MINIMAL}
-                                        size={Size.SMALL}
-                                    >
-                                        <span className='header-label'>{h.label}</span>
+            <table className='perf-table monospace'>
+                <thead>
+                    <tr>
+                        {visibleHeaders.map((h) => {
+                            const targetSortDirection =
+                                // eslint-disable-next-line no-nested-ternary
+                                sortingColumn === h.key
+                                    ? sortDirection === SortingDirection.ASC
+                                        ? SortingDirection.DESC
+                                        : SortingDirection.ASC
+                                    : sortDirection;
 
-                                        {sortingColumn === h.key ? (
-                                            <Icon
-                                                className={classNames(
-                                                    {
-                                                        'is-active': sortingColumn === h.key,
-                                                    },
-                                                    'sort-icon',
-                                                )}
-                                                icon={
-                                                    sortDirection === SortingDirection.ASC
-                                                        ? IconNames.CARET_DOWN
-                                                        : IconNames.CARET_UP
-                                                }
-                                            />
-                                        ) : (
-                                            <Icon
-                                                className={classNames('sort-icon')}
-                                                icon={IconNames.CARET_DOWN}
-                                            />
-                                        )}
-                                    </Button>
-                                ) : (
-                                    <span className='header-label no-button'>{h.label}</span>
-                                )}
+                            return (
+                                <th
+                                    key={h.key}
+                                    className='cell-header'
+                                >
+                                    {h.sortable ? (
+                                        <Button
+                                            onClick={() => changeSorting(h.key)(targetSortDirection)}
+                                            variant={ButtonVariant.MINIMAL}
+                                            size={Size.SMALL}
+                                        >
+                                            <span className='header-label'>{h.label}</span>
 
-                                {/* TODO: May want this in the near future */}
-                                {/* {h?.filterable && (
+                                            {sortingColumn === h.key ? (
+                                                <Icon
+                                                    className={classNames(
+                                                        {
+                                                            'is-active': sortingColumn === h.key,
+                                                        },
+                                                        'sort-icon',
+                                                    )}
+                                                    icon={
+                                                        sortDirection === SortingDirection.ASC
+                                                            ? IconNames.CARET_DOWN
+                                                            : IconNames.CARET_UP
+                                                    }
+                                                />
+                                            ) : (
+                                                <Icon
+                                                    className={classNames('sort-icon')}
+                                                    icon={IconNames.CARET_DOWN}
+                                                />
+                                            )}
+                                        </Button>
+                                    ) : (
+                                        <span className='header-label no-button'>{h.label}</span>
+                                    )}
+
+                                    {/* TODO: May want this in the near future */}
+                                    {/* {h?.filterable && (
                                             <div className='column-filter'>
                                                 <InputGroup
                                                     asyncControl
@@ -228,76 +241,77 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 />
                                             </div>
                                         )} */}
-                            </th>
-                        );
-                    })}
-                </tr>
-            </thead>
+                                </th>
+                            );
+                        })}
+                    </tr>
+                </thead>
 
-            <tbody>
-                {tableFields?.map((row, i) => (
-                    <Fragment key={i}>
-                        <tr
-                            className={classNames({
-                                'missing-data': shouldHighlightRows && row.raw_op_code.includes('MISSING'),
-                            })}
-                        >
-                            {visibleHeaders.map((h) => (
-                                <td
-                                    key={h.key}
-                                    className={classNames('cell', {
-                                        'align-right': h.key === COLUMN_HEADERS.math_fidelity,
-                                    })}
-                                >
-                                    {cellFormattingProxy(row, h, operations, filters?.[h.key])}
-                                </td>
-                            ))}
-                        </tr>
-
-                        {comparisonDataTableFields?.length > 0 &&
-                            comparisonDataTableFields.map((dataset, index) => (
-                                <tr
-                                    key={`comparison-${i}-${index}`}
-                                    className={classNames(
-                                        {
-                                            'missing-data':
-                                                shouldHighlightRows && dataset[i]?.raw_op_code.includes('MISSING'),
-                                        },
-                                        'comparison-row',
-                                    )}
-                                >
-                                    {visibleHeaders.map((h) => (
-                                        <td
-                                            key={h.key}
-                                            className={classNames('cell', {
-                                                'align-right': h.key === COLUMN_HEADERS.math_fidelity,
-                                            })}
-                                        >
-                                            {COMPARISON_KEYS.includes(h.key) &&
-                                                dataset[i] &&
-                                                formatCell(dataset[i], h, operations, filters?.[h.key])}
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
-                        {provideMatmulAdvice && row.op_code.includes('Matmul') && (
-                            <tr>
-                                <td
-                                    colSpan={visibleHeaders.length}
-                                    className='cell advice'
-                                >
-                                    <ul>
-                                        {row?.advice.map((advice, j) => (
-                                            <li key={`advice-${j}`}>{advice}</li>
-                                        ))}
-                                    </ul>
-                                </td>
+                <tbody>
+                    {tableFields?.map((row, i) => (
+                        <Fragment key={i}>
+                            <tr
+                                className={classNames({
+                                    'missing-data': shouldHighlightRows && row.raw_op_code.includes('MISSING'),
+                                })}
+                            >
+                                {visibleHeaders.map((h) => (
+                                    <td
+                                        key={h.key}
+                                        className={classNames('cell', {
+                                            'align-right': h.key === COLUMN_HEADERS.math_fidelity,
+                                        })}
+                                    >
+                                        {cellFormattingProxy(row, h, operations, filters?.[h.key])}
+                                    </td>
+                                ))}
                             </tr>
-                        )}
-                    </Fragment>
-                ))}
-            </tbody>
-        </table>
+
+                            {comparisonDataTableFields?.length > 0 &&
+                                comparisonDataTableFields.map((dataset, index) => (
+                                    <tr
+                                        key={`comparison-${i}-${index}`}
+                                        className={classNames(
+                                            {
+                                                'missing-data':
+                                                    shouldHighlightRows && dataset[i]?.raw_op_code.includes('MISSING'),
+                                            },
+                                            'comparison-row',
+                                        )}
+                                    >
+                                        {visibleHeaders.map((h) => (
+                                            <td
+                                                key={h.key}
+                                                className={classNames('cell', {
+                                                    'align-right': h.key === COLUMN_HEADERS.math_fidelity,
+                                                })}
+                                            >
+                                                {COMPARISON_KEYS.includes(h.key) &&
+                                                    dataset[i] &&
+                                                    formatCell(dataset[i], h, operations, filters?.[h.key])}
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            {provideMatmulAdvice && row.op_code.includes('Matmul') && (
+                                <tr>
+                                    <td
+                                        colSpan={visibleHeaders.length}
+                                        className='cell advice'
+                                    >
+                                        <ul>
+                                            {row?.advice.map((advice, j) => (
+                                                <li key={`advice-${j}`}>{advice}</li>
+                                            ))}
+                                        </ul>
+                                    </td>
+                                </tr>
+                            )}
+                        </Fragment>
+                    ))}
+                </tbody>
+            </table>
+        </>
     );
 };
 
