@@ -8,6 +8,7 @@ import { Helmet } from 'react-helmet-async';
 import { useSetAtom } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
+import 'styles/components/ToastOverrides.scss';
 import { useEffect } from 'react';
 import { activeNpeOpTraceAtom, activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
@@ -76,18 +77,19 @@ function Layout() {
             <main>
                 <ModalAwareOutlet routes={routeObjectList} />
                 {location.pathname === ROUTES.CLUSTER && state?.background && <ClusterRenderer />}
-                <ToastContainer
-                    position='top-right'
-                    autoClose={false}
-                    newestOnTop={false}
-                    closeOnClick
-                    closeButton={false}
-                    theme='light'
-                    transition={BounceIn}
-                />
             </main>
 
             <FooterInfobar />
+
+            <ToastContainer
+                position='top-right'
+                autoClose={false}
+                newestOnTop={false}
+                closeOnClick
+                closeButton={false}
+                theme='light'
+                transition={BounceIn}
+            />
         </div>
     );
 }
