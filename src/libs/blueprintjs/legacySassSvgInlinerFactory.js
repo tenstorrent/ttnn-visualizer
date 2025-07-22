@@ -114,13 +114,8 @@ function legacyToSass(value) {
 export function legacySassSvgInlinerFactory(base, opts) {
     const { optimize = false, encodingFormat = 'base64' } = opts;
 
-    /**
-     * @param {sass.types.String} path
-     * @param {sass.types.Map} selectors
-     * @returns {sass.SassString}
-     */
     return function (path, selectors) {
-        const resolvedPath = resolve(base, path.getValue());
+        const resolvedPath = resolve(base, path[0].text);
         try {
             let svgContents = readFileSync(resolvedPath, { encoding: 'utf8' });
 
