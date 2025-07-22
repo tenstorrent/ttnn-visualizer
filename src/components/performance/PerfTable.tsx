@@ -170,7 +170,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             {npeManifestError && (
                 <div className='error-message'>
                     <Icon
-                        className='connection-status-icon'
                         icon={IconNames.ERROR}
                         size={20}
                         intent={Intent.WARNING}
