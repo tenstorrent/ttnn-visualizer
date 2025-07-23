@@ -38,7 +38,7 @@
     "@tanstack/react-virtual": "^3.13.12",
     "@types/tinycolor2": "^1.4.6",
     "ajv": "^8.17.1",
-    "axios": "^1.10.0",
+    "axios": "^1.11.0",
     "css-select": "^5.2.2",
     "dom-serializer": "^2.0.0",
     "immutable": "^5.1.3",
