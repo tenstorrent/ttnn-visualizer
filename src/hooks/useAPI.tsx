@@ -434,7 +434,7 @@ export const useNpe = (fileName: string | null) =>
         queryFn: () => fetchNpeOpTrace(),
         queryKey: ['fetch-npe', fileName],
         retry: false,
-        staleTime: Infinity,
+        staleTime: 0,
     });
 
 export const useOperationDetails = (operationId: number | null) => {
