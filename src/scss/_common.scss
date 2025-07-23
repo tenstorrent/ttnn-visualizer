@@ -108,12 +108,6 @@ $row-background: $tt-grey-2;
     height: 80vh;
 }
 
-// Toast overrides
-/* stylelint-disable-next-line selector-class-pattern */
-.Toastify__toast {
-    --toastify-toast-bd-radius: 2px;
-}
-
 .buffers-plot-title {
     margin-top: -18px;
 }
