@@ -25,6 +25,7 @@ export const getOrCreateInstanceId = () => {
             Math.random().toString(36).substring(2, 15) +
             Math.random().toString(36).substring(2, 15) +
             Math.random().toString(36).substring(2, 15);
+        sessionStorage.setItem('displayInitialMessage', 'true');
         sessionStorage.setItem('instanceId', instanceId);
     }
     return instanceId;
