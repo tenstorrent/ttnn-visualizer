@@ -1174,33 +1174,37 @@ def sync_remote_folder():
     if not request_body or not isinstance(request_body, dict):
         return jsonify({"error": "Invalid or missing JSON data"}), 400
 
-    folder = request_body.get("folder")
-    profile = request_body.get("profile", None)
+    profiler = request_body.get("profiler")
+    performance = request_body.get("performance", None)
     instance_id = request.args.get("instanceId", None)
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
     )
 
-    if profile:
-        profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
+    if performance:
+        performance_folder = RemoteReportFolder.model_validate(
+            performance, strict=False
+        )
         try:
             sync_remote_performance_folders(
                 connection,
                 remote_dir,
-                profile=profile_folder,
+                performance=performance_folder,
                 exclude_patterns=[r"/tensors(/|$)"],
                 sid=instance_id,
             )
 
-            profile_folder.lastSynced = int(time.time())
+            performance_folder.lastSynced = int(time.time())
 
-            return profile_folder.model_dump()
+            return performance_folder.model_dump()
 
         except RemoteConnectionException as e:
             return Response(status=e.http_status, response=e.message)
 
     try:
-        remote_profiler_folder = RemoteReportFolder.model_validate(folder, strict=False)
+        remote_profiler_folder = RemoteReportFolder.model_validate(
+            profiler, strict=False
+        )
 
         sync_remote_profiler_folders(
             connection,
@@ -1247,55 +1251,36 @@ def detect_sqlite_path():
 def use_remote_folder():
     data = request.get_json(force=True)
     connection = data.get("connection", None)
-    folder = data.get("folder", None)
-    profile = data.get("profile", None)
+    profiler = data.get("profiler", None)
+    performance = data.get("performance", None)
 
-    if not connection or not folder:
+    if not connection or not (profiler or performance):
         return Response(status=HTTPStatus.BAD_REQUEST)
 
     connection = RemoteConnection.model_validate(connection, strict=False)
-    folder = RemoteReportFolder.model_validate(folder, strict=False)
-    performance_name = None
-    remote_performance_folder = None
 
-    if profile:
+    kwargs = {
+        "instance_id": request.args.get("instanceId"),
+        "remote_connection": connection,
+    }
+
+    if profiler:
+        remote_profiler_folder = RemoteReportFolder.model_validate(
+            profiler,
+            strict=False,
+        )
+        kwargs["remote_profiler_folder"] = remote_profiler_folder
+        kwargs["profiler_name"] = remote_profiler_folder.remotePath.split("/")[-1]
+
+    if performance:
         remote_performance_folder = RemoteReportFolder.model_validate(
-            profile, strict=False
+            performance,
+            strict=False,
         )
-        performance_name = remote_performance_folder.reportName
+        kwargs["remote_performance_folder"] = remote_performance_folder
+        kwargs["performance_name"] = remote_performance_folder.reportName
 
-    data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-    profiler_name = folder.remotePath.split("/")[-1]
-    folder_name = folder.remotePath.split("/")[-1]
-
-    connection_directory = Path(
-        data_directory,
-        connection.host,
-        current_app.config["PROFILER_DIRECTORY_NAME"],
-        folder_name,
-    )
-
-    if not connection_directory.exists():
-        return Response(
-            status=HTTPStatus.INTERNAL_SERVER_ERROR,
-            response=f"{connection_directory} does not exist.",
-        )
-
-    remote_path = (
-        f"{Path(data_directory).name}/{connection.host}/{connection_directory.name}"
-    )
-
-    instance_id = request.args.get("instanceId")
-    current_app.logger.info(f"Setting active reports for {instance_id} - {remote_path}")
-
-    update_instance(
-        instance_id=instance_id,
-        profiler_name=profiler_name,
-        performance_name=performance_name,
-        remote_connection=connection,
-        remote_profiler_folder=folder,
-        remote_performance_folder=remote_performance_folder,
-    )
+    update_instance(**kwargs)
 
     return Response(status=HTTPStatus.OK)
 
