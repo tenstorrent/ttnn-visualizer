@@ -1175,26 +1175,28 @@ def sync_remote_folder():
         return jsonify({"error": "Invalid or missing JSON data"}), 400
 
     folder = request_body.get("folder")
-    profile = request_body.get("profile", None)
+    performance = request_body.get("profile", None)
     instance_id = request.args.get("instanceId", None)
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
     )
 
-    if profile:
-        profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
+    if performance:
+        performance_folder = RemoteReportFolder.model_validate(
+            performance, strict=False
+        )
         try:
             sync_remote_performance_folders(
                 connection,
                 remote_dir,
-                profile=profile_folder,
+                profile=performance_folder,
                 exclude_patterns=[r"/tensors(/|$)"],
                 sid=instance_id,
             )
 
-            profile_folder.lastSynced = int(time.time())
+            performance_folder.lastSynced = int(time.time())
 
-            return profile_folder.model_dump()
+            return performance_folder.model_dump()
 
         except RemoteConnectionException as e:
             return Response(status=e.http_status, response=e.message)
