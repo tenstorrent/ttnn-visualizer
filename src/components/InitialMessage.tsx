@@ -7,11 +7,11 @@ import { useState } from 'react';
 import getServerConfig from '../functions/getServerConfig';
 
 const InitialMessage = () => {
-    const [isDialogOpen, setIsDialogOpen] = useState(!shouldHideStartup());
+    const [isDialogOpen, setIsDialogOpen] = useState(showInitialMessage());
 
     const handleCloseDialog = () => {
-        createHideStartupCookie();
         setIsDialogOpen(false);
+        sessionStorage.removeItem('displayInitialMessage');
     };
 
     return (
@@ -47,20 +47,14 @@ const InitialMessage = () => {
     );
 };
 
-const shouldHideStartup = (): boolean => {
-    const match = document.cookie.match(/(?:^|;\s*)hide-startup-information=([^;]*)/);
+const showInitialMessage = (): boolean => {
+    const shouldDisplayInitialMessage = sessionStorage.getItem('displayInitialMessage') === 'true';
 
     if (!getServerConfig()?.SERVER_MODE) {
         return false;
     }
 
-    return match ? match[1] === 'true' : false;
-};
-
-const createHideStartupCookie = () => {
-    const expires = new Date();
-    expires.setDate(expires.getDate() + 30);
-    document.cookie = `hide-startup-information=true; expires=${expires.toUTCString()}; path=/`;
+    return shouldDisplayInitialMessage;
 };
 
 export default InitialMessage;
