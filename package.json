@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualizer",
   "private": true,
-  "version": "0.43.1",
+  "version": "0.44.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -37,7 +37,8 @@
     "@blueprintjs/table": "^5.3.15",
     "@tanstack/react-virtual": "^3.13.12",
     "@types/tinycolor2": "^1.4.6",
-    "axios": "^1.10.0",
+    "ajv": "^8.17.1",
+    "axios": "^1.11.0",
     "css-select": "^5.2.2",
     "dom-serializer": "^2.0.0",
     "immutable": "^5.1.3",
@@ -99,7 +100,7 @@
     "stylelint-prettier": "^5.0.3",
     "svgo": "^3.3.2",
     "typescript": "~5.2.2",
-    "vite": "^7.0.5",
+    "vite": "^7.0.6",
     "vitest": "^3.2.4",
     "vitest-canvas-mock": "^0.3.3"
   },

@@ -139,66 +139,63 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                         />
                     </h3>
                 </div>
+
                 <div className='chip'>
-                    <div
-                        className='tensix-grid empty'
-                        style={{
-                            gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
-                            gridTemplateRows: `repeat(${height || 0}, ${tensixHeight}px)`,
-                        }}
-                    >
-                        {Array.from({ length: width * height }).map((_, index) => (
-                            <div
-                                key={index}
-                                className='tensix empty-tensix'
-                                style={{
-                                    width: `${tensixSize}px`,
-                                    height: `${tensixHeight}px`,
-                                    gridColumn: (index % width) + 1,
-                                    gridRow: Math.floor(index / width) + 1,
-                                }}
-                            />
-                        ))}
-                    </div>
                     <div
                         className='tensix-grid'
                         style={{
-                            gridTemplateColumns: `repeat(${width || 0}, ${tensixSize}px)`,
+                            gridTemplateColumns: `repeat(${width || 0}, 1fr)`,
                             gridTemplateRows: `repeat(${height || 0}, ${tensixHeight}px)`,
                         }}
                     >
-                        {coordsByBankId.map((coords, index) => (
-                            <button
-                                type='button'
-                                key={index}
-                                className={classNames('tensix', { active: selectedTensix === index })}
-                                style={{
-                                    width: `${tensixSize}px`,
-                                    height: `${tensixHeight}px`,
-                                    gridColumn: coords.x + 1,
-                                    gridRow: coords.y + 1,
-                                }}
-                                onClick={() => {
-                                    setSelectedTensix(index);
-                                    setChartData(
-                                        getChartData(
-                                            pageDataToChunkArray(buffersByBankId[index]),
-                                            (id) => tensorByAddress?.get(id) || null,
-                                        ),
-                                    );
-                                }}
-                            >
-                                <SVGBufferRenderer
-                                    width={tensixSize - 2}
-                                    height={tensixHeight}
-                                    data={buffersByBankId[index]}
-                                    memorySize={memSize}
-                                    memoryStart={memStart}
+                        {Array.from({ length: width * height }).map((_, index) => {
+                            const x = index % width;
+                            const y = Math.floor(index / width);
+                            const matchIndex = coordsByBankId.findIndex((coord) => coord?.x === x && coord?.y === y);
+                            const match = coordsByBankId[matchIndex];
+
+                            return match ? (
+                                <button
+                                    type='button'
+                                    key={index}
+                                    className={classNames('tensix', {
+                                        active: selectedTensix === matchIndex,
+                                    })}
+                                    style={{
+                                        gridColumn: match.x + 1,
+                                        gridRow: match.y + 1,
+                                    }}
+                                    onClick={() => {
+                                        setSelectedTensix(matchIndex);
+                                        setChartData(
+                                            getChartData(
+                                                pageDataToChunkArray(buffersByBankId[matchIndex]),
+                                                (id) => tensorByAddress?.get(id) || null,
+                                            ),
+                                        );
+                                    }}
+                                >
+                                    <SVGBufferRenderer
+                                        height={tensixHeight}
+                                        data={buffersByBankId[matchIndex]}
+                                        memorySize={memSize}
+                                        memoryStart={memStart}
+                                    />
+                                </button>
+                            ) : (
+                                <div
+                                    key={index}
+                                    className='tensix empty-tensix'
+                                    style={{
+                                        gridColumn: x + 1,
+                                        gridRow: y + 1,
+                                    }}
                                 />
-                            </button>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
+
                 {selectedTensix !== null && (
                     <div className='tensix-details'>
                         <div className='tensix-details-header'>
