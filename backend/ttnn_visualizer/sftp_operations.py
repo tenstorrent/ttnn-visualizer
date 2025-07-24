@@ -902,11 +902,11 @@ def sync_remote_profiler_folders(
 def sync_remote_performance_folders(
     remote_connection: RemoteConnection,
     path_prefix: str,
-    profile: RemoteReportFolder,
+    performance: RemoteReportFolder,
     exclude_patterns: Optional[List[str]] = None,
     sid=None,
 ):
-    remote_folder_path = profile.remotePath
+    remote_folder_path = performance.remotePath
     profile_folder = Path(remote_folder_path).name
     destination_dir = Path(
         REPORT_DATA_DIRECTORY,

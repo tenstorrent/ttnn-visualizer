@@ -1189,7 +1189,7 @@ def sync_remote_folder():
             sync_remote_performance_folders(
                 connection,
                 remote_dir,
-                profile=performance_folder,
+                performance=performance_folder,
                 exclude_patterns=[r"/tensors(/|$)"],
                 sid=instance_id,
             )
