@@ -322,7 +322,6 @@ const RemoteSyncConfigurator: FC = () => {
                                         const response = await remote.mountRemoteFolder(
                                             remote.persistentState.selectedConnection,
                                             selectedReportFolder,
-                                            selectedPerformanceFolder,
                                         );
 
                                         if (response.status === 200) {
@@ -418,7 +417,7 @@ const RemoteSyncConfigurator: FC = () => {
                                             ) {
                                                 const response = await remote.mountRemoteFolder(
                                                     remote.persistentState.selectedConnection,
-                                                    selectedReportFolder,
+                                                    undefined,
                                                     selectedPerformanceFolder,
                                                 );
 
