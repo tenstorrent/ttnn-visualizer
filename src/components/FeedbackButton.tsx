@@ -34,7 +34,7 @@ const FeedbackButton = () => {
                 <DialogBody>
                     <p>
                         We&apos;re looking for your feedback to improve the TT-NN Visualizer. If you have any
-                        suggestions, issues, or feature requests, please let us know by opening up a issue in Github.
+                        suggestions, issues, or feature requests, please let us know by opening an issue in GitHub.
                     </p>
                 </DialogBody>
 
