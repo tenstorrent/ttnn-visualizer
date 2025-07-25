@@ -116,5 +116,12 @@ $group-row-pattern: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%
         }
     }
 
+    .error-message {
+        display: inline-flex;
+        justify-content: center;
+        gap: 5px;
+        color: colours.$tt-yellow;
+    }
+
     @include perf.perf-report-colours;
 }

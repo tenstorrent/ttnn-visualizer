@@ -38,8 +38,7 @@ export default defineConfig(({ command }) => {
             devSourcemap: true,
             preprocessorOptions: {
                 scss: {
-                    silenceDeprecations: ['legacy-js-api'], // Ignoring warnings relating to BlueprintJS - revisit if we upgrade Vite/BlueprintJS/Sass
-                    quietDeps: true, // Ignoring warnings relating to BlueprintJS - revisit if we upgrade Vite/BlueprintJS/Sass
+                    quietDeps: true, // Ignoring warnings relating to BlueprintJS - revisit if we upgrade it
                     functions: {
                         'svg-icon($path, $selectors: null)': legacySassSvgInlinerFactory(
                             join(__dirname, '/src/libs/blueprintjs/icons'),
