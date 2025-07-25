@@ -55,7 +55,7 @@ const remoteFolderRenderer =
         }
 
         const { lastSynced, lastModified, reportName } = folder;
-        const lastSyncedDate = lastSynced ? formatter.format(new Date(lastSynced)) : 'Never';
+        const lastSyncedDate = lastSynced ? formatter.format(getUTC(lastSynced)) : 'Never';
 
         let statusIcon = (
             <Tooltip content={`Fetching folder status, last sync: ${lastSyncedDate}`}>
@@ -166,5 +166,12 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
         </div>
     );
 };
+
+function getUTC(epoch: number) {
+    const date = new Date(0);
+    date.setUTCSeconds(epoch);
+
+    return date;
+}
 
 export default RemoteFolderSelector;
