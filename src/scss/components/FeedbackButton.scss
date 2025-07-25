@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+.feedback-button {
+    position: fixed;
+    top: 50vh;
+    right: -50px;
+    z-index: 10;
+    transform: rotate(-90deg);
+    animation: feedback-slide 1.1s cubic-bezier(0.4, 0, 0.2, 1) 1;
+    animation-delay: 0.5s;
+    transition: transform 0.3s ease-in-out;
+
+    @keyframes feedback-slide {
+        0% {
+            transform: translateX(0) rotate(-90deg);
+        }
+
+        20% {
+            transform: translateX(-50px) rotate(-90deg);
+        }
+
+        100% {
+            transform: translateX(0) rotate(-90deg);
+        }
+    }
+
+    &:hover,
+    &:focus {
+        transform: translateX(-15px) rotate(-90deg);
+    }
+}
