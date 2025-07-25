@@ -15,14 +15,7 @@ from typing import List
 
 import yaml
 import zstd
-from flask import (
-    Blueprint,
-    Response,
-    current_app,
-    jsonify,
-    request,
-    session,
-)
+from flask import Blueprint, Response, current_app, jsonify, request, session
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
     NPEQueries,
@@ -45,10 +38,7 @@ from ttnn_visualizer.file_uploads import (
     save_uploaded_files,
     validate_files,
 )
-from ttnn_visualizer.instances import (
-    get_instances,
-    update_instance,
-)
+from ttnn_visualizer.instances import get_instances, update_instance
 from ttnn_visualizer.models import (
     Instance,
     RemoteConnection,
@@ -315,48 +305,24 @@ def operation_detail(operation_id, instance: Instance):
 @timer
 def operation_history(instance: Instance):
     operation_history_filename = "operation_history.json"
-    if instance.remote_connection and instance.remote_connection.useRemoteQuerying:
-        if not instance.remote_folder:
-            return []
-        operation_history = read_remote_file(
-            remote_connection=instance.remote_connection,
-            remote_path=Path(
-                instance.remote_folder.remotePath, operation_history_filename
-            ),
-        )
-        if not operation_history:
-            return []
-        return json.loads(operation_history)
-    else:
-        operation_history_file = (
-            Path(str(instance.profiler_path)).parent / operation_history_filename
-        )
-        if not operation_history_file.exists():
-            return []
-        with open(operation_history_file, "r") as file:
-            return json.load(file)
+    operation_history_file = (
+        Path(str(instance.profiler_path)).parent / operation_history_filename
+    )
+    if not operation_history_file.exists():
+        return []
+    with open(operation_history_file, "r") as file:
+        return json.load(file)
 
 
 @api.route("/config")
 @with_instance
 @timer
 def get_config(instance: Instance):
-    if instance.remote_connection and instance.remote_connection.useRemoteQuerying:
-        if not instance.remote_profiler_folder:
-            return {}
-        config = read_remote_file(
-            remote_connection=instance.remote_connection,
-            remote_path=Path(instance.remote_profiler_folder.remotePath, "config.json"),
-        )
-        if not config:
-            return {}
-        return config
-    else:
-        config_file = Path(str(instance.profiler_path)).parent.joinpath("config.json")
-        if not config_file.exists():
-            return {}
-        with open(config_file, "r") as file:
-            return json.load(file)
+    config_file = Path(str(instance.profiler_path)).parent.joinpath("config.json")
+    if not config_file.exists():
+        return {}
+    with open(config_file, "r") as file:
+        return json.load(file)
 
 
 @api.route("/tensors", methods=["GET"])
@@ -1186,20 +1152,6 @@ def test_remote_folder():
         except RemoteConnectionException as e:
             add_status(ConnectionTestStates.FAILED.value, e.message)
 
-    # Test Sqlite binary path configuration
-    if not has_failures() and connection.useRemoteQuerying:
-        if not connection.sqliteBinaryPath:
-            add_status(ConnectionTestStates.FAILED, "SQLite binary path not provided")
-        else:
-            try:
-                check_sqlite_path(connection)
-                add_status(ConnectionTestStates.OK, "SQLite binary found.")
-            except AuthenticationFailedException as e:
-                add_status(ConnectionTestStates.FAILED.value, e.message)
-                return [status.model_dump() for status in statuses], e.http_status
-            except RemoteConnectionException as e:
-                add_status(ConnectionTestStates.FAILED, e.message)
-
     return [status.model_dump() for status in statuses]
 
 
@@ -1323,7 +1275,7 @@ def use_remote_folder():
         folder_name,
     )
 
-    if not connection.useRemoteQuerying and not connection_directory.exists():
+    if not connection_directory.exists():
         return Response(
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
             response=f"{connection_directory} does not exist.",

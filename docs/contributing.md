@@ -30,10 +30,10 @@ activate env
 source myenv/bin/activate
 ```
 
-install requirements
+install dependencies
 
 ```shell
-pip install -r backend/ttnn_visualizer/requirements.txt
+pip install '.[dev]'
 ```
 
 Starting the server

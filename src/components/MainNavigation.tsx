@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useEffect, useState } from 'react';
-import { Alignment, Button, Navbar, Tooltip } from '@blueprintjs/core';
+import { Alignment, Button, ButtonVariant, Navbar, Position, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useAtomValue } from 'jotai';
@@ -89,14 +89,14 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.HOME)}
                     active={hasMatchingPath(ROUTES.HOME)}
                     icon={IconNames.DOCUMENT_OPEN}
-                    variant='minimal'
-                    size='large'
+                    variant={ButtonVariant.MINIMAL}
+                    size={Size.LARGE}
                     className='reports-button'
                 />
 
                 <Tooltip
                     content={MEMORY_PROFILER_DISABLED}
-                    position='bottom'
+                    position={Position.BOTTOM}
                     disabled={hasActiveProfiler}
                 >
                     <Button
@@ -105,15 +105,15 @@ function MainNavigation() {
                         active={hasMatchingPath(ROUTES.OPERATIONS)}
                         icon={IconNames.CUBE}
                         disabled={!hasActiveProfiler}
-                        variant='minimal'
-                        size='large'
+                        variant={ButtonVariant.MINIMAL}
+                        size={Size.LARGE}
                         className='operations-button'
                     />
                 </Tooltip>
 
                 <Tooltip
                     content={MEMORY_PROFILER_DISABLED}
-                    position='bottom'
+                    position={Position.BOTTOM}
                     disabled={hasActiveProfiler}
                 >
                     <Button
@@ -122,15 +122,15 @@ function MainNavigation() {
                         active={hasMatchingPath(ROUTES.TENSORS)}
                         icon={IconNames.FLOW_LINEAR}
                         disabled={!hasActiveProfiler}
-                        variant='minimal'
-                        size='large'
+                        variant={ButtonVariant.MINIMAL}
+                        size={Size.LARGE}
                         className='tensors-button'
                     />
                 </Tooltip>
 
                 <Tooltip
                     content={MEMORY_PROFILER_DISABLED}
-                    position='bottom'
+                    position={Position.BOTTOM}
                     disabled={hasActiveProfiler}
                 >
                     <Button
@@ -139,15 +139,15 @@ function MainNavigation() {
                         active={hasMatchingPath(ROUTES.BUFFERS)}
                         icon={IconNames.SMALL_SQUARE}
                         disabled={!hasActiveProfiler}
-                        variant='minimal'
-                        size='large'
+                        variant={ButtonVariant.MINIMAL}
+                        size={Size.LARGE}
                         className='buffers-button'
                     />
                 </Tooltip>
 
                 <Tooltip
                     content={MEMORY_PROFILER_DISABLED}
-                    position='bottom'
+                    position={Position.BOTTOM}
                     disabled={hasActiveProfiler}
                 >
                     <Button
@@ -156,15 +156,15 @@ function MainNavigation() {
                         active={hasMatchingPath(ROUTES.GRAPHTREE)}
                         icon={IconNames.GRAPH}
                         disabled={!hasActiveProfiler}
-                        variant='minimal'
-                        size='large'
+                        variant={ButtonVariant.MINIMAL}
+                        size={Size.LARGE}
                         className='graph-button'
                     />
                 </Tooltip>
 
                 <Tooltip
                     content={PERFORMANCE_PROFILER_DISABLED}
-                    position='bottom'
+                    position={Position.BOTTOM}
                     disabled={hasActivePerf}
                 >
                     <Button
@@ -173,8 +173,8 @@ function MainNavigation() {
                         active={hasMatchingPath(ROUTES.PERFORMANCE)}
                         icon={IconNames.LIGHTNING}
                         disabled={!hasActivePerf}
-                        variant='minimal'
-                        size='large'
+                        variant={ButtonVariant.MINIMAL}
+                        size={Size.LARGE}
                         className='performance-button'
                     />
                 </Tooltip>
@@ -184,8 +184,8 @@ function MainNavigation() {
                     onClick={() => handleNavigate(ROUTES.NPE)}
                     active={hasMatchingPath(ROUTES.NPE)}
                     icon={IconNames.Random}
-                    variant='minimal'
-                    size='large'
+                    variant={ButtonVariant.MINIMAL}
+                    size={Size.LARGE}
                     className='npe-button'
                 >
                     <small>beta</small>
@@ -193,7 +193,7 @@ function MainNavigation() {
 
                 <Tooltip
                     content={CLUSTER_DISABLED}
-                    position='bottom'
+                    position={Position.BOTTOM}
                     disabled={hasClusterDescription}
                 >
                     <Button
@@ -202,8 +202,8 @@ function MainNavigation() {
                         active={hasMatchingPath(ROUTES.CLUSTER)}
                         disabled={!hasClusterDescription}
                         icon={IconNames.LayoutGrid}
-                        variant='minimal'
-                        size='large'
+                        variant={ButtonVariant.MINIMAL}
+                        size={Size.LARGE}
                         className='cluster-button modal'
                     />
                 </Tooltip>

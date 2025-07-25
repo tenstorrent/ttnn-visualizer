@@ -8,6 +8,7 @@ import Papa, { ParseResult } from 'papaparse';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
+import Ajv from 'ajv';
 import axiosInstance from '../libs/axiosInstance';
 import {
     Buffer,
@@ -38,6 +39,7 @@ import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel } from '../model/ClusterModel';
+import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -307,7 +309,15 @@ const fetchPerformanceReport = async (name?: string | null): Promise<PerfTableRo
 };
 
 const fetchNPEManifest = async (): Promise<NPEManifestEntry[]> => {
+    const ajv = new Ajv();
+    const validateNPEManifest = ajv.compile(npeManifestSchema);
     const { data } = await axiosInstance.get<NPEManifestEntry[]>(`/api/performance/npe/manifest`);
+    const valid = validateNPEManifest(data);
+    if (!valid) {
+        // eslint-disable-next-line no-console
+        console.error('Invalid NPE manifest:', validateNPEManifest.errors);
+        throw new Error(validateNPEManifest.errors?.map((err) => ` ${err.message}`).join(', '));
+    }
     return data;
 };
 
@@ -329,7 +339,7 @@ const fetchNPETimeline = async (fileName: string): Promise<NPEData> => {
     return data;
 };
 
-export const useNPETimelineFile = (fileName: string | null) => {
+export const useNPETimelineFile = (fileName: string | undefined) => {
     return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNPETimeline(fileName!),
         queryKey: ['get-npe-timeline', fileName],
@@ -424,7 +434,7 @@ export const useNpe = (fileName: string | null) =>
         queryFn: () => fetchNpeOpTrace(),
         queryKey: ['fetch-npe', fileName],
         retry: false,
-        staleTime: Infinity,
+        staleTime: 30000,
     });
 
 export const useOperationDetails = (operationId: number | null) => {

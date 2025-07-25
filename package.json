@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualizer",
   "private": true,
-  "version": "0.43.0",
+  "version": "0.44.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
     "serve": "vite build && FLASK_ENV=production pnpm run flask:start",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:fix": "eslint . --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint:ts": "npx tsc --noEmit",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
     "flask:lint": "isort --check-only backend/ttnn_visualizer && black --check backend/ttnn_visualizer",
@@ -36,7 +37,8 @@
     "@blueprintjs/table": "^5.3.15",
     "@tanstack/react-virtual": "^3.13.12",
     "@types/tinycolor2": "^1.4.6",
-    "axios": "^1.10.0",
+    "ajv": "^8.17.1",
+    "axios": "^1.11.0",
     "css-select": "^5.2.2",
     "dom-serializer": "^2.0.0",
     "immutable": "^5.1.3",

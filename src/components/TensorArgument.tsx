@@ -51,7 +51,7 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
     }
 
     return (
-        <div className='expandable-argument'>
+        <div className='tensor-argument'>
             <Switch
                 label={isExpanded ? 'Hide full tensor' : 'Show full tensor'}
                 onChange={() => handleExpandToggle()}
@@ -60,9 +60,7 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
 
             {isExpanded ? (
                 <>
-                    {typeof argument.value === 'string' && (
-                        <pre className='full-tensor'>{argument.value as string}</pre>
-                    )}
+                    {typeof argument.value === 'string' && <pre>{argument.value as string}</pre>}
 
                     {onCollapse && (
                         <Switch
@@ -75,9 +73,9 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
             ) : (
                 Array.isArray(splitArgument) && (
                     <>
-                        <p className='collapsed-tensor monospace'>{splitArgument[0]}</p>
-                        <p className='collapsed-tensor monospace'>.........</p>
-                        <p className='collapsed-tensor monospace'>{splitArgument[splitArgument.length - 1]}</p>
+                        <p className='monospace'>{splitArgument[0]}</p>
+                        <p className='monospace'>.........</p>
+                        <p className='monospace'>{splitArgument[splitArgument.length - 1]}</p>
                     </>
                 )
             )}

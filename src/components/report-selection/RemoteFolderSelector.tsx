@@ -50,9 +50,6 @@ const remoteFolderRenderer =
         connection?: RemoteConnection,
     ): ItemRenderer<RemoteFolder> =>
     (folder, { handleClick, modifiers }) => {
-        const { persistentState } = useRemoteConnection();
-        const isUsingRemoteQuerying = persistentState.selectedConnection?.useRemoteQuerying;
-
         if (!modifiers.matchesPredicate) {
             return null;
         }
@@ -91,7 +88,7 @@ const remoteFolderRenderer =
         const getLabelElement = () => (
             <>
                 <span>{reportName}</span>
-                <span className='status-icon'>{!isUsingRemoteQuerying && statusIcon}</span>
+                <span className='status-icon'>{statusIcon}</span>
             </>
         );
 

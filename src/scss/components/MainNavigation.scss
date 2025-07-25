@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use 'styles/definitions/colours' as *;
+@use 'styles/definitions/variables' as variables;
 
 @mixin button-styles($color, $colorActive, $icon) {
     color: $color;
@@ -40,6 +41,7 @@
     width: auto;
     padding-left: 0;
     padding-right: 0;
+    flex-grow: 1;
 
     .bp5-navbar-group {
         gap: 3px; // avoids focus ring overlap
@@ -112,5 +114,30 @@
         justify-content: center;
         transition: transform 300ms ease-out 50ms;
         gap: 7px;
+    }
+
+    @media screen and (width <= #{variables.$bp-large}) {
+        .bp5-button-text {
+            font-size: 13px;
+        }
+
+        .bp5-button {
+            padding-left: 10px;
+            padding-right: 10px;
+        }
+
+        .bp5-icon {
+            margin-right: 8px;
+        }
+    }
+
+    @media screen and (width <= #{variables.$bp-medium}) {
+        .bp5-button-text {
+            display: none;
+        }
+
+        .bp5-icon {
+            margin-right: 0;
+        }
     }
 }

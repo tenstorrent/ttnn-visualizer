@@ -12,6 +12,8 @@
     display: inline-flex;
     height: 600px;
     flex-direction: column;
+    overflow: auto;
+    max-width: 100%;
 
     .aside-container {
         display: flex;

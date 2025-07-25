@@ -6,6 +6,7 @@ import { TypedPerfTableRow } from './sortAndFilterPerfTableData';
 
 const PLACEHOLDER: TypedPerfTableRow = {
     id: null,
+    global_call_count: null,
     advice: [],
     total_percent: null,
     bound: '',

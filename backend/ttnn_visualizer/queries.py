@@ -72,11 +72,7 @@ class DatabaseQueries:
                 raise ValueError(
                     "Must provide either an existing connection or instance"
                 )
-            remote_connection = instance.remote_connection if instance else None
-            if remote_connection and remote_connection.useRemoteQuerying:
-                raise NotImplementedError("Remote querying is not implemented yet")
-            else:
-                self.query_runner = LocalQueryRunner(instance=instance)
+            self.query_runner = LocalQueryRunner(instance=instance)
 
     def _check_table_exists(self, table_name: str) -> bool:
         """
