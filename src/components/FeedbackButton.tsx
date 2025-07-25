@@ -63,4 +63,3 @@ const FeedbackButton = () => {
 
 export default FeedbackButton;
 
-// href='https://github.com/tenstorrent/ttnn-visualizer/issues'
