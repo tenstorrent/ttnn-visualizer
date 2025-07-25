@@ -4,24 +4,57 @@
 
 import { AnchorButton, Button, Dialog, DialogBody, DialogFooter, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import 'styles/components/FeedbackButton.scss';
+
+const ANIMATION_DELAY = 1000;
+const ANIMATION_DURATION = 1000;
 
 const FeedbackButton = () => {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const buttonRef = useRef<HTMLButtonElement>(null);
 
     const handleCloseDialog = () => {
         setIsDialogOpen(false);
     };
 
+    const handleHover = () => {
+        if (buttonRef.current) {
+            buttonRef.current.classList.add('hover-state');
+        }
+    };
+
+    const handleHoverRemove = () => {
+        if (buttonRef.current) {
+            buttonRef.current.classList.remove('hover-state');
+        }
+    };
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            buttonRef.current?.classList.add('animate-in');
+
+            setTimeout(() => {
+                buttonRef.current?.classList.remove('initial-state', 'animate-in');
+            }, ANIMATION_DURATION);
+        }, ANIMATION_DELAY);
+
+        return () => clearTimeout(timer);
+    }, []);
+
     return (
         <>
             <Button
-                className='feedback-button'
+                ref={buttonRef}
+                className='feedback-button initial-state'
                 text='Feedback'
                 intent={Intent.PRIMARY}
                 endIcon={IconNames.COMMENT}
                 onClick={() => setIsDialogOpen(true)}
+                onMouseEnter={handleHover}
+                onMouseLeave={handleHoverRemove}
+                onFocus={handleHover}
+                onBlur={handleHoverRemove}
             />
 
             <Dialog
