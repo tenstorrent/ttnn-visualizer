@@ -32,6 +32,6 @@ $button-rotation: -90deg;
 
     &:hover,
     &:focus {
-        transform: translateX($short-offset) rotate($rotation);
+        transform: translateX($short-offset) rotate($button-rotation);
     }
 }
