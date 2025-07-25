@@ -3,7 +3,10 @@
   "private": true,
   "version": "0.44.1",
   "type": "module",
-  "scripts": {
+    "engines": {
+        "node": "22.12.0"
+    },
+    "scripts": {
     "dev": "vite",
     "dev:server": "VITE_SERVER_MODE=1 vite",
     "build": "vite build",
