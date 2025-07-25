@@ -2,34 +2,36 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-@use '../definitions/colours' as *;
+$long-offset: -50px;
+$short-offset: -15px;
+$button-rotation: -90deg;
 
 .feedback-button {
     position: fixed;
     top: 50vh;
-    right: -50px;
+    right: $long-offset;
     z-index: 10;
-    transform: rotate(-90deg);
+    transform: rotate($button-rotation);
     animation: feedback-slide 1.1s cubic-bezier(0.4, 0, 0.2, 1) 1;
     animation-delay: 0.5s;
     transition: transform 0.3s ease-in-out;
 
     @keyframes feedback-slide {
         0% {
-            transform: translateX(0) rotate(-90deg);
+            transform: translateX(0) rotate($button-rotation);
         }
 
         20% {
-            transform: translateX(-50px) rotate(-90deg);
+            transform: translateX($long-offset) rotate($button-rotation);
         }
 
         100% {
-            transform: translateX(0) rotate(-90deg);
+            transform: translateX(0) rotate($button-rotation);
         }
     }
 
     &:hover,
     &:focus {
-        transform: translateX(-15px) rotate(-90deg);
+        transform: translateX($short-offset) rotate($rotation);
     }
 }
