@@ -16,10 +16,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Use Node.js
+      - name: Read .nvmrc
+        id: nvm
+        run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-           node-version: v22.1.0
+            node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
       - run: npm install -g pnpm@latest-10
       - run: pnpm install
       - run: pnpm run build
