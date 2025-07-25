@@ -16,16 +16,16 @@ $button-rotation: -90deg; // Rotate the button to face upwards
     transform: translateX($hide-offset) rotate($button-rotation);
     transition: transform 0.3s ease-in-out;
 
-    &.hover-state {
-        transform: translateX($animate-out-offset) rotate($button-rotation);
-    }
-
     &.initial-state {
         transform: translateX($initial-offset) rotate($button-rotation);
     }
 
     &.animate-in {
-        animation: feedback-slide 1s ease forwards;
+        animation: feedback-slide 2.8s ease forwards;
+    }
+
+    &.hover-state {
+        transform: translateX($animate-out-offset) rotate($button-rotation);
     }
 }
 
@@ -35,6 +35,10 @@ $button-rotation: -90deg; // Rotate the button to face upwards
     }
 
     20% {
+        transform: translateX($animate-out-offset) rotate($button-rotation);
+    }
+
+    70% {
         transform: translateX($animate-out-offset) rotate($button-rotation);
     }
 

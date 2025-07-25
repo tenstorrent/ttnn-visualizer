@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import 'styles/components/FeedbackButton.scss';
 
 const ANIMATION_DELAY = 1000;
-const ANIMATION_DURATION = 1000;
+const ANIMATION_DURATION = 2800;
 
 const FeedbackButton = () => {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
