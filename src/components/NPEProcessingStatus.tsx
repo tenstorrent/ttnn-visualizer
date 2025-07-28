@@ -41,9 +41,7 @@ const NPEProcessingStatus = ({ matchedVersion, expectedVersion, npeData }: NPEPr
 
                     <p>
                         Use {NPE_REPO_URL} to generate new NPE dataset or install an older version of the visualizer
-                        <code className='formatted-code'>
-                            {matchedVersion ? `pip install ttnn-visualizer==${matchedVersion}` : null}
-                        </code>
+                        <code className='formatted-code'>pip install ttnn-visualizer=={matchedVersion}</code>
                     </p>
                 </>
             ) : (
