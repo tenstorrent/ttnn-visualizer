@@ -4,7 +4,7 @@
 
 import { FC, useState } from 'react';
 
-import { AnchorButton, FormGroup, Tooltip } from '@blueprintjs/core';
+import { Button, FormGroup, Tooltip } from '@blueprintjs/core';
 
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useSetAtom } from 'jotai';
@@ -280,7 +280,8 @@ const RemoteSyncConfigurator: FC = () => {
                     type='profiler'
                 >
                     <Tooltip content='Sync remote folder'>
-                        <AnchorButton
+                        <Button
+                            aria-label='Sync remote folder'
                             icon={IconNames.REFRESH}
                             loading={isSyncingReportFolder}
                             disabled={isDisabled || !selectedReportFolder || reportFolderList?.length === 0}
@@ -374,7 +375,8 @@ const RemoteSyncConfigurator: FC = () => {
                         type='performance'
                     >
                         <Tooltip content='Sync remote folder'>
-                            <AnchorButton
+                            <Button
+                                aria-label='Sync remote folder'
                                 icon={IconNames.REFRESH}
                                 loading={isSyncingPerformanceFolder}
                                 disabled={

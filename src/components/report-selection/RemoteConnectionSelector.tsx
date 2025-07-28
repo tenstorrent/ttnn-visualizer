@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { FC, useState } from 'react';
-import { AnchorButton, Button, MenuItem, Tooltip } from '@blueprintjs/core';
+import { Button, MenuItem, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRendererProps, Select } from '@blueprintjs/select';
 import RemoteConnectionDialog from './RemoteConnectionDialog';
@@ -63,14 +63,16 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                     />
                 </Select>
                 <Tooltip content='Edit selected connection'>
-                    <AnchorButton
+                    <Button
+                        aria-label='Edit selected connection'
                         icon={IconNames.EDIT}
                         disabled={disabled || !selectedConnection}
                         onClick={() => setIsEditDialogOpen(true)}
                     />
                 </Tooltip>
                 <Tooltip content='Remove selected connection'>
-                    <AnchorButton
+                    <Button
+                        aria-label='Remove selected connection'
                         icon={IconNames.TRASH}
                         disabled={disabled || !selectedConnection}
                         onClick={() => onRemoveConnection(selectedConnection)}
