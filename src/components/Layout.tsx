@@ -51,6 +51,10 @@ function Layout() {
                 titleTemplate='%s | TT-NN Visualizer'
             >
                 <meta charSet='utf-8' />
+                <meta
+                    name='description'
+                    content='A tool for visualizing the Tenstorrent Neural Network model (TT-NN)'
+                />
             </Helmet>
 
             <header className='app-header'>
