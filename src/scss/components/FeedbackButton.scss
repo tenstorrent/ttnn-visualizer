@@ -21,7 +21,7 @@ $button-rotation: -90deg; // Rotate the button to face upwards
     }
 
     &.animate-in {
-        animation: feedback-slide 2.8s ease forwards;
+        animation: feedback-slide 2s ease forwards;
     }
 
     &.hover-state {
@@ -38,7 +38,7 @@ $button-rotation: -90deg; // Rotate the button to face upwards
         transform: translateX($animate-out-offset) rotate($button-rotation);
     }
 
-    70% {
+    85% {
         transform: translateX($animate-out-offset) rotate($button-rotation);
     }
 
