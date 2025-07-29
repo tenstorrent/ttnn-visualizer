@@ -2,6 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+:root {
+    --feedback-animation-duration: 2.2s;
+    --feedback-animation-delay: 1s;
+}
+
 $initial-position: -35px; // Aligns button to the right edge of the screen
 $initial-offset: 35px;
 $animate-out-offset: 3px;
@@ -16,15 +21,13 @@ $button-rotation: -90deg; // Rotate the button to face upwards
     transform: translateX($hide-offset) rotate($button-rotation);
     transition: transform 0.3s ease-in-out;
 
-    &.initial-state {
-        transform: translateX($initial-offset) rotate($button-rotation);
-    }
-
     &.animate-in {
-        animation: feedback-slide 2.2s ease forwards 1s;
+        transform: translateX($initial-offset) rotate($button-rotation);
+        animation: feedback-slide 2.2s ease forwards var(--feedback-animation-delay);
+        animation-duration: var(--feedback-animation-duration);
     }
 
-    &.hover-state {
+    &.user-is-interacting {
         transform: translateX($animate-out-offset) rotate($button-rotation);
     }
 }

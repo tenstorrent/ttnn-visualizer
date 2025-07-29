@@ -4,47 +4,45 @@
 
 import { AnchorButton, Button, Dialog, DialogBody, DialogFooter, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useEffect, useRef, useState } from 'react';
+import classNames from 'classnames';
+import { useEffect, useState } from 'react';
 import 'styles/components/FeedbackButton.scss';
-
-const ANIMATION_DURATION = 3800; // Should match animation duration + animation delay of feedback-slide in FeedbackButton.scss
 
 const FeedbackButton = () => {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const buttonRef = useRef<HTMLButtonElement>(null);
+    const [isInitialState, setIsInitialState] = useState(true);
+    const [isUserInteracting, setIsUserInteracting] = useState(false);
 
     const handleCloseDialog = () => {
         setIsDialogOpen(false);
     };
 
     const handleHover = () => {
-        if (buttonRef.current) {
-            buttonRef.current.classList.add('hover-state');
-            buttonRef.current.classList.remove('animate-in');
-        }
+        setIsUserInteracting(true);
+        setIsInitialState(false);
     };
 
     const handleHoverRemove = () => {
-        if (buttonRef.current) {
-            buttonRef.current.classList.remove('hover-state');
-        }
+        setIsUserInteracting(false);
     };
 
-    useEffect(() => {
-        buttonRef.current?.classList.add('animate-in');
+    const animationDuration = getFeedbackAnimationDurationMs();
 
+    useEffect(() => {
         const timer = setTimeout(() => {
-            buttonRef.current?.classList.remove('initial-state', 'animate-in');
-        }, ANIMATION_DURATION);
+            setIsInitialState(false);
+        }, animationDuration);
 
         return () => clearTimeout(timer);
-    }, []);
+    }, [animationDuration]);
 
     return (
         <>
             <Button
-                ref={buttonRef}
-                className='feedback-button initial-state'
+                className={classNames('feedback-button', {
+                    'animate-in': isInitialState,
+                    'user-is-interacting': isUserInteracting,
+                })}
                 text='Feedback'
                 intent={Intent.PRIMARY}
                 endIcon={IconNames.COMMENT}
@@ -91,5 +89,13 @@ const FeedbackButton = () => {
         </>
     );
 };
+
+function getFeedbackAnimationDurationMs() {
+    const root = document.documentElement;
+    const duration = getComputedStyle(root).getPropertyValue('--feedback-animation-duration').trim();
+    const delay = getComputedStyle(root).getPropertyValue('--feedback-animation-delay').trim();
+
+    return parseFloat(duration) * 1000 + parseFloat(delay) * 1000;
+}
 
 export default FeedbackButton;
