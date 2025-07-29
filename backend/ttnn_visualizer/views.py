@@ -134,13 +134,19 @@ def test_ssh_connection(connection) -> bool:
     )
 
     try:
-        result = subprocess.run(
-            ssh_cmd, capture_output=True, text=True, check=True, timeout=10
+        log_message = (
+            f"Testing SSH connection to {connection.username}@{connection.host}"
         )
+        if connection.port != 22:
+            log_message += f" on port {connection.port}"
+        logger.info(log_message)
+        subprocess.run(ssh_cmd, capture_output=True, text=True, check=True, timeout=10)
         return True
     except subprocess.CalledProcessError as e:
-        if e.returncode == 255:  # SSH protocol errors
+        if e.returncode == 255:  # SSH errors
             try:
+                if e.stderr:
+                    logger.warning(e.stderr.strip())
                 handle_ssh_subprocess_error(e, connection)
             except AuthenticationException:
                 # Convert to AuthenticationFailedException for proper HTTP 422 response
@@ -150,17 +156,17 @@ def test_ssh_connection(connection) -> bool:
                     "Password authentication is not supported."
                 )
                 logger.info(
-                    f"SSH authentication failed for {connection.username}@{connection.host}: {user_message}"
+                    f"SSH authentication failed for {connection.username}@{connection.host}: {e.stderr.strip()}"
                 )
                 raise AuthenticationFailedException(message=user_message)
             except NoValidConnectionsError as ssh_err:
+                logger.warning(
+                    f"SSH connection failed for {connection.username}@{connection.host}: {e.stderr.strip()}"
+                )
                 user_message = (
                     f"Unable to establish SSH connection to {connection.host}. "
                     "Please check the hostname, port, and network connectivity. "
-                    "Ensure SSH key-based authentication is properly configured."
-                )
-                logger.warning(
-                    f"SSH connection failed for {connection.username}@{connection.host}: {user_message}"
+                    f"Ensure SSH key-based authentication is properly configured."
                 )
                 raise RemoteConnectionException(
                     message=user_message, status=ConnectionTestStates.FAILED
