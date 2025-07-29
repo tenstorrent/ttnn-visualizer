@@ -643,9 +643,11 @@ def get_performance_data_list(instance: Instance):
                 / connection.host
                 / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
             )
-        directory_names = [
-            directory.name for directory in path.iterdir() if directory.is_dir()
-        ]
+        directory_names = (
+            [directory.name for directory in path.iterdir() if directory.is_dir()]
+            if path.exists()
+            else []
+        )
 
     valid_dirs = []
 
