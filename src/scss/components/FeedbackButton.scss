@@ -23,7 +23,7 @@ $button-rotation: -90deg; // Rotate the button to face upwards
 
     &.animate-in {
         transform: translateX($initial-offset) rotate($button-rotation);
-        animation: feedback-slide 2.2s ease forwards var(--feedback-animation-delay);
+        animation: feedback-slide var(--feedback-animation-duration) ease forwards var(--feedback-animation-delay);
         animation-duration: var(--feedback-animation-duration);
     }
 
