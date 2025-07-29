@@ -229,8 +229,6 @@ def main():
 
     gunicorn_args = [
         "gunicorn",
-        "-t",
-        "300",
         "-k",
         config.GUNICORN_WORKER_CLASS,
         "-w",
