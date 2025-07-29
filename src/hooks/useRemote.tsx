@@ -65,6 +65,7 @@ const useRemoteConnection = () => {
         if (!profilerRemoteFolder && !performanceRemoteFolder) {
             throw new Error('No remote folder provided');
         }
+
         return axiosInstance.post<RemoteFolder>('/api/remote/sync', {
             connection,
             profiler: profilerRemoteFolder,
