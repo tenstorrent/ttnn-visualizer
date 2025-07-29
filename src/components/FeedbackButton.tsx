@@ -7,8 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useEffect, useRef, useState } from 'react';
 import 'styles/components/FeedbackButton.scss';
 
-const ANIMATION_DELAY = 1000;
-const ANIMATION_DURATION = 2800;
+const ANIMATION_DURATION = 3800; // Should match animation duration + animation delay of feedback-slide in FeedbackButton.scss
 
 const FeedbackButton = () => {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -21,6 +20,7 @@ const FeedbackButton = () => {
     const handleHover = () => {
         if (buttonRef.current) {
             buttonRef.current.classList.add('hover-state');
+            buttonRef.current.classList.remove('animate-in');
         }
     };
 
@@ -31,13 +31,11 @@ const FeedbackButton = () => {
     };
 
     useEffect(() => {
-        const timer = setTimeout(() => {
-            buttonRef.current?.classList.add('animate-in');
+        buttonRef.current?.classList.add('animate-in');
 
-            setTimeout(() => {
-                buttonRef.current?.classList.remove('initial-state', 'animate-in');
-            }, ANIMATION_DURATION);
-        }, ANIMATION_DELAY);
+        const timer = setTimeout(() => {
+            buttonRef.current?.classList.remove('initial-state', 'animate-in');
+        }, ANIMATION_DURATION);
 
         return () => clearTimeout(timer);
     }, []);
