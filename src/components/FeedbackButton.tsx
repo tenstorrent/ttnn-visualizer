@@ -90,12 +90,12 @@ const FeedbackButton = () => {
     );
 };
 
-function getFeedbackAnimationDurationMs() {
+const getFeedbackAnimationDurationMs = () => {
     const root = document.documentElement;
     const duration = getComputedStyle(root).getPropertyValue('--feedback-animation-duration').trim();
     const delay = getComputedStyle(root).getPropertyValue('--feedback-animation-delay').trim();
 
     return parseFloat(duration) * 1000 + parseFloat(delay) * 1000;
-}
+};
 
 export default FeedbackButton;
