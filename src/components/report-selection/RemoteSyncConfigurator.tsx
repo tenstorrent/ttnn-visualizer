@@ -4,7 +4,7 @@
 
 import { FC, useState } from 'react';
 
-import { AnchorButton, FormGroup, Tooltip } from '@blueprintjs/core';
+import { Button, FormGroup, Tooltip } from '@blueprintjs/core';
 
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useSetAtom } from 'jotai';
@@ -158,6 +158,7 @@ const RemoteSyncConfigurator: FC = () => {
                     }}
                 />
             </FormGroup>
+
             <FormGroup
                 className='form-group'
                 label={<h3 className='label'>Use remote sync server</h3>}
@@ -280,7 +281,7 @@ const RemoteSyncConfigurator: FC = () => {
                     type='profiler'
                 >
                     <Tooltip content='Sync remote folder'>
-                        <AnchorButton
+                        <Button
                             icon={IconNames.REFRESH}
                             loading={isSyncingReportFolder}
                             disabled={isDisabled || !selectedReportFolder || reportFolderList?.length === 0}
@@ -322,17 +323,10 @@ const RemoteSyncConfigurator: FC = () => {
                                         const response = await remote.mountRemoteFolder(
                                             remote.persistentState.selectedConnection,
                                             selectedReportFolder,
-                                            selectedPerformanceFolder,
                                         );
 
                                         if (response.status === 200) {
-                                            const performanceFileName = selectedPerformanceFolder?.reportName;
-
                                             updateReportSelection(selectedReportFolder);
-
-                                            if (performanceFileName) {
-                                                updatePerformanceSelection(performanceFileName);
-                                            }
                                         }
                                     }
                                 }
@@ -374,7 +368,7 @@ const RemoteSyncConfigurator: FC = () => {
                         type='performance'
                     >
                         <Tooltip content='Sync remote folder'>
-                            <AnchorButton
+                            <Button
                                 icon={IconNames.REFRESH}
                                 loading={isSyncingPerformanceFolder}
                                 disabled={
@@ -418,7 +412,7 @@ const RemoteSyncConfigurator: FC = () => {
                                             ) {
                                                 const response = await remote.mountRemoteFolder(
                                                     remote.persistentState.selectedConnection,
-                                                    selectedReportFolder,
+                                                    undefined,
                                                     selectedPerformanceFolder,
                                                 );
 

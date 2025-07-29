@@ -55,32 +55,33 @@ const useRemoteConnection = () => {
 
     const syncRemoteFolder = async (
         connection?: RemoteConnection,
-        remoteFolder?: RemoteFolder,
-        remoteProfile?: RemoteFolder,
+        profilerRemoteFolder?: RemoteFolder,
+        performanceRemoteFolder?: RemoteFolder,
     ) => {
         if (!connection || !connection.host || !connection.port || !connection.profilerPath) {
             throw new Error('No connection provided');
         }
 
-        if (!remoteFolder && !remoteProfile) {
+        if (!profilerRemoteFolder && !performanceRemoteFolder) {
             throw new Error('No remote folder provided');
         }
+
         return axiosInstance.post<RemoteFolder>('/api/remote/sync', {
             connection,
-            folder: remoteFolder,
-            profile: remoteProfile,
+            profiler: profilerRemoteFolder,
+            performance: performanceRemoteFolder,
         });
     };
 
     const mountRemoteFolder = async (
         connection: RemoteConnection,
-        remoteFolder?: RemoteFolder,
-        remoteProfile?: RemoteFolder,
+        profilerRemoteFolder?: RemoteFolder,
+        performanceRemoteFolder?: RemoteFolder,
     ) => {
         return axiosInstance.post<MountRemoteFolder>('/api/remote/use', {
             connection,
-            folder: remoteFolder,
-            profile: remoteProfile,
+            profiler: profilerRemoteFolder,
+            performance: performanceRemoteFolder,
         });
     };
 
