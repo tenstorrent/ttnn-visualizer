@@ -763,7 +763,10 @@ def get_performance_results_data_raw(instance: Instance):
 @with_instance
 def get_performance_results_report(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return Response(
+            status=HTTPStatus.BAD_REQUEST,
+            response="No performance data found for instance.",
+        )
 
     name = request.args.get("name", None)
 
