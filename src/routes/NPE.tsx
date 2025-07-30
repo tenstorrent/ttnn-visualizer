@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
-import { Button, ButtonVariant, MenuItem } from '@blueprintjs/core';
+import { Button, ButtonVariant, Callout, MenuItem } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { useParams } from 'react-router';
@@ -20,9 +20,10 @@ import { semverParse } from '../functions/semverParse';
 import npeDemoDataSinglechip from '../assets/data/npe-demo-single.json';
 import npeDemoDataMultichip from '../assets/data/npe-demo-multi.json';
 import getServerConfig from '../functions/getServerConfig';
+import NPEProcessingStatus from '../components/NPEProcessingStatus';
+import 'styles/routes/NPE.scss';
 
 const NPE_DATA_VERSION = '1.0.0';
-
 const NPE_REPO_URL = (
     <a
         target='_blank'
@@ -82,6 +83,8 @@ const NPE: React.FC = () => {
     };
     const npeData = demoData || loadedData || loadedTimeline;
     const isDemoEnabled = getServerConfig()?.SERVER_MODE;
+    const matchedVersion = matchNpeDataVersion(npeData?.common_info?.version);
+
     useEffect(() => {
         if (loadedData || loadedTimeline) {
             setSelectedDemo(null);
@@ -146,32 +149,25 @@ const NPE: React.FC = () => {
                 )}
             </div>
             {isLoading || isLoadingTimeline ? (
-                <LoadingSpinner />
+                <div>
+                    <LoadingSpinner />
+                </div>
             ) : npeData ? (
                 isValidNpeData(npeData) ? (
                     <NPEView npeData={npeData} />
                 ) : (
-                    <>
-                        <p>
-                            Invalid NPE data or version. Current supported version is {NPE_DATA_VERSION} got&nbsp;
-                            {npeData.common_info.version || 'null'};
-                        </p>
-
-                        {/* TODO: Reorganise this so we're not duplicating matchNpeDataVersion */}
-                        <p>
-                            Use {NPE_REPO_URL} to generate new NPE dataset
-                            {matchNpeDataVersion(npeData.common_info.version) ? (
-                                <> or install an older version of the visualizer </>
-                            ) : null}
-                        </p>
-
-                        {matchNpeDataVersion(npeData.common_info.version) ? (
-                            <pre>pip install ttnn-visualizer=={matchNpeDataVersion(npeData.common_info.version)}</pre>
-                        ) : null}
-                    </>
+                    <div className='npe-message-container'>
+                        <NPEProcessingStatus
+                            matchedVersion={matchedVersion}
+                            expectedVersion={NPE_DATA_VERSION}
+                            npeData={npeData}
+                        />
+                    </div>
                 )
             ) : (
-                <p>See {NPE_REPO_URL} for details on how to generate NPE report files.</p>
+                <div className='npe-message-container'>
+                    <Callout compact>See {NPE_REPO_URL} for details on how to generate NPE report files.</Callout>
+                </div>
             )}
         </>
     );
@@ -198,7 +194,7 @@ const isValidNpeData = (data: NPEData): boolean => {
     return true;
 };
 
-const matchNpeDataVersion = (version: string) => {
+const matchNpeDataVersion = (version?: string) => {
     const parsedVersion = semverParse(version);
     switch (parsedVersion) {
         case null:
