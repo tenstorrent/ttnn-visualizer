@@ -12,4 +12,5 @@ export enum ConnectionTestStates {
 export interface ConnectionStatus {
     status: ConnectionTestStates;
     message: string;
+    detail?: string;
 }

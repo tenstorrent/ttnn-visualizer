@@ -67,6 +67,7 @@ from ttnn_visualizer.sftp_operations import (
     sync_remote_performance_folders,
     sync_remote_profiler_folders,
 )
+from ttnn_visualizer.ssh_client import SSHClient
 from ttnn_visualizer.utils import (
     get_cluster_descriptor_path,
     read_last_synced_file,
@@ -74,129 +75,10 @@ from ttnn_visualizer.utils import (
 )
 
 
-def handle_ssh_subprocess_error(e: subprocess.CalledProcessError, remote_connection):
-    """
-    Convert subprocess SSH errors to appropriate SSH exceptions.
-
-    :param e: The subprocess.CalledProcessError
-    :param remote_connection: The RemoteConnection object for context
-    :raises: SSHException, AuthenticationException, or NoValidConnectionsError
-    """
-    stderr = e.stderr.lower() if e.stderr else ""
-
-    # Check for authentication failures
-    if any(
-        auth_err in stderr
-        for auth_err in [
-            "permission denied",
-            "authentication failed",
-            "publickey",
-            "password",
-            "host key verification failed",
-        ]
-    ):
-        raise AuthenticationException(
-            f"SSH authentication failed: {remote_connection.username}@{remote_connection.host}: Permission denied (publickey,password)"
-        )
-
-    # Check for connection failures
-    elif any(
-        conn_err in stderr
-        for conn_err in [
-            "connection refused",
-            "network is unreachable",
-            "no route to host",
-            "name or service not known",
-            "connection timed out",
-        ]
-    ):
-        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
-
-    # Check for general SSH protocol errors
-    elif "ssh:" in stderr or "protocol" in stderr:
-        raise SSHException(f"SSH protocol error: {e.stderr}")
-
-    # Default to generic SSH exception
-    else:
-        raise SSHException(f"SSH command failed: {e.stderr}")
-
-
 def test_ssh_connection(connection) -> bool:
     """Test SSH connection by running a simple command."""
-    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-
-    # Handle non-standard SSH port
-    if connection.port != 22:
-        ssh_cmd.extend(["-p", str(connection.port)])
-
-    ssh_cmd.extend(
-        [f"{connection.username}@{connection.host}", "echo 'SSH connection test'"]
-    )
-
-    try:
-        log_message = (
-            f"Testing SSH connection to {connection.username}@{connection.host}"
-        )
-        if connection.port != 22:
-            log_message += f" on port {connection.port}"
-        logger.info(log_message)
-        subprocess.run(ssh_cmd, capture_output=True, text=True, check=True, timeout=10)
-        return True
-    except subprocess.CalledProcessError as e:
-        if e.returncode == 255:  # SSH errors
-            try:
-                if e.stderr:
-                    logger.warning(e.stderr.strip())
-                handle_ssh_subprocess_error(e, connection)
-            except AuthenticationException:
-                # Convert to AuthenticationFailedException for proper HTTP 422 response
-                user_message = (
-                    "SSH authentication failed. This application requires SSH key-based authentication. "
-                    "Please ensure your SSH public key is added to the authorized_keys file on the remote server. "
-                    "Password authentication is not supported."
-                )
-                logger.info(
-                    f"SSH authentication failed for {connection.username}@{connection.host}: {e.stderr.strip()}"
-                )
-                raise AuthenticationFailedException(message=user_message)
-            except NoValidConnectionsError as ssh_err:
-                logger.warning(
-                    f"SSH connection failed for {connection.username}@{connection.host}: {e.stderr.strip()}"
-                )
-                user_message = (
-                    f"Unable to establish SSH connection to {connection.host}. "
-                    "Please check the hostname, port, and network connectivity. "
-                    f"Ensure SSH key-based authentication is properly configured."
-                )
-                raise RemoteConnectionException(
-                    message=user_message, status=ConnectionTestStates.FAILED
-                )
-            except SSHException as ssh_err:
-                user_message = f"SSH connection error to {connection.host}: {str(ssh_err)}. Ensure SSH key-based authentication is properly configured."
-                logger.warning(
-                    f"SSH error for {connection.username}@{connection.host}: {user_message}"
-                )
-                raise RemoteConnectionException(
-                    message=user_message, status=ConnectionTestStates.FAILED
-                )
-        else:
-            error_message = f"SSH connection test failed: {e.stderr}"
-            logger.error(
-                f"SSH test failed for {connection.username}@{connection.host}: {error_message}"
-            )
-            raise RemoteConnectionException(
-                message=error_message, status=ConnectionTestStates.FAILED
-            )
-        return False
-    except subprocess.TimeoutExpired:
-        timeout_message = "SSH connection test timed out"
-        logger.warning(
-            f"SSH timeout for {connection.username}@{connection.host}: {timeout_message}"
-        )
-        raise RemoteConnectionException(
-            message=timeout_message, status=ConnectionTestStates.FAILED
-        )
-        return False
+    ssh_client = SSHClient(connection)
+    return ssh_client.test_connection()
 
 
 logger = logging.getLogger(__name__)
@@ -1112,8 +994,8 @@ def test_remote_folder():
     connection = RemoteConnection.model_validate(connection_data)
     statuses = []
 
-    def add_status(status, message):
-        statuses.append(StatusMessage(status=status, message=message))
+    def add_status(status, message, detail=None):
+        statuses.append(StatusMessage(status=status, message=message, detail=detail))
 
     def has_failures():
         return any(
@@ -1126,10 +1008,14 @@ def test_remote_folder():
         add_status(ConnectionTestStates.OK.value, "SSH connection established")
     except AuthenticationFailedException as e:
         # Return 422 for authentication failures
-        add_status(ConnectionTestStates.FAILED.value, e.message)
+        add_status(
+            ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+        )
         return [status.model_dump() for status in statuses], e.http_status
     except RemoteConnectionException as e:
-        add_status(ConnectionTestStates.FAILED.value, e.message)
+        add_status(
+            ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+        )
 
     # Test Directory Configuration
     if not has_failures():
@@ -1137,10 +1023,14 @@ def test_remote_folder():
             check_remote_path_exists(connection, "profilerPath")
             add_status(ConnectionTestStates.OK.value, "Memory folder path exists")
         except AuthenticationFailedException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
             return [status.model_dump() for status in statuses], e.http_status
         except RemoteConnectionException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
 
     # Test Directory Configuration (perf)
     if not has_failures() and connection.performancePath:
@@ -1148,20 +1038,28 @@ def test_remote_folder():
             check_remote_path_exists(connection, "performancePath")
             add_status(ConnectionTestStates.OK.value, "Performance folder path exists")
         except AuthenticationFailedException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
             return [status.model_dump() for status in statuses], e.http_status
         except RemoteConnectionException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
 
     # Check for Project Configurations
     if not has_failures():
         try:
             check_remote_path_for_reports(connection)
         except AuthenticationFailedException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
             return [status.model_dump() for status in statuses], e.http_status
         except RemoteConnectionException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
 
     return [status.model_dump() for status in statuses]
 

@@ -24,6 +24,7 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
+from ttnn_visualizer.ssh_client import SSHClient
 from ttnn_visualizer.utils import update_last_synced
 
 logger = logging.getLogger(__name__)
@@ -31,53 +32,6 @@ logger = logging.getLogger(__name__)
 TEST_CONFIG_FILE = "config.json"
 TEST_PROFILER_FILE = "profile_log_device.csv"
 REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
-
-
-def handle_ssh_subprocess_error(
-    e: subprocess.CalledProcessError, remote_connection: RemoteConnection
-):
-    """
-    Convert subprocess SSH errors to appropriate SSH exceptions.
-
-    :param e: The subprocess.CalledProcessError
-    :param remote_connection: The RemoteConnection object for context
-    :raises: SSHException, AuthenticationException, or NoValidConnectionsError
-    """
-    stderr = e.stderr.lower() if e.stderr else ""
-
-    # Check for authentication failures
-    if any(
-        auth_err in stderr
-        for auth_err in [
-            "permission denied",
-            "authentication failed",
-            "publickey",
-            "password",
-            "host key verification failed",
-        ]
-    ):
-        raise AuthenticationException(f"SSH authentication failed: {e.stderr}")
-
-    # Check for connection failures
-    elif any(
-        conn_err in stderr
-        for conn_err in [
-            "connection refused",
-            "network is unreachable",
-            "no route to host",
-            "name or service not known",
-            "connection timed out",
-        ]
-    ):
-        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
-
-    # Check for general SSH protocol errors
-    elif "ssh:" in stderr or "protocol" in stderr:
-        raise SSHException(f"SSH protocol error: {e.stderr}")
-
-    # Default to generic SSH exception
-    else:
-        raise SSHException(f"SSH command failed: {e.stderr}")
 
 
 def start_background_task(task, *args):
@@ -663,36 +617,8 @@ def read_remote_file(
     else:
         path = Path(remote_connection.profilerPath)
 
-    logger.info(f"Reading remote file {path}")
-
-    # Build SSH command to read the file
-    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-
-    # Handle non-standard SSH port
-    if remote_connection.port != 22:
-        ssh_cmd.extend(["-p", str(remote_connection.port)])
-
-    ssh_cmd.extend(
-        [f"{remote_connection.username}@{remote_connection.host}", f"cat '{path}'"]
-    )
-
-    try:
-        result = subprocess.run(ssh_cmd, capture_output=True, check=True, timeout=30)
-        return result.stdout
-    except subprocess.CalledProcessError as e:
-        if e.returncode == 255:  # SSH protocol errors
-            handle_ssh_subprocess_error(e, remote_connection)
-            return None
-        else:
-            # File not found or other command error
-            logger.error(f"File not found or cannot be read: {path}")
-            return None
-    except subprocess.TimeoutExpired:
-        logger.error(f"Timeout reading remote file: {path}")
-        return None
-    except Exception as e:
-        logger.error(f"Error reading remote file {path}: {e}")
-        return None
+    ssh_client = SSHClient(remote_connection)
+    return ssh_client.read_file(path, timeout=30)
 
 
 @remote_exception_handler
@@ -713,24 +639,11 @@ def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str)
     """Check if a remote path exists using SSH test command."""
     path = getattr(remote_connection, path_key)
 
-    # Build SSH command to test if path exists
-    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-
-    # Handle non-standard SSH port
-    if remote_connection.port != 22:
-        ssh_cmd.extend(["-p", str(remote_connection.port)])
-
-    ssh_cmd.extend(
-        [f"{remote_connection.username}@{remote_connection.host}", f"test -d '{path}'"]
-    )
+    ssh_client = SSHClient(remote_connection)
 
     try:
-        result = subprocess.run(ssh_cmd, capture_output=True, check=True, timeout=10)
-        # If command succeeds, directory exists
-        return True
-    except subprocess.CalledProcessError as e:
-        if e.returncode == 255:  # SSH protocol errors
-            handle_ssh_subprocess_error(e, remote_connection)
+        if ssh_client.check_path_exists(path, timeout=10):
+            return True
         else:
             # Directory does not exist or is inaccessible
             if path_key == "performancePath":
@@ -742,10 +655,10 @@ def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str)
             raise RemoteConnectionException(
                 message=message, status=ConnectionTestStates.FAILED
             )
-    except subprocess.TimeoutExpired:
-        logger.error(f"Timeout checking remote path: {path}")
+    except SSHException as e:
+        logger.error(f"Error checking remote path: {path}")
         raise RemoteConnectionException(
-            message=f"Timeout checking remote path: {path}",
+            message=f"Error checking remote path: {path}: {str(e)}",
             status=ConnectionTestStates.FAILED,
         )
 

@@ -4,7 +4,6 @@
 import csv
 import json
 import os
-import subprocess
 import tempfile
 from io import StringIO
 from pathlib import Path
@@ -13,60 +12,8 @@ from typing import Dict, List, Optional, Union
 import pandas as pd
 import zstd
 from tt_perf_report import perf_report
-from ttnn_visualizer.exceptions import (
-    AuthenticationException,
-    DataFormatError,
-    NoValidConnectionsError,
-    SSHException,
-)
+from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance, RemoteConnection
-
-
-def handle_ssh_subprocess_error(
-    e: subprocess.CalledProcessError, remote_connection: RemoteConnection
-):
-    """
-    Convert subprocess SSH errors to appropriate SSH exceptions.
-
-    :param e: The subprocess.CalledProcessError
-    :param remote_connection: The RemoteConnection object for context
-    :raises: SSHException, AuthenticationException, or NoValidConnectionsError
-    """
-    stderr = e.stderr.lower() if e.stderr else ""
-
-    # Check for authentication failures
-    if any(
-        auth_err in stderr
-        for auth_err in [
-            "permission denied",
-            "authentication failed",
-            "publickey",
-            "password",
-            "host key verification failed",
-        ]
-    ):
-        raise AuthenticationException(f"SSH authentication failed: {e.stderr}")
-
-    # Check for connection failures
-    elif any(
-        conn_err in stderr
-        for conn_err in [
-            "connection refused",
-            "network is unreachable",
-            "no route to host",
-            "name or service not known",
-            "connection timed out",
-        ]
-    ):
-        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
-
-    # Check for general SSH protocol errors
-    elif "ssh:" in stderr or "protocol" in stderr:
-        raise SSHException(f"SSH protocol error: {e.stderr}")
-
-    # Default to generic SSH exception
-    else:
-        raise SSHException(f"SSH command failed: {e.stderr}")
 
 
 class LocalCSVQueryRunner:

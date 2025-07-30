@@ -34,6 +34,7 @@ $tt-pending: $tt-yellow;
 .verify-connection-item {
     display: inline-flex;
     gap: 2px;
+    align-items: flex-start;
     flex-basis: 100%;
 
     &:last-of-type {
@@ -42,6 +43,32 @@ $tt-pending: $tt-yellow;
 
     .connection-status-icon {
         animation: 0.7s steps(2) infinite alternate both;
+        margin-top: 2px; // Align with text baseline
+    }
+
+    .connection-status-content {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .connection-status-text {
+        line-height: 1.4;
+    }
+
+    .connection-status-detail {
+        font-family: 'Courier New', Consolas, 'Lucida Console', monospace;
+        font-size: 12px;
+        color: $tt-grey-6;
+        background-color: $tt-grey-2;
+        border: 1px solid $tt-grey-4;
+        border-radius: 4px;
+        padding: 8px;
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-all;
+        max-width: 400px;
+        overflow-x: auto;
     }
 
     &.status-idle .connection-status-icon {
