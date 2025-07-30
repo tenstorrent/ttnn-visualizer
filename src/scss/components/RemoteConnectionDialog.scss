@@ -34,6 +34,7 @@ $tt-pending: $tt-yellow;
 .verify-connection-item {
     display: inline-flex;
     gap: 2px;
+    flex-basis: 100%;
 
     &:last-of-type {
         margin-bottom: 10px;
