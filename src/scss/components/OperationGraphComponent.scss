@@ -27,6 +27,13 @@
         place-content: center space-between;
         gap: 10px;
         align-items: center;
+        flex-wrap: wrap;
+        max-width: calc(100vw - 350px);
+        justify-content: flex-start;
+
+        .bp5-control {
+            margin-bottom: 0;
+        }
     }
 
     .slider-wrapper {
