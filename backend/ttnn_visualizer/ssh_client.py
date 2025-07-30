@@ -85,7 +85,7 @@ class SSHClient:
                 f"SSH authentication failed: {self.connection.username}@{self.connection.host}: Permission denied (publickey,password)"
             )
 
-        # Check for connection failures
+        # Check for connection failures (including DNS resolution failures)
         elif any(
             conn_err in stderr
             for conn_err in [
@@ -93,7 +93,9 @@ class SSHClient:
                 "network is unreachable",
                 "no route to host",
                 "name or service not known",
+                "could not resolve hostname",
                 "connection timed out",
+                "nodename nor servname provided",
             ]
         ):
             raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
@@ -163,7 +165,7 @@ class SSHClient:
             # Get the raw error details from the last SSH operation
             raw_error = getattr(self, "_last_raw_error", None)
             raise AuthenticationFailedException(message=user_message, detail=raw_error)
-        except NoValidConnectionsError:
+        except NoValidConnectionsError as ssh_err:
             user_message = (
                 f"Unable to establish SSH connection to {self.connection.host}. "
                 "Please check the hostname, port, and network connectivity. "
@@ -177,17 +179,36 @@ class SSHClient:
                 detail=raw_error,
             )
         except SSHException as ssh_err:
-            user_message = f"SSH connection error to {self.connection.host}: {str(ssh_err)}. Ensure SSH key-based authentication is properly configured."
-            logger.warning(
-                f"SSH error for {self.connection.username}@{self.connection.host}: {user_message}"
-            )
-            # Get the raw error details from the last SSH operation
-            raw_error = getattr(self, "_last_raw_error", None)
-            raise RemoteConnectionException(
-                message=user_message,
-                status=ConnectionTestStates.FAILED,
-                detail=raw_error,
-            )
+            # Add debug logging to understand what we're getting
+            logger.debug(f"SSHException caught in test_connection: '{str(ssh_err)}'")
+
+            # Check if this is a timeout - should match original "SSH connection test timed out" message
+            ssh_err_str = str(ssh_err).lower()
+            if "timed out" in ssh_err_str or "timeout" in ssh_err_str:
+                timeout_message = "SSH connection test timed out"
+                logger.warning(
+                    f"SSH timeout for {self.connection.username}@{self.connection.host}: {timeout_message}"
+                )
+                # Store timeout as raw error
+                raw_error = str(ssh_err)
+                raise RemoteConnectionException(
+                    message=timeout_message,
+                    status=ConnectionTestStates.FAILED,
+                    detail=raw_error,
+                )
+            else:
+                # This should match the original SSHException handling:
+                # "SSH connection error to {host}: {str(ssh_err)}. Ensure SSH key-based authentication is properly configured."
+                user_message = f"SSH connection error to {self.connection.host}: {str(ssh_err)}. Ensure SSH key-based authentication is properly configured."
+                logger.warning(
+                    f"SSH error for {self.connection.username}@{self.connection.host}: {user_message}"
+                )
+                raw_error = getattr(self, "_last_raw_error", str(ssh_err))
+                raise RemoteConnectionException(
+                    message=user_message,
+                    status=ConnectionTestStates.FAILED,
+                    detail=raw_error,
+                )
 
     def read_file(
         self, remote_path: Union[str, Path], timeout: int = 30
