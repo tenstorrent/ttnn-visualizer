@@ -19,6 +19,7 @@ import { toReadableShape, toReadableType } from '../functions/math';
 import SearchField from './SearchField';
 
 type OperationList = OperationDescription[];
+const DEALLOCATE_OP_NAME = 'ttnn.deallocate';
 
 const OperationGraph: React.FC<{
     operationList: OperationList;
@@ -71,7 +72,7 @@ const OperationGraph: React.FC<{
         return new DataSet(
             operationList
                 .filter((op) => connectedNodeIds.has(op.id))
-                .filter((op) => !filterDeallocate || !op.name.toLowerCase().includes('deallocate'))
+                .filter((op) => !filterDeallocate || !op.name.toLowerCase().includes(DEALLOCATE_OP_NAME))
                 .map((op) => ({
                     id: op.id,
                     label: `${op.id} ${op.name} \n ${op.operationFileIdentifier}`,
