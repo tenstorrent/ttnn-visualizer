@@ -21,6 +21,7 @@ import npeDemoDataSinglechip from '../assets/data/npe-demo-single.json';
 import npeDemoDataMultichip from '../assets/data/npe-demo-multi.json';
 import getServerConfig from '../functions/getServerConfig';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
+import 'styles/routes/NPE.scss';
 
 const NPE_DATA_VERSION = '1.0.0';
 const NPE_REPO_URL = (
@@ -149,14 +150,18 @@ const NPE: React.FC = () => {
                 isValidNpeData(npeData) ? (
                     <NPEView npeData={npeData} />
                 ) : (
-                    <NPEProcessingStatus
-                        matchedVersion={matchedVersion}
-                        expectedVersion={NPE_DATA_VERSION}
-                        npeData={npeData}
-                    />
+                    <div className='npe-message-container'>
+                        <NPEProcessingStatus
+                            matchedVersion={matchedVersion}
+                            expectedVersion={NPE_DATA_VERSION}
+                            npeData={npeData}
+                        />
+                    </div>
                 )
             ) : (
-                <Callout>See {NPE_REPO_URL} for details on how to generate NPE report files.</Callout>
+                <div className='npe-message-container'>
+                    <Callout>See {NPE_REPO_URL} for details on how to generate NPE report files.</Callout>
+                </div>
             )}
         </>
     );
