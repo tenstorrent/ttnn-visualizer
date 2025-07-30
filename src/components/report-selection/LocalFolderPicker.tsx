@@ -34,7 +34,7 @@ const LocalFolderPicker = ({
 
     const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
 
-    // Map through items and ensure reportNames are not duplicated
+    // Map through items and if reportNames are duplicated append (count) to the name
     const itemsWithUniqueReportNames = items?.map((item, idx, arr) => {
         const name = item.reportName;
         const prevCount = arr.slice(0, idx).filter((i) => i.reportName === name).length;
@@ -75,6 +75,7 @@ const LocalFolderPicker = ({
                 {handleDelete && !isDeleteDisabled && (
                     <>
                         <Button
+                            aria-label='Delete report'
                             icon={IconNames.TRASH}
                             onClick={() => setFolderToDelete(folder)}
                             variant={ButtonVariant.MINIMAL}
