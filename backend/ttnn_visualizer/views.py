@@ -551,7 +551,15 @@ def get_profiler_data_list(instance: Instance):
         if not any(file.name == "config.json" for file in files):
             continue
 
-        valid_dirs.append({"path": dir_path.name, "reportName": report_name})
+        modifiedTime = dir_path.stat().st_mtime
+
+        valid_dirs.append(
+            {
+                "path": dir_path.name,
+                "reportName": report_name,
+                "uploadTime": modifiedTime,
+            }
+        )
 
     return jsonify(valid_dirs)
 
@@ -672,7 +680,15 @@ def get_performance_data_list(instance: Instance):
         if not any(file.name.startswith("ops_perf_results") for file in files):
             continue
 
-        valid_dirs.append({"path": dir_path.name, "reportName": dir_path.name})
+        modifiedTime = dir_path.stat().st_mtime
+
+        valid_dirs.append(
+            {
+                "path": dir_path.name,
+                "reportName": dir_path.name,
+                "uploadTime": modifiedTime,
+            }
+        )
 
     return jsonify(valid_dirs)
 

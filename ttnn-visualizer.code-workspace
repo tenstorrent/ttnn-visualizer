@@ -38,6 +38,9 @@
             "yaxis",
             "yref",
         ],
+        "[python]": {
+            "editor.defaultFormatter": "ms-python.black-formatter",
+        },
     },
     "extensions": {
         "recommendations": [

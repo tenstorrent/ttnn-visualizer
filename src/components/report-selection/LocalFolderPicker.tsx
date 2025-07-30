@@ -10,6 +10,7 @@ import { useSession } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
+import getUTC from '../../functions/getUTC';
 
 interface LocalFolderPickerProps {
     items: ReportFolder[];
@@ -18,6 +19,11 @@ interface LocalFolderPickerProps {
     handleDelete?: (folder: ReportFolder) => void;
     defaultLabel?: string;
 }
+
+const formatter = new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+});
 
 const LocalFolderPicker = ({
     items,
@@ -56,6 +62,8 @@ const LocalFolderPicker = ({
                     onFocus={handleFocus}
                     icon={folder.path === path ? IconNames.SAVED : IconNames.DOCUMENT}
                 />
+
+                <span>{formatter.format(getUTC(folder.uploadTime))}</span>
 
                 {handleDelete && !isDeleteDisabled && (
                     <>
