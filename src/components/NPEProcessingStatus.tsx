@@ -31,23 +31,24 @@ const NPEProcessingStatus = ({ matchedVersion, expectedVersion, npeData }: NPEPr
             intent={Intent.WARNING}
             title={matchedVersion ? 'Invalid NPE version' : 'Invalid NPE data'}
             className='npe-processing-status'
+            compact
         >
             {matchedVersion ? (
                 <>
-                    <p>
+                    <p className='status-text'>
                         Current supported version is <u>{expectedVersion}</u>, uploaded data version is{' '}
                         <u>{npeData?.common_info?.version || 'null'}</u>.
                     </p>
 
-                    <p>
+                    <p className='status-text'>
                         Use {NPE_REPO_URL} to generate new NPE dataset or install an older version of the visualizer{' '}
                         <code className='formatted-code'>pip install ttnn-visualizer=={matchedVersion}</code>
                     </p>
                 </>
             ) : (
                 <>
-                    <p>Unable to process uploaded NPE data.</p>
-                    <p>Use {NPE_REPO_URL} to generate a new dataset.</p>
+                    <p className='status-text'>Unable to process uploaded NPE data.</p>
+                    <p className='status-text'>Use {NPE_REPO_URL} to generate a new dataset.</p>
                 </>
             )}
         </Callout>

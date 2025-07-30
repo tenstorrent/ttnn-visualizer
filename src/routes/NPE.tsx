@@ -160,7 +160,7 @@ const NPE: React.FC = () => {
                 )
             ) : (
                 <div className='npe-message-container'>
-                    <Callout>See {NPE_REPO_URL} for details on how to generate NPE report files.</Callout>
+                    <Callout compact>See {NPE_REPO_URL} for details on how to generate NPE report files.</Callout>
                 </div>
             )}
         </>
