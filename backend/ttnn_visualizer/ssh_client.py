@@ -60,16 +60,15 @@ class SSHClient:
         :raises: SSHException, AuthenticationException, or NoValidConnectionsError
         """
         stderr = e.stderr.lower() if e.stderr else ""
+        raw_error = e.stderr.strip() if e.stderr else "No stderr output"
 
         # Log the raw SSH error for debugging
-        if e.stderr:
-            logger.warning(
-                f"SSH error for {self.connection.username}@{self.connection.host}: {e.stderr.strip()}"
-            )
-        else:
-            logger.warning(
-                f"SSH error for {self.connection.username}@{self.connection.host}: No stderr output"
-            )
+        logger.warning(
+            f"SSH error for {self.connection.username}@{self.connection.host}: {raw_error}"
+        )
+
+        # Store raw error for exceptions that need it
+        self._last_raw_error = raw_error
 
         # Check for authentication failures
         if any(
@@ -161,23 +160,33 @@ class SSHClient:
             logger.info(
                 f"SSH authentication failed for {self.connection.username}@{self.connection.host}"
             )
-            raise AuthenticationFailedException(message=user_message)
+            # Get the raw error details from the last SSH operation
+            raw_error = getattr(self, "_last_raw_error", None)
+            raise AuthenticationFailedException(message=user_message, detail=raw_error)
         except NoValidConnectionsError:
             user_message = (
                 f"Unable to establish SSH connection to {self.connection.host}. "
                 "Please check the hostname, port, and network connectivity. "
                 "Ensure SSH key-based authentication is properly configured."
             )
+            # Get the raw error details from the last SSH operation
+            raw_error = getattr(self, "_last_raw_error", None)
             raise RemoteConnectionException(
-                message=user_message, status=ConnectionTestStates.FAILED
+                message=user_message,
+                status=ConnectionTestStates.FAILED,
+                detail=raw_error,
             )
         except SSHException as ssh_err:
             user_message = f"SSH connection error to {self.connection.host}: {str(ssh_err)}. Ensure SSH key-based authentication is properly configured."
             logger.warning(
                 f"SSH error for {self.connection.username}@{self.connection.host}: {user_message}"
             )
+            # Get the raw error details from the last SSH operation
+            raw_error = getattr(self, "_last_raw_error", None)
             raise RemoteConnectionException(
-                message=user_message, status=ConnectionTestStates.FAILED
+                message=user_message,
+                status=ConnectionTestStates.FAILED,
+                detail=raw_error,
             )
 
     def read_file(

@@ -14,10 +14,12 @@ class RemoteConnectionException(Exception):
         message,
         status: ConnectionTestStates,
         http_status_code: Optional[HTTPStatus] = None,
+        detail: Optional[str] = None,
     ):
         super().__init__(message)
         self.message = message
         self.status = status
+        self.detail = detail
         self._http_status_code = http_status_code
 
     @property
@@ -37,12 +39,16 @@ class AuthenticationFailedException(RemoteConnectionException):
     """Exception for SSH authentication failures that should return HTTP 422"""
 
     def __init__(
-        self, message, status: ConnectionTestStates = ConnectionTestStates.FAILED
+        self,
+        message,
+        status: ConnectionTestStates = ConnectionTestStates.FAILED,
+        detail: Optional[str] = None,
     ):
         super().__init__(
             message=message,
             status=status,
             http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,  # 422
+            detail=detail,
         )
 
 

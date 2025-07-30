@@ -994,8 +994,8 @@ def test_remote_folder():
     connection = RemoteConnection.model_validate(connection_data)
     statuses = []
 
-    def add_status(status, message):
-        statuses.append(StatusMessage(status=status, message=message))
+    def add_status(status, message, detail=None):
+        statuses.append(StatusMessage(status=status, message=message, detail=detail))
 
     def has_failures():
         return any(
@@ -1008,10 +1008,14 @@ def test_remote_folder():
         add_status(ConnectionTestStates.OK.value, "SSH connection established")
     except AuthenticationFailedException as e:
         # Return 422 for authentication failures
-        add_status(ConnectionTestStates.FAILED.value, e.message)
+        add_status(
+            ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+        )
         return [status.model_dump() for status in statuses], e.http_status
     except RemoteConnectionException as e:
-        add_status(ConnectionTestStates.FAILED.value, e.message)
+        add_status(
+            ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+        )
 
     # Test Directory Configuration
     if not has_failures():
@@ -1019,10 +1023,14 @@ def test_remote_folder():
             check_remote_path_exists(connection, "profilerPath")
             add_status(ConnectionTestStates.OK.value, "Memory folder path exists")
         except AuthenticationFailedException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
             return [status.model_dump() for status in statuses], e.http_status
         except RemoteConnectionException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
 
     # Test Directory Configuration (perf)
     if not has_failures() and connection.performancePath:
@@ -1030,20 +1038,28 @@ def test_remote_folder():
             check_remote_path_exists(connection, "performancePath")
             add_status(ConnectionTestStates.OK.value, "Performance folder path exists")
         except AuthenticationFailedException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
             return [status.model_dump() for status in statuses], e.http_status
         except RemoteConnectionException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
 
     # Check for Project Configurations
     if not has_failures():
         try:
             check_remote_path_for_reports(connection)
         except AuthenticationFailedException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
             return [status.model_dump() for status in statuses], e.http_status
         except RemoteConnectionException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
 
     return [status.model_dump() for status in statuses]
 
