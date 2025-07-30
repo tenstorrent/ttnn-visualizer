@@ -439,12 +439,7 @@ def get_profiler_data_list(instance: Instance):
         if not any(file.name == "config.json" for file in files):
             continue
 
-        valid_dirs.append(
-            {
-                "path": dir_path.name,
-                "reportName": report_name,
-            }
-        )
+        valid_dirs.append({"path": dir_path.name, "reportName": report_name})
 
     return jsonify(valid_dirs)
 
