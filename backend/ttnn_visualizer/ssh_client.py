@@ -61,6 +61,16 @@ class SSHClient:
         """
         stderr = e.stderr.lower() if e.stderr else ""
 
+        # Log the raw SSH error for debugging
+        if e.stderr:
+            logger.warning(
+                f"SSH error for {self.connection.username}@{self.connection.host}: {e.stderr.strip()}"
+            )
+        else:
+            logger.warning(
+                f"SSH error for {self.connection.username}@{self.connection.host}: No stderr output"
+            )
+
         # Check for authentication failures
         if any(
             auth_err in stderr
@@ -121,6 +131,9 @@ class SSHClient:
             else:
                 raise SSHException(f"Command failed: {e.stderr}")
         except subprocess.TimeoutExpired:
+            logger.warning(
+                f"SSH command timed out for {self.connection.username}@{self.connection.host}: {command}"
+            )
             raise SSHException(f"SSH command timed out: {command}")
 
     def test_connection(self) -> bool:
@@ -248,10 +261,14 @@ class SSHClient:
             if e.returncode == 255:  # SSH protocol errors
                 self._handle_subprocess_error(e)
             else:
-                logger.error(f"Error downloading file {remote_path}: {e.stderr}")
+                logger.error(
+                    f"SFTP error for {self.connection.username}@{self.connection.host} downloading {remote_path}: {e.stderr}"
+                )
                 raise SSHException(f"Failed to download {remote_path}")
         except subprocess.TimeoutExpired:
-            logger.error(f"Timeout downloading file: {remote_path}")
+            logger.error(
+                f"SFTP timeout for {self.connection.username}@{self.connection.host} downloading file: {remote_path}"
+            )
             raise SSHException(f"Timeout downloading {remote_path}")
 
     def get_file_stat(
