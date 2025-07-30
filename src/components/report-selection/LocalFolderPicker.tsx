@@ -116,7 +116,6 @@ const LocalFolderPicker = ({
             }
             onItemSelect={handleSelect}
             disabled={!items || !session}
-            fill
         >
             <Tooltip content={path ? `/${getPrettyPath(path)}` : ''}>
                 <Button

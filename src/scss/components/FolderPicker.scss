@@ -5,7 +5,7 @@
 // The select component
 .folder-picker {
     > .bp5-popover-target {
-        width: 100%;
+        min-width: 243px;
     }
 
     .folder-picker-button {
@@ -42,5 +42,6 @@
         text-align: right;
         overflow: hidden;
         text-overflow: ellipsis;
+        white-space: nowrap;
     }
 }

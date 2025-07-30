@@ -174,6 +174,7 @@ class RemoteConnection(SerializeableModel):
 class StatusMessage(SerializeableModel):
     status: ConnectionTestStates
     message: str
+    detail: Optional[str] = None
 
 
 class ActiveReports(SerializeableModel):
