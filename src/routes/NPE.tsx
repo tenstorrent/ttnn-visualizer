@@ -90,7 +90,13 @@ const NPE: React.FC = () => {
     }, [loadedData, loadedTimeline]);
     return (
         <>
-            <Helmet title='NPE' />
+            <Helmet>
+                <title>NPE</title>
+                <meta
+                    name='description'
+                    content='NPE performance estimator'
+                />
+            </Helmet>
 
             <h1 className='page-title'>NOC performance estimator</h1>
             <div className='npe-inline-loaders'>

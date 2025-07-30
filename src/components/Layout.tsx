@@ -52,6 +52,10 @@ function Layout() {
                 titleTemplate='%s | TT-NN Visualizer'
             >
                 <meta charSet='utf-8' />
+                <meta
+                    name='description'
+                    content='A comprehensive tool for visualizing and analysing model execution, offering interactive graphs, memory plots, tensor details, buffer overviews, operation flow graphs, and multi-instance support with file or SSH-based report loading.'
+                />
             </Helmet>
 
             <header className='app-header'>
