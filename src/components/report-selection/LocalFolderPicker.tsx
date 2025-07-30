@@ -10,7 +10,6 @@ import { useSession } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
-import getUTC from '../../functions/getUTC';
 
 interface LocalFolderPickerProps {
     items: ReportFolder[];
@@ -19,11 +18,6 @@ interface LocalFolderPickerProps {
     handleDelete?: (folder: ReportFolder) => void;
     defaultLabel?: string;
 }
-
-const formatter = new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'long',
-    timeStyle: 'short',
-});
 
 const LocalFolderPicker = ({
     items,
@@ -40,6 +34,21 @@ const LocalFolderPicker = ({
 
     const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
 
+    // Map through items and ensure reportNames are not duplicated
+    const itemsWithUniqueReportNames = items?.map((item, idx, arr) => {
+        const name = item.reportName;
+        const prevCount = arr.slice(0, idx).filter((i) => i.reportName === name).length;
+
+        if (prevCount === 0) {
+            return item;
+        }
+
+        return {
+            ...item,
+            reportName: `${name} (${prevCount})`,
+        };
+    });
+
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers }) => {
         if (!modifiers.matchesPredicate) {
             return null;
@@ -48,7 +57,7 @@ const LocalFolderPicker = ({
         return (
             <div
                 className='folder-picker-menu-item'
-                key={folder.path}
+                key={`${folder.path} - ${folder.reportName}`}
             >
                 <MenuItem
                     textClassName='folder-picker-label'
@@ -62,8 +71,6 @@ const LocalFolderPicker = ({
                     onFocus={handleFocus}
                     icon={folder.path === path ? IconNames.SAVED : IconNames.DOCUMENT}
                 />
-
-                <span>{formatter.format(getUTC(folder.uploadTime))}</span>
 
                 {handleDelete && !isDeleteDisabled && (
                     <>
@@ -104,7 +111,7 @@ const LocalFolderPicker = ({
     return (
         <Select<ReportFolder>
             className='folder-picker'
-            items={items ?? []}
+            items={itemsWithUniqueReportNames ?? []}
             itemPredicate={(query, item) => !query || item.reportName.toLowerCase().includes(query.toLowerCase())}
             itemRenderer={renderItem}
             noResults={
@@ -120,7 +127,11 @@ const LocalFolderPicker = ({
             <Tooltip content={path ? `/${getPrettyPath(path)}` : ''}>
                 <Button
                     className='folder-picker-button'
-                    text={items && path ? getReportName(items, path) : defaultLabel}
+                    text={
+                        itemsWithUniqueReportNames && path
+                            ? getReportName(itemsWithUniqueReportNames, path)
+                            : defaultLabel
+                    }
                     disabled={isDisabled || !session}
                     alignText='start'
                     icon={IconNames.DOCUMENT_OPEN}

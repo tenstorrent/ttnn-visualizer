@@ -9,7 +9,6 @@ import { FC, type PropsWithChildren } from 'react';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemoteConnection from '../../hooks/useRemote';
-import getUTC from '../../functions/getUTC';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
@@ -166,6 +165,13 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
             {children}
         </div>
     );
+};
+
+const getUTC = (epoch: number): Date => {
+    const date = new Date(0);
+    date.setUTCSeconds(epoch);
+
+    return date;
 };
 
 export default RemoteFolderSelector;
