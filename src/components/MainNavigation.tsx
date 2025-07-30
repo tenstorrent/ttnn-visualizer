@@ -86,6 +86,7 @@ function MainNavigation() {
             <Navbar.Group align={Alignment.END}>
                 <Button
                     text='Reports'
+                    aria-label='Reports'
                     onClick={() => handleNavigate(ROUTES.HOME)}
                     active={hasMatchingPath(ROUTES.HOME)}
                     icon={IconNames.DOCUMENT_OPEN}
@@ -101,6 +102,7 @@ function MainNavigation() {
                 >
                     <Button
                         text='Operations'
+                        aria-label='Operations'
                         onClick={() => handleNavigate(ROUTES.OPERATIONS)}
                         active={hasMatchingPath(ROUTES.OPERATIONS)}
                         icon={IconNames.CUBE}
@@ -118,6 +120,7 @@ function MainNavigation() {
                 >
                     <Button
                         text='Tensors'
+                        aria-label='Tensors'
                         onClick={() => handleNavigate(ROUTES.TENSORS)}
                         active={hasMatchingPath(ROUTES.TENSORS)}
                         icon={IconNames.FLOW_LINEAR}
@@ -135,6 +138,7 @@ function MainNavigation() {
                 >
                     <Button
                         text='Buffers'
+                        aria-label='Buffers'
                         onClick={() => handleNavigate(ROUTES.BUFFERS)}
                         active={hasMatchingPath(ROUTES.BUFFERS)}
                         icon={IconNames.SMALL_SQUARE}
@@ -152,6 +156,7 @@ function MainNavigation() {
                 >
                     <Button
                         text='Graph'
+                        aria-label='Graph'
                         onClick={() => handleNavigate(ROUTES.GRAPHTREE)}
                         active={hasMatchingPath(ROUTES.GRAPHTREE)}
                         icon={IconNames.GRAPH}
@@ -169,6 +174,7 @@ function MainNavigation() {
                 >
                     <Button
                         text='Performance'
+                        aria-label='Performance'
                         onClick={() => handleNavigate(ROUTES.PERFORMANCE)}
                         active={hasMatchingPath(ROUTES.PERFORMANCE)}
                         icon={IconNames.LIGHTNING}
@@ -181,6 +187,7 @@ function MainNavigation() {
 
                 <Button
                     text='NPE'
+                    aria-label='NPE'
                     onClick={() => handleNavigate(ROUTES.NPE)}
                     active={hasMatchingPath(ROUTES.NPE)}
                     icon={IconNames.Random}
@@ -198,6 +205,7 @@ function MainNavigation() {
                 >
                     <Button
                         text='Topology'
+                        aria-label='Topology'
                         onClick={() => handleOpenModal(ROUTES.CLUSTER)}
                         active={hasMatchingPath(ROUTES.CLUSTER)}
                         disabled={!hasClusterDescription}

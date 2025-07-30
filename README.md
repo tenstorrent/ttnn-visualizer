@@ -103,6 +103,9 @@ Unzip the files into their own directories and select them with the local folder
 **Llama mlp**
 [memory + performance report](https://github.com/user-attachments/files/18770763/llama_attn_32l_10iter_30jan.zip)
 
+**N300 llama**
+[memory + performance report with NPE data + cluster description](https://github.com/user-attachments/files/21496609/n300.zip)
+
 ### NPE report
 
 **T3K synthetic**

@@ -282,6 +282,7 @@ const RemoteSyncConfigurator: FC = () => {
                 >
                     <Tooltip content='Sync remote folder'>
                         <Button
+                            aria-label='Sync remote folder'
                             icon={IconNames.REFRESH}
                             loading={isSyncingReportFolder}
                             disabled={isDisabled || !selectedReportFolder || reportFolderList?.length === 0}
@@ -369,6 +370,7 @@ const RemoteSyncConfigurator: FC = () => {
                     >
                         <Tooltip content='Sync remote folder'>
                             <Button
+                                aria-label='Sync remote folder'
                                 icon={IconNames.REFRESH}
                                 loading={isSyncingPerformanceFolder}
                                 disabled={

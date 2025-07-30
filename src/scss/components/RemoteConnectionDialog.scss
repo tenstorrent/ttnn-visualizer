@@ -35,6 +35,7 @@ $tt-pending: $tt-yellow;
     display: inline-flex;
     gap: 2px;
     align-items: flex-start;
+    flex-basis: 100%;
 
     &:last-of-type {
         margin-bottom: 10px;
