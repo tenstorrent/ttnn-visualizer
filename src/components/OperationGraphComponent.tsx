@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Edge, Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
-import { Button, Intent, Label, PopoverPosition, Slider, Tooltip } from '@blueprintjs/core';
+import { Button, Intent, Label, PopoverPosition, Slider, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { OperationDescription, Tensor } from '../model/APIData';
@@ -37,6 +37,8 @@ const OperationGraph: React.FC<{
     const [nodeNameFilter, setNodeNameFilter] = useState<string>('');
     const [filteredNodeIdList, setFilteredNodeIdList] = useState<number[]>([]);
     const [currentFilteredIndex, setCurrentFilteredIndex] = useState<number | null>(null);
+
+    const [filterDeallocate, setFilterDeallocate] = useState<boolean>(false);
 
     const edges = useMemo(
         () =>
@@ -69,6 +71,7 @@ const OperationGraph: React.FC<{
         return new DataSet(
             operationList
                 .filter((op) => connectedNodeIds.has(op.id))
+                .filter((op) => !filterDeallocate || !op.name.toLowerCase().includes('deallocate'))
                 .map((op) => ({
                     id: op.id,
                     label: `${op.id} ${op.name} \n ${op.operationFileIdentifier}`,
@@ -76,7 +79,7 @@ const OperationGraph: React.FC<{
                     filterString: `${op.name}`,
                 })),
         );
-    }, [operationList, connectedNodeIds]);
+    }, [operationList, connectedNodeIds, filterDeallocate]);
 
     const focusOnNode = useCallback(
         (nodeId: number | null) => {
@@ -266,7 +269,7 @@ const OperationGraph: React.FC<{
             networkRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [edges]);
+    }, [edges, nodes]);
 
     const getNextOperationId = (currentId: number | null) => {
         if (nodes === null || currentId === null) {
@@ -360,6 +363,12 @@ const OperationGraph: React.FC<{
                         }}
                         disabled={isLoading || filteredNodeIdList.length === 0}
                         variant='outlined'
+                    />
+                    <Switch
+                        checked={filterDeallocate}
+                        onChange={() => setFilterDeallocate(!filterDeallocate)}
+                        label='Hide deallocate ops'
+                        disabled={isLoading}
                     />
                 </div>
                 <div className='slider-wrapper'>
