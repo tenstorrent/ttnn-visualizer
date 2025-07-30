@@ -158,6 +158,7 @@ const RemoteSyncConfigurator: FC = () => {
                     }}
                 />
             </FormGroup>
+
             <FormGroup
                 className='form-group'
                 label={<h3 className='label'>Use remote sync server</h3>}
@@ -323,17 +324,10 @@ const RemoteSyncConfigurator: FC = () => {
                                         const response = await remote.mountRemoteFolder(
                                             remote.persistentState.selectedConnection,
                                             selectedReportFolder,
-                                            selectedPerformanceFolder,
                                         );
 
                                         if (response.status === 200) {
-                                            const performanceFileName = selectedPerformanceFolder?.reportName;
-
                                             updateReportSelection(selectedReportFolder);
-
-                                            if (performanceFileName) {
-                                                updatePerformanceSelection(performanceFileName);
-                                            }
                                         }
                                     }
                                 }
@@ -420,7 +414,7 @@ const RemoteSyncConfigurator: FC = () => {
                                             ) {
                                                 const response = await remote.mountRemoteFolder(
                                                     remote.persistentState.selectedConnection,
-                                                    selectedReportFolder,
+                                                    undefined,
                                                     selectedPerformanceFolder,
                                                 );
 
