@@ -1,12 +1,12 @@
 {
   "name": "ttnn-visualizer",
   "private": true,
-  "version": "0.44.1",
+  "version": "0.45.0",
   "type": "module",
-    "engines": {
-        "node": "22.12.0"
-    },
-    "scripts": {
+  "engines": {
+    "node": "22.12.0"
+  },
+  "scripts": {
     "dev": "vite",
     "dev:server": "VITE_SERVER_MODE=1 vite",
     "build": "vite build",
