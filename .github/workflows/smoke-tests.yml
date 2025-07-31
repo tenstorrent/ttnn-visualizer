@@ -59,7 +59,7 @@ jobs:
     needs: build-wheel
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.10', '3.11', '3.12', '3.13']
     
     steps:
       - name: Checkout code
@@ -115,40 +115,7 @@ jobs:
       
       - name: Run Playwright smoke test
         run: |
-          python -c "
-import asyncio
-from playwright.async_api import async_playwright
-
-async def smoke_test():
-    async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        page = await browser.new_page()
-        
-        try:
-            # Navigate to the app
-            await page.goto('http://localhost:8000', timeout=10000)
-            
-            # Wait for the page to load and check title
-            await page.wait_for_load_state('networkidle', timeout=10000)
-            title = await page.title()
-            print(f'✅ Page loaded successfully. Title: {title}')
-            
-            # Check if the page contains expected content
-            body_text = await page.text_content('body')
-            if 'visualizer' in body_text.lower() or 'ttnn' in body_text.lower() or 'tt-nn' in body_text.lower():
-                print('✅ Page contains expected content')
-            else:
-                print('⚠️  Page may not have loaded correctly - no expected content found')
-                
-        except Exception as e:
-            print(f'❌ Smoke test failed: {e}')
-            raise
-        finally:
-            await browser.close()
-
-# Run the test
-asyncio.run(smoke_test())
-          "
+          python scripts/smoke_test.py
       
       - name: Cleanup
         if: always()
