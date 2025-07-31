@@ -29,7 +29,6 @@ const PERFORMANCE_PATH_STATUS = {
     status: ConnectionTestStates.PROGRESS,
     message: 'Testing performance report folder path',
 };
-
 const FAILED_CONNECTION = { status: ConnectionTestStates.FAILED, message: 'Connection failed' };
 const FAILED_MEMORY_REPORT_PATH = { status: ConnectionTestStates.FAILED, message: 'Memory report folder path failed' };
 
