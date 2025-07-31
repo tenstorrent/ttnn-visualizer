@@ -45,6 +45,10 @@ const useRemoteConnection = () => {
             throw new Error('No connection provided');
         }
 
+        if (!connection.profilerPath) {
+            return [];
+        }
+
         const response = await axiosInstance.post<RemoteFolder[]>('/api/remote/profiler', connection);
 
         return response.data;
@@ -54,6 +58,11 @@ const useRemoteConnection = () => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
+
+        if (!connection.performancePath) {
+            return [];
+        }
+
         const response = await axiosInstance.post<RemoteFolder[]>('/api/remote/performance', {
             connection,
         });
@@ -108,19 +117,7 @@ const useRemoteConnection = () => {
             setAppConfig('selectedConnection', JSON.stringify(connection ?? null));
         },
         getSavedReportFolders: (connection?: RemoteConnection) =>
-            JSON.parse(getAppConfig(`${connection?.name} - reportFolders`) ?? '[]').map((folder: RemoteConnection) => {
-                const { reportPath, ...rest } = folder;
-
-                // reportPath is deprecated - use profilerPath instead
-                if (folder.profilerPath) {
-                    return {
-                        ...rest,
-                        profilerPath: reportPath || rest.profilerPath,
-                    };
-                }
-
-                return rest;
-            }) as RemoteFolder[],
+            JSON.parse(getAppConfig(`${connection?.name} - reportFolders`) ?? '[]') as RemoteFolder[],
 
         setSavedReportFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
             setAppConfig(`${connection?.name} - reportFolders`, JSON.stringify(folders));
