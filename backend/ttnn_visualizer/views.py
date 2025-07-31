@@ -7,7 +7,6 @@ import json
 import logging
 import re
 import shutil
-import subprocess
 import time
 from http import HTTPStatus
 from pathlib import Path
@@ -1018,7 +1017,7 @@ def test_remote_folder():
         )
 
     # Test Directory Configuration
-    if not has_failures():
+    if not has_failures() and connection.profilerPath:
         try:
             check_remote_path_exists(connection, "profilerPath")
             add_status(ConnectionTestStates.OK.value, "Memory folder path exists")

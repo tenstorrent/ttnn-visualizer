@@ -623,13 +623,23 @@ def read_remote_file(
 
 @remote_exception_handler
 def check_remote_path_for_reports(remote_connection):
-    """Check the remote path for config files."""
-    remote_config_paths = find_folders_by_files(
-        remote_connection, remote_connection.profilerPath, [TEST_CONFIG_FILE]
-    )
-    if not remote_config_paths:
+    remote_profiler_paths = []
+    remote_performance_paths = []
+
+    if getattr(remote_connection, "profilerPath", None):
+        remote_profiler_paths = find_folders_by_files(
+            remote_connection, remote_connection.profilerPath, [TEST_CONFIG_FILE]
+        )
+
+    if getattr(remote_connection, "performancePath", None):
+        remote_performance_paths = find_folders_by_files(
+            remote_connection, remote_connection.performancePath, [TEST_PROFILER_FILE]
+        )
+
+    if not remote_profiler_paths and not remote_performance_paths:
         raise NoProjectsException(
-            message="No projects found at path", status=ConnectionTestStates.FAILED
+            message="No projects found at given path(s)",
+            status=ConnectionTestStates.FAILED,
         )
     return True
 

@@ -8,6 +8,15 @@ import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definition
 import axiosInstance from '../libs/axiosInstance';
 import useAppConfig from './useAppConfig';
 
+const FAILED_NO_CONNECTION = {
+    status: ConnectionTestStates.FAILED,
+    message: 'No connection provided',
+};
+const FAILED_NO_PATH = {
+    status: ConnectionTestStates.FAILED,
+    message: 'Please provide at least one folder path.',
+};
+
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
 
@@ -19,12 +28,11 @@ const useRemoteConnection = () => {
 
     const testConnection = async (connection: Partial<RemoteConnection>) => {
         if (!connection.host || !connection.port) {
-            return [
-                {
-                    status: ConnectionTestStates.FAILED,
-                    message: 'No connection provided',
-                },
-            ];
+            return [FAILED_NO_CONNECTION];
+        }
+
+        if (!connection.profilerPath && !connection.performancePath) {
+            return [FAILED_NO_PATH];
         }
 
         const { data: connectionTestStates } = await axiosInstance.post('/api/remote/test', connection);
