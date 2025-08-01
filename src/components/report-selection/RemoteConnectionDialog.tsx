@@ -153,7 +153,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                 <FormGroup
                     label='Memory report folder path'
-                    subLabel='Path to a remote folder containing memory reports (e.g., "/path-to-tt-metal/generated/ttnn/reports/")'
+                    subLabel='Path to a remote folder containing memory reports (e.g., "/<PATH TO TT METAL>/generated/ttnn/reports/")'
                 >
                     <InputGroup
                         key='path'
@@ -164,7 +164,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                 <FormGroup
                     label='Performance report folder path (optional)'
-                    subLabel='Path to a remote folder containing performance reports (e.g., "/path-to-tt-metal/generated/profiler/reports/")'
+                    subLabel='Path to a remote folder containing performance reports (e.g., "/<PATH TO TT METAL>/generated/profiler/reports/")'
                 >
                     <InputGroup
                         key='path'
