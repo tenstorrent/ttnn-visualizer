@@ -123,16 +123,16 @@ function Range() {
             const matchMin =
                 opIdsMap.find((op) => selectedPerformanceRange[0] === Number(op.perfId))?.opId ??
                 opIdsMap.reduce((prev, curr) =>
-                    Math.abs((Number(curr.perfId) ?? 0) - selectedPerformanceRange[0]) <
-                    Math.abs((Number(prev.perfId) ?? 0) - selectedPerformanceRange[0])
+                    Math.abs(Number(curr.perfId) - selectedPerformanceRange[0]) <
+                    Math.abs(Number(prev.perfId) - selectedPerformanceRange[0])
                         ? curr
                         : prev,
                 ).opId;
             const matchMax =
                 opIdsMap.find((op) => selectedPerformanceRange[1] === Number(op.perfId))?.opId ??
                 opIdsMap.reduce((prev, curr) =>
-                    Math.abs((Number(curr.perfId) ?? 0) - selectedPerformanceRange[1]) <
-                    Math.abs((Number(prev.perfId) ?? 0) - selectedPerformanceRange[1])
+                    Math.abs(Number(curr.perfId) - selectedPerformanceRange[1]) <
+                    Math.abs(Number(prev.perfId) - selectedPerformanceRange[1])
                         ? curr
                         : prev,
                 ).opId;

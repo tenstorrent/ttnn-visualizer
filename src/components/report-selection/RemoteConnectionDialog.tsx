@@ -112,7 +112,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
                 <FormGroup
                     label='SSH Host'
-                    subLabel='SSH host name. E.g.: localhost'
+                    subLabel='SSH host name (e.g., localhost)'
                 >
                     <InputGroup
                         key='host'
@@ -134,7 +134,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
                 <FormGroup
                     label='SSH Port'
-                    subLabel='Port to use for the SSH connection. E.g.: port 22'
+                    subLabel='Port to use for the SSH connection (e.g., port 22)'
                 >
                     <InputGroup
                         key='port'
@@ -153,7 +153,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                 <FormGroup
                     label='Memory report folder path'
-                    subLabel='Path to a remote folder containing memory reports e.g. "$HOME/work/profiler-reports/"'
+                    subLabel='Path to a remote folder containing memory reports (e.g., "/<PATH TO TT METAL>/generated/ttnn/reports/")'
                 >
                     <InputGroup
                         key='path'
@@ -164,7 +164,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                 <FormGroup
                     label='Performance report folder path (optional)'
-                    subLabel='Path to a remote folder containing performance reports e.g. "$HOME/perf/perf-reports/"'
+                    subLabel='Path to a remote folder containing performance reports (e.g., "/<PATH TO TT METAL>/generated/profiler/reports/")'
                 >
                     <InputGroup
                         key='path'
