@@ -122,7 +122,7 @@
   },
   "lint-staged": {
     "**/*.{ts,tsx}": [
-      "eslint ./src --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0 --no-ignore"
+      "eslint ./src --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
     ],
     "**/*.scss": "npx stylelint --fix",
     "**/*.{js,jsx,ts,tsx,css,scss}": "pnpm run format",

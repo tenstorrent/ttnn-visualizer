@@ -34,12 +34,7 @@ module.exports = defineConfig([
 
             parserOptions: {
                 projectService: {
-                    allowDefaultProject: [
-                        '.stylelintrc.cjs',
-                        // 'eslint.config.cjs',
-                        'scripts/check-spdx.mjs',
-                        'scripts/release.mjs',
-                    ],
+                    allowDefaultProject: ['.stylelintrc.cjs', 'scripts/check-spdx.mjs', 'scripts/release.mjs'],
                 },
             },
         },
@@ -194,7 +189,7 @@ module.exports = defineConfig([
         '**/dist',
         '**/*.svg',
         '**/*.scss',
-        '**/legacySassSvgInlinerFactory.js',
+        'src/libs/blueprintjs/legacySassSvgInlinerFactory.js',
         '**/node_modules',
         '**/.DS_Store',
         '**/build',
