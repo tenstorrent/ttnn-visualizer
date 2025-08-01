@@ -560,7 +560,12 @@ def get_performance_data_list(instance: Instance):
         if not any(file.name.startswith("ops_perf_results") for file in files):
             continue
 
-        valid_dirs.append({"path": dir_path.name, "reportName": dir_path.name})
+        valid_dirs.append(
+            {
+                "path": dir_path.name,
+                "reportName": dir_path.name,
+            }
+        )
 
     return jsonify(valid_dirs)
 
