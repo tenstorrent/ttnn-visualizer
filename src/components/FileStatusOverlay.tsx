@@ -10,9 +10,7 @@ import 'styles/components/FileStatusOverlay.scss';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileStatus } from '../model/APIData';
 
-interface FileTransferOverlayProps {}
-
-const FileStatusOverlay: React.FC<FileTransferOverlayProps> = () => {
+const FileStatusOverlay: React.FC = () => {
     const formatPercentage = (percentage: number) => percentage.toFixed(2).padStart(5, '0');
     const [progress] = useAtom(fileTransferProgressAtom);
     const { currentFileName, finishedFiles, numberOfFiles, percentOfCurrent, status } = progress;

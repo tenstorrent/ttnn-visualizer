@@ -153,7 +153,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                     ),
                 });
             } else {
-                // eslint-disable-next-line no-unused-expressions
+                // eslint-disable-next-line no-unused-expressions, @typescript-eslint/no-unused-expressions
                 canvasRef.current && (canvasRef.current.style.cursor = 'default');
                 setTooltip(null);
             }
