@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useState } from 'react';
-import { Alert, Button, ButtonVariant, Intent, MenuItem, Tooltip } from '@blueprintjs/core';
+import { Alert, Button, ButtonVariant, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useSession } from '../../hooks/useAPI';
@@ -18,6 +18,8 @@ interface LocalFolderPickerProps {
     handleDelete?: (folder: ReportFolder) => void;
     defaultLabel?: string;
 }
+
+const REPORT_NAME_MAX_LENGTH = 18;
 
 const LocalFolderPicker = ({
     items,
@@ -62,7 +64,16 @@ const LocalFolderPicker = ({
                 <MenuItem
                     textClassName='folder-picker-label'
                     text={`/${getPrettyPath(folder.path)}`}
-                    labelElement={folder.reportName}
+                    labelElement={
+                        <Tooltip
+                            className='folder-picker-name-label'
+                            content={folder.reportName}
+                            disabled={folder.reportName.length < REPORT_NAME_MAX_LENGTH}
+                            position={Position.RIGHT}
+                        >
+                            {folder.reportName}
+                        </Tooltip>
+                    }
                     labelClassName='folder-picker-name-label'
                     roleStructure='listoption'
                     active={folder.path === path}
@@ -145,9 +156,8 @@ const LocalFolderPicker = ({
     );
 };
 
-const getReportName = (reports: ReportFolder[], path: string | null) => {
-    return reports?.find((report) => report.path === path)?.reportName;
-};
+const getReportName = (reports: ReportFolder[], path: string | null) =>
+    reports?.find((report) => report.path === path)?.reportName;
 
 const PATH_REGEX = /^\d+_/gm;
 const getPrettyPath = (path: string) => (PATH_REGEX.test(path) ? path.replace(PATH_REGEX, '') : path);
