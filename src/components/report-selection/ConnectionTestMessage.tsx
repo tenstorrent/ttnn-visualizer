@@ -4,13 +4,9 @@
 
 import { Icon, Intent } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
-import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
+import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 
-interface ConnectionTestMessageProps {
-    status: ConnectionTestStates;
-    message: string;
-    detail?: string;
-}
+type ConnectionTestMessageProps = ConnectionStatus;
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -37,7 +33,7 @@ function ConnectionTestMessage({ status, message, detail }: ConnectionTestMessag
             />
             <div className='connection-status-content'>
                 <span className='connection-status-text'>{message}</span>
-                {detail && <pre className='connection-status-detail'>{detail}</pre>}
+                {detail && <code className='connection-status-detail'>{detail}</code>}
             </div>
         </div>
     );
