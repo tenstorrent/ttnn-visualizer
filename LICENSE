@@ -122,5 +122,6 @@ The following separate and independent dependencies are utilized by this project
 - build – MIT https://opensource.org/license/mit
 - tt-perf-report – MIT https://opensource.org/license/mit
 - zstd (python-zstandard) – BSD‑3‑Clause – https://github.com/indygreg/python-zstandard/blob/main/LICENSE
+- playwright – Apache-2.0 – https://github.com/microsoft/playwright-python/blob/main/LICENSE
 
 - Upload Release Assets - GitHub Action - MIT - https://github.com/AButler/upload-release-assets/blob/master/LICENSE

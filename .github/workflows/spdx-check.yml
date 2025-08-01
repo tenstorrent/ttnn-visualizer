@@ -1,28 +1,32 @@
 name: Checking SPDX License Headers
 
 on:
-  pull_request:
-    branches: [ "dev" ]
-  workflow_dispatch:
+    pull_request:
+        branches: [ "dev" ]
+    workflow_dispatch:
 
 jobs:
-  check-headers:
-    name: Check Headers
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    check-headers:
+        name: Check Headers
+        runs-on: ubuntu-latest
+        steps:
+            -   name: Checkout code
+                uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-            node-version: v20.11.1
+            -   name: Read .nvmrc
+                id: nvm
+                run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
 
-      - name: Install dependencies
-        run: |
-          npm install -g pnpm@latest-10
-          pnpm install
+            -   name: Setup Node.js
+                uses: actions/setup-node@v4
+                with:
+                    node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
 
-      - name: Running check license identifiers
-        run: |
-          pnpm run spdx
+            -   name: Install dependencies
+                run: |
+                    npm install -g pnpm@latest-10
+                    pnpm install
+
+            -   name: Running check license identifiers
+                run: |
+                    pnpm run spdx

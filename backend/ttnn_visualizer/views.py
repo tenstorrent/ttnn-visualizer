@@ -67,6 +67,7 @@ from ttnn_visualizer.sftp_operations import (
     sync_remote_performance_folders,
     sync_remote_profiler_folders,
 )
+from ttnn_visualizer.ssh_client import SSHClient
 from ttnn_visualizer.utils import (
     get_cluster_descriptor_path,
     read_last_synced_file,
@@ -74,123 +75,10 @@ from ttnn_visualizer.utils import (
 )
 
 
-def handle_ssh_subprocess_error(e: subprocess.CalledProcessError, remote_connection):
-    """
-    Convert subprocess SSH errors to appropriate SSH exceptions.
-
-    :param e: The subprocess.CalledProcessError
-    :param remote_connection: The RemoteConnection object for context
-    :raises: SSHException, AuthenticationException, or NoValidConnectionsError
-    """
-    stderr = e.stderr.lower() if e.stderr else ""
-
-    # Check for authentication failures
-    if any(
-        auth_err in stderr
-        for auth_err in [
-            "permission denied",
-            "authentication failed",
-            "publickey",
-            "password",
-            "host key verification failed",
-        ]
-    ):
-        raise AuthenticationException(
-            f"SSH authentication failed: {remote_connection.username}@{remote_connection.host}: Permission denied (publickey,password)"
-        )
-
-    # Check for connection failures
-    elif any(
-        conn_err in stderr
-        for conn_err in [
-            "connection refused",
-            "network is unreachable",
-            "no route to host",
-            "name or service not known",
-            "connection timed out",
-        ]
-    ):
-        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
-
-    # Check for general SSH protocol errors
-    elif "ssh:" in stderr or "protocol" in stderr:
-        raise SSHException(f"SSH protocol error: {e.stderr}")
-
-    # Default to generic SSH exception
-    else:
-        raise SSHException(f"SSH command failed: {e.stderr}")
-
-
 def test_ssh_connection(connection) -> bool:
     """Test SSH connection by running a simple command."""
-    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-
-    # Handle non-standard SSH port
-    if connection.port != 22:
-        ssh_cmd.extend(["-p", str(connection.port)])
-
-    ssh_cmd.extend(
-        [f"{connection.username}@{connection.host}", "echo 'SSH connection test'"]
-    )
-
-    try:
-        result = subprocess.run(
-            ssh_cmd, capture_output=True, text=True, check=True, timeout=10
-        )
-        return True
-    except subprocess.CalledProcessError as e:
-        if e.returncode == 255:  # SSH protocol errors
-            try:
-                handle_ssh_subprocess_error(e, connection)
-            except AuthenticationException:
-                # Convert to AuthenticationFailedException for proper HTTP 422 response
-                user_message = (
-                    "SSH authentication failed. This application requires SSH key-based authentication. "
-                    "Please ensure your SSH public key is added to the authorized_keys file on the remote server. "
-                    "Password authentication is not supported."
-                )
-                logger.info(
-                    f"SSH authentication failed for {connection.username}@{connection.host}: {user_message}"
-                )
-                raise AuthenticationFailedException(message=user_message)
-            except NoValidConnectionsError as ssh_err:
-                user_message = (
-                    f"Unable to establish SSH connection to {connection.host}. "
-                    "Please check the hostname, port, and network connectivity. "
-                    "Ensure SSH key-based authentication is properly configured."
-                )
-                logger.warning(
-                    f"SSH connection failed for {connection.username}@{connection.host}: {user_message}"
-                )
-                raise RemoteConnectionException(
-                    message=user_message, status=ConnectionTestStates.FAILED
-                )
-            except SSHException as ssh_err:
-                user_message = f"SSH connection error to {connection.host}: {str(ssh_err)}. Ensure SSH key-based authentication is properly configured."
-                logger.warning(
-                    f"SSH error for {connection.username}@{connection.host}: {user_message}"
-                )
-                raise RemoteConnectionException(
-                    message=user_message, status=ConnectionTestStates.FAILED
-                )
-        else:
-            error_message = f"SSH connection test failed: {e.stderr}"
-            logger.error(
-                f"SSH test failed for {connection.username}@{connection.host}: {error_message}"
-            )
-            raise RemoteConnectionException(
-                message=error_message, status=ConnectionTestStates.FAILED
-            )
-        return False
-    except subprocess.TimeoutExpired:
-        timeout_message = "SSH connection test timed out"
-        logger.warning(
-            f"SSH timeout for {connection.username}@{connection.host}: {timeout_message}"
-        )
-        raise RemoteConnectionException(
-            message=timeout_message, status=ConnectionTestStates.FAILED
-        )
-        return False
+    ssh_client = SSHClient(connection)
+    return ssh_client.test_connection()
 
 
 logger = logging.getLogger(__name__)
@@ -643,9 +531,11 @@ def get_performance_data_list(instance: Instance):
                 / connection.host
                 / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
             )
-        directory_names = [
-            directory.name for directory in path.iterdir() if directory.is_dir()
-        ]
+        directory_names = (
+            [directory.name for directory in path.iterdir() if directory.is_dir()]
+            if path.exists()
+            else []
+        )
 
     valid_dirs = []
 
@@ -761,7 +651,10 @@ def get_performance_results_data_raw(instance: Instance):
 @with_instance
 def get_performance_results_report(instance: Instance):
     if not instance.performance_path:
-        return Response(status=HTTPStatus.NOT_FOUND)
+        return Response(
+            status=HTTPStatus.BAD_REQUEST,
+            response="No performance data found for instance.",
+        )
 
     name = request.args.get("name", None)
 
@@ -1101,8 +994,8 @@ def test_remote_folder():
     connection = RemoteConnection.model_validate(connection_data)
     statuses = []
 
-    def add_status(status, message):
-        statuses.append(StatusMessage(status=status, message=message))
+    def add_status(status, message, detail=None):
+        statuses.append(StatusMessage(status=status, message=message, detail=detail))
 
     def has_failures():
         return any(
@@ -1115,10 +1008,14 @@ def test_remote_folder():
         add_status(ConnectionTestStates.OK.value, "SSH connection established")
     except AuthenticationFailedException as e:
         # Return 422 for authentication failures
-        add_status(ConnectionTestStates.FAILED.value, e.message)
+        add_status(
+            ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+        )
         return [status.model_dump() for status in statuses], e.http_status
     except RemoteConnectionException as e:
-        add_status(ConnectionTestStates.FAILED.value, e.message)
+        add_status(
+            ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+        )
 
     # Test Directory Configuration
     if not has_failures():
@@ -1126,10 +1023,14 @@ def test_remote_folder():
             check_remote_path_exists(connection, "profilerPath")
             add_status(ConnectionTestStates.OK.value, "Memory folder path exists")
         except AuthenticationFailedException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
             return [status.model_dump() for status in statuses], e.http_status
         except RemoteConnectionException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
 
     # Test Directory Configuration (perf)
     if not has_failures() and connection.performancePath:
@@ -1137,20 +1038,28 @@ def test_remote_folder():
             check_remote_path_exists(connection, "performancePath")
             add_status(ConnectionTestStates.OK.value, "Performance folder path exists")
         except AuthenticationFailedException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
             return [status.model_dump() for status in statuses], e.http_status
         except RemoteConnectionException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
 
     # Check for Project Configurations
     if not has_failures():
         try:
             check_remote_path_for_reports(connection)
         except AuthenticationFailedException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
             return [status.model_dump() for status in statuses], e.http_status
         except RemoteConnectionException as e:
-            add_status(ConnectionTestStates.FAILED.value, e.message)
+            add_status(
+                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
+            )
 
     return [status.model_dump() for status in statuses]
 
@@ -1174,33 +1083,37 @@ def sync_remote_folder():
     if not request_body or not isinstance(request_body, dict):
         return jsonify({"error": "Invalid or missing JSON data"}), 400
 
-    folder = request_body.get("folder")
-    profile = request_body.get("profile", None)
+    profiler = request_body.get("profiler")
+    performance = request_body.get("performance", None)
     instance_id = request.args.get("instanceId", None)
     connection = RemoteConnection.model_validate(
         request_body.get("connection"), strict=False
     )
 
-    if profile:
-        profile_folder = RemoteReportFolder.model_validate(profile, strict=False)
+    if performance:
+        performance_folder = RemoteReportFolder.model_validate(
+            performance, strict=False
+        )
         try:
             sync_remote_performance_folders(
                 connection,
                 remote_dir,
-                profile=profile_folder,
+                performance=performance_folder,
                 exclude_patterns=[r"/tensors(/|$)"],
                 sid=instance_id,
             )
 
-            profile_folder.lastSynced = int(time.time())
+            performance_folder.lastSynced = int(time.time())
 
-            return profile_folder.model_dump()
+            return performance_folder.model_dump()
 
         except RemoteConnectionException as e:
             return Response(status=e.http_status, response=e.message)
 
     try:
-        remote_profiler_folder = RemoteReportFolder.model_validate(folder, strict=False)
+        remote_profiler_folder = RemoteReportFolder.model_validate(
+            profiler, strict=False
+        )
 
         sync_remote_profiler_folders(
             connection,
@@ -1247,55 +1160,36 @@ def detect_sqlite_path():
 def use_remote_folder():
     data = request.get_json(force=True)
     connection = data.get("connection", None)
-    folder = data.get("folder", None)
-    profile = data.get("profile", None)
+    profiler = data.get("profiler", None)
+    performance = data.get("performance", None)
 
-    if not connection or not folder:
+    if not connection or not (profiler or performance):
         return Response(status=HTTPStatus.BAD_REQUEST)
 
     connection = RemoteConnection.model_validate(connection, strict=False)
-    folder = RemoteReportFolder.model_validate(folder, strict=False)
-    performance_name = None
-    remote_performance_folder = None
 
-    if profile:
+    kwargs = {
+        "instance_id": request.args.get("instanceId"),
+        "remote_connection": connection,
+    }
+
+    if profiler:
+        remote_profiler_folder = RemoteReportFolder.model_validate(
+            profiler,
+            strict=False,
+        )
+        kwargs["remote_profiler_folder"] = remote_profiler_folder
+        kwargs["profiler_name"] = remote_profiler_folder.remotePath.split("/")[-1]
+
+    if performance:
         remote_performance_folder = RemoteReportFolder.model_validate(
-            profile, strict=False
+            performance,
+            strict=False,
         )
-        performance_name = remote_performance_folder.reportName
+        kwargs["remote_performance_folder"] = remote_performance_folder
+        kwargs["performance_name"] = remote_performance_folder.reportName
 
-    data_directory = current_app.config["REMOTE_DATA_DIRECTORY"]
-    profiler_name = folder.remotePath.split("/")[-1]
-    folder_name = folder.remotePath.split("/")[-1]
-
-    connection_directory = Path(
-        data_directory,
-        connection.host,
-        current_app.config["PROFILER_DIRECTORY_NAME"],
-        folder_name,
-    )
-
-    if not connection_directory.exists():
-        return Response(
-            status=HTTPStatus.INTERNAL_SERVER_ERROR,
-            response=f"{connection_directory} does not exist.",
-        )
-
-    remote_path = (
-        f"{Path(data_directory).name}/{connection.host}/{connection_directory.name}"
-    )
-
-    instance_id = request.args.get("instanceId")
-    current_app.logger.info(f"Setting active reports for {instance_id} - {remote_path}")
-
-    update_instance(
-        instance_id=instance_id,
-        profiler_name=profiler_name,
-        performance_name=performance_name,
-        remote_connection=connection,
-        remote_profiler_folder=folder,
-        remote_performance_folder=remote_performance_folder,
-    )
+    update_instance(**kwargs)
 
     return Response(status=HTTPStatus.OK)
 

@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup } from '@blueprintjs/core';
+import { AxiosError } from 'axios';
 import { FC, useState } from 'react';
 import 'styles/components/RemoteConnectionDialog.scss';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
@@ -65,11 +66,18 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
             const statuses = await testConnection(connection);
             setConnectionTests(statuses);
         } catch (err) {
-            // TODO: Look at error handling
-            setConnectionTests([
-                { status: ConnectionTestStates.FAILED, message: 'Connection failed' },
-                { status: ConnectionTestStates.FAILED, message: 'Memory report folder path failed' },
-            ]);
+            // Check if this is an axios error with response data (e.g., HTTP 422 for auth failures)
+            const axiosError = err as AxiosError;
+            if (axiosError.response && axiosError.response.data) {
+                // Use the actual API response data which contains proper messages and details
+                setConnectionTests(axiosError.response.data as ConnectionStatus[]);
+            } else {
+                // Fallback for other types of errors
+                setConnectionTests([
+                    { status: ConnectionTestStates.FAILED, message: 'Connection failed' },
+                    { status: ConnectionTestStates.FAILED, message: 'Memory report folder path failed' },
+                ]);
+            }
         } finally {
             setIsTestingconnection(false);
         }
@@ -173,6 +181,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                                 key={`${test.message}-${index}`}
                                 status={test.status}
                                 message={test.message}
+                                detail={test.detail}
                             />
                         );
                     })}

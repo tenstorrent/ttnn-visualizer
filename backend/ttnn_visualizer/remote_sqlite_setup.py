@@ -3,100 +3,24 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import re
-import subprocess
 
 from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates
-from ttnn_visualizer.exceptions import (
-    AuthenticationException,
-    NoValidConnectionsError,
-    RemoteSqliteException,
-    SSHException,
-)
+from ttnn_visualizer.exceptions import RemoteSqliteException, SSHException
 from ttnn_visualizer.models import RemoteConnection
-
-
-def handle_ssh_subprocess_error(
-    e: subprocess.CalledProcessError, remote_connection: RemoteConnection
-):
-    """
-    Convert subprocess SSH errors to appropriate SSH exceptions.
-
-    :param e: The subprocess.CalledProcessError
-    :param remote_connection: The RemoteConnection object for context
-    :raises: SSHException, AuthenticationException, or NoValidConnectionsError
-    """
-    stderr = e.stderr.lower() if e.stderr else ""
-
-    # Check for authentication failures
-    if any(
-        auth_err in stderr
-        for auth_err in [
-            "permission denied",
-            "authentication failed",
-            "publickey",
-            "password",
-            "host key verification failed",
-        ]
-    ):
-        raise AuthenticationException(f"SSH authentication failed: {e.stderr}")
-
-    # Check for connection failures
-    elif any(
-        conn_err in stderr
-        for conn_err in [
-            "connection refused",
-            "network is unreachable",
-            "no route to host",
-            "name or service not known",
-            "connection timed out",
-        ]
-    ):
-        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
-
-    # Check for general SSH protocol errors
-    elif "ssh:" in stderr or "protocol" in stderr:
-        raise SSHException(f"SSH protocol error: {e.stderr}")
-
-    # Default to generic SSH exception
-    else:
-        raise SSHException(f"SSH command failed: {e.stderr}")
-
+from ttnn_visualizer.ssh_client import SSHClient
 
 MINIMUM_SQLITE_VERSION = "3.38.0"
 
 
 def _execute_ssh_command(remote_connection: RemoteConnection, command: str) -> str:
     """Execute an SSH command and return the output."""
-    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-
-    # Handle non-standard SSH port
-    if remote_connection.port != 22:
-        ssh_cmd.extend(["-p", str(remote_connection.port)])
-
-    ssh_cmd.extend([f"{remote_connection.username}@{remote_connection.host}", command])
-
+    ssh_client = SSHClient(remote_connection)
     try:
-        result = subprocess.run(
-            ssh_cmd, capture_output=True, text=True, check=True, timeout=30
-        )
-        return result.stdout
-    except subprocess.CalledProcessError as e:
-        if e.returncode == 255:  # SSH protocol errors
-            handle_ssh_subprocess_error(e, remote_connection)
-            # This line should never be reached as handle_ssh_subprocess_error raises an exception
-            raise RemoteSqliteException(
-                message=f"SSH command failed: {e.stderr}",
-                status=ConnectionTestStates.FAILED,
-            )
-        else:
-            raise RemoteSqliteException(
-                message=f"SSH command failed: {e.stderr}",
-                status=ConnectionTestStates.FAILED,
-            )
-    except subprocess.TimeoutExpired:
+        return ssh_client.execute_command(command, timeout=30)
+    except SSHException as e:
         raise RemoteSqliteException(
-            message=f"SSH command timed out: {command}",
+            message=str(e),
             status=ConnectionTestStates.FAILED,
         )
 
