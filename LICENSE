@@ -82,9 +82,9 @@ The following separate and independent dependencies are utilized by this project
 - @blueprintjs/icons – Apache-2.0 – https://github.com/palantir/blueprint/blob/develop/packages/icons/LICENSE
 - @blueprintjs/select – Apache-2.0 – https://github.com/palantir/blueprint/blob/develop/packages/select/LICENSE
 - @blueprintjs/table – Apache-2.0 – https://github.com/palantir/blueprint/blob/develop/packages/table/LICENSE
-- @eslint/rewrite – Apache-2.0 – https://github.com/eslint/rewrite
 - @eslint/eslintrc – MIT – https://github.com/eslint/eslintrc
 - @eslint/js – MIT – https://github.com/eslint/eslint
+- @eslint/rewrite – Apache-2.0 – https://github.com/eslint/rewrite
 - @tanstack/react-virtual – MIT – https://github.com/TanStack/virtual/blob/main/LICENSE
 - @types/tinycolor2 – MIT – https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/tinycolor2/LICENSE
 - axios – MIT – https://github.com/axios/axios/blob/v1.x/LICENSE
