@@ -98,4 +98,12 @@ module.exports = {
         'react/require-default-props': 'off',
         'no-restricted-syntax': 'off'
     },
+    overrides: [
+        {
+            files: '*.spec.tsx',
+            rules: {
+                'no-unused-expressions': 'off' // Vitest (Chai, really) uses a syntax which will fail this check
+            }
+        }
+    ],
 };
