@@ -337,7 +337,7 @@ const RemoteSyncConfigurator: FC = () => {
                 </RemoteFolderSelector>
             </FormGroup>
 
-            {remote.persistentState.selectedConnection?.performancePath && (
+            {
                 <FormGroup
                     className='form-group'
                     label={<h3 className='label'>Performance report</h3>}
@@ -436,7 +436,7 @@ const RemoteSyncConfigurator: FC = () => {
                         </Tooltip>
                     </RemoteFolderSelector>
                 </FormGroup>
-            )}
+            }
         </>
     );
 };

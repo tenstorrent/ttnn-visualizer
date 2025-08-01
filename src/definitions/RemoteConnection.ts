@@ -9,7 +9,6 @@ export interface RemoteConnection {
     username: string;
     host: string;
     port: number;
-    reportPath?: string; // Deprecated - use profilerPath
     profilerPath: string;
     performancePath?: string;
     sqliteBinaryPath?: string;

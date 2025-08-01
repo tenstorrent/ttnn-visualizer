@@ -15,6 +15,7 @@ import mockSession from './data/mockSession.json';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import getButtonWithText from './helpers/getButtonWithText';
 import { TestProviders } from './helpers/TestProviders';
+import getAllButtonsWithText from './helpers/getAllButtonsWithText';
 
 // Scrub the markup after each test
 afterEach(cleanup);
@@ -44,11 +45,15 @@ it('Disable remote sync in Home route', () => {
         </TestProviders>,
     );
 
+    const noSelectionButtons = getAllButtonsWithText('(No selection)');
+
     expect(screen.getAllByTestId('remote-sync-disabled')).toHaveLength(1);
     expect(getButtonWithText('Add new connection')).toBeDisabled();
     expect(getButtonWithText('(No connection)')).toBeDisabled();
     expect(getButtonWithText('Fetch remote folders list')).toBeDisabled();
-    expect(getButtonWithText('(No selection)')).toBeDisabled();
+    noSelectionButtons.forEach((button) => {
+        expect(button).toBeDisabled();
+    });
 });
 
 it('Hide comparison component in Performance route', () => {
