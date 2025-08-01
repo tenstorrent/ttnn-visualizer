@@ -4,7 +4,7 @@
 
 @use '../definitions/colours' as *;
 
-.bp5-button-text:has(.path-label) {
+.bp6-button-text:has(.path-label) {
     display: inline-flex;
     align-items: center;
     width: 100%;
@@ -32,7 +32,7 @@
         flex-grow: 1;
         max-width: 550px;
 
-        & > .bp5-icon {
+        & > .bp6-icon {
             color: $tt-grey-4;
         }
 
@@ -48,15 +48,15 @@
             gap: 5px;
         }
 
-        .remote-connection-select .bp5-button-text,
-        .remote-folder-select .bp5-button-text {
+        .remote-connection-select .bp6-button-text,
+        .remote-folder-select .bp6-button-text {
             width: 8rem;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
-        .bp5-form-group-sub-label {
+        .bp6-form-group-sub-label {
             color: $tt-grey-7;
         }
 

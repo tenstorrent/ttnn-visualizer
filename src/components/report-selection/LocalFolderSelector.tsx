@@ -251,7 +251,7 @@ const LocalFolderOptions: FC = () => {
             <FormGroup subLabel='Upload a local memory report'>
                 <div className='buttons-container'>
                     <label
-                        className='bp5-file-input'
+                        className='bp6-file-input'
                         htmlFor='local-upload'
                     >
                         <input
@@ -265,7 +265,7 @@ const LocalFolderOptions: FC = () => {
                             webkitdirectory=''
                             onChange={handleReportDirectoryOpen}
                         />
-                        <span className='bp5-file-upload-input'>{profilerUploadLabel}</span>
+                        <span className='bp6-file-upload-input'>{profilerUploadLabel}</span>
                     </label>
 
                     <FileStatusOverlay />
@@ -307,7 +307,7 @@ const LocalFolderOptions: FC = () => {
             <FormGroup subLabel='Upload a local performance report'>
                 <div className='buttons-container'>
                     <label
-                        className='bp5-file-input'
+                        className='bp6-file-input'
                         htmlFor='local-performance-upload'
                     >
                         <input
@@ -321,7 +321,7 @@ const LocalFolderOptions: FC = () => {
                             webkitdirectory=''
                             onChange={handlePerformanceDirectoryOpen}
                         />
-                        <span className='bp5-file-upload-input'>{performanceDataUploadLabel}</span>
+                        <span className='bp6-file-upload-input'>{performanceDataUploadLabel}</span>
                     </label>
 
                     {performanceFolder && !isUploadingPerformance && (

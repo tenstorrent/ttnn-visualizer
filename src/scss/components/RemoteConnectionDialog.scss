@@ -6,19 +6,19 @@
 
 $tt-pending: $tt-yellow;
 
-.bp5-dialog.remote-connection-dialog {
+.bp6-dialog.remote-connection-dialog {
     background-color: $tt-grey-3;
 
-    .bp5-dialog-header {
+    .bp6-dialog-header {
         background-color: $tt-grey-2;
 
-        .bp5-icon,
-        .bp5-heading {
+        .bp6-icon,
+        .bp6-heading {
             color: $tt-grey-7;
         }
     }
 
-    .bp5-form-group-sub-label {
+    .bp6-form-group-sub-label {
         color: $tt-grey-7;
     }
 

@@ -4,12 +4,12 @@
 
 // The select component
 .folder-picker {
-    > .bp5-popover-target {
+    > .bp6-popover-target {
         min-width: 243px;
     }
 
     .folder-picker-button {
-        .bp5-button-text {
+        .bp6-button-text {
             white-space: nowrap;
             text-overflow: ellipsis;
             overflow: hidden;
@@ -23,7 +23,7 @@
     flex-wrap: nowrap;
     justify-content: space-between;
 
-    .bp5-menu-item {
+    .bp6-menu-item {
         padding-left: 7px;
     }
 
