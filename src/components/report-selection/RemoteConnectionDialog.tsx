@@ -196,7 +196,10 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                     <br />
 
                     {connectionTests.length === 0 && (
-                        <p>Ensure the SSH connection is working correctly and the remote path(s) are valid.</p>
+                        <p>
+                            Check the SSH connection is working correctly, the remote path(s) are valid and contain
+                            expected report types.
+                        </p>
                     )}
 
                     <Button
