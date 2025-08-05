@@ -5,11 +5,11 @@
 import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup } from '@blueprintjs/core';
 import { AxiosError } from 'axios';
 import { FC, useState } from 'react';
-import 'styles/components/RemoteConnectionDialog.scss';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { RemoteConnection } from '../../definitions/RemoteConnection';
 import useRemoteConnection from '../../hooks/useRemote';
 import ConnectionTestMessage from './ConnectionTestMessage';
+import 'styles/components/RemoteConnectionDialog.scss';
 
 interface RemoteConnectionDialogProps {
     title?: string;
@@ -20,6 +20,26 @@ interface RemoteConnectionDialogProps {
     remoteConnection?: RemoteConnection;
 }
 
+const SSH_STATUS_PROGRESS = { status: ConnectionTestStates.PROGRESS, message: 'Testing SSH connection' };
+const MEMORY_REPORT_PATH_STATUS = {
+    status: ConnectionTestStates.PROGRESS,
+    message: 'Testing memory report folder path',
+};
+const PERFORMANCE_PATH_STATUS = {
+    status: ConnectionTestStates.PROGRESS,
+    message: 'Testing performance report folder path',
+};
+const FAILED_CONNECTION = { status: ConnectionTestStates.FAILED, message: 'Connection failed' };
+const FAILED_MEMORY_REPORT_PATH = { status: ConnectionTestStates.FAILED, message: 'Memory report folder path failed' };
+
+const DEFAULT_CONNECTION: RemoteConnection = {
+    name: '',
+    host: '',
+    port: 22,
+    profilerPath: '',
+    username: '',
+};
+
 const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     open,
     onClose,
@@ -28,19 +48,9 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     buttonLabel = 'Add connection',
     remoteConnection,
 }) => {
-    const defaultConnection = remoteConnection ?? {
-        name: '',
-        host: '',
-        port: 22,
-        profilerPath: '',
-        username: '',
-    };
-    const defaultConnectionTests: ConnectionStatus[] = [
-        { status: ConnectionTestStates.IDLE, message: 'Test connection' },
-        { status: ConnectionTestStates.IDLE, message: 'Test memory report folder path' },
-    ];
-    const [connection, setConnection] = useState<Partial<RemoteConnection>>(defaultConnection);
-    const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>(defaultConnectionTests);
+    const connectionToTest = remoteConnection ?? DEFAULT_CONNECTION;
+    const [connection, setConnection] = useState<Partial<RemoteConnection>>(connectionToTest);
+    const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const { testConnection } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
     const [isDetectingBinaryPath] = useState(false);
@@ -50,17 +60,17 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     const testConnectionStatus = async () => {
         setIsTestingconnection(true);
 
-        const sshStatus = { status: ConnectionTestStates.PROGRESS, message: 'Testing connection' };
-        const reportFolderStatus = {
-            status: ConnectionTestStates.PROGRESS,
-            message: 'Testing memory report folder path',
-        };
-        const performanceFolderStatus = {
-            status: ConnectionTestStates.PROGRESS,
-            message: 'Testing performance report folder path',
-        };
+        const tests: ConnectionStatus[] = [SSH_STATUS_PROGRESS];
 
-        setConnectionTests([sshStatus, reportFolderStatus, performanceFolderStatus]);
+        if (connection.profilerPath) {
+            tests.push(MEMORY_REPORT_PATH_STATUS);
+        }
+
+        if (connection.performancePath) {
+            tests.push(PERFORMANCE_PATH_STATUS);
+        }
+
+        setConnectionTests(tests);
 
         try {
             const statuses = await testConnection(connection);
@@ -73,10 +83,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 setConnectionTests(axiosError.response.data as ConnectionStatus[]);
             } else {
                 // Fallback for other types of errors
-                setConnectionTests([
-                    { status: ConnectionTestStates.FAILED, message: 'Connection failed' },
-                    { status: ConnectionTestStates.FAILED, message: 'Memory report folder path failed' },
-                ]);
+                setConnectionTests([FAILED_CONNECTION, FAILED_MEMORY_REPORT_PATH]);
             }
         } finally {
             setIsTestingconnection(false);
@@ -84,8 +91,8 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     };
 
     const closeDialog = () => {
-        setConnection(defaultConnection);
-        setConnectionTests(defaultConnectionTests);
+        setConnection(connectionToTest);
+        setConnectionTests([]);
         onClose();
     };
 
@@ -163,7 +170,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 </FormGroup>
 
                 <FormGroup
-                    label='Performance report folder path (optional)'
+                    label='Performance report folder path'
                     subLabel='Path to a remote folder containing performance reports (e.g., "/<PATH TO TT METAL>/generated/profiler/reports/")'
                 >
                     <InputGroup
@@ -188,8 +195,15 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                     <br />
 
+                    {connectionTests.length === 0 && (
+                        <p>
+                            Check the SSH connection is working correctly, the remote path(s) are valid and contain
+                            expected report types.
+                        </p>
+                    )}
+
                     <Button
-                        text='Test Connection'
+                        text='Run tests'
                         disabled={isTestingConnection || isDetectingBinaryPath}
                         loading={isTestingConnection}
                         onClick={testConnectionStatus}

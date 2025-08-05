@@ -27,7 +27,7 @@ const formatRemoteFolderName = (
     }
 
     const paths = {
-        profiler: selectedConnection.profilerPath || selectedConnection.reportPath,
+        profiler: selectedConnection.profilerPath,
         performance: selectedConnection.performancePath,
     };
 
