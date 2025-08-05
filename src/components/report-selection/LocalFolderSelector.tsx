@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
+import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
@@ -250,23 +250,18 @@ const LocalFolderOptions: FC = () => {
 
             <FormGroup subLabel='Upload a local memory report'>
                 <div className='buttons-container'>
-                    <label
-                        className='bp6-file-input'
-                        htmlFor='local-upload'
-                    >
-                        <input
-                            id='local-upload'
-                            data-testid='local-profiler-upload'
-                            type='file'
-                            multiple
-                            /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
-                            // eslint-disable-next-line react/no-unknown-property
-                            directory=''
-                            webkitdirectory=''
-                            onChange={handleReportDirectoryOpen}
-                        />
-                        <span className='bp6-file-upload-input'>{profilerUploadLabel}</span>
-                    </label>
+                    <FileInput
+                        id='local-upload'
+                        onInputChange={handleReportDirectoryOpen}
+                        text={profilerUploadLabel}
+                        inputProps={{
+                            // @ts-expect-error 'directory' (needed for Safari) and 'webkitdirectory' - TypeScript’s DOM types do not include non-standard attributes
+                            directory: '',
+                            webkitdirectory: '',
+                            multiple: true,
+                            'data-testid': 'local-profiler-upload',
+                        }}
+                    />
 
                     <FileStatusOverlay />
 
@@ -306,23 +301,18 @@ const LocalFolderOptions: FC = () => {
 
             <FormGroup subLabel='Upload a local performance report'>
                 <div className='buttons-container'>
-                    <label
-                        className='bp6-file-input'
-                        htmlFor='local-performance-upload'
-                    >
-                        <input
-                            id='local-performance-upload'
-                            data-testid='local-performance-upload'
-                            type='file'
-                            multiple
-                            /* @ts-expect-error 'directory' does not exist on native HTMLInputElement */
-                            // eslint-disable-next-line react/no-unknown-property
-                            directory=''
-                            webkitdirectory=''
-                            onChange={handlePerformanceDirectoryOpen}
-                        />
-                        <span className='bp6-file-upload-input'>{performanceDataUploadLabel}</span>
-                    </label>
+                    <FileInput
+                        id='local-performance-upload'
+                        onInputChange={handlePerformanceDirectoryOpen}
+                        text={performanceDataUploadLabel}
+                        inputProps={{
+                            // @ts-expect-error 'directory' (needed for Safari) and 'webkitdirectory' - TypeScript’s DOM types do not include non-standard attributes
+                            directory: '',
+                            webkitdirectory: '',
+                            multiple: true,
+                            'data-testid': 'local-performance-upload',
+                        }}
+                    />
 
                     {performanceFolder && !isUploadingPerformance && (
                         <div
