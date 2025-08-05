@@ -1,6 +1,6 @@
 .github
 .vscode
-.eslintrc*
+eslint.config
 release/dist
 src/sample-data
 *.md

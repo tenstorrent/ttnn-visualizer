@@ -242,6 +242,7 @@ const RemoteSyncConfigurator: FC = () => {
                                 setSelectedReportFolder(updatedReportsfolders[0]);
                                 setSelectedPerformanceFolder(updatedPerformanceFolders[0]);
                             }
+                            // eslint-disable-next-line @typescript-eslint/no-unused-vars
                         } catch (err) {
                             // eslint-disable-next-line no-alert
                             alert('Unable to connect to remote server.');
