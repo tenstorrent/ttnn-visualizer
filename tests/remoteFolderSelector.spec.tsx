@@ -23,8 +23,8 @@ it('renders the initial form state when there is no data', () => {
     const reportSelects = getAllButtonsWithText('(No selection)');
     const syncButtons = getAllButtonsWithText('Sync remote folder');
 
-    expect(getButtonWithText('Add new connection')).to.exist;
-    expect(getButtonWithText('(No connection)')).to.exist;
+    expect(getButtonWithText('Add new connection')).not.toBeNull();
+    expect(getButtonWithText('(No connection)')).not.toBeNull();
     expect(getButtonWithText('Edit selected connection')).to.have.property('disabled', true);
     expect(getButtonWithText('Remove selected connection')).to.have.property('disabled', true);
     expect(getButtonWithText('Fetch remote folders list')).to.have.property('disabled', true);
@@ -52,7 +52,7 @@ it('renders the initial form state when there is remote connection data', () => 
     const reportSelects = getAllButtonsWithText('(No selection)');
     const syncButtons = getAllButtonsWithText('Sync remote folder');
 
-    expect(getButtonWithText('Local - ssh://localhost:2222/')).to.exist;
+    expect(getButtonWithText('Local - ssh://localhost:2222/')).not.toBeNull();
     expect(getButtonWithText('Edit selected connection')).to.have.property('disabled', false);
     expect(getButtonWithText('Remove selected connection')).to.have.property('disabled', false);
     expect(getButtonWithText('Fetch remote folders list')).to.have.property('disabled', false);

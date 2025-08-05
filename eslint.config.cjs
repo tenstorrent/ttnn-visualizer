@@ -185,12 +185,6 @@ module.exports = defineConfig([
             'no-restricted-syntax': 'off',
         },
     },
-    {
-        files: ['*.spec.tsx'],
-        rules: {
-            'no-unused-expressions': 'off', // Vitest (Chai, really) uses a syntax which will fail this check
-        },
-    },
     globalIgnores([
         '**/dist',
         '**/*.svg',
