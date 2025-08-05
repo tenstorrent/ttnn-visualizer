@@ -4,6 +4,7 @@
 
 @use '../definitions/colours' as *;
 
+// TODO: Reorganise these styles so they are either in the new folder picker or separate
 .bp6-button-text:has(.path-label) {
     display: inline-flex;
     align-items: center;
@@ -111,13 +112,4 @@
             margin-left: 5px;
         }
     }
-}
-
-.path-label {
-    max-width: clamp(150px, 15vw, 250px);
-    display: inline-block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    text-wrap: nowrap;
 }
