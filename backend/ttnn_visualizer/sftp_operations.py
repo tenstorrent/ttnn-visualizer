@@ -628,11 +628,22 @@ def check_remote_path_for_reports(remote_connection):
         remote_connection, remote_connection.performancePath, [TEST_PROFILER_FILE]
     )
 
-    if not remote_profiler_paths and not remote_performance_paths:
+    errors = []
+    if not remote_profiler_paths and remote_connection.profilerPath:
+        errors.append(
+            f"No matching profiler projects found: {remote_connection.profilerPath}"
+        )
+    if not remote_performance_paths and remote_connection.performancePath:
+        errors.append(
+            f"No matching performance projects found: {remote_connection.performancePath}"
+        )
+
+    if errors:
         raise NoProjectsException(
-            message="No projects found at given path(s)",
+            message="; ".join(errors),
             status=ConnectionTestStates.FAILED,
         )
+
     return True
 
 
@@ -650,8 +661,10 @@ def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str)
             # Directory does not exist or is inaccessible
             if path_key == "performancePath":
                 message = "Performance directory does not exist or cannot be accessed"
-            else:
+            if path_key == "profilerPath":
                 message = "Profiler directory does not exist or cannot be accessed"
+            else:
+                message = f"Remote path '{path}' does not exist or cannot be accessed"
 
             logger.error(message)
             raise RemoteConnectionException(
