@@ -1072,7 +1072,8 @@ def test_remote_folder():
 def read_remote_folder():
     connection = RemoteConnection.model_validate(request.json, strict=False)
     try:
-        content = read_remote_file(connection, remote_path=connection.path)
+        # Only profilerPath is relevant here as we're reading the stack trace file
+        content = read_remote_file(connection, remote_path=connection.profilerPath)
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
     return Response(status=200, response=content)

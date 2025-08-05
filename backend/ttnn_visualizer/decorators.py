@@ -90,13 +90,13 @@ def remote_exception_handler(func):
             current_app.logger.error(f"File not found: {str(err)}")
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
-                message=f"Unable to open path {connection.path}: {str(err)}",
+                message=f"Unable to open path: {str(err)}",
             )
         except NoProjectsException as err:
             current_app.logger.error(f"No projects: {str(err)}")
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
-                message=f"No projects found at remote location: {connection.path}",
+                message=f"No projects found at remote location: {str(err)}",
             )
         except NoValidConnectionsError as err:
             current_app.logger.warning(
@@ -124,7 +124,7 @@ def remote_exception_handler(func):
                 status=ConnectionTestStates.FAILED, message=message
             )
         except IOError as err:
-            message = f"Error opening remote folder {connection.path}: {str(err)}"
+            message = f"Error opening remote folder: {str(err)}"
             if "Name or service not known" in str(err):
                 message = f"Unable to connect to {connection.host} - check hostname"
             raise RemoteConnectionException(
