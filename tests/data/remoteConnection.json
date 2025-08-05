@@ -3,7 +3,6 @@
       "name":"Local",
       "host":"localhost",
       "port":2222,
-      "reportPath":"/test/data",
       "username":"test-user",
       "performancePath":"/test/data/perf",
       "profilerPath":""
