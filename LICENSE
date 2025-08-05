@@ -93,6 +93,7 @@ The following separate and independent dependencies are utilized by this project
 - globals – MIT – https://github.com/sindresorhus/globals/blob/main/license
 - immutable – MIT – https://github.com/immutable-js/immutable-js/blob/master/LICENSE
 - jotai – MIT – https://github.com/pmndrs/jotai/blob/main/LICENSE
+- jsdom - MIT - https://github.com/jsdom/jsdom/blob/main/LICENSE.txt
 - mini-svg-data-uri – MIT – https://github.com/tigt/mini-svg-data-uri/blob/master/LICENSE
 - normalize.css – MIT – https://github.com/necolas/normalize.css/blob/master/LICENSE.md
 - papaparse – MIT – https://github.com/mholt/PapaParse/blob/master/LICENSE

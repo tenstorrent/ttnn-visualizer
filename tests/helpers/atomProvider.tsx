@@ -17,7 +17,7 @@ export const HydrateAtoms = ({
     initialValues: AtomProviderInitialValues;
     children: React.ReactNode;
 }) => {
-    useHydrateAtoms(initialValues);
+    useHydrateAtoms(new Map(initialValues));
     return children;
 };
 
