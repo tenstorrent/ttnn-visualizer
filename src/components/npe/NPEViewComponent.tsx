@@ -284,7 +284,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         onChange={(value: number) => handleScrubberChange(value)}
                     />
                     <div
-                        className='bp5-slider-progress duplicate'
+                        className='bp6-slider-progress duplicate'
                         style={{ width: `${canvasWidth - RIGHT_MARGIN_OFFSET_PX}px` }}
                     />
                 </div>

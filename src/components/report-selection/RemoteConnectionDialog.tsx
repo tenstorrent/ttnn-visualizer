@@ -111,7 +111,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                     subLabel='Connection name'
                 >
                     <InputGroup
-                        className='bp5-light'
+                        className='bp6-light'
                         key='name'
                         value={connection.name}
                         onChange={(e) => setConnection({ ...connection, name: e.target.value })}

@@ -15,7 +15,7 @@ import LocalFolderSelector from '../src/components/report-selection/LocalFolderS
 // Scrub the markup after each test
 afterEach(cleanup);
 
-const PORTAL_CLASS = '.bp5-portal';
+const PORTAL_CLASS = '.bp6-portal';
 const TOASTIFY_CLASS = '.Toastify';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({

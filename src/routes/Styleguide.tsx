@@ -359,7 +359,7 @@ export default function Styleguide() {
                 className='short-width'
             >
                 <InputGroup
-                    className='bp5-light'
+                    className='bp6-light'
                     onChange={() => {}}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
@@ -367,28 +367,28 @@ export default function Styleguide() {
 
             <div className='container flex'>
                 <InputGroup
-                    className='bp5-light'
+                    className='bp6-light'
                     onChange={() => {}}
                     intent={Intent.PRIMARY}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
 
                 <InputGroup
-                    className='bp5-light'
+                    className='bp6-light'
                     onChange={() => {}}
                     intent={Intent.WARNING}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
 
                 <InputGroup
-                    className='bp5-light'
+                    className='bp6-light'
                     onChange={() => {}}
                     intent={Intent.SUCCESS}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
 
                 <InputGroup
-                    className='bp5-light'
+                    className='bp6-light'
                     onChange={() => {}}
                     intent={Intent.DANGER}
                     leftIcon={IconNames.FOLDER_NEW}
@@ -407,7 +407,7 @@ export default function Styleguide() {
 
             <FormGroup>
                 <label
-                    className='bp5-file-input'
+                    className='bp6-file-input'
                     htmlFor='local-upload'
                 >
                     <input
@@ -415,7 +415,7 @@ export default function Styleguide() {
                         type='file'
                         multiple
                     />
-                    <span className='bp5-file-upload-input'>Select files...</span>
+                    <span className='bp6-file-upload-input'>Select files...</span>
                 </label>
             </FormGroup>
 

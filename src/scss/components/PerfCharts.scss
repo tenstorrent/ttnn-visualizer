@@ -17,15 +17,8 @@
 .folder-selection {
     display: flex;
     flex-wrap: nowrap;
-    width: 250px;
+    width: 290px;
     gap: 5px;
-
-    // TODO: Fix discrepancies between this usage and the one in FolderPicker.scss
-    .folder-picker-button {
-        .bp5-button-text {
-            max-width: 147px;
-        }
-    }
 }
 
 .operation-types-charts {

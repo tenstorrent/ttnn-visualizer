@@ -100,33 +100,33 @@ $pt-intent-text-colors: (
 );
 
 // Overrides for BlueprintJS which cannot be done via SASS variables
-.bp5-dark {
-    .bp5-navbar {
+.bp6-dark {
+    .bp6-navbar {
         box-shadow: none;
     }
 
-    .bp5-button {
-        &.bp5-minimal {
-            &.bp5-intent-primary {
+    .bp6-button {
+        &.bp6-minimal {
+            &.bp6-intent-primary {
                 &:hover,
                 &:active {
                     color: $tt-purple-tint-2;
                 }
 
-                &.bp5-active {
+                &.bp6-active {
                     color: $tt-purple-tint-2;
                 }
             }
         }
 
-        &.bp5-outlined {
-            &.bp5-intent-primary {
+        &.bp6-outlined {
+            &.bp6-intent-primary {
                 &:hover,
                 &:active {
                     color: $dark-primary-intent-color;
                 }
 
-                &.bp5-active {
+                &.bp6-active {
                     color: $dark-primary-intent-color;
                 }
             }
