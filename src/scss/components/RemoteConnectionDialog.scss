@@ -4,8 +4,6 @@
 
 @use '../definitions/colours' as *;
 
-$tt-pending: $tt-yellow;
-
 .bp5-dialog.remote-connection-dialog {
     background-color: $tt-grey-3;
 
@@ -57,18 +55,11 @@ $tt-pending: $tt-yellow;
     }
 
     .connection-status-detail {
-        font-family: 'Courier New', Consolas, 'Lucida Console', monospace;
         font-size: 12px;
         color: $tt-grey-6;
         background-color: $tt-grey-2;
-        border: 1px solid $tt-grey-4;
         border-radius: 4px;
         padding: 8px;
-        margin: 0;
-        white-space: pre-wrap;
-        word-break: break-all;
-        max-width: 400px;
-        overflow-x: auto;
     }
 
     &.status-idle .connection-status-icon {
