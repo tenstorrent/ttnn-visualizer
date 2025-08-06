@@ -17,7 +17,13 @@ interface TestProvidersProps {
 export function TestProviders({ initialAtomValues = [], children }: TestProvidersProps) {
     return (
         <QueryProvider>
-            <MemoryRouter>
+            {/* We don't currently test routing so there's no harm in enabling these future features to avoid noisy warnings in the logs */}
+            <MemoryRouter
+                future={{
+                    v7_startTransition: true,
+                    v7_relativeSplatPath: true,
+                }}
+            >
                 <HelmetProvider>
                     <AtomProvider initialValues={initialAtomValues}>
                         <>

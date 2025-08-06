@@ -242,6 +242,7 @@ const RemoteSyncConfigurator: FC = () => {
                                 setSelectedReportFolder(updatedReportsfolders[0]);
                                 setSelectedPerformanceFolder(updatedPerformanceFolders[0]);
                             }
+                            // eslint-disable-next-line @typescript-eslint/no-unused-vars
                         } catch (err) {
                             // eslint-disable-next-line no-alert
                             alert('Unable to connect to remote server.');
@@ -337,7 +338,7 @@ const RemoteSyncConfigurator: FC = () => {
                 </RemoteFolderSelector>
             </FormGroup>
 
-            {remote.persistentState.selectedConnection?.performancePath && (
+            {
                 <FormGroup
                     className='form-group'
                     label={<h3 className='label'>Performance report</h3>}
@@ -436,7 +437,7 @@ const RemoteSyncConfigurator: FC = () => {
                         </Tooltip>
                     </RemoteFolderSelector>
                 </FormGroup>
-            )}
+            }
         </>
     );
 };

@@ -30,16 +30,14 @@
       "allowSyntheticDefaultImports":true,
       "types":[
          "vitest/importMeta"
-      ]
+      ],
    },
-   "include":[
-      "vite.config.ts",
-      "vitest.config.ts",
-      "vitest.setup.ts",
-      "src",
-      "package.json",
-      "tests",
-      "scripts"
+    "include":[
+        "vite.config.ts",
+        "vitest.config.ts",
+        "vitest.setup.ts",
+        "src/**/*",
+        "tests/**/*",
     ],
    "references":[
       {

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useState } from 'react';
-import { Alert, Button, ButtonVariant, Intent, MenuItem, Tooltip } from '@blueprintjs/core';
+import { Alert, Button, ButtonVariant, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useSession } from '../../hooks/useAPI';
@@ -18,6 +18,8 @@ interface LocalFolderPickerProps {
     handleDelete?: (folder: ReportFolder) => void;
     defaultLabel?: string;
 }
+
+const REPORT_NAME_MAX_LENGTH = 18;
 
 const LocalFolderPicker = ({
     items,
@@ -34,6 +36,21 @@ const LocalFolderPicker = ({
 
     const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
 
+    // Map through items and if reportNames are duplicated append (count) to the name
+    const itemsWithUniqueReportNames = items?.map((item, idx, arr) => {
+        const name = item.reportName;
+        const prevCount = arr.slice(0, idx).filter((i) => i.reportName === name).length;
+
+        if (prevCount === 0) {
+            return item;
+        }
+
+        return {
+            ...item,
+            reportName: `${name} (${prevCount})`,
+        };
+    });
+
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers }) => {
         if (!modifiers.matchesPredicate) {
             return null;
@@ -42,12 +59,21 @@ const LocalFolderPicker = ({
         return (
             <div
                 className='folder-picker-menu-item'
-                key={folder.path}
+                key={`${folder.path} - ${folder.reportName}`}
             >
                 <MenuItem
                     textClassName='folder-picker-label'
                     text={`/${getPrettyPath(folder.path)}`}
-                    labelElement={folder.reportName}
+                    labelElement={
+                        <Tooltip
+                            className='folder-picker-name-label'
+                            content={folder.reportName}
+                            disabled={folder.reportName.length < REPORT_NAME_MAX_LENGTH}
+                            position={Position.RIGHT}
+                        >
+                            {folder.reportName}
+                        </Tooltip>
+                    }
                     labelClassName='folder-picker-name-label'
                     roleStructure='listoption'
                     active={folder.path === path}
@@ -60,6 +86,7 @@ const LocalFolderPicker = ({
                 {handleDelete && !isDeleteDisabled && (
                     <>
                         <Button
+                            aria-label='Delete report'
                             icon={IconNames.TRASH}
                             onClick={() => setFolderToDelete(folder)}
                             variant={ButtonVariant.MINIMAL}
@@ -77,7 +104,7 @@ const LocalFolderPicker = ({
                                 onConfirm={() => handleDelete(folderToDelete)}
                                 cancelButtonText='Cancel'
                                 confirmButtonText='Delete'
-                                className='bp5-dark'
+                                className='bp6-dark'
                                 // @ts-expect-error BackdropClassName is not defined in AlertProps
                                 backdropClassName='delete-folder-backdrop'
                             >
@@ -96,7 +123,7 @@ const LocalFolderPicker = ({
     return (
         <Select<ReportFolder>
             className='folder-picker'
-            items={items ?? []}
+            items={itemsWithUniqueReportNames ?? []}
             itemPredicate={(query, item) => !query || item.reportName.toLowerCase().includes(query.toLowerCase())}
             itemRenderer={renderItem}
             noResults={
@@ -112,7 +139,11 @@ const LocalFolderPicker = ({
             <Tooltip content={path ? `/${getPrettyPath(path)}` : ''}>
                 <Button
                     className='folder-picker-button'
-                    text={items && path ? getReportName(items, path) : defaultLabel}
+                    text={
+                        itemsWithUniqueReportNames && path
+                            ? getReportName(itemsWithUniqueReportNames, path)
+                            : defaultLabel
+                    }
                     disabled={isDisabled || !session}
                     alignText='start'
                     icon={IconNames.DOCUMENT_OPEN}
@@ -125,9 +156,8 @@ const LocalFolderPicker = ({
     );
 };
 
-const getReportName = (reports: ReportFolder[], path: string | null) => {
-    return reports?.find((report) => report.path === path)?.reportName;
-};
+const getReportName = (reports: ReportFolder[], path: string | null) =>
+    reports?.find((report) => report.path === path)?.reportName;
 
 const PATH_REGEX = /^\d+_/gm;
 const getPrettyPath = (path: string) => (PATH_REGEX.test(path) ? path.replace(PATH_REGEX, '') : path);

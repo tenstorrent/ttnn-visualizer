@@ -8,6 +8,15 @@ import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definition
 import axiosInstance from '../libs/axiosInstance';
 import useAppConfig from './useAppConfig';
 
+const FAILED_NO_CONNECTION = {
+    status: ConnectionTestStates.FAILED,
+    message: 'No connection provided',
+};
+const FAILED_NO_PATH = {
+    status: ConnectionTestStates.FAILED,
+    message: 'Please provide at least one folder path.',
+};
+
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
 
@@ -19,12 +28,11 @@ const useRemoteConnection = () => {
 
     const testConnection = async (connection: Partial<RemoteConnection>) => {
         if (!connection.host || !connection.port) {
-            return [
-                {
-                    status: ConnectionTestStates.FAILED,
-                    message: 'No connection provided',
-                },
-            ];
+            return [FAILED_NO_CONNECTION];
+        }
+
+        if (!connection.profilerPath && !connection.performancePath) {
+            return [FAILED_NO_PATH];
         }
 
         const { data: connectionTestStates } = await axiosInstance.post('/api/remote/test', connection);
@@ -37,6 +45,10 @@ const useRemoteConnection = () => {
             throw new Error('No connection provided');
         }
 
+        if (!connection.profilerPath) {
+            return [];
+        }
+
         const response = await axiosInstance.post<RemoteFolder[]>('/api/remote/profiler', connection);
 
         return response.data;
@@ -46,6 +58,11 @@ const useRemoteConnection = () => {
         if (!connection || !connection.host || !connection.port) {
             throw new Error('No connection provided');
         }
+
+        if (!connection.performancePath) {
+            return [];
+        }
+
         const response = await axiosInstance.post<RemoteFolder[]>('/api/remote/performance', {
             connection,
         });
@@ -100,19 +117,7 @@ const useRemoteConnection = () => {
             setAppConfig('selectedConnection', JSON.stringify(connection ?? null));
         },
         getSavedReportFolders: (connection?: RemoteConnection) =>
-            JSON.parse(getAppConfig(`${connection?.name} - reportFolders`) ?? '[]').map((folder: RemoteConnection) => {
-                const { reportPath, ...rest } = folder;
-
-                // reportPath is deprecated - use profilerPath instead
-                if (folder.profilerPath) {
-                    return {
-                        ...rest,
-                        profilerPath: reportPath || rest.profilerPath,
-                    };
-                }
-
-                return rest;
-            }) as RemoteFolder[],
+            JSON.parse(getAppConfig(`${connection?.name} - reportFolders`) ?? '[]') as RemoteFolder[],
 
         setSavedReportFolders: (connection: RemoteConnection | undefined, folders: RemoteFolder[]) => {
             setAppConfig(`${connection?.name} - reportFolders`, JSON.stringify(folders));

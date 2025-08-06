@@ -7,7 +7,6 @@ import json
 import logging
 import re
 import shutil
-import subprocess
 import time
 from http import HTTPStatus
 from pathlib import Path
@@ -560,7 +559,12 @@ def get_performance_data_list(instance: Instance):
         if not any(file.name.startswith("ops_perf_results") for file in files):
             continue
 
-        valid_dirs.append({"path": dir_path.name, "reportName": dir_path.name})
+        valid_dirs.append(
+            {
+                "path": dir_path.name,
+                "reportName": dir_path.name,
+            }
+        )
 
     return jsonify(valid_dirs)
 
@@ -1018,7 +1022,7 @@ def test_remote_folder():
         )
 
     # Test Directory Configuration
-    if not has_failures():
+    if not has_failures() and connection.profilerPath:
         try:
             check_remote_path_exists(connection, "profilerPath")
             add_status(ConnectionTestStates.OK.value, "Memory folder path exists")
@@ -1068,7 +1072,8 @@ def test_remote_folder():
 def read_remote_folder():
     connection = RemoteConnection.model_validate(request.json, strict=False)
     try:
-        content = read_remote_file(connection, remote_path=connection.path)
+        # Only profilerPath is relevant here as we're reading the stack trace file
+        content = read_remote_file(connection, remote_path=connection.profilerPath)
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
     return Response(status=200, response=content)

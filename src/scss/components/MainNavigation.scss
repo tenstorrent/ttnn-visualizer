@@ -8,11 +8,11 @@
 @mixin button-styles($color, $colorActive, $icon) {
     color: $color;
 
-    .bp5-icon.bp5-icon-#{$icon} {
+    .bp6-icon.bp6-icon-#{$icon} {
         color: $color;
     }
 
-    &.bp5-outlined:not([disabled]) {
+    &.bp6-outlined:not([disabled]) {
         border-color: $color;
 
         &:hover {
@@ -20,17 +20,17 @@
         }
     }
 
-    &.bp5-minimal:not([disabled]) {
+    &.bp6-minimal:not([disabled]) {
         &:hover {
             background-color: rgba($color, 0.2);
             color: $color;
         }
 
-        &.bp5-active {
+        &.bp6-active {
             color: $colorActive;
             background-color: rgba($color, 0.3);
 
-            .bp5-icon.bp5-icon-#{$icon} {
+            .bp6-icon.bp6-icon-#{$icon} {
                 color: $colorActive;
             }
         }
@@ -43,11 +43,11 @@
     padding-right: 0;
     flex-grow: 1;
 
-    .bp5-navbar-group {
+    .bp6-navbar-group {
         gap: 3px; // avoids focus ring overlap
     }
 
-    .bp5-button {
+    .bp6-button {
         position: relative;
 
         &.reports-button {
@@ -83,7 +83,7 @@
         }
 
         &.modal {
-            &.bp5-active {
+            &.bp6-active {
                 cursor: default;
                 pointer-events: none;
             }
@@ -117,26 +117,26 @@
     }
 
     @media screen and (width <= #{variables.$bp-large}) {
-        .bp5-button-text {
+        .bp6-button-text {
             font-size: 13px;
         }
 
-        .bp5-button {
+        .bp6-button {
             padding-left: 10px;
             padding-right: 10px;
         }
 
-        .bp5-icon {
+        .bp6-icon {
             margin-right: 8px;
         }
     }
 
     @media screen and (width <= #{variables.$bp-medium}) {
-        .bp5-button-text {
+        .bp6-button-text {
             display: none;
         }
 
-        .bp5-icon {
+        .bp6-icon {
             margin-right: 0;
         }
     }

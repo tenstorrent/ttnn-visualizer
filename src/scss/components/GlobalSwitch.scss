@@ -5,13 +5,13 @@
 @use '../definitions/colours' as *;
 
 .global-switch {
-    &.bp5-control.bp5-switch {
+    &.bp6-control.bp6-switch {
         &.primary {
-            input:checked ~ .bp5-control-indicator {
+            input:checked ~ .bp6-control-indicator {
                 background-color: $tt-green-tint-1;
             }
 
-            input:checked:not(:disabled):active ~ .bp5-control-indicator {
+            input:checked:not(:disabled):active ~ .bp6-control-indicator {
                 background-color: $tt-green;
             }
         }

@@ -27,7 +27,7 @@ const formatRemoteFolderName = (
     }
 
     const paths = {
-        profiler: selectedConnection.profilerPath || selectedConnection.reportPath,
+        profiler: selectedConnection.profilerPath,
         performance: selectedConnection.performancePath,
     };
 
@@ -167,11 +167,11 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     );
 };
 
-function getUTC(epoch: number) {
+const getUTC = (epoch: number): Date => {
     const date = new Date(0);
     date.setUTCSeconds(epoch);
 
     return date;
-}
+};
 
 export default RemoteFolderSelector;
