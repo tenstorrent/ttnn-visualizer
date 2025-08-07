@@ -29,4 +29,4 @@ jobs:
 
             -   name: Running check license identifiers
                 run: |
-                    pnpm run spdx
+                    pnpm lint:spdx
