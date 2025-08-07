@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useCallback, useMemo } from 'react';
 import { LinkUtilization, NPEData, NPE_COORDINATES, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
