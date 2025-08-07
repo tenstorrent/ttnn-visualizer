@@ -15,23 +15,23 @@ jobs:
   build-wheel:
     name: Build Python Wheel
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Read .nvmrc
         id: nvm
         run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
-        
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
-          
+
       - run: npm install -g pnpm@latest-10
       - run: pnpm install
-      - run: pnpm run build
+      - run: pnpm build
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v4
@@ -60,22 +60,22 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13']
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      
+
       - name: Download wheel artifact
         uses: actions/download-artifact@v4
         with:
           name: python-wheel
           path: dist/
-      
+
       - name: Install wheel and dependencies
         run: |
           python -m pip install --upgrade pip
@@ -84,14 +84,14 @@ jobs:
           # Install playwright for testing
           pip install playwright
           playwright install --with-deps chromium
-      
+
       - name: Start ttnn-visualizer server in background
         run: |
           # Start the server in the background
           ttnn-visualizer &
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
-          
+
           # Wait for server to start (max 30 seconds)
           echo "Waiting for server to start..."
           for i in {1..30}; do
@@ -106,17 +106,17 @@ jobs:
             fi
             sleep 1
           done
-      
+
       - name: Test server with curl
         run: |
           # Test that we can reach the server
           curl -f http://localhost:8000
           echo "✅ Server responded to curl request"
-      
+
       - name: Run Playwright smoke test
         run: |
           python scripts/smoke_test.py
-      
+
       - name: Cleanup
         if: always()
         run: |

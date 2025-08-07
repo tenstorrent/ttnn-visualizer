@@ -25,7 +25,7 @@ jobs:
             node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
       - run: npm install -g pnpm@latest-10
       - run: pnpm install
-      - run: pnpm run build
+      - run: pnpm build
 
       - name: Set up Python
         uses: actions/setup-python@v4

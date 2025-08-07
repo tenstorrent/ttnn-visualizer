@@ -1,18 +1,26 @@
 /* eslint-disable no-console */
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import fs from 'fs';
 import path from 'path';
 
+const CURRENT_YEAR = new Date().getFullYear();
+const BRAND = 'Tenstorrent AI ULC';
+const LICENSE = 'Apache-2.0';
+
 // License formats
-const SPDX_JS_LICENSE = '// SPDX-License-Identifier: Apache-2.0';
-const SPDX_PYTHON_LICENSE = '# SPDX-License-Identifier: Apache-2.0';
+const SPDX_JS_LICENSE = `// SPDX-License-Identifier: ${LICENSE}
+//
+// SPDX-FileCopyrightText: © ${CURRENT_YEAR} ${BRAND}`;
+const SPDX_PYTHON_LICENSE = `# SPDX-License-Identifier: ${LICENSE}
+#
+# SPDX-FileCopyrightText: © ${CURRENT_YEAR} ${BRAND}`;
 const SPDX_PACKAGE_JSON_LICENSE = {
-    license: 'Apache-2.0',
+    license: LICENSE,
     author: {
-        name: 'Tenstorrent AI ULC',
+        name: BRAND,
         url: 'https://tenstorrent.com/',
     },
 };
@@ -41,9 +49,8 @@ const isFileType = (filePath, extensions) => extensions.includes(path.extname(fi
 
 const checkLicenseString = (filePath, licenseType) => {
     const content = fs.readFileSync(filePath, 'utf8');
-    const firstFewLines = content.split('\n').slice(0, 3).join('\n');
 
-    if (!firstFewLines.includes(licenseType)) {
+    if (!content.includes(licenseType)) {
         NON_COMPLIANT_FILES.push(filePath);
     }
 };

@@ -29,8 +29,8 @@ jobs:
 
       - name: Lint and test
         run: |
-          pnpm run lint
-          pnpm run test
+          pnpm lint
+          pnpm test
   backend-lint-and-test:
     name: Lint and Test (Backend)
     runs-on: ubuntu-latest
