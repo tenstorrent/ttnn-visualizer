@@ -39,6 +39,7 @@ module.exports = defineConfig([
                         'scripts/check-spdx.mjs',
                         'scripts/release.mjs',
                         'scripts/check-missing-licenses.mjs',
+                        'scripts/get-missing-licenses.mjs',
                     ],
                 },
             },
