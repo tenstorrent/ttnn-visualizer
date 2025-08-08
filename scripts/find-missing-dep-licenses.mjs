@@ -11,7 +11,7 @@ const findMissingDepLicenses = async (missingDeps, depLicenses) => {
     }));
 
     for (const obj of result) {
-        if (obj.possibleLicenseFile) {
+        if (obj.licenseFileGuess) {
             try {
                 // eslint-disable-next-line no-await-in-loop
                 let res = await fetch(obj.licenseFileGuess, { method: 'HEAD' });
