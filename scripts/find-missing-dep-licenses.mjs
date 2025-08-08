@@ -33,7 +33,8 @@ const findMissingDepLicenses = async (missingDeps, depLicenses) => {
                         }
                     }
                 }
-            } catch {
+            } catch (err) {
+                console.error(`Error fetching license file for "${obj.name}" at "${obj.licenseFileGuess}":`, err);
                 obj.licenseFileGuess = '';
             }
         }
