@@ -69,11 +69,11 @@ const checkMissingLicenses = () => {
                 await getMissingLicenses(missingDeps, depLicenses);
             }
 
-            return missingDeps;
+            process.exit(1);
         }
 
         console.info('No missing licenses found.\n');
-        return missingDeps;
+        process.exit(0);
     });
 };
 

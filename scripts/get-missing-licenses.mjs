@@ -42,12 +42,9 @@ const getMissingLicenses = async (missingDeps, depLicenses) => {
     if (result.length) {
         console.info(JSON.stringify(result, null, 2));
         console.info(`\n${result.length} missing licenses found\n`);
-
-        process.exit(0);
     }
 
     console.info('No missing licenses found.\n');
-    process.exit(0);
 };
 
 const getLicenseURL = (name, depLicenses) => {

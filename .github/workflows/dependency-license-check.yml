@@ -1,32 +1,34 @@
 name: Dependency License Check
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+    pull_request:
+        branches: [ "dev" ]
+    workflow_dispatch:
 
 jobs:
-  check-licenses:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    check-licenses:
+        name: Check Licenses
+        runs-on: ubuntu-latest
+        steps:
+            -   name: Checkout code
+                uses: actions/checkout@v4
 
-    - name: Read .nvmrc
-      id: nvm
-      run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
+            -   name: Read .nvmrc
+                id: nvm
+                run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
+            -   name: Setup Node.js
+                uses: actions/setup-node@v4
+                with:
+                    node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
 
-    - name: Install dependencies
-      run: |
-        npm install -g pnpm@latest-10
-        pnpm install
+            -   name: Install dependencies
+                run: |
+                    npm install -g pnpm@latest-10
+                    pnpm install
 
-    - name: Run license check
-      id: license_check
-      run: |
-        pnpm licenses ls --json | node scripts/check-missing-licenses.mjs
+            -   name: Run license check
+                id: license_check
+                run: |
+                    pnpm licenses ls --json | node scripts/check-missing-licenses.mjs
+
