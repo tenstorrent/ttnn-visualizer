@@ -155,22 +155,22 @@ The following separate and independent dependencies are utilized by this project
 - vitest - MIT - https://github.com/vitest-dev/vitest/blob/main/LICENSE
 - vitest-canvas-mock - MIT - https://github.com/wobsoriano/vitest-canvas-mock/blob/main/LICENSE
 
-- Flask - BSD‑3‑Clause - https://github.com/pallets/flask/blob/main/LICENSE.txt
-- gunicorn - MIT - https://github.com/benoitc/gunicorn/blob/master/LICENSE
-- uvicorn - BSD‑3‑Clause - https://github.com/encode/uvicorn/blob/master/LICENSE.md
-- flask_cors - MIT - https://github.com/corydolphin/flask-cors/blob/main/LICENSE
-- pydantic - MIT - https://github.com/pydantic/pydantic-settings/blob/main/LICENSE
-- setuptools - MIT - https://github.com/pypa/setuptools/blob/main/LICENSE
-- python-dotenv - BSD‑3‑Clause - https://github.com/theskumar/python-dotenv/blob/main/LICENSE
-- flask-sqlalchemy - BSD‑3‑Clause - https://github.com/pallets-eco/flask-sqlalchemy/blob/main/LICENSE
-- flask-socketio - MIT - https://github.com/miguelgrinberg/Flask-SocketIO/blob/main/LICENSE
-- PyYAML - MIT - https://github.com/yaml/pyyaml/blob/main/LICENSE
-- gevent - MIT - https://github.com/gevent/gevent/blob/master/LICENSE
-- pandas - BSD‑3‑Clause - https://github.com/pandas-dev/pandas/blob/main/LICENSE
-- wheel - MIT https://opensource.org/license/mit
 - build - MIT https://opensource.org/license/mit
-- tt-perf-report - MIT https://opensource.org/license/mit
-- zstd (python-zstandard) - BSD‑3‑Clause - https://github.com/indygreg/python-zstandard/blob/main/LICENSE
+- Flask - BSD‑3‑Clause - https://github.com/pallets/flask/blob/main/LICENSE.txt
+- flask_cors - MIT - https://github.com/corydolphin/flask-cors/blob/main/LICENSE
+- flask-socketio - MIT - https://github.com/miguelgrinberg/Flask-SocketIO/blob/main/LICENSE
+- flask-sqlalchemy - BSD‑3‑Clause - https://github.com/pallets-eco/flask-sqlalchemy/blob/main/LICENSE
+- gevent - MIT - https://github.com/gevent/gevent/blob/master/LICENSE
+- gunicorn - MIT - https://github.com/benoitc/gunicorn/blob/master/LICENSE
+- pandas - BSD‑3‑Clause - https://github.com/pandas-dev/pandas/blob/main/LICENSE
 - playwright - Apache-2.0 - https://github.com/microsoft/playwright-python/blob/main/LICENSE
+- pydantic - MIT - https://github.com/pydantic/pydantic-settings/blob/main/LICENSE
+- python-dotenv - BSD‑3‑Clause - https://github.com/theskumar/python-dotenv/blob/main/LICENSE
+- PyYAML - MIT - https://github.com/yaml/pyyaml/blob/main/LICENSE
+- setuptools - MIT - https://github.com/pypa/setuptools/blob/main/LICENSE
+- tt-perf-report - MIT https://opensource.org/license/mit
+- uvicorn - BSD‑3‑Clause - https://github.com/encode/uvicorn/blob/master/LICENSE.md
+- wheel - MIT https://opensource.org/license/mit
+- zstd (python-zstandard) - BSD‑3‑Clause - https://github.com/indygreg/python-zstandard/blob/main/LICENSE
 
 - Upload Release Assets - GitHub Action - MIT - https://github.com/AButler/upload-release-assets/blob/master/LICENSE
