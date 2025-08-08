@@ -19,6 +19,7 @@
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
     "lint:fix": "eslint . --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:spdx": "node scripts/check-spdx.mjs",
+    "lint:licenses": "pnpm licenses ls --json | node ./scripts/check-missing-licenses.mjs",
     "lint:ts": "npx tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preinstall": "npx only-allow pnpm",

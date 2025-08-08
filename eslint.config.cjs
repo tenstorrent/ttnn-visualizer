@@ -34,7 +34,12 @@ module.exports = defineConfig([
 
             parserOptions: {
                 projectService: {
-                    allowDefaultProject: ['.stylelintrc.cjs', 'scripts/check-spdx.mjs', 'scripts/release.mjs'],
+                    allowDefaultProject: [
+                        '.stylelintrc.cjs',
+                        'scripts/check-spdx.mjs',
+                        'scripts/release.mjs',
+                        'scripts/check-missing-licenses.mjs',
+                    ],
                 },
             },
         },
