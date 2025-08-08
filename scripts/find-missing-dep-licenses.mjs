@@ -3,7 +3,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-const getMissingLicenses = async (missingDeps, depLicenses) => {
+const findMissingDepLicenses = async (missingDeps, depLicenses) => {
     const result = missingDeps.map((name) => ({
         name,
         licenseType: depLicenses[name].license || '',
@@ -40,11 +40,15 @@ const getMissingLicenses = async (missingDeps, depLicenses) => {
     }
 
     if (result.length) {
-        console.info(JSON.stringify(result, null, 2));
-        console.info(`\n${result.length} missing licenses found\n`);
+        console.error(JSON.stringify(result, null, 2));
+        console.error(`\n${result.length} missing licenses found\n`);
+
+        return false;
     }
 
     console.info('No missing licenses found.\n');
+
+    return true;
 };
 
 const getLicenseURL = (name, depLicenses) => {
@@ -59,4 +63,4 @@ const getLicenseURL = (name, depLicenses) => {
     return '';
 };
 
-export default getMissingLicenses;
+export default findMissingDepLicenses;

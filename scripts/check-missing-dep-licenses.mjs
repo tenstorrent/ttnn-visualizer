@@ -4,9 +4,9 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import fs from 'fs';
-import getMissingLicenses from './get-missing-licenses.mjs';
+import findMissingDepLicenses from './find-missing-dep-licenses.mjs';
 
-const checkMissingLicenses = () => {
+const checkMissingDepLicenses = () => {
     // Read package.json
     const PKG = JSON.parse(fs.readFileSync('package.json', 'utf8'));
     const DIRECT_DEPS = [...Object.keys(PKG.dependencies || {}), ...Object.keys(PKG.devDependencies || {})];
@@ -59,14 +59,14 @@ const checkMissingLicenses = () => {
         });
 
         if (missingDeps.length) {
-            console.info(JSON.stringify(missingDeps, null, 2));
-            console.info(`\n${missingDeps.length} missing licenses found.\n`);
+            console.error(JSON.stringify(missingDeps, null, 2));
+            console.error(`\n${missingDeps.length} missing licenses found.\n`);
 
             const args = process.argv.slice(2);
             const fixFlag = args.some((arg) => arg === '--fix=true');
 
             if (fixFlag) {
-                await getMissingLicenses(missingDeps, depLicenses);
+                await findMissingDepLicenses(missingDeps, depLicenses);
             }
 
             process.exit(1);
@@ -77,6 +77,6 @@ const checkMissingLicenses = () => {
     });
 };
 
-checkMissingLicenses();
+checkMissingDepLicenses();
 
-export default checkMissingLicenses;
+export default checkMissingDepLicenses;
