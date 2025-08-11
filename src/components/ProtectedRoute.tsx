@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import ROUTES from '../definitions/Routes';
