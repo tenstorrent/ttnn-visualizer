@@ -8,6 +8,7 @@ import ROUTES from '../definitions/Routes';
 import { useSession } from '../hooks/useAPI';
 import { RouteRequirements } from '../definitions/RouteObjectList';
 import LoadingSpinner from './LoadingSpinner';
+import 'styles/components/ProtectedRoute.scss';
 
 interface ProtectedRouteProps {
     children: ReactNode;
@@ -22,7 +23,12 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     const needsPerformance = currentRoute?.needsPerformanceReport ?? false;
 
     if (isLoading || session === undefined) {
-        return <LoadingSpinner />;
+        return (
+            <div className='session-loader'>
+                <LoadingSpinner />
+                <p>Currently fetching session...</p>
+            </div>
+        );
     }
 
     if (session && !session?.active_report?.profiler_name && needsProfiler) {
