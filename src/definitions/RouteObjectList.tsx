@@ -55,3 +55,26 @@ export const routeObjectList = [
         element: null,
     },
 ];
+
+interface RouteRequirements {
+    needsProfilerReport?: boolean;
+    needsPerformanceReport?: boolean;
+}
+
+export const RouteRequirements: Record<string, RouteRequirements> = {
+    [ROUTES.OPERATIONS]: {
+        needsProfilerReport: true,
+    },
+    [ROUTES.TENSORS]: {
+        needsProfilerReport: true,
+    },
+    [ROUTES.BUFFERS]: {
+        needsProfilerReport: true,
+    },
+    [ROUTES.GRAPHTREE]: {
+        needsProfilerReport: true,
+    },
+    [ROUTES.PERFORMANCE]: {
+        needsPerformanceReport: true,
+    },
+};
