@@ -21,7 +21,7 @@ import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import getCoreCount from '../functions/getCoreCount';
 import {
     activePerformanceReportAtom,
-    comparisonPerformanceReportAtom,
+    comparisonPerformanceReportsAtom,
     selectedPerformanceRangeAtom,
 } from '../store/app';
 import PerfCharts from '../components/performance/PerfCharts';
@@ -35,7 +35,7 @@ import getServerConfig from '../functions/getServerConfig';
 const INITIAL_TAB_ID = 'tab-1';
 
 export default function Performance() {
-    const [comparisonReports, setComparisonReports] = useAtom(comparisonPerformanceReportAtom);
+    const [comparisonReports, setComparisonReports] = useAtom(comparisonPerformanceReportsAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
 

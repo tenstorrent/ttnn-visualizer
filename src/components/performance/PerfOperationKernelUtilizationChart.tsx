@@ -11,7 +11,7 @@ import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
 import getPlotLabel from '../../functions/getPlotLabel';
-import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportsAtom } from '../../store/app';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfOperationKernelUtilizationChartProps {
@@ -21,7 +21,7 @@ interface PerfOperationKernelUtilizationChartProps {
 
 function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOperationKernelUtilizationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+    const comparisonReports = useAtomValue(comparisonPerformanceReportsAtom);
 
     const chartDataDuration = useMemo(
         () =>
@@ -30,13 +30,13 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
                 y: data?.map((row) => row.device_time),
                 type: 'bar',
                 hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Duration: %{y} ns<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReports),
                 legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getPrimaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, perfReport, comparisonReport],
+        [datasets, perfReport, comparisonReports],
     );
 
     const chartDataUtilization = useMemo(
@@ -46,13 +46,13 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
                 y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1) ?? [],
                 yaxis: 'y2',
                 hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Utilization: %{y}<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReports),
                 legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getSecondaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, maxCores, perfReport, comparisonReport],
+        [datasets, maxCores, perfReport, comparisonReports],
     );
 
     const maxYValue = Math.max(...chartDataDuration.flatMap((data) => (data.y as number[]) ?? []));

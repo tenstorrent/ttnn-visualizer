@@ -11,7 +11,7 @@ import SkeletalChart from './SkeletalChart';
 import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';
 import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationChart';
 import 'styles/components/PerfCharts.scss';
-import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportsAtom } from '../../store/app';
 import PerfDeviceTimeChart from './PerfDeviceTimeChart';
 
 interface NonFilterablePerfChartsProps {
@@ -28,7 +28,7 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
     opCodeOptions,
 }) => {
     const performanceReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReports = useAtomValue(comparisonPerformanceReportAtom);
+    const comparisonReports = useAtomValue(comparisonPerformanceReportsAtom);
 
     const datasets = [chartData, ...(secondaryData || [])].filter((set) => set.length > 0);
 
