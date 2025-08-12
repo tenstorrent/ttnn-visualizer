@@ -241,6 +241,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
             });
         }
 
+        // Still some awkward casting here
         return [...sortTableFields(filteredTableFields as [])];
     }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters, selectedTensor, showOnlySelected]);
 

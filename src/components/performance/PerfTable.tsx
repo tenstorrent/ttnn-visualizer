@@ -103,6 +103,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     const tableFields = useMemo<TypedPerfTableRow[]>(() => {
         const parsedRows = sortAndFilterPerfTableData(data, filters, filterableColumnKeys, mathFidelityFilter);
 
+        // Still some awkward casting here
         return [...sortTableFields(parsedRows as [])];
     }, [data, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields]);
 
@@ -116,6 +117,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                     mathFidelityFilter,
                 );
 
+                // Still some awkward casting here
                 return [...sortTableFields(parsedRows as [])];
             }) || [],
         [comparisonData, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields],

@@ -51,7 +51,7 @@ const useSortTable = (defaultSortingKey: SortingValue) => {
 
     const sortTableFields = useCallback(
         <T extends Record<string, SortingValue>>(tableFields: T[]): T[] => {
-            if (!sortingColumn || sortingColumn === null) {
+            if (!sortingColumn) {
                 return tableFields;
             }
 
