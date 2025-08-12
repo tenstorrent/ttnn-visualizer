@@ -20,12 +20,6 @@ const FAILED_NO_PATH = {
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
 
-    // TODO Ensure on form that SSH connection is valid first
-    const fetchSqlitePath = async (connection: Partial<RemoteConnection>) => {
-        const { data: connectionTestStates } = await axiosInstance.post('/api/remote/sqlite/detect-path', connection);
-        return connectionTestStates;
-    };
-
     const testConnection = async (connection: Partial<RemoteConnection>) => {
         if (!connection.host || !connection.port) {
             return [FAILED_NO_CONNECTION];
@@ -160,7 +154,6 @@ const useRemoteConnection = () => {
         listReportFolders,
         listPerformanceFolders,
         mountRemoteFolder,
-        fetchSqlitePath,
         persistentState,
         readRemoteFile,
     };
