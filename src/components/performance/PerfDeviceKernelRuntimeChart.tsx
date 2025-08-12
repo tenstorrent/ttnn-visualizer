@@ -9,7 +9,7 @@ import { PerfTableRow } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import getPlotLabel from '../../functions/getPlotLabel';
-import { activePerformanceReportAtom, comparisonPerformanceReportsAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfDeviceKernelRuntimeChartProps {
@@ -19,7 +19,7 @@ interface PerfDeviceKernelRuntimeChartProps {
 
 function PerfDeviceKernelRuntimeChart({ maxCores, datasets = [] }: PerfDeviceKernelRuntimeChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReports = useAtomValue(comparisonPerformanceReportsAtom);
+    const comparisonReports = useAtomValue(comparisonPerformanceReportListAtom);
     const maxDataSize = datasets.reduce((max, data) => Math.max(max, data?.length || 0), 0);
 
     const chartDataCoreCount = useMemo(

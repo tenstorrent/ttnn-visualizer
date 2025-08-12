@@ -9,7 +9,7 @@ import { PerfTableRow } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import getPlotLabel from '../../functions/getPlotLabel';
-import { activePerformanceReportAtom, comparisonPerformanceReportsAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfDeviceKernelDurationChartProps {
@@ -18,7 +18,7 @@ interface PerfDeviceKernelDurationChartProps {
 
 function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReports = useAtomValue(comparisonPerformanceReportsAtom);
+    const comparisonReports = useAtomValue(comparisonPerformanceReportListAtom);
 
     const chartData = useMemo(
         () =>

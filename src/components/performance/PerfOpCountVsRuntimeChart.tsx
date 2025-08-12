@@ -8,7 +8,7 @@ import { useAtomValue } from 'jotai';
 import { Marker, PerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
-import { activePerformanceReportAtom, comparisonPerformanceReportsAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
 
 interface PerfOpCountVsRuntimeChartProps {
@@ -18,7 +18,7 @@ interface PerfOpCountVsRuntimeChartProps {
 
 function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCountVsRuntimeChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReports = useAtomValue(comparisonPerformanceReportsAtom);
+    const comparisonReports = useAtomValue(comparisonPerformanceReportListAtom);
     const flattenedData = datasets.flat();
     const opCodes = useMemo(
         () => [...new Set(flattenedData?.filter((row) => row.raw_op_code !== undefined).map((row) => row.raw_op_code))],

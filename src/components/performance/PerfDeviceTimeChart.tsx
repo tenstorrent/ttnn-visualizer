@@ -8,7 +8,7 @@ import { useAtomValue } from 'jotai';
 import { PerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
-import { activePerformanceReportAtom, comparisonPerformanceReportsAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
@@ -19,7 +19,7 @@ interface PerfDeviceTimeChartProps {
 
 function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReports = useAtomValue(comparisonPerformanceReportsAtom);
+    const comparisonReports = useAtomValue(comparisonPerformanceReportListAtom);
 
     const deviceTimes = useMemo(
         () =>

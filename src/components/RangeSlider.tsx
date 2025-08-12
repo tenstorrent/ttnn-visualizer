@@ -9,7 +9,7 @@ import { useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
 import {
     activePerformanceReportAtom,
-    comparisonPerformanceReportsAtom,
+    comparisonPerformanceReportListAtom,
     hasClusterDescriptionAtom,
     operationRangeAtom,
     performanceRangeAtom,
@@ -39,7 +39,7 @@ function Range() {
     const [selectedOperationRange, setSelectedOperationRange] = useAtom(selectedOperationRangeAtom);
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
     const [selectedPerformanceRange, setSelectedPerformanceRange] = useAtom(selectedPerformanceRangeAtom);
-    const comparisonReports = useAtomValue(comparisonPerformanceReportsAtom);
+    const comparisonReports = useAtomValue(comparisonPerformanceReportListAtom);
     const [isUserOpChange, setIsUserOpChange] = useState(false);
     const [isUserPerfChange, setIsUserPerfChange] = useState(false);
     const setHasClusterDescription = useSetAtom(hasClusterDescriptionAtom);

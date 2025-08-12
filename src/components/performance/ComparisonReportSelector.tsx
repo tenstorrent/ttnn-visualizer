@@ -9,7 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import LocalFolderPicker from '../report-selection/LocalFolderPicker';
 import { ReportFolder } from '../../definitions/Reports';
-import { activePerformanceReportAtom, comparisonPerformanceReportsAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 
 interface ComparisonReportSelectorProps {
     folderList: ReportFolder[];
@@ -26,7 +26,7 @@ const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({
     subLabel,
     className,
 }) => {
-    const [comparisonReports, setComparisonReports] = useAtom(comparisonPerformanceReportsAtom);
+    const [comparisonReports, setComparisonReports] = useAtom(comparisonPerformanceReportListAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
     return (

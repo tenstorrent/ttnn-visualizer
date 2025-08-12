@@ -34,7 +34,7 @@ export const operationRangeAtom = atom<NumberRange | null>(null);
 export const selectedOperationRangeAtom = atom<NumberRange | null>(null);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
-export const comparisonPerformanceReportsAtom = atom<string[] | null>(null);
+export const comparisonPerformanceReportListAtom = atom<string[] | null>(null);
 
 export const scrollPositionsAtom = atom<ScrollPositions | null>(null);
 

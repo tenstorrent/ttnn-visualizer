@@ -14,7 +14,7 @@ import { calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
-import { activePerformanceReportAtom, comparisonPerformanceReportsAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
 
@@ -62,7 +62,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     const opIdsMap = useOpToPerfIdFiltered();
 
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const activeComparisonReports = useAtomValue(comparisonPerformanceReportsAtom);
+    const activeComparisonReports = useAtomValue(comparisonPerformanceReportListAtom);
 
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
