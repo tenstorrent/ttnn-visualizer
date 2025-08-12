@@ -368,17 +368,18 @@ def get_operation_buffers(operation_id, instance: Instance):
 @api.route("/profiler", methods=["GET"])
 @with_instance
 def get_profiler_data_list(instance: Instance):
-    # Doesn't handle remote at the moment
-    # is_remote = True if instance.remote_connection else False
-    # config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     config_key = "LOCAL_DATA_DIRECTORY"
     data_directory = Path(current_app.config[config_key])
 
-    # if is_remote:
-    #     connection = RemoteConnection.model_validate(instance.remote_connection, strict=False)
-    #     path = data_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
-    # else:
-    path = data_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
+    if current_app.config["TT_METAL_HOME"]:
+        tt_metal_home = Path(current_app.config["TT_METAL_HOME"])
+        tt_metal_report_path = tt_metal_home / "generated" / "ttnn" / "reports"
+        if not tt_metal_report_path.exists():
+            logger.warning(f"TT-Metal reports not found: {tt_metal_report_path}")
+            return jsonify([])
+        path = tt_metal_report_path
+    else:
+        path = data_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
 
     if not path.exists():
         path.mkdir(parents=True, exist_ok=True)
@@ -437,7 +438,6 @@ def get_profiler_data_list(instance: Instance):
             continue
         if not any(file.name == "config.json" for file in files):
             continue
-
         valid_dirs.append({"path": dir_path.name, "reportName": report_name})
 
     return jsonify(valid_dirs)
@@ -494,7 +494,16 @@ def get_performance_data_list(instance: Instance):
     is_remote = True if instance.remote_connection else False
     config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
     data_directory = Path(current_app.config[config_key])
-    path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+
+    if current_app.config["TT_METAL_HOME"]:
+        tt_metal_home = Path(current_app.config["TT_METAL_HOME"])
+        tt_metal_report_path = tt_metal_home / "generated" / "profiler" / "reports"
+        if not tt_metal_report_path.exists():
+            logger.warning(f"TT-Metal reports not found: {tt_metal_report_path}")
+            return jsonify([])
+        path = tt_metal_report_path
+    else:
+        path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
 
     if not is_remote and not path.exists():
         path.mkdir(parents=True, exist_ok=True)
@@ -530,6 +539,7 @@ def get_performance_data_list(instance: Instance):
                 / connection.host
                 / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
             )
+
         directory_names = (
             [directory.name for directory in path.iterdir() if directory.is_dir()]
             if path.exists()

@@ -192,6 +192,9 @@ def parse_args():
     parser.add_argument(
         "--performance-path", help="Specify a performance path", default=None
     )
+    parser.add_argument(
+        "--tt-metal-home", help="Specify a TT-Metal home path", default=None
+    )
     return parser.parse_args()
 
 
@@ -219,6 +222,9 @@ def main():
             sys.exit("Invalid profiler path")
 
         instance_id = session.instance_id
+
+    if args.tt_metal_home:
+        config.TT_METAL_HOME = args.tt_metal_home
 
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"

@@ -54,16 +54,24 @@ def get_performance_path(performance_name, current_app, remote_connection=None):
 
     :return: Profiler path as a string.
     """
-    local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
-    remote_dir = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
-
-    if remote_connection:
-        base_dir = Path(remote_dir).joinpath(remote_connection.host)
+    if current_app.config["TT_METAL_HOME"]:
+        tt_metal_home = Path(current_app.config["TT_METAL_HOME"])
+        tt_metal_report_path = tt_metal_home / "generated" / "profiler" / "reports"
+        if not tt_metal_report_path.exists():
+            logger.warning(f"TT-Metal reports not found: {tt_metal_report_path}")
+            return None
+        performance_path = tt_metal_report_path / performance_name
     else:
-        base_dir = local_dir
+        local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+        remote_dir = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
 
-    profiler_dir = base_dir / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-    performance_path = profiler_dir / performance_name
+        if remote_connection:
+            base_dir = Path(remote_dir).joinpath(remote_connection.host)
+        else:
+            base_dir = local_dir
+
+        profiler_dir = base_dir / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+        performance_path = profiler_dir / performance_name
 
     return str(performance_path)
 
@@ -82,14 +90,22 @@ def get_profiler_path(profiler_name, current_app, remote_connection=None):
     remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
 
     if profiler_name:
-        if remote_connection:
-            base_dir = Path(remote_dir).joinpath(remote_connection.host)
+        if current_app.config["TT_METAL_HOME"]:
+            tt_metal_home = Path(current_app.config["TT_METAL_HOME"])
+            tt_metal_report_path = tt_metal_home / "generated" / "ttnn" / "reports"
+            if not tt_metal_report_path.exists():
+                logger.warning(f"TT-Metal reports not found: {tt_metal_report_path}")
+                return None
+            profiler_path = tt_metal_report_path / profiler_name
         else:
-            base_dir = local_dir
+            if remote_connection:
+                base_dir = Path(remote_dir).joinpath(remote_connection.host)
+            else:
+                base_dir = local_dir
 
-        profiler_path = (
-            base_dir / current_app.config["PROFILER_DIRECTORY_NAME"] / profiler_name
-        )
+            profiler_path = (
+                base_dir / current_app.config["PROFILER_DIRECTORY_NAME"] / profiler_name
+            )
         target_path = profiler_path / database_file_name
 
         return str(target_path)
