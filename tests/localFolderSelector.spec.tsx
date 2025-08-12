@@ -6,7 +6,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import getAllButtonsWithText from './helpers/getAllButtonsWithText';
-import mockSessionEmpty from './data/mockSessionEmpty.json';
+import mockInstanceEmpty from './data/mockInstanceEmpty.json';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
 import { ReportFolder } from '../src/definitions/Reports';
@@ -21,10 +21,10 @@ const TOASTIFY_CLASS = '.Toastify';
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetClusterDescription: () => ({ data: null }),
     usePerfFolderList: () => ({ data: mockPerformanceReportFolders }),
-    useSession: () => ({ data: mockSessionEmpty }),
+    useInstance: () => ({ data: mockInstanceEmpty }),
     useReportFolderList: () => ({ data: mockProfilerFolderList }),
-    updateTabSession: () => ({
-        ...mockSessionEmpty,
+    updateInstance: () => ({
+        ...mockInstanceEmpty,
         active_report: {
             profiler_name: mockProfilerFolderList[0].reportName,
         },
