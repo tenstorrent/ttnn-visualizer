@@ -503,7 +503,7 @@ export default function Styleguide() {
                 />
             </div>
 
-            {/* TODO: Get these working again */}
+            {/* TODO: Get these working again - https://github.com/tenstorrent/ttnn-visualizer/issues/740 */}
             {/* <div className='container'>
                 <Button
                     onClick={() => setShowProgressOverlay(true)}
