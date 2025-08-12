@@ -73,7 +73,7 @@ export interface OperationDetailsData extends Operation {
     l1_sizes: number[];
 }
 
-export interface TabSession {
+export interface Instance {
     active_report?: { performance_name?: string; profiler_name?: string; npe_name?: string };
     remote_connection?: RemoteConnection;
     remote_profiler_folder?: RemoteFolder;
