@@ -19,7 +19,7 @@ interface PerfDeviceKernelRuntimeChartProps {
 
 function PerfDeviceKernelRuntimeChart({ maxCores, datasets = [] }: PerfDeviceKernelRuntimeChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReports = useAtomValue(comparisonPerformanceReportListAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const maxDataSize = datasets.reduce((max, data) => Math.max(max, data?.length || 0), 0);
 
     const chartDataCoreCount = useMemo(
@@ -29,14 +29,14 @@ function PerfDeviceKernelRuntimeChart({ maxCores, datasets = [] }: PerfDeviceKer
                 y: data?.map((row) => row.cores),
                 type: 'bar',
                 hovertemplate: `Operation: %{x}<br />Cores: %{y}`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReports),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 showlegend: true,
                 legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getPrimaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, perfReport, comparisonReports],
+        [datasets, perfReport, comparisonReportList],
     );
 
     const chartDataDuration = useMemo(
@@ -46,14 +46,14 @@ function PerfDeviceKernelRuntimeChart({ maxCores, datasets = [] }: PerfDeviceKer
                 y: data?.map((row) => row.device_time),
                 yaxis: 'y2',
                 hovertemplate: `Operation: %{x}<br />Device Kernel Duration: %{y} ns`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReports),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 showlegend: true,
                 legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getSecondaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, perfReport, comparisonReports],
+        [datasets, perfReport, comparisonReportList],
     );
 
     const configuration: PlotConfiguration = {

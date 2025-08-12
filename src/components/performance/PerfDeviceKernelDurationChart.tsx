@@ -18,7 +18,7 @@ interface PerfDeviceKernelDurationChartProps {
 
 function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReports = useAtomValue(comparisonPerformanceReportListAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const chartData = useMemo(
         () =>
@@ -27,14 +27,14 @@ function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurati
                 y: data?.map((row) => row.device_time),
                 mode: 'markers',
                 type: 'scatter',
-                name: getPlotLabel(dataIndex, perfReport, comparisonReports),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 marker: {
                     size: 10,
                     color: getPrimaryDataColours(dataIndex),
                 },
                 hovertemplate: `Cores: %{x}<br />Device Kernel Duration: %{y} ns`,
             })) as Partial<PlotData>[],
-        [datasets, comparisonReports, perfReport],
+        [datasets, comparisonReportList, perfReport],
     );
 
     const configuration: PlotConfiguration = {

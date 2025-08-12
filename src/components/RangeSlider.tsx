@@ -39,7 +39,7 @@ function Range() {
     const [selectedOperationRange, setSelectedOperationRange] = useAtom(selectedOperationRangeAtom);
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
     const [selectedPerformanceRange, setSelectedPerformanceRange] = useAtom(selectedPerformanceRangeAtom);
-    const comparisonReports = useAtomValue(comparisonPerformanceReportListAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const [isUserOpChange, setIsUserOpChange] = useState(false);
     const [isUserPerfChange, setIsUserPerfChange] = useState(false);
     const setHasClusterDescription = useSetAtom(hasClusterDescriptionAtom);
@@ -202,7 +202,7 @@ function Range() {
                                 min={perfMin}
                                 max={perfMax}
                                 labelStepSize={getStepSize(perfMax)}
-                                disabled={!isPerformanceRoute || !!comparisonReports}
+                                disabled={!isPerformanceRoute || !!comparisonReportList}
                                 labelRenderer={(id, options) =>
                                     getPerformanceLabel(id, perfData, options?.isHandleTooltip)
                                 }

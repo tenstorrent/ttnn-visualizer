@@ -21,7 +21,7 @@ interface PerfCoreCountUtilizationChartProps {
 
 function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCountUtilizationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReports = useAtomValue(comparisonPerformanceReportListAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const chartDataDuration = useMemo(
         () =>
@@ -30,13 +30,13 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
                 y: data?.map((row) => row.cores),
                 type: 'bar',
                 hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Cores: %{y}<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReports),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getPrimaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, perfReport, comparisonReports],
+        [datasets, perfReport, comparisonReportList],
     );
 
     const chartDataUtilization = useMemo(
@@ -46,13 +46,13 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
                 y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
                 yaxis: 'y2',
                 hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Utilization: %{y}<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReports),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getSecondaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, perfReport, comparisonReports, maxCores],
+        [datasets, perfReport, comparisonReportList, maxCores],
     );
 
     const configuration: PlotConfiguration = {

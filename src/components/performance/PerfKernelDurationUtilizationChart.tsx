@@ -20,7 +20,7 @@ interface PerfKernelDurationUtilizationChartProps {
 
 function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDurationUtilizationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReports = useAtomValue(comparisonPerformanceReportListAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const chartData = useMemo(
         () =>
@@ -29,14 +29,14 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDu
                 y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
                 mode: 'markers',
                 type: 'scatter',
-                name: getPlotLabel(dataIndex, perfReport, comparisonReports),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 marker: {
                     size: 10,
                     color: getPrimaryDataColours(dataIndex),
                 },
                 hovertemplate: `Duration: %{x} ns<br />Utilization: %{y}`,
             })) as Partial<PlotData>[],
-        [datasets, maxCores, perfReport, comparisonReports],
+        [datasets, maxCores, perfReport, comparisonReportList],
     );
 
     const configuration: PlotConfiguration = {

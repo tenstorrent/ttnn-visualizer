@@ -19,7 +19,7 @@ interface PerfDeviceTimeChartProps {
 
 function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReports = useAtomValue(comparisonPerformanceReportListAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const deviceTimes = useMemo(
         () =>
@@ -28,13 +28,13 @@ function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
                 y: data?.map((row) => parseFloat(row.device_time) * 1000), // Convert microseconds to nanoseconds
                 type: 'bar',
                 hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Device time: %{y} ns<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReports),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getPrimaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, perfReport, comparisonReports],
+        [datasets, perfReport, comparisonReportList],
     );
 
     const idealTimes = useMemo(
@@ -43,13 +43,13 @@ function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
                 x: data?.map((_row, index) => index + 1),
                 y: data?.map((row) => row.pm_ideal_ns),
                 hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Ideal time: %{y} ns<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReports),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getSecondaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, perfReport, comparisonReports],
+        [datasets, perfReport, comparisonReportList],
     );
 
     const maxDeviceTime = Math.max(

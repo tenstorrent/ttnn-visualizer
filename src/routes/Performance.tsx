@@ -35,13 +35,13 @@ import getServerConfig from '../functions/getServerConfig';
 const INITIAL_TAB_ID = 'tab-1';
 
 export default function Performance() {
-    const [comparisonReports, setComparisonReports] = useAtom(comparisonPerformanceReportListAtom);
+    const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
 
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport(activePerformanceReport);
-    const { data: comparisonData } = usePerformanceComparisonReport(comparisonReports || null);
+    const { data: comparisonData } = usePerformanceComparisonReport(comparisonReportList || null);
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
 
@@ -78,18 +78,18 @@ export default function Performance() {
 
     // Clear comparison report if users switches active perf report to the comparison report
     useEffect(() => {
-        if (activePerformanceReport && comparisonReports?.includes(activePerformanceReport)) {
-            const filteredReports = comparisonReports.filter((report) => report !== activePerformanceReport);
-            setComparisonReports(filteredReports.length === 0 ? null : filteredReports);
+        if (activePerformanceReport && comparisonReportList?.includes(activePerformanceReport)) {
+            const filteredReports = comparisonReportList.filter((report) => report !== activePerformanceReport);
+            setComparisonReportList(filteredReports.length === 0 ? null : filteredReports);
         }
-    }, [comparisonReports, activePerformanceReport, setComparisonReports]);
+    }, [comparisonReportList, activePerformanceReport, setComparisonReportList]);
 
     // If a comparison report is selected, clear the selected range as we don't currently support ranges for comparison
     useEffect(() => {
-        if (comparisonReports && perfRange) {
+        if (comparisonReportList && perfRange) {
             setSelectedRange([perfRange[0], perfRange[1]]);
         }
-    }, [comparisonReports, setSelectedRange, perfRange]);
+    }, [comparisonReportList, setSelectedRange, perfRange]);
 
     useEffect(() => {
         setFilteredComparisonData(
@@ -119,13 +119,13 @@ export default function Performance() {
 
     const rangedData = useMemo(
         () =>
-            !comparisonReports && selectedRange && filteredPerfData.length > 0
+            !comparisonReportList && selectedRange && filteredPerfData.length > 0
                 ? filteredPerfData.filter((row) => {
                       const rowId = parseInt(row?.id, 10);
                       return rowId >= selectedRange[0] && rowId <= selectedRange[1];
                   })
                 : filteredPerfData,
-        [selectedRange, filteredPerfData, comparisonReports],
+        [selectedRange, filteredPerfData, comparisonReportList],
     );
 
     if (isLoadingPerformance || isLoadingDeviceLog) {
@@ -134,7 +134,8 @@ export default function Performance() {
 
     const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
     const maxCores = perfData ? getCoreCount(architecture, perfData) : 0;
-    const reportSelectors = comparisonReports && comparisonReports?.length > 0 ? [...comparisonReports, null] : [null];
+    const reportSelectors =
+        comparisonReportList && comparisonReportList?.length > 0 ? [...comparisonReportList, null] : [null];
 
     return (
         <div className='performance data-padding'>
