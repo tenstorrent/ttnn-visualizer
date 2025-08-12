@@ -25,6 +25,7 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import Config, DefaultConfig
+from ttnn_visualizer.utils import create_path_resolver
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -78,6 +79,7 @@ def create_app(settings_override=None):
             js_config = {
                 "SERVER_MODE": app.config["SERVER_MODE"],
                 "BASE_PATH": app.config["BASE_PATH"],
+                "TT_METAL_HOME": app.config["TT_METAL_HOME"],
             }
             js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(js_config)};"
 
@@ -226,10 +228,37 @@ def main():
     if args.tt_metal_home:
         config.TT_METAL_HOME = args.tt_metal_home
 
+    # Display mode information
+    app = create_app()
+    with app.app_context():
+        resolver = create_path_resolver(app)
+        mode_info = resolver.get_mode_info()
+
+        if mode_info["mode"] == "tt_metal":
+            print(
+                "🚀 TT-METAL MODE: Working directly with tt-metal generated directory"
+            )
+            print(f"   TT_METAL_HOME: {mode_info['tt_metal_home']}")
+            print(f"   Profiler reports: {mode_info['profiler_base']}")
+            print(f"   Performance reports: {mode_info['performance_base']}")
+
+            # Validate setup
+            is_valid, message = resolver.validate_tt_metal_setup()
+            if is_valid:
+                print(f"   ✓ {message}")
+            else:
+                print(f"   ⚠️  Warning: {message}")
+        else:
+            print(
+                "📁 UPLOAD/SYNC MODE: Using local data directory for uploaded/synced reports"
+            )
+            print(f"   Local directory: {mode_info['local_dir']}")
+            print(f"   Remote directory: {mode_info['remote_dir']}")
+
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
     if config.PRINT_ENV:
-        print("ENVIRONMENT:")
+        print("\nENVIRONMENT:")
         for key, value in config.to_dict().items():
             print(f"{key}={value}")
 

@@ -68,6 +68,7 @@ from ttnn_visualizer.sftp_operations import (
 )
 from ttnn_visualizer.ssh_client import SSHClient
 from ttnn_visualizer.utils import (
+    create_path_resolver,
     get_cluster_descriptor_path,
     read_last_synced_file,
     timer,
@@ -368,21 +369,18 @@ def get_operation_buffers(operation_id, instance: Instance):
 @api.route("/profiler", methods=["GET"])
 @with_instance
 def get_profiler_data_list(instance: Instance):
-    config_key = "LOCAL_DATA_DIRECTORY"
-    data_directory = Path(current_app.config[config_key])
+    # Use PathResolver to get the base path for profiler reports
+    resolver = create_path_resolver(current_app)
 
-    if current_app.config["TT_METAL_HOME"]:
-        tt_metal_home = Path(current_app.config["TT_METAL_HOME"])
-        tt_metal_report_path = tt_metal_home / "generated" / "ttnn" / "reports"
-        if not tt_metal_report_path.exists():
-            logger.warning(f"TT-Metal reports not found: {tt_metal_report_path}")
-            return jsonify([])
-        path = tt_metal_report_path
-    else:
-        path = data_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
+    # Note: "profiler" in app terminology maps to tt-metal's ttnn/reports
+    path = resolver.get_base_report_path("profiler", instance.remote_connection)
 
     if not path.exists():
-        path.mkdir(parents=True, exist_ok=True)
+        if resolver.is_tt_metal_mode:
+            logger.warning(f"TT-Metal profiler reports not found: {path}")
+            return jsonify([])
+        else:
+            path.mkdir(parents=True, exist_ok=True)
 
     valid_dirs = []
 
@@ -491,22 +489,20 @@ def delete_profiler_report(profiler_name, instance: Instance):
 @api.route("/performance", methods=["GET"])
 @with_instance
 def get_performance_data_list(instance: Instance):
+    # Use PathResolver to get the base path for performance reports
+    resolver = create_path_resolver(current_app)
+
+    # Note: "performance" in app terminology maps to tt-metal's profiler/reports
+    path = resolver.get_base_report_path("performance", instance.remote_connection)
+
     is_remote = True if instance.remote_connection else False
-    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    data_directory = Path(current_app.config[config_key])
 
-    if current_app.config["TT_METAL_HOME"]:
-        tt_metal_home = Path(current_app.config["TT_METAL_HOME"])
-        tt_metal_report_path = tt_metal_home / "generated" / "profiler" / "reports"
-        if not tt_metal_report_path.exists():
-            logger.warning(f"TT-Metal reports not found: {tt_metal_report_path}")
+    if not path.exists():
+        if resolver.is_tt_metal_mode:
+            logger.warning(f"TT-Metal performance reports not found: {path}")
             return jsonify([])
-        path = tt_metal_report_path
-    else:
-        path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-
-    if not is_remote and not path.exists():
-        path.mkdir(parents=True, exist_ok=True)
+        elif not is_remote:
+            path.mkdir(parents=True, exist_ok=True)
 
     if current_app.config["SERVER_MODE"]:
         session_instances = session.get("instances", [])
@@ -530,16 +526,7 @@ def get_performance_data_list(instance: Instance):
             set(db_directory_names + session_directory_names + demo_directory_names)
         )
     else:
-        if is_remote:
-            connection = RemoteConnection.model_validate(
-                instance.remote_connection, strict=False
-            )
-            path = (
-                data_directory
-                / connection.host
-                / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-            )
-
+        # PathResolver already handles remote vs local logic
         directory_names = (
             [directory.name for directory in path.iterdir() if directory.is_dir()]
             if path.exists()

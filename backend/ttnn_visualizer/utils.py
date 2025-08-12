@@ -18,6 +18,127 @@ logger = logging.getLogger(__name__)
 LAST_SYNCED_FILE_NAME = ".last-synced"
 
 
+class PathResolver:
+    """Centralized path resolution for both TT-Metal and upload/sync modes."""
+
+    def __init__(self, current_app):
+        self.current_app = current_app
+        self.tt_metal_home = current_app.config.get("TT_METAL_HOME")
+        self.is_tt_metal_mode = bool(self.tt_metal_home)
+
+    def get_base_report_path(self, report_type: str, remote_connection=None):
+        """
+        Get the base path for a report type (profiler/performance).
+
+        Args:
+            report_type: Either 'profiler' or 'performance'
+            remote_connection: Optional remote connection for upload/sync mode
+
+        Returns:
+            Path object to the base directory for this report type
+        """
+        if self.is_tt_metal_mode:
+            tt_metal_base = Path(self.tt_metal_home) / "generated"
+            if report_type == "profiler":
+                return tt_metal_base / "ttnn" / "reports"
+            elif report_type == "performance":
+                return tt_metal_base / "profiler" / "reports"
+            else:
+                raise ValueError(f"Unknown report type: {report_type}")
+        else:
+            # Upload/sync mode - use existing logic
+            local_dir = Path(self.current_app.config["LOCAL_DATA_DIRECTORY"])
+            remote_dir = Path(self.current_app.config["REMOTE_DATA_DIRECTORY"])
+
+            if remote_connection:
+                base_dir = remote_dir / remote_connection.host
+            else:
+                base_dir = local_dir
+
+            if report_type == "profiler":
+                return base_dir / self.current_app.config["PROFILER_DIRECTORY_NAME"]
+            elif report_type == "performance":
+                return base_dir / self.current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+            else:
+                raise ValueError(f"Unknown report type: {report_type}")
+
+    def get_profiler_path(self, profiler_name: str, remote_connection=None):
+        """Get the full path to a profiler report's db.sqlite file."""
+        if not profiler_name:
+            return ""
+
+        base_path = self.get_base_report_path("profiler", remote_connection)
+
+        if self.is_tt_metal_mode and not base_path.exists():
+            logger.warning(f"TT-Metal profiler reports not found: {base_path}")
+            return ""
+
+        profiler_path = base_path / profiler_name
+        target_path = profiler_path / self.current_app.config["SQLITE_DB_PATH"]
+
+        return str(target_path)
+
+    def get_performance_path(self, performance_name: str, remote_connection=None):
+        """Get the full path to a performance report directory."""
+        base_path = self.get_base_report_path("performance", remote_connection)
+
+        if self.is_tt_metal_mode and not base_path.exists():
+            logger.warning(f"TT-Metal performance reports not found: {base_path}")
+            return ""
+
+        performance_path = base_path / performance_name
+        return str(performance_path)
+
+    def get_mode_info(self):
+        """Get information about the current mode for debugging/display."""
+        if self.is_tt_metal_mode:
+            return {
+                "mode": "tt_metal",
+                "tt_metal_home": self.tt_metal_home,
+                "profiler_base": str(
+                    Path(self.tt_metal_home) / "generated" / "ttnn" / "reports"
+                ),
+                "performance_base": str(
+                    Path(self.tt_metal_home) / "generated" / "profiler" / "reports"
+                ),
+            }
+        else:
+            return {
+                "mode": "upload_sync",
+                "local_dir": str(self.current_app.config["LOCAL_DATA_DIRECTORY"]),
+                "remote_dir": str(self.current_app.config["REMOTE_DATA_DIRECTORY"]),
+            }
+
+    def validate_tt_metal_setup(self):
+        """Validate that TT-Metal directories exist and are accessible."""
+        if not self.is_tt_metal_mode:
+            return True, "Not in TT-Metal mode"
+
+        tt_metal_base = Path(self.tt_metal_home)
+        if not tt_metal_base.exists():
+            return False, f"TT_METAL_HOME directory does not exist: {tt_metal_base}"
+
+        generated_dir = tt_metal_base / "generated"
+        if not generated_dir.exists():
+            return False, f"TT-Metal generated directory not found: {generated_dir}"
+
+        profiler_base = self.get_base_report_path("profiler")
+        performance_base = self.get_base_report_path("performance")
+
+        messages = []
+        if not profiler_base.exists():
+            messages.append(f"Profiler reports directory not found: {profiler_base}")
+        if not performance_base.exists():
+            messages.append(
+                f"Performance reports directory not found: {performance_base}"
+            )
+
+        if messages:
+            return False, "; ".join(messages)
+
+        return True, "TT-Metal setup is valid"
+
+
 def str_to_bool(string_value):
     return string_value.lower() in ("yes", "true", "t", "1")
 
@@ -52,28 +173,10 @@ def get_performance_path(performance_name, current_app, remote_connection=None):
     :param current_app: Flask current application object.
     :param remote_connection: Remote connection model instance
 
-    :return: Profiler path as a string.
+    :return: Performance path as a string.
     """
-    if current_app.config["TT_METAL_HOME"]:
-        tt_metal_home = Path(current_app.config["TT_METAL_HOME"])
-        tt_metal_report_path = tt_metal_home / "generated" / "profiler" / "reports"
-        if not tt_metal_report_path.exists():
-            logger.warning(f"TT-Metal reports not found: {tt_metal_report_path}")
-            return None
-        performance_path = tt_metal_report_path / performance_name
-    else:
-        local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
-        remote_dir = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
-
-        if remote_connection:
-            base_dir = Path(remote_dir).joinpath(remote_connection.host)
-        else:
-            base_dir = local_dir
-
-        profiler_dir = base_dir / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-        performance_path = profiler_dir / performance_name
-
-    return str(performance_path)
+    resolver = PathResolver(current_app)
+    return resolver.get_performance_path(performance_name, remote_connection)
 
 
 def get_profiler_path(profiler_name, current_app, remote_connection=None):
@@ -85,32 +188,75 @@ def get_profiler_path(profiler_name, current_app, remote_connection=None):
 
     :return: profiler_path as a string
     """
-    database_file_name = current_app.config["SQLITE_DB_PATH"]
-    local_dir = current_app.config["LOCAL_DATA_DIRECTORY"]
-    remote_dir = current_app.config["REMOTE_DATA_DIRECTORY"]
+    resolver = PathResolver(current_app)
+    return resolver.get_profiler_path(profiler_name, remote_connection)
 
-    if profiler_name:
-        if current_app.config["TT_METAL_HOME"]:
-            tt_metal_home = Path(current_app.config["TT_METAL_HOME"])
-            tt_metal_report_path = tt_metal_home / "generated" / "ttnn" / "reports"
-            if not tt_metal_report_path.exists():
-                logger.warning(f"TT-Metal reports not found: {tt_metal_report_path}")
-                return None
-            profiler_path = tt_metal_report_path / profiler_name
-        else:
-            if remote_connection:
-                base_dir = Path(remote_dir).joinpath(remote_connection.host)
-            else:
-                base_dir = local_dir
 
-            profiler_path = (
-                base_dir / current_app.config["PROFILER_DIRECTORY_NAME"] / profiler_name
-            )
-        target_path = profiler_path / database_file_name
+def create_path_resolver(current_app):
+    """Create a PathResolver instance for the current app."""
+    return PathResolver(current_app)
 
-        return str(target_path)
-    else:
-        return ""
+
+def get_available_reports(current_app):
+    """
+    Get available reports in the current mode.
+
+    Returns a dict with 'profiler' and 'performance' keys containing lists of available reports.
+    This is a convenience function for views that need to discover available reports.
+    """
+    resolver = PathResolver(current_app)
+
+    reports = {"profiler": [], "performance": []}
+
+    # Get profiler reports
+    try:
+        profiler_base = resolver.get_base_report_path("profiler")
+        if profiler_base.exists():
+            for report_dir in profiler_base.iterdir():
+                if report_dir.is_dir():
+                    db_file = report_dir / current_app.config["SQLITE_DB_PATH"]
+                    if db_file.exists():
+                        reports["profiler"].append(
+                            {
+                                "name": report_dir.name,
+                                "path": str(report_dir),
+                                "modified": report_dir.stat().st_mtime,
+                            }
+                        )
+    except Exception as e:
+        logger.warning(f"Error reading profiler reports: {e}")
+
+    # Get performance reports
+    try:
+        performance_base = resolver.get_base_report_path("performance")
+        if performance_base.exists():
+            for report_dir in performance_base.iterdir():
+                if report_dir.is_dir():
+                    # Check for typical performance files
+                    has_perf_files = any(
+                        (report_dir / filename).exists()
+                        for filename in [
+                            "profile_log_device.csv",
+                            "tracy_profile_log_host.tracy",
+                        ]
+                    ) or any(report_dir.glob("ops_perf_results*.csv"))
+
+                    if has_perf_files:
+                        reports["performance"].append(
+                            {
+                                "name": report_dir.name,
+                                "path": str(report_dir),
+                                "modified": report_dir.stat().st_mtime,
+                            }
+                        )
+    except Exception as e:
+        logger.warning(f"Error reading performance reports: {e}")
+
+    # Sort by modification time (newest first)
+    reports["profiler"].sort(key=lambda x: x["modified"], reverse=True)
+    reports["performance"].sort(key=lambda x: x["modified"], reverse=True)
+
+    return reports
 
 
 def get_npe_path(npe_name, current_app):
