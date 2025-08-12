@@ -25,10 +25,10 @@ import {
     PROFILER_FOLDER_QUERY_KEY,
     deletePerformance,
     deleteProfiler,
-    updateTabSession,
+    updateInstance,
+    useInstance,
     usePerfFolderList,
     useReportFolderList,
-    useSession,
 } from '../../hooks/useAPI';
 import LocalFolderPicker from './LocalFolderPicker';
 import { ReportFolder } from '../../definitions/Reports';
@@ -88,7 +88,7 @@ const LocalFolderOptions: FC = () => {
     } = useLocalConnection();
     const { data: perfFolderList } = usePerfFolderList();
     const { data: reportFolderList } = useReportFolderList();
-    const { data: session } = useSession();
+    const { data: instance } = useInstance();
 
     const [profilerFolder, setProfilerFolder] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
@@ -189,7 +189,7 @@ const LocalFolderOptions: FC = () => {
     }, [isUploadingReport, isUploadingPerformance]);
 
     const handleSelectProfiler = async (item: ReportFolder) => {
-        await updateTabSession({ ...session, active_report: { profiler_name: item.path } });
+        await updateInstance({ ...instance, active_report: { profiler_name: item.path } });
 
         createToastNotification('Active memory report', getReportName(reportFolderList, item.path) ?? '');
         setActiveProfilerReport(item.path);
@@ -210,7 +210,7 @@ const LocalFolderOptions: FC = () => {
     };
 
     const handleSelectPerformance = async (item: ReportFolder) => {
-        await updateTabSession({ ...session, active_report: { performance_name: item.path } });
+        await updateInstance({ ...instance, active_report: { performance_name: item.path } });
 
         createToastNotification('Active performance report', item.reportName);
         setActivePerformanceReport(item.path);

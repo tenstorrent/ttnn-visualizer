@@ -21,9 +21,9 @@ const TOASTIFY_CLASS = '.Toastify';
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetClusterDescription: () => ({ data: null }),
     usePerfFolderList: () => ({ data: mockPerformanceReportFolders }),
-    useSession: () => ({ data: mockInstanceEmpty }),
+    useInstance: () => ({ data: mockInstanceEmpty }),
     useReportFolderList: () => ({ data: mockProfilerFolderList }),
-    updateTabSession: () => ({
+    updateInstance: () => ({
         ...mockInstanceEmpty,
         active_report: {
             profiler_name: mockProfilerFolderList[0].reportName,
