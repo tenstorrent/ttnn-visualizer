@@ -19,6 +19,7 @@ import {
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification from '../../functions/createToastNotification';
+import getServerConfig from '../../functions/getServerConfig';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 import {
     PERFORMANCE_FOLDER_QUERY_KEY,
@@ -229,6 +230,9 @@ const LocalFolderOptions: FC = () => {
         }
     };
 
+    // Check if TT_METAL_HOME is set to conditionally hide upload forms
+    const isTtMetalMode = !!getServerConfig()?.TT_METAL_HOME;
+
     return (
         <>
             <FormGroup
@@ -248,38 +252,41 @@ const LocalFolderOptions: FC = () => {
                 />
             </FormGroup>
 
-            <FormGroup subLabel='Upload a local memory report'>
-                <div className='buttons-container'>
-                    <FileInput
-                        id='local-upload'
-                        onInputChange={handleReportDirectoryOpen}
-                        text={profilerUploadLabel}
-                        inputProps={{
-                            // @ts-expect-error 'directory' (needed for Safari) and 'webkitdirectory' - TypeScript’s DOM types do not include non-standard attributes
-                            directory: '',
-                            webkitdirectory: '',
-                            multiple: true,
-                            'data-testid': 'local-profiler-upload',
-                        }}
-                    />
+            {!isTtMetalMode && (
+                <FormGroup subLabel='Upload a local memory report'>
+                    <div className='buttons-container'>
+                        <FileInput
+                            id='local-upload'
+                            onInputChange={handleReportDirectoryOpen}
+                            text={profilerUploadLabel}
+                            inputProps={{
+                                // @ts-expect-error 'directory' (needed for Safari) and 'webkitdirectory' - TypeScript’s DOM types do not include non-standard attributes
+                                directory: '',
+                                webkitdirectory: '',
+                                multiple: true,
+                                'data-testid': 'local-profiler-upload',
+                            }}
+                        />
 
-                    <FileStatusOverlay />
+                        <FileStatusOverlay />
 
-                    {profilerFolder && !isUploadingReport && (
-                        <div className={`verify-connection-item status-${ConnectionTestStates[profilerFolder.status]}`}>
-                            <Icon
-                                className='connection-status-icon'
-                                icon={ICON_MAP[profilerFolder.status]}
-                                size={20}
-                                intent={INTENT_MAP[profilerFolder.status]}
-                            />
+                        {profilerFolder && !isUploadingReport && (
+                            <div
+                                className={`verify-connection-item status-${ConnectionTestStates[profilerFolder.status]}`}
+                            >
+                                <Icon
+                                    className='connection-status-icon'
+                                    icon={ICON_MAP[profilerFolder.status]}
+                                    size={20}
+                                    intent={INTENT_MAP[profilerFolder.status]}
+                                />
 
-                            <span className='connection-status-text'>{profilerFolder.message}</span>
-                        </div>
-                    )}
-                </div>
-            </FormGroup>
-
+                                <span className='connection-status-text'>{profilerFolder.message}</span>
+                            </div>
+                        )}
+                    </div>
+                </FormGroup>
+            )}
             <FormGroup
                 className='form-group'
                 label={<h3 className='label'>Performance report</h3>}
@@ -299,37 +306,39 @@ const LocalFolderOptions: FC = () => {
                 />
             </FormGroup>
 
-            <FormGroup subLabel='Upload a local performance report'>
-                <div className='buttons-container'>
-                    <FileInput
-                        id='local-performance-upload'
-                        onInputChange={handlePerformanceDirectoryOpen}
-                        text={performanceDataUploadLabel}
-                        inputProps={{
-                            // @ts-expect-error 'directory' (needed for Safari) and 'webkitdirectory' - TypeScript’s DOM types do not include non-standard attributes
-                            directory: '',
-                            webkitdirectory: '',
-                            multiple: true,
-                            'data-testid': 'local-performance-upload',
-                        }}
-                    />
+            {!isTtMetalMode && (
+                <FormGroup subLabel='Upload a local performance report'>
+                    <div className='buttons-container'>
+                        <FileInput
+                            id='local-performance-upload'
+                            onInputChange={handlePerformanceDirectoryOpen}
+                            text={performanceDataUploadLabel}
+                            inputProps={{
+                                // @ts-expect-error 'directory' (needed for Safari) and 'webkitdirectory' - TypeScript’s DOM types do not include non-standard attributes
+                                directory: '',
+                                webkitdirectory: '',
+                                multiple: true,
+                                'data-testid': 'local-performance-upload',
+                            }}
+                        />
 
-                    {performanceFolder && !isUploadingPerformance && (
-                        <div
-                            className={`verify-connection-item status-${ConnectionTestStates[performanceFolder.status]}`}
-                        >
-                            <Icon
-                                className='connection-status-icon'
-                                icon={ICON_MAP[performanceFolder.status]}
-                                size={20}
-                                intent={INTENT_MAP[performanceFolder.status]}
-                            />
+                        {performanceFolder && !isUploadingPerformance && (
+                            <div
+                                className={`verify-connection-item status-${ConnectionTestStates[performanceFolder.status]}`}
+                            >
+                                <Icon
+                                    className='connection-status-icon'
+                                    icon={ICON_MAP[performanceFolder.status]}
+                                    size={20}
+                                    intent={INTENT_MAP[performanceFolder.status]}
+                                />
 
-                            <span className='connection-status-text'>{performanceFolder.message}</span>
-                        </div>
-                    )}
-                </div>
-            </FormGroup>
+                                <span className='connection-status-text'>{performanceFolder.message}</span>
+                            </div>
+                        )}
+                    </div>
+                </FormGroup>
+            )}
         </>
     );
 };
