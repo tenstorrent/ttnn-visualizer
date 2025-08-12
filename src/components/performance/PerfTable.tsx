@@ -100,14 +100,14 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
 
     // TODO: Refactor so that sortAndFilterPerfTableData is not used here and PerfReport.
     // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
-    const tableFields: TypedPerfTableRow[] = useMemo(() => {
+    const tableFields = useMemo<TypedPerfTableRow[]>(() => {
         const parsedRows = sortAndFilterPerfTableData(data, filters, filterableColumnKeys, mathFidelityFilter);
 
-        return sortTableFields(parsedRows);
+        return [...sortTableFields(parsedRows as [])];
     }, [data, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields]);
 
-    const comparisonDataTableFields = useMemo(() => {
-        return (
+    const comparisonDataTableFields = useMemo<TypedPerfTableRow[][]>(
+        () =>
             comparisonData?.map((dataset) => {
                 const parsedRows = sortAndFilterPerfTableData(
                     dataset,
@@ -116,10 +116,10 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                     mathFidelityFilter,
                 );
 
-                return sortTableFields(parsedRows);
-            }) || []
-        );
-    }, [comparisonData, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields]);
+                return [...sortTableFields(parsedRows as [])];
+            }) || [],
+        [comparisonData, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields],
+    );
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),

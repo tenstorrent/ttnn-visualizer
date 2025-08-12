@@ -220,7 +220,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         );
     };
 
-    const tableFields = useMemo(() => {
+    const tableFields = useMemo<SummaryTableBuffer[]>(() => {
         let filteredTableFields = listOfBuffers;
 
         if (showOnlySelected) {
@@ -241,7 +241,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
             });
         }
 
-        return [...sortTableFields(filteredTableFields as [])] as SummaryTableBuffer[];
+        return [...sortTableFields(filteredTableFields as [])];
     }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters, selectedTensor, showOnlySelected]);
 
     useEffect(() => {
