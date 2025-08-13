@@ -53,14 +53,40 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
+    const [fabricEventsOnlyFilter, setFabricEventsOnlyFilter] = useState<boolean>(false);
 
     const links = useMemo(() => {
-        return npeData.timestep_data[selectedTimestep];
-    }, [npeData.timestep_data, selectedTimestep]);
+        const timestepData = npeData.timestep_data[selectedTimestep];
+        timestepData.active_transfers.forEach((id) => {
+            const transfer = npeData.noc_transfers.find((tr) => tr.id === id);
+            // TODO: this functionality should likely move to BE.
+            if (transfer && transfer.fabric_event_type && fabricEventsOnlyFilter) {
+                transfer.route.forEach((route) => {
+                    route.links.forEach((link) => {
+                        timestepData.link_demand.forEach((linkDemand) => {
+                            if (
+                                linkDemand[NPE_LINK.CHIP_ID] === link[NPE_LINK.CHIP_ID] &&
+                                linkDemand[NPE_LINK.NOC_ID] === link[NPE_LINK.NOC_ID] &&
+                                linkDemand[NPE_LINK.Y] === link[NPE_LINK.Y] &&
+                                linkDemand[NPE_LINK.X] === link[NPE_LINK.X]
+                            ) {
+                                linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] = true;
+                            }
+                        });
+                    });
+                });
+            }
+        });
+        return timestepData;
+    }, [npeData.noc_transfers, npeData.timestep_data, selectedTimestep, fabricEventsOnlyFilter]);
 
     const transfers = useMemo(() => {
-        return npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));
-    }, [npeData.noc_transfers, links]);
+        return npeData.noc_transfers
+            .filter((tr) => links?.active_transfers.includes(tr.id))
+            .filter((tr) => {
+                return fabricEventsOnlyFilter ? tr.fabric_event_type : true;
+            });
+    }, [npeData.noc_transfers, links?.active_transfers, fabricEventsOnlyFilter]);
 
     const showNOCType = (value: NoCType) => {
         if (nocFilter === null) {
@@ -257,6 +283,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         checked={nocFilter === NoCType.NOC1 || nocFilter === null}
                         onChange={() => showNOCType(NoCType.NOC1)}
                     />
+                    <Switch
+                        label='Fabric events only'
+                        checked={fabricEventsOnlyFilter}
+                        onChange={() => setFabricEventsOnlyFilter(!fabricEventsOnlyFilter)}
+                    />
                     |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                     <label>
                         Zoom
@@ -346,10 +377,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     ))}
 
                                     {links?.link_demand.map((linkUtilization, index) => {
+                                        const fabricCondition = fabricEventsOnlyFilter
+                                            ? linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE]
+                                            : true;
                                         if (
                                             linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id &&
                                             (nocFilter === null ||
-                                                linkUtilization[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0)
+                                                linkUtilization[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0) &&
+                                            fabricCondition
                                         ) {
                                             return (
                                                 <button
