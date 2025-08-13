@@ -59,7 +59,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         const timestepData = npeData.timestep_data[selectedTimestep];
         timestepData.active_transfers.forEach((id) => {
             const transfer = npeData.noc_transfers.find((tr) => tr.id === id);
-            // TODO: this functionality should likely move to BE.
+            // TODO: this functionality should move to BE. https://github.com/orgs/tenstorrent/projects/178/views/1?pane=issue&itemId=124188622&issue=tenstorrent%7Cttnn-visualizer%7C745
             if (transfer && transfer.fabric_event_type && fabricEventsOnlyFilter) {
                 transfer.route.forEach((route) => {
                     route.links.forEach((link) => {
