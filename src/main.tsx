@@ -16,12 +16,17 @@ import ROUTES from './definitions/Routes';
 import getServerConfig from './functions/getServerConfig';
 import { SocketProvider } from './libs/SocketProvider';
 import { routeObjectList } from './definitions/RouteObjectList';
+import ProtectedRoute from './components/ProtectedRoute';
 
 const router = createBrowserRouter(
     [
         {
             path: ROUTES.HOME,
-            element: <Layout />,
+            element: (
+                <ProtectedRoute>
+                    <Layout />
+                </ProtectedRoute>
+            ),
             errorElement: <ErrorPage />,
             children: routeObjectList,
         },
