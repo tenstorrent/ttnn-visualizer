@@ -24,7 +24,7 @@ class PathResolver:
     def __init__(self, current_app):
         self.current_app = current_app
         self.tt_metal_home = current_app.config.get("TT_METAL_HOME")
-        self.is_tt_metal_mode = bool(self.tt_metal_home)
+        self.is_local_tt_metal = bool(self.tt_metal_home)
 
     def get_base_report_path(self, report_type: str, remote_connection=None):
         """
@@ -37,7 +37,7 @@ class PathResolver:
         Returns:
             Path object to the base directory for this report type
         """
-        if self.is_tt_metal_mode:
+        if self.is_local_tt_metal:
             tt_metal_base = Path(self.tt_metal_home) / "generated"
             if report_type == "profiler":
                 return tt_metal_base / "ttnn" / "reports"
@@ -69,7 +69,7 @@ class PathResolver:
 
         base_path = self.get_base_report_path("profiler", remote_connection)
 
-        if self.is_tt_metal_mode and not base_path.exists():
+        if self.is_local_tt_metal and not base_path.exists():
             logger.warning(f"TT-Metal profiler reports not found: {base_path}")
             return ""
 
@@ -82,7 +82,7 @@ class PathResolver:
         """Get the full path to a performance report directory."""
         base_path = self.get_base_report_path("performance", remote_connection)
 
-        if self.is_tt_metal_mode and not base_path.exists():
+        if self.is_local_tt_metal and not base_path.exists():
             logger.warning(f"TT-Metal performance reports not found: {base_path}")
             return ""
 
@@ -91,7 +91,7 @@ class PathResolver:
 
     def get_mode_info(self):
         """Get information about the current mode for debugging/display."""
-        if self.is_tt_metal_mode:
+        if self.is_local_tt_metal:
             return {
                 "mode": "tt_metal",
                 "tt_metal_home": self.tt_metal_home,
@@ -111,7 +111,7 @@ class PathResolver:
 
     def validate_tt_metal_setup(self):
         """Validate that TT-Metal directories exist and are accessible."""
-        if not self.is_tt_metal_mode:
+        if not self.is_local_tt_metal:
             return True, "Not in TT-Metal mode"
 
         tt_metal_base = Path(self.tt_metal_home)

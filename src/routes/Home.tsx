@@ -15,7 +15,7 @@ function Home() {
     useClearSelectedBuffer();
 
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
-    const isTtMetalMode = !!getServerConfig()?.TT_METAL_HOME;
+    const isLocalTtMetal = !!getServerConfig()?.TT_METAL_HOME;
 
     return (
         <div className='home'>
@@ -45,7 +45,7 @@ function Home() {
                         <RemoteSyncConfigurator />
                     </div>
 
-                    {isServerMode || isTtMetalMode ? (
+                    {isServerMode || isLocalTtMetal ? (
                         <div
                             className='feature-disabled'
                             data-testid='remote-sync-disabled'

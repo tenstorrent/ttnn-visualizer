@@ -230,8 +230,8 @@ const LocalFolderOptions: FC = () => {
         }
     };
 
-    // Check if TT_METAL_HOME is set to conditionally hide upload forms
-    const isTtMetalMode = !!getServerConfig()?.TT_METAL_HOME;
+    // Check if local TT-Metal is available to conditionally hide upload forms
+    const isLocalTtMetal = !!getServerConfig()?.TT_METAL_HOME;
 
     return (
         <>
@@ -252,7 +252,7 @@ const LocalFolderOptions: FC = () => {
                 />
             </FormGroup>
 
-            {!isTtMetalMode && (
+            {!isLocalTtMetal && (
                 <FormGroup subLabel='Upload a local memory report'>
                     <div className='buttons-container'>
                         <FileInput
@@ -306,7 +306,7 @@ const LocalFolderOptions: FC = () => {
                 />
             </FormGroup>
 
-            {!isTtMetalMode && (
+            {!isLocalTtMetal && (
                 <FormGroup subLabel='Upload a local performance report'>
                     <div className='buttons-container'>
                         <FileInput
