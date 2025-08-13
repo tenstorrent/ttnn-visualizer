@@ -33,7 +33,14 @@
         flex-grow: 1;
         max-width: 550px;
 
-        & > .bp6-icon {
+        .legend-title {
+            font-size: 30px;
+            font-weight: 400;
+            padding: 0 10px;
+            margin: 0;
+        }
+
+        > .legend-icon {
             color: $tt-grey-4;
         }
 
@@ -75,17 +82,14 @@
             justify-content: center;
             padding: 20px;
 
-            .callout {
-                a {
-                    white-space: pre;
-                }
+            .callout-title {
+                font-size: 18px;
+            }
+
+            .callout-link {
+                white-space: pre;
             }
         }
-    }
-
-    legend {
-        font-size: 30px;
-        padding: 0 10px;
     }
 }
 

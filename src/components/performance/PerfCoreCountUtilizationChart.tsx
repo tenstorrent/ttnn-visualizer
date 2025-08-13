@@ -9,7 +9,7 @@ import { PerfTableRow } from '../../definitions/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
-import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
@@ -21,7 +21,7 @@ interface PerfCoreCountUtilizationChartProps {
 
 function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCountUtilizationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const chartDataDuration = useMemo(
         () =>
@@ -30,13 +30,13 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
                 y: data?.map((row) => row.cores),
                 type: 'bar',
                 hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Cores: %{y}<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getPrimaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, perfReport, comparisonReport],
+        [datasets, perfReport, comparisonReportList],
     );
 
     const chartDataUtilization = useMemo(
@@ -46,13 +46,13 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
                 y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
                 yaxis: 'y2',
                 hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Utilization: %{y}<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getSecondaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, perfReport, comparisonReport, maxCores],
+        [datasets, perfReport, comparisonReportList, maxCores],
     );
 
     const configuration: PlotConfiguration = {

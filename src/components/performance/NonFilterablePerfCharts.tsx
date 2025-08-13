@@ -11,7 +11,7 @@ import SkeletalChart from './SkeletalChart';
 import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';
 import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationChart';
 import 'styles/components/PerfCharts.scss';
-import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import PerfDeviceTimeChart from './PerfDeviceTimeChart';
 
 interface NonFilterablePerfChartsProps {
@@ -28,7 +28,7 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
     opCodeOptions,
 }) => {
     const performanceReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReports = useAtomValue(comparisonPerformanceReportAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const datasets = [chartData, ...(secondaryData || [])].filter((set) => set.length > 0);
 
@@ -99,13 +99,13 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                 {performanceReport && (
                     <PerfOperationTypesChart
                         className='flex-chart'
-                        reportTitle={comparisonReports ? performanceReport : ''}
+                        reportTitle={comparisonReportList ? performanceReport : ''}
                         data={chartData}
                         opCodes={opCodeOptions}
                     />
                 )}
 
-                {comparisonReports?.map((report, index) => (
+                {comparisonReportList?.map((report, index) => (
                     <PerfOperationTypesChart
                         key={`${report}-${index}`}
                         className='flex-chart'
