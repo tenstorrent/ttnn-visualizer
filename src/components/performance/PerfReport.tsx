@@ -14,7 +14,7 @@ import { calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
-import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
 
@@ -62,7 +62,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     const opIdsMap = useOpToPerfIdFiltered();
 
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const activeComparisonReports = useAtomValue(comparisonPerformanceReportAtom);
+    const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
@@ -84,8 +84,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     );
 
     const comparisonIndex =
-        (activeComparisonReports ?? []).findIndex((value) => value === selectedTabId) > -1
-            ? (activeComparisonReports ?? []).findIndex((value) => value === selectedTabId)
+        (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId) > -1
+            ? (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId)
             : 0;
 
     const processedRows: TypedPerfTableRow[] = useMemo(() => {
@@ -148,16 +148,16 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
     // Resets various state if we remove all comparison reports
     useEffect(() => {
-        if (!activeComparisonReports?.includes(selectedTabId as string)) {
+        if (!activeComparisonReportList?.includes(selectedTabId as string)) {
             setSelectedTabId(INITIAL_TAB_ID);
         }
 
-        if (!activeComparisonReports) {
+        if (!activeComparisonReportList) {
             setHighlightRows(false);
             setUseNormalisedData(false);
             setSelectedTabId(INITIAL_TAB_ID);
         }
-    }, [activeComparisonReports, selectedTabId]);
+    }, [activeComparisonReportList, selectedTabId]);
 
     // If currently selected tab is disabled, reset to initial tab
     useEffect(() => {
@@ -201,7 +201,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                 }
                 onChange={() => setUseNormalisedData(!useNormalisedData)}
                 checked={useNormalisedData}
-                disabled={!activeComparisonReports}
+                disabled={!activeComparisonReportList}
             />
 
             <Switch
@@ -215,7 +215,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                 }
                 onChange={() => setHighlightRows(!highlightRows)}
                 checked={highlightRows}
-                disabled={!activeComparisonReports || !useNormalisedData}
+                disabled={!activeComparisonReportList || !useNormalisedData}
             />
 
             <div className='perf-report'>
@@ -300,7 +300,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         }
                     />
 
-                    {activeComparisonReports?.map((report, index) => (
+                    {activeComparisonReportList?.map((report, index) => (
                         <Tab
                             id={report}
                             key={index}

@@ -9,7 +9,7 @@ import { useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
 import {
     activePerformanceReportAtom,
-    comparisonPerformanceReportAtom,
+    comparisonPerformanceReportListAtom,
     hasClusterDescriptionAtom,
     operationRangeAtom,
     performanceRangeAtom,
@@ -39,7 +39,7 @@ function Range() {
     const [selectedOperationRange, setSelectedOperationRange] = useAtom(selectedOperationRangeAtom);
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
     const [selectedPerformanceRange, setSelectedPerformanceRange] = useAtom(selectedPerformanceRangeAtom);
-    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const [isUserOpChange, setIsUserOpChange] = useState(false);
     const [isUserPerfChange, setIsUserPerfChange] = useState(false);
     const setHasClusterDescription = useSetAtom(hasClusterDescriptionAtom);
@@ -202,7 +202,7 @@ function Range() {
                                 min={perfMin}
                                 max={perfMax}
                                 labelStepSize={getStepSize(perfMax)}
-                                disabled={!isPerformanceRoute || !!comparisonReport}
+                                disabled={!isPerformanceRoute || !!comparisonReportList}
                                 labelRenderer={(id, options) =>
                                     getPerformanceLabel(id, perfData, options?.isHandleTooltip)
                                 }

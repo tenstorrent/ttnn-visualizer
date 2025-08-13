@@ -9,7 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import LocalFolderPicker from '../report-selection/LocalFolderPicker';
 import { ReportFolder } from '../../definitions/Reports';
-import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 
 interface ComparisonReportSelectorProps {
     folderList: ReportFolder[];
@@ -26,7 +26,7 @@ const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({
     subLabel,
     className,
 }) => {
-    const [comparisonReports, setComparisonReports] = useAtom(comparisonPerformanceReportAtom);
+    const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
     return (
@@ -39,7 +39,7 @@ const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({
             <div className='folder-selection'>
                 <LocalFolderPicker
                     items={folderList.filter((folder: ReportFolder) => {
-                        const selectedReports = (comparisonReports || []).filter(
+                        const selectedReports = (comparisonReportList || []).filter(
                             (_reportName, index) => index !== reportIndex,
                         );
 
@@ -48,12 +48,12 @@ const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({
                             !selectedReports.includes(folder.reportName)
                         );
                     })}
-                    value={comparisonReports?.[reportIndex] || null}
+                    value={comparisonReportList?.[reportIndex] || null}
                     handleSelect={(folder: ReportFolder) => {
-                        const updatedReports = [...(comparisonReports || [])];
+                        const updatedReports = [...(comparisonReportList || [])];
                         updatedReports[reportIndex] = folder.reportName;
 
-                        setComparisonReports(updatedReports);
+                        setComparisonReportList(updatedReports);
                     }}
                 />
 
@@ -61,12 +61,12 @@ const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({
                     variant={ButtonVariant.OUTLINED}
                     icon={IconNames.CROSS}
                     onClick={() => {
-                        const updatedReports = [...(comparisonReports || [])];
+                        const updatedReports = [...(comparisonReportList || [])];
                         updatedReports.splice(reportIndex, 1);
 
-                        setComparisonReports(updatedReports?.length === 0 ? null : updatedReports);
+                        setComparisonReportList(updatedReports?.length === 0 ? null : updatedReports);
                     }}
-                    disabled={!comparisonReports?.[reportIndex]}
+                    disabled={!comparisonReportList?.[reportIndex]}
                 />
             </div>
         </FormGroup>

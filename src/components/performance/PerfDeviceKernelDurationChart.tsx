@@ -9,7 +9,7 @@ import { PerfTableRow } from '../../definitions/PerfTable';
 import PerfChart from './PerfChart';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import getPlotLabel from '../../functions/getPlotLabel';
-import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfDeviceKernelDurationChartProps {
@@ -18,7 +18,7 @@ interface PerfDeviceKernelDurationChartProps {
 
 function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const chartData = useMemo(
         () =>
@@ -27,14 +27,14 @@ function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurati
                 y: data?.map((row) => row.device_time),
                 mode: 'markers',
                 type: 'scatter',
-                name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 marker: {
                     size: 10,
                     color: getPrimaryDataColours(dataIndex),
                 },
                 hovertemplate: `Cores: %{x}<br />Device Kernel Duration: %{y} ns`,
             })) as Partial<PlotData>[],
-        [datasets, comparisonReport, perfReport],
+        [datasets, comparisonReportList, perfReport],
     );
 
     const configuration: PlotConfiguration = {

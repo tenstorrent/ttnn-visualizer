@@ -50,7 +50,7 @@ const useSortTable = (defaultSortingKey: string | null) => {
     const [sortDirection, setSortDirection] = useState<SortingDirection | null>(SortingDirection.ASC);
 
     const sortTableFields = useCallback(
-        // TODO: Type this more strongly
+        // TODO: Type this more strongly - https://github.com/tenstorrent/ttnn-visualizer/issues/738
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tableFields: any[]) => {
             if (!sortingColumn) {
