@@ -105,7 +105,14 @@ export enum NoCID {
     NOC1_OUT = 'NOC1_OUT',
 }
 
-export type LinkUtilization = [device_id: number, row: number, col: number, noc_id: NoCID, demand: number];
+export type LinkUtilization = [
+    device_id: number,
+    row: number,
+    col: number,
+    noc_id: NoCID,
+    demand: number,
+    fabric_event_type: boolean,
+];
 export type NoCLink = [device_id: number, row: number, col: number, noc_id: NoCID];
 export type NPE_COORDINATES = [device_id: number, row: number, col: number];
 
@@ -128,6 +135,7 @@ export interface NoCTransfer {
     dst: [[device_id, row, col]];
     total_bytes: number;
     noc_event_type: '';
+    fabric_event_type: boolean;
     start_cycle: number;
     end_cycle: number;
     route: NoCRoute[];
@@ -158,11 +166,12 @@ export interface NPEData {
 }
 
 export enum NPE_LINK {
-    CHIP_ID, // future iteration
+    CHIP_ID,
     Y,
     X,
     NOC_ID,
     DEMAND,
+    FABRIC_EVENT_TYPE,
 }
 
 export interface NPEManifestEntry {

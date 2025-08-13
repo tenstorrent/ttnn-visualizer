@@ -91,6 +91,7 @@ const ActiveTransferDetails = ({
                                         </div>
                                         <div>{formatSize(transfer.total_bytes)}B</div>
                                         <div>{transfer.noc_event_type}</div>
+                                        <div>Fabric event: {transfer.fabric_event_type ? 'TRUE' : 'FALSE'}</div>
 
                                         <div>
                                             <div className='route'>
