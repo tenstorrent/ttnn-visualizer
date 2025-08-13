@@ -230,7 +230,6 @@ const LocalFolderOptions: FC = () => {
         }
     };
 
-    // Check if local TT-Metal is available to conditionally hide upload forms
     const isLocalTtMetal = !!getServerConfig()?.TT_METAL_HOME;
 
     return (
