@@ -376,7 +376,7 @@ def get_profiler_data_list(instance: Instance):
     path = resolver.get_base_report_path("profiler", instance.remote_connection)
 
     if not path.exists():
-        if resolver.is_local_tt_metal:
+        if resolver.is_direct_report_mode:
             logger.warning(f"TT-Metal profiler reports not found: {path}")
             return jsonify([])
         else:
@@ -498,7 +498,7 @@ def get_performance_data_list(instance: Instance):
     is_remote = True if instance.remote_connection else False
 
     if not path.exists():
-        if resolver.is_local_tt_metal:
+        if resolver.is_direct_report_mode:
             logger.warning(f"TT-Metal performance reports not found: {path}")
             return jsonify([])
         elif not is_remote:

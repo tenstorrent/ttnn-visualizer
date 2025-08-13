@@ -230,7 +230,7 @@ const LocalFolderOptions: FC = () => {
         }
     };
 
-    const isLocalTtMetal = !!getServerConfig()?.TT_METAL_HOME;
+    const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
 
     return (
         <>
@@ -251,7 +251,7 @@ const LocalFolderOptions: FC = () => {
                 />
             </FormGroup>
 
-            {!isLocalTtMetal && (
+            {!isDirectReportMode && (
                 <FormGroup subLabel='Upload a local memory report'>
                     <div className='buttons-container'>
                         <FileInput
@@ -305,7 +305,7 @@ const LocalFolderOptions: FC = () => {
                 />
             </FormGroup>
 
-            {!isLocalTtMetal && (
+            {!isDirectReportMode && (
                 <FormGroup subLabel='Upload a local performance report'>
                     <div className='buttons-container'>
                         <FileInput
