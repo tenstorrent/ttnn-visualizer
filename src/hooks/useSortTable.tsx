@@ -9,9 +9,9 @@ export enum SortingDirection {
     DESC = 'desc',
 }
 
-type SortingValue = number | string | null;
+type SortingValue = string | number | null;
 
-const sortAsc = (a: SortingValue, b: SortingValue) => {
+const sortAsc = (a: SortingValue, b: SortingValue): number => {
     // Nulls should be sorted to the end
     if (a === null || b === null) {
         return a === null ? 1 : -1;
@@ -28,7 +28,7 @@ const sortAsc = (a: SortingValue, b: SortingValue) => {
     return a > b ? 1 : -1;
 };
 
-const sortDesc = (a: SortingValue, b: SortingValue) => {
+const sortDesc = (a: SortingValue, b: SortingValue): number => {
     // Nulls should be sorted to the end
     if (a === null || b === null) {
         return a === null ? 1 : -1;
@@ -45,26 +45,26 @@ const sortDesc = (a: SortingValue, b: SortingValue) => {
     return a < b ? 1 : -1;
 };
 
-const useSortTable = (defaultSortingKey: string | null) => {
-    const [sortingColumn, setSortingColumn] = useState<string | null>(defaultSortingKey);
+const useSortTable = (defaultSortingKey: SortingValue) => {
+    const [sortingColumn, setSortingColumn] = useState<SortingValue>(defaultSortingKey);
     const [sortDirection, setSortDirection] = useState<SortingDirection | null>(SortingDirection.ASC);
 
     const sortTableFields = useCallback(
-        // TODO: Type this more strongly - https://github.com/tenstorrent/ttnn-visualizer/issues/738
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (tableFields: any[]) => {
+        <T extends Record<string, SortingValue>>(tableFields: T[]): T[] => {
             if (!sortingColumn) {
                 return tableFields;
             }
 
-            return sortDirection === SortingDirection.ASC
-                ? tableFields.sort((a, b) => sortAsc(a[sortingColumn], b[sortingColumn]))
-                : tableFields.sort((a, b) => sortDesc(a[sortingColumn], b[sortingColumn]));
+            return [...tableFields].sort((a, b) =>
+                sortDirection === SortingDirection.ASC
+                    ? sortAsc(a[String(sortingColumn)], b[String(sortingColumn)])
+                    : sortDesc(a[String(sortingColumn)], b[String(sortingColumn)]),
+            );
         },
         [sortingColumn, sortDirection],
     );
 
-    const changeSorting = (selectedColumn: string | null) => (direction: SortingDirection | null) => {
+    const changeSorting = (selectedColumn: SortingValue) => (direction: SortingDirection | null) => {
         setSortDirection(direction);
         setSortingColumn(selectedColumn);
     };

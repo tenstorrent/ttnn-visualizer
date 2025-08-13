@@ -5,7 +5,7 @@
 import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import ROUTES from '../definitions/Routes';
-import { useSession } from '../hooks/useAPI';
+import { useInstance } from '../hooks/useAPI';
 import { RouteRequirements } from '../definitions/RouteObjectList';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ProtectedRoute.scss';
@@ -15,14 +15,14 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-    const { data: session, isLoading } = useSession();
+    const { data: instance, isLoading } = useInstance();
     const location = useLocation();
 
     const currentRoute = RouteRequirements[location.pathname];
     const needsProfiler = currentRoute?.needsProfilerReport ?? false;
     const needsPerformance = currentRoute?.needsPerformanceReport ?? false;
 
-    if (isLoading || session === undefined) {
+    if (isLoading || instance === undefined) {
         return (
             <div className='session-loader'>
                 <LoadingSpinner />
@@ -31,9 +31,9 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
         );
     }
 
-    if (session && !session?.active_report?.profiler_name && needsProfiler) {
+    if (instance && !instance?.active_report?.profiler_name && needsProfiler) {
         // eslint-disable-next-line no-console
-        console.info('No profiler report found, redirecting to home.', session);
+        console.info('No profiler report found, redirecting to home.', instance);
 
         return (
             <Navigate
@@ -43,7 +43,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
         );
     }
 
-    if (session && !session?.active_report?.performance_name && needsPerformance) {
+    if (instance && !instance?.active_report?.performance_name && needsPerformance) {
         // eslint-disable-next-line no-console
         console.info('No performance report found, redirecting to home.');
 
