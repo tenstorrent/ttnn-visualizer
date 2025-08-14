@@ -55,6 +55,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
     const [fabricEventsOnlyFilter, setFabricEventsOnlyFilter] = useState<boolean>(false);
 
+    const isFabricTransfersFilteringEnabled = useMemo(() => {
+        return npeData.noc_transfers.some((tr) => tr.fabric_event_type);
+    }, [npeData]);
+
     const links = useMemo(() => {
         const timestepData = npeData.timestep_data[selectedTimestep];
         timestepData.active_transfers.forEach((id) => {
@@ -286,6 +290,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     <Switch
                         label='Fabric events only'
                         checked={fabricEventsOnlyFilter}
+                        disabled={!isFabricTransfersFilteringEnabled}
                         onChange={() => setFabricEventsOnlyFilter(!fabricEventsOnlyFilter)}
                     />
                     |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
