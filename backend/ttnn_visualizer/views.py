@@ -1273,3 +1273,74 @@ def get_npe_data(instance: Instance):
             npe_data = json.load(file)
 
     return jsonify(npe_data)
+
+
+@api.route("/notify", methods=["POST"])
+def notify_report_update():
+    """
+    Endpoint to receive notifications about report updates and broadcast them via websockets.
+
+    Expected JSON payload:
+    {
+        "report_name": "string",
+        "status": "PASS" | "FAIL"
+    }
+    """
+    from ttnn_visualizer.sockets import (
+        ReportUpdate,
+        ReportUpdateStatus,
+        emit_report_update,
+    )
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        report_name = data.get("report_name")
+        status_str = data.get("status")
+
+        if not report_name:
+            return jsonify({"error": "report_name is required"}), 400
+
+        if not status_str:
+            return jsonify({"error": "status is required"}), 400
+
+        # Validate status
+        try:
+            status = ReportUpdateStatus(status_str.upper())
+        except ValueError:
+            return (
+                jsonify(
+                    {
+                        "error": f"Invalid status. Must be 'PASS' or 'FAIL', got '{status_str}'"
+                    }
+                ),
+                400,
+            )
+
+        # Create and emit the report update
+        report_update = ReportUpdate(report_name=report_name, status=status)
+
+        emit_report_update(report_update)
+
+        logger.info(
+            f"Report update notification processed: {report_name} - {status.value}"
+        )
+
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "message": "Report update notification sent",
+                    "report_name": report_name,
+                    "status": status.value,
+                    "timestamp": report_update.timestamp,
+                }
+            ),
+            200,
+        )
+
+    except Exception as e:
+        logger.error(f"Error processing report update notification: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500

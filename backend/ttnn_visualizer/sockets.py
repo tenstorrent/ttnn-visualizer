@@ -17,6 +17,7 @@ logger = getLogger(__name__)
 
 class Messages(object):
     FILE_TRANSFER_PROGRESS = "fileTransferProgress"
+    REPORT_UPDATED = "reportUpdated"
 
 
 class FileStatus(Enum):
@@ -25,6 +26,12 @@ class FileStatus(Enum):
     COMPRESSING = "COMPRESSING"
     FINISHED = "FINISHED"
     STARTED = "STARTED"
+
+
+class ReportUpdateStatus(Enum):
+    PASS = "PASS"
+    FAIL = "FAIL"
+    ERROR = "ERROR"
 
 
 @dataclass
@@ -38,6 +45,14 @@ class FileProgress(SerializeableDataclass):
 
     def __post_init__(self):
         self.percent_of_current = round(self.percent_of_current, 2)
+
+
+@dataclass
+class ReportUpdate(SerializeableDataclass):
+    report_name: str
+    status: ReportUpdateStatus
+    message_type: str = "report_updated"
+    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
 # For tracking connected clients subscriber ID
@@ -75,6 +90,20 @@ def emit_file_status(progress: FileProgress, instance_id=None):
         # Set a new debounce timer
         debounce_timer = threading.Timer(debounce_delay, emit_now)
         debounce_timer.start()
+
+
+def emit_report_update(report_update: ReportUpdate):
+    """Emit a report update notification to all connected clients."""
+    try:
+        if socketio is not None and hasattr(socketio, "emit"):
+            data = report_update.to_dict()
+            socketio.emit(Messages.REPORT_UPDATED, data)
+            logger.info(
+                f"Report update notification sent: {report_update.report_name} - {report_update.status.value}"
+            )
+    except NameError:
+        logger.warning("SocketIO not available - skipping report update notification")
+        pass  # Can silently pass since we know the NameError is from sockets being disabled
 
 
 def register_handlers(socketio_instance):
