@@ -52,6 +52,7 @@ class ReportUpdate(SerializeableDataclass):
     report_name: str
     status: ReportUpdateStatus
     message_type: str = "report_updated"
+    instance_id: str | None = None
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
