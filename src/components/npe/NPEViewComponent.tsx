@@ -33,6 +33,7 @@ const TENSIX_SIZE: number = NODE_SIZE; // * 0.75;
 const SVG_SIZE = TENSIX_SIZE;
 const PLAYBACK_SPEED = 1;
 const PLAYBACK_SPEED_2X = 2;
+const ZOOM_LABEL = 'zoom-label';
 
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
@@ -42,7 +43,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
     const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
     let totalColsChips = 0;
-    const [zoom, setZoom] = useState<number>(0.75);
+    const [zoom, setZoom] = useState<number>(0.8);
     const chips = Object.entries(npeData.chips).map(([ClusterChipId, coords]) => {
         totalColsChips = Math.max(totalColsChips, coords[CLUSTER_COORDS.X]);
         return {
@@ -147,20 +148,27 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         }, 100 / speed);
         setAnimationInterval(Number(interval));
     };
+
     const stopAnimation = () => {
         setPlaybackSpeed(0);
         return clearInterval(animationInterval as number);
     };
 
     const onPlay = () => {
-        startAnimation();
+        if (isPlaying) {
+            onPause();
+        } else {
+            startAnimation();
+        }
     };
     const onPlay2x = () => {
         startAnimation(PLAYBACK_SPEED_2X);
     };
+
     const onPause = () => {
         stopAnimation();
     };
+
     const onBackward = () => {
         stopAnimation();
         const range = npeData.timestep_data.length;
@@ -170,6 +178,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return prev > 0 ? prev - 1 : range - 1;
         });
     };
+
     const onForward = () => {
         stopAnimation();
         setSelectedNode(null);
@@ -179,6 +188,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return prev < range - 1 ? prev + 1 : 0;
         });
     };
+
     const handleScrubberChange = (value: number) => {
         stopAnimation();
         setSelectedTimestep(value);
@@ -235,6 +245,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     };
 
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
+    const isPlaying = useMemo(() => playbackSpeed !== 0, [playbackSpeed]);
 
     return (
         <div className='npe'>
@@ -245,24 +256,24 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             <div className='header'>
                 <ButtonGroup className='npe-controls'>
                     <Button
+                        aria-label='Step backward'
                         icon={IconNames.StepBackward}
                         onClick={onBackward}
                     />
                     <Button
-                        icon={IconNames.Play}
+                        aria-label='Play'
+                        icon={isPlaying ? IconNames.PAUSE : IconNames.PLAY}
                         intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
                         onClick={onPlay}
                     />
                     <Button
+                        aria-label='Fast forward'
                         icon={IconNames.FastForward}
                         onClick={onPlay2x}
                         intent={playbackSpeed === PLAYBACK_SPEED_2X ? Intent.PRIMARY : Intent.NONE}
                     />
                     <Button
-                        icon={IconNames.STOP}
-                        onClick={onPause}
-                    />
-                    <Button
+                        aria-label='Step forward'
                         icon={IconNames.StepForward}
                         onClick={onForward}
                     />
@@ -293,11 +304,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         disabled={!isFabricTransfersFilteringEnabled}
                         onChange={() => setFabricEventsOnlyFilter(!fabricEventsOnlyFilter)}
                     />
-                    |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-                    <label>
-                        Zoom
+                    |
+                    <div>
+                        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                        <label id={ZOOM_LABEL}>Zoom</label>
                         <Slider
-                            aria-label='zoom'
+                            handleHtmlProps={{ 'aria-labelledby': ZOOM_LABEL }}
                             min={0.1}
                             max={2}
                             stepSize={0.1}
@@ -306,10 +318,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             onChange={(value: number) => setZoom(value)}
                             labelRenderer={(value) => `${value.toFixed(1)}`}
                         />
-                    </label>
+                    </div>
                 </ButtonGroup>
                 <div style={{ position: 'relative', width: `${switchwidth}px` }}>
                     <Slider
+                        handleHtmlProps={{ 'aria-label': 'Timeline scrubber' }}
                         min={0}
                         max={npeData.timestep_data.length - 1}
                         stepSize={1}
@@ -541,6 +554,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     highlightedTransfer={highlightedTransfer}
                     setHighlightedTransfer={setHighlightedTransfer}
                     nocType={nocFilter}
+                    height={height * TENSIX_SIZE}
                 />
             </div>
         </div>
