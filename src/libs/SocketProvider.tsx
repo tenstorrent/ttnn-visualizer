@@ -10,6 +10,7 @@ import { getOrCreateInstanceId } from './axiosInstance';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileProgress, FileStatus } from '../model/APIData';
 import getServerConfig from '../functions/getServerConfig';
+import { useReportUpdateHandler } from '../hooks/useReportUpdateHandler';
 
 type SocketContextType = Socket | null;
 
@@ -25,6 +26,7 @@ interface SocketProviderProps {
 
 export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     const [_, setFileTransferProgress] = useAtom(fileTransferProgressAtom);
+    const { handleReportUpdate } = useReportUpdateHandler();
     const instanceId = getOrCreateInstanceId();
 
     useEffect(() => {
@@ -58,19 +60,23 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
             }
         });
 
+        socket.on('reportUpdated', handleReportUpdate);
+
         /* For debugging socket messages */
         // socket.onAny((eventName: string, data: any ) => {
         //     console.info(`Socket ${eventName}: ${JSON.stringify(data)}`);
         // })
 
         return () => {
-            // socket.offAny();
+            socket.offAny();
             socket.off('connect');
             socket.off('disconnect');
             socket.off('connect_error');
             socket.off('reconnect');
+            socket.off('fileTransferProgress');
+            socket.off('reportUpdated');
         };
-    }, [instanceId, setFileTransferProgress]);
+    }, [instanceId, setFileTransferProgress, handleReportUpdate]);
 
     return <SocketContext.Provider value={socket}>{children}</SocketContext.Provider>;
 };
