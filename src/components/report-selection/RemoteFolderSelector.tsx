@@ -9,6 +9,7 @@ import { FC, type PropsWithChildren } from 'react';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemoteConnection from '../../hooks/useRemote';
+import 'styles/components/RemoteFolderSelector.scss';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
@@ -137,9 +138,9 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     const isDisabled = loading || remoteFolderList?.length === 0 || disabled;
 
     return (
-        <div className='buttons-container'>
+        <div className='form-container'>
             <Select
-                className='remote-folder-select'
+                className='remote-select'
                 items={remoteFolderList ?? []}
                 itemRenderer={remoteFolderRenderer(updatingFolderList, type, remoteFolder, remoteConnection)}
                 filterable

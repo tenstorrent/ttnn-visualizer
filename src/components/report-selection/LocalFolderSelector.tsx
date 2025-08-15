@@ -6,7 +6,6 @@ import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core'
 import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
-import 'styles/components/OldFolderPicker.scss';
 import { useQueryClient } from 'react-query';
 import { useAtom, useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
@@ -253,7 +252,7 @@ const LocalFolderOptions: FC = () => {
 
             {!isDirectReportMode && (
                 <FormGroup subLabel='Upload a local memory report'>
-                    <div className='buttons-container'>
+                    <div className='form-container'>
                         <FileInput
                             id='local-upload'
                             onInputChange={handleReportDirectoryOpen}
@@ -307,7 +306,7 @@ const LocalFolderOptions: FC = () => {
 
             {!isDirectReportMode && (
                 <FormGroup subLabel='Upload a local performance report'>
-                    <div className='buttons-container'>
+                    <div className='form-container'>
                         <FileInput
                             id='local-performance-upload'
                             onInputChange={handlePerformanceDirectoryOpen}
