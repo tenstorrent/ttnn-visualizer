@@ -33,6 +33,7 @@ const ActiveTransferDetails = ({
                     <h3>
                         Active transfers through {selectedNode?.coords.join('-')}
                         <Button
+                            aria-label='Close active transfers'
                             variant='minimal'
                             icon={IconNames.CROSS}
                             onClick={() => showActiveTransfers(null)}
