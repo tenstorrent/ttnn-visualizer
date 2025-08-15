@@ -19,7 +19,7 @@ function Home() {
 
     return (
         <div className='home'>
-            <div className='folder-picker-options'>
+            <div className='fieldset-container'>
                 <FolderFieldset
                     title='Local folder'
                     icon={IconNames.FOLDER_OPEN}
