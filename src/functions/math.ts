@@ -11,6 +11,14 @@ export const formatSize = (number: number, decimals?: number): string => {
     return new Intl.NumberFormat('en-US', { maximumFractionDigits: decimals }).format(number);
 };
 
+export const formatUnit = (number: number): string => {
+    return new Intl.NumberFormat('en-US', {
+        style: 'unit',
+        unit: 'byte',
+        unitDisplay: 'long',
+    }).format(number);
+};
+
 /**
  * Convert microseconds to seconds and format it to 3 decimal places
  * returns empty string if us is less than min
