@@ -110,7 +110,7 @@ export type LinkUtilization = [
     row: number,
     col: number,
     noc_id: NoCID,
-    demand: number,
+    demand: number, // percentage - it can exceed 100% if there is congestion
     fabric_event_type: boolean,
 ];
 export type NoCLink = [device_id: number, row: number, col: number, noc_id: NoCID];
@@ -146,12 +146,12 @@ export interface TimestepData {
     end_cycle: number;
     active_transfers: NoCTransferId[];
     link_demand: LinkUtilization[];
-    avg_link_demand: number;
-    avg_link_util: number;
+    avg_link_demand: number; // percentage
+    avg_link_util: number; // percentage
     noc: {
         [K in NoCType]: {
-            avg_link_demand: number;
-            avg_link_util: number;
+            avg_link_demand: number; //  percentage
+            avg_link_util: number; // percentage
         };
     };
 }

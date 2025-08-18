@@ -2,22 +2,31 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+const LOCALE = 'en-US';
+
 export const toHex = (num: number): string => {
     // eslint-disable-next-line no-bitwise
     return `0x${(num >>> 0).toString(16).toUpperCase()}`;
 };
 
 export const formatSize = (number: number, decimals?: number): string => {
-    return new Intl.NumberFormat('en-US', { maximumFractionDigits: decimals }).format(number);
+    return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: decimals }).format(number);
 };
 
-export const formatUnit = (number: number): string => {
-    return new Intl.NumberFormat('en-US', {
+export const formatUnit = (value: number, unit: string): string => {
+    return new Intl.NumberFormat(LOCALE, {
         style: 'unit',
-        unit: 'byte',
+        unit,
         unitDisplay: 'long',
-    }).format(number);
+    }).format(value);
 };
+
+export const formatPercentage = (number: number, decimals: number = 2): string =>
+    new Intl.NumberFormat(LOCALE, {
+        style: 'percent',
+        unitDisplay: 'narrow',
+        maximumFractionDigits: decimals,
+    }).format(number / 100);
 
 /**
  * Convert microseconds to seconds and format it to 3 decimal places

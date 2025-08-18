@@ -6,7 +6,7 @@ import { Button, Icon, Intent, Tag } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
 import { calculateLinkCongestionColor, getRouteColor } from './drawingApi';
-import { formatUnit } from '../../functions/math';
+import { formatPercentage, formatUnit } from '../../functions/math';
 
 const ActiveTransferDetails = ({
     groupedTransfersByNoCID,
@@ -56,7 +56,7 @@ const ActiveTransferDetails = ({
                                             className='color-square'
                                             style={{ backgroundColor: calculateLinkCongestionColor(congestion) }}
                                         />
-                                        {congestion.toFixed(2)}
+                                        {formatPercentage(congestion)}
                                     </h4>
 
                                     {localTransferList.map((transfer) => (
@@ -70,6 +70,7 @@ const ActiveTransferDetails = ({
                                                             ? 1
                                                             : 0.25,
                                                 }}
+                                                // TODO: Figure out the appropriate accessibility handling for mouse events
                                                 // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
                                                 onMouseOver={() => setHighlightedTransfer(transfer)}
                                                 // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
@@ -94,7 +95,7 @@ const ActiveTransferDetails = ({
                                                             : `${transfer.dst[0].join('-')} - ${transfer.dst[transfer.dst.length - 1].join('-')}`}
                                                     </span>
                                                 </div>
-                                                <div>{formatUnit(transfer.total_bytes)}</div>
+                                                <div>{formatUnit(transfer.total_bytes, 'byte')}</div>
                                                 <div>{transfer.noc_event_type}</div>
                                                 {transfer.route[0].injection_rate.toFixed(2)} b/cycle
                                                 {transfer.fabric_event_type && (

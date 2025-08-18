@@ -97,10 +97,10 @@
         max-width: 380px;
         border-left: 1px solid $tt-slate;
         overflow-y: scroll;
-        background-color: $tt-grey-3;
 
         .wrapper {
             padding: 10px;
+            background-color: $tt-grey-3;
         }
 
         .active-transfer-details-title {
@@ -110,7 +110,7 @@
             justify-content: space-between;
             padding: 5px;
             padding-left: 10px;
-            background-color: $tt-purple-shade;
+            background-color: $tt-grey-4;
             margin-bottom: 0;
 
             span {
