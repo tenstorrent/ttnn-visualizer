@@ -14,5 +14,6 @@ $bp-large: 1300px;
 $bp-medium: 1100px;
 
 // Colors
+// TODO: Temporary placing of these here - reconcile with usage in _blueprintjs.scss
 $dark-button-background-base: $tt-grey-2;
 $tt-dark-minimal-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: 5%);
