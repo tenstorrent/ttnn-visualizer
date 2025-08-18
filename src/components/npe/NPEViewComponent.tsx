@@ -43,7 +43,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
     const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
     let totalColsChips = 0;
-    const [zoom, setZoom] = useState<number>(0.8);
+    const [zoom, setZoom] = useState<number>(0.75);
     const chips = Object.entries(npeData.chips).map(([ClusterChipId, coords]) => {
         totalColsChips = Math.max(totalColsChips, coords[CLUSTER_COORDS.X]);
         return {
@@ -148,27 +148,20 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         }, 100 / speed);
         setAnimationInterval(Number(interval));
     };
-
     const stopAnimation = () => {
         setPlaybackSpeed(0);
         return clearInterval(animationInterval as number);
     };
 
     const onPlay = () => {
-        if (isPlaying) {
-            onPause();
-        } else {
-            startAnimation();
-        }
+        startAnimation();
     };
     const onPlay2x = () => {
         startAnimation(PLAYBACK_SPEED_2X);
     };
-
     const onPause = () => {
         stopAnimation();
     };
-
     const onBackward = () => {
         stopAnimation();
         const range = npeData.timestep_data.length;
@@ -178,7 +171,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return prev > 0 ? prev - 1 : range - 1;
         });
     };
-
     const onForward = () => {
         stopAnimation();
         setSelectedNode(null);
@@ -188,19 +180,16 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return prev < range - 1 ? prev + 1 : 0;
         });
     };
-
     const handleScrubberChange = (value: number) => {
         stopAnimation();
         setSelectedTimestep(value);
         setSelectedNode(null);
         setSelectedTransferList([]);
     };
-
     const hideAllTransfers = () => {
         setIsShowingAllTransfers(false);
         setSelectedTransferList([]);
     };
-
     const showActiveTransfers = useShowActiveTransfers({
         npeData,
         selectedNode,
@@ -245,7 +234,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     };
 
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
-    const isPlaying = useMemo(() => playbackSpeed !== 0, [playbackSpeed]);
 
     return (
         <div className='npe'>
@@ -262,15 +250,19 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     />
                     <Button
                         aria-label='Play'
-                        icon={isPlaying ? IconNames.PAUSE : IconNames.PLAY}
+                        icon={IconNames.PLAY}
                         intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
                         onClick={onPlay}
                     />
                     <Button
-                        aria-label='Fast forward'
+                        aria-label='Play at double speed'
                         icon={IconNames.FastForward}
                         onClick={onPlay2x}
                         intent={playbackSpeed === PLAYBACK_SPEED_2X ? Intent.PRIMARY : Intent.NONE}
+                    />
+                    <Button
+                        icon={IconNames.STOP}
+                        onClick={onPause}
                     />
                     <Button
                         aria-label='Step forward'
