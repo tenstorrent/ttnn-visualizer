@@ -34,6 +34,9 @@ const SVG_SIZE = TENSIX_SIZE;
 const PLAYBACK_SPEED = 1;
 const PLAYBACK_SPEED_2X = 2;
 
+const LABEL_STEP_COUNT_TIMESTEPSCALE = 20;
+const LABEL_STEP_COUNT_CYCLESCALE = 10;
+
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [selectedTimestep, setSelectedTimestep] = useState<number>(0);
@@ -337,13 +340,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         stepSize={1}
                         labelStepSize={
                             npeData.timestep_data.length > LABEL_STEP_THRESHOLD
-                                ? npeData.timestep_data.length / (timestepsScale ? 20 : 10)
+                                ? npeData.timestep_data.length /
+                                  (timestepsScale ? LABEL_STEP_COUNT_TIMESTEPSCALE : LABEL_STEP_COUNT_CYCLESCALE)
                                 : 1
                         }
                         labelRenderer={(value: number) =>
                             timestepsScale
                                 ? value.toFixed(0)
-                                : (npeData.common_info.cycles_per_timestep * value).toFixed(0)
+                                : ((npeData.common_info.cycles_per_timestep ?? 1) * value).toFixed(0)
                         }
                         value={selectedTimestep}
                         onChange={(value: number) => handleScrubberChange(value)}
