@@ -542,6 +542,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         );
                     })}
                 </div>
+
                 <ActiveTransferDetails
                     groupedTransfersByNoCID={groupedTransfersByNoCID}
                     selectedNode={selectedNode}
@@ -554,7 +555,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     highlightedTransfer={highlightedTransfer}
                     setHighlightedTransfer={setHighlightedTransfer}
                     nocType={nocFilter}
-                    height={height * TENSIX_SIZE}
                 />
             </div>
         </div>

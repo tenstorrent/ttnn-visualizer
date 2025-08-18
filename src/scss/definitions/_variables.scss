@@ -2,6 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+@use 'sass:color';
+@use './colours' as *;
+
 // Fonts
 $base-font: 'Arial Nova', arial, sans-serif;
 $monospace-font: monospace;
@@ -9,3 +12,7 @@ $monospace-font: monospace;
 // Breakpoints
 $bp-large: 1300px;
 $bp-medium: 1100px;
+
+// Colors
+$dark-button-background-base: $tt-grey-2;
+$tt-dark-minimal-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: 5%);

@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+@use 'sass:color';
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 .npe-inline-loaders {
     display: flex;
@@ -45,7 +48,7 @@
 
     .split-grid {
         display: flex;
-        align-items: flex-start;
+        align-items: stretch;
         gap: 10px;
     }
 
@@ -61,7 +64,7 @@
         right: 20px;
         top: -100px;
         gap: 5px;
-        background-color: #343434dd;
+        background-color: rgba($tt-grey-2, 0.87);
         z-index: 10;
 
         .collapsible-component {
@@ -92,49 +95,78 @@
         display: inline-flex;
         flex-direction: column;
         max-width: 380px;
-        padding-left: 10px;
         border-left: 1px solid $tt-slate;
-        height: 100vh;
         overflow-y: scroll;
+        background-color: $tt-grey-3;
 
-        h3 {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .wrapper {
+            padding: 10px;
         }
 
-        h4 {
-            margin-bottom: 5px;
+        .active-transfer-details-title {
+            display: flex;
+            margin-top: 0;
+            align-items: flex-start;
+            justify-content: space-between;
+            padding: 5px;
+            padding-left: 10px;
+            background-color: $tt-purple-shade;
+            margin-bottom: 0;
+
+            span {
+                margin-top: 3px;
+            }
+
+            .bp6-button.bp6-minimal {
+                background-color: transparent;
+
+                &:hover {
+                    background-color: variables.$tt-dark-minimal-button-background-color-hover;
+                }
+            }
+        }
+
+        .noc-id {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 0;
+            margin-bottom: 0;
+
+            .color-square {
+                width: 11px;
+                height: 11px;
+                border: 1px solid $tt-grey-5;
+            }
         }
 
         .local-transfer-ctn {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             display: inline-flex;
             flex-flow: column nowrap;
+            gap: 10px;
+        }
 
-            h4 {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-
-                .color-square {
-                    width: 11px;
-                    height: 11px;
-                    border: 1px solid $tt-grey-5;
-                }
-            }
+        .transfer-info {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            align-items: flex-start;
         }
 
         .local-transfer {
             display: inline-flex;
             flex-flow: row wrap;
             gap: 5px;
-            align-content: center;
             align-items: center;
-            padding: 5px;
-            margin: 2px;
             transition: opacity 0.2s;
             cursor: pointer;
+        }
+
+        .transfer-src-dst {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
         }
 
         .transfer-src {
