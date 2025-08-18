@@ -97,6 +97,7 @@
         width: 380px;
         border-left: 1px solid $tt-slate;
         overflow-y: scroll;
+        flex-shrink: 0;
 
         .wrapper {
             padding: 10px;
