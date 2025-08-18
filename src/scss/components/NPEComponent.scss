@@ -94,7 +94,7 @@
     .side-data {
         display: inline-flex;
         flex-direction: column;
-        max-width: 380px;
+        width: 380px;
         border-left: 1px solid $tt-slate;
         overflow-y: scroll;
 
@@ -198,15 +198,18 @@
 
     .chip {
         position: relative;
-        border: 1.5px solid $tt-grey-5;
     }
 
     .tensix-grid {
+        display: grid;
+        gap: 1px;
+
         &.empty {
             position: absolute;
             z-index: -1;
             top: 0;
             left: 0;
+            border: 1.5px solid $tt-grey-5;
         }
 
         &.transfers,
@@ -220,9 +223,6 @@
         &.transfer-single {
             z-index: 1;
         }
-
-        display: grid;
-        gap: 1px;
 
         .chip-id {
             font-size: 100px;
