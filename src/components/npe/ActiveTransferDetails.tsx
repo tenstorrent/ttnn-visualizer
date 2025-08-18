@@ -51,7 +51,7 @@ const ActiveTransferDetails = ({
                                     key={nocId}
                                 >
                                     <h4 className='noc-id'>
-                                        NOC ID: {nocId}
+                                        {nocId}
                                         <span
                                             className='color-square'
                                             style={{ backgroundColor: calculateLinkCongestionColor(congestion) }}

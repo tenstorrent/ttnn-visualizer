@@ -190,10 +190,7 @@
         gap: 5px;
         overflow: auto;
         scrollbar-gutter: stable;
-
-        &.details-open {
-            width: calc(100% - 300px);
-        }
+        flex-grow: 1;
     }
 
     .chip {
