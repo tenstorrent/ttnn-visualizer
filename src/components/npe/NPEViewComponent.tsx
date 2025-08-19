@@ -6,7 +6,7 @@
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, ButtonGroup, Intent, Slider, Switch } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
@@ -283,8 +283,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             onChange={() => setIsAnnotatingCores(!isAnnotatingCores)}
                         />
                         <ButtonGroup
-                            variant='minimal'
-                            size='small'
+                            variant={ButtonVariant.OUTLINED}
+                            size={Size.SMALL}
                         >
                             <Button
                                 text='Timesteps'
