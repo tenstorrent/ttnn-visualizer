@@ -162,6 +162,7 @@ The following separate and independent dependencies are utilized by this project
 - flask-sqlalchemy - BSD‑3‑Clause - https://github.com/pallets-eco/flask-sqlalchemy/blob/main/LICENSE
 - gevent - MIT - https://github.com/gevent/gevent/blob/master/LICENSE
 - gunicorn - MIT - https://github.com/benoitc/gunicorn/blob/master/LICENSE
+- orjson - Dual-license Apache-2.0 or MIT - https://github.com/ijl/orjson/blob/master/LICENSE-APACHE and https://github.com/ijl/orjson/blob/master/LICENSE-MIT
 - pandas - BSD‑3‑Clause - https://github.com/pandas-dev/pandas/blob/main/LICENSE
 - playwright - Apache-2.0 - https://github.com/microsoft/playwright-python/blob/main/LICENSE
 - pydantic - MIT - https://github.com/pydantic/pydantic-settings/blob/main/LICENSE
