@@ -52,12 +52,12 @@
 
     .split-grid {
         display: flex;
-        align-items: stretch;
+
+        // align-items: stretch;
         gap: 10px;
         margin-top: 10px;
         margin-bottom: 20px;
         border: 1px solid $tt-grey-5;
-        padding: variables.$npe-grid-padding;
     }
 
     .metadata {
@@ -112,6 +112,7 @@
         overflow: auto;
         scrollbar-gutter: stable;
         flex: 1 1 0;
+        padding: 10px;
     }
 
     .chip {

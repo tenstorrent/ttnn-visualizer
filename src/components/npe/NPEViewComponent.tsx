@@ -59,6 +59,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [fabricEventsOnlyFilter, setFabricEventsOnlyFilter] = useState<boolean>(false);
     const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
 
+    const [sideBarMaxHeight, setSideBarMaxHeight] = useState<number>(0);
     const splitGridRef = useRef<HTMLDivElement>(null);
 
     const isFabricTransfersFilteringEnabled = useMemo(() => {
@@ -135,6 +136,13 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setHighlightedTransfer(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [npeData]);
+
+    useEffect(() => {
+        if (splitGridRef?.current) {
+            const splitGridHeight = splitGridRef.current.getBoundingClientRect().height;
+            setSideBarMaxHeight(splitGridHeight);
+        }
+    }, [zoom]);
 
     const { transferListSelectionRendering, groupedTransfersByNoCID } = useSelectedTransferGrouping(
         selectedTransferList,
@@ -239,7 +247,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     };
 
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
-    const sideBarMaxHeight = splitGridRef?.current?.getBoundingClientRect().height || 0; // Can't be memoised as it relies on the inner content of split-grid which loads after splitGridRef.current is available
 
     return (
         <div className='npe'>

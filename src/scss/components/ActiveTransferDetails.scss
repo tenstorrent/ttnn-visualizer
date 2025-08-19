@@ -5,17 +5,15 @@
 @use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
 
+$outer-padding: 10px;
+
 .side-data {
     display: flex;
     flex-direction: column;
     width: 380px;
     overflow-y: scroll;
     flex: 0 1 auto;
-
-    // Offset parent margins so the border in .has-data aligns properly
-    margin-top: -#{variables.$npe-grid-padding};
-    margin-right: -#{variables.$npe-grid-padding};
-    margin-bottom: -#{variables.$npe-grid-padding};
+    background-color: $tt-grey-3;
 
     &:empty {
         display: none;
@@ -26,27 +24,21 @@
     }
 
     .wrapper {
-        height: 100%;
-        padding: 10px;
-        background-color: $tt-grey-3;
+        padding: $outer-padding;
     }
 
     .active-transfer-details-title {
         display: flex;
         margin-top: 0;
-        align-items: flex-start;
+        align-items: center;
         justify-content: space-between;
-        padding: 5px;
-        padding-left: 10px;
+        padding: 5px 5px 5px $outer-padding; // Button size in this heading means we can't use $outer-padding in most directions
         background-color: $tt-grey-4;
         margin-bottom: 0;
 
-        span {
-            margin-top: 3px;
-        }
-
         .bp6-button.bp6-minimal {
             background-color: transparent;
+            padding: 0;
 
             &:hover {
                 background-color: variables.$tt-dark-minimal-button-background-color-hover;
