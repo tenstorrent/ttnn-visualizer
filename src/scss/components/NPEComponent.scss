@@ -6,6 +6,8 @@
 @use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
 
+$grid-padding: 10px;
+
 .npe-inline-loaders {
     display: flex;
     flex-direction: row;
@@ -50,6 +52,10 @@
         display: flex;
         align-items: stretch;
         gap: 10px;
+        margin-top: 10px;
+        margin-bottom: 20px;
+        border: 1px solid $tt-grey-5;
+        padding: $grid-padding;
     }
 
     .metadata {
@@ -92,12 +98,20 @@
     }
 
     .side-data {
-        display: inline-flex;
+        display: flex;
         flex-direction: column;
-        width: 380px;
-        border-left: 1px solid $tt-slate;
+        max-width: 380px;
         overflow-y: scroll;
-        flex-shrink: 0;
+        flex: 0 1 auto;
+
+        // Offset parent margins so the border in .has-data aligns properly
+        margin-top: -#{$grid-padding};
+        margin-right: -#{$grid-padding};
+        margin-bottom: -#{$grid-padding};
+
+        &.has-data {
+            border-left: 1px solid $tt-grey-5;
+        }
 
         .wrapper {
             padding: 10px;
@@ -188,10 +202,10 @@
 
     .chip-cluster-wrap {
         display: grid;
-        gap: 5px;
+        gap: 10px;
         overflow: auto;
         scrollbar-gutter: stable;
-        flex-grow: 1;
+        flex: 1 1 0;
     }
 
     .chip {
@@ -207,7 +221,7 @@
             z-index: -1;
             top: 0;
             left: 0;
-            border: 1.5px solid $tt-grey-5;
+            border: 2px dashed $tt-grey-5;
         }
 
         &.transfers,

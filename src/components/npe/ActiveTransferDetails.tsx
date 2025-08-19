@@ -4,6 +4,7 @@
 
 import { Button, Icon, Intent, Tag } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import classNames from 'classnames';
 import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
 import { calculateLinkCongestionColor, getRouteColor } from './drawingApi';
 import { formatPercentage, formatUnit } from '../../functions/math';
@@ -26,9 +27,15 @@ const ActiveTransferDetails = ({
     congestionData: LinkUtilization[];
     nocType: NoCType | null;
 }) => {
+    const hasData = Object.keys(groupedTransfersByNoCID).length !== 0;
+
     return (
-        <aside className='side-data'>
-            {Object.keys(groupedTransfersByNoCID).length !== 0 && (
+        <aside
+            className={classNames('side-data', {
+                'has-data': hasData,
+            })}
+        >
+            {hasData && (
                 <>
                     <h3 className='active-transfer-details-title'>
                         <span>Active transfers through {selectedNode?.coords.join('-')}</span>
