@@ -18,6 +18,7 @@ const ActiveTransferDetails = ({
     congestionData,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     nocType, // this may or may not be used in the future
+    maxHeight,
 }: {
     groupedTransfersByNoCID: Record<NoCID, NoCTransfer[]>;
     selectedNode: { index: number; coords: number[] } | null;
@@ -26,6 +27,7 @@ const ActiveTransferDetails = ({
     setHighlightedTransfer: (transfer: NoCTransfer | null) => void;
     congestionData: LinkUtilization[];
     nocType: NoCType | null;
+    maxHeight: number;
 }) => {
     const hasData = Object.keys(groupedTransfersByNoCID).length !== 0;
 
@@ -34,6 +36,7 @@ const ActiveTransferDetails = ({
             className={classNames('side-data', {
                 'has-data': hasData,
             })}
+            style={{ maxHeight: `${maxHeight}px` }}
         >
             {hasData && (
                 <>

@@ -547,6 +547,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     highlightedTransfer={highlightedTransfer}
                     setHighlightedTransfer={setHighlightedTransfer}
                     nocType={nocFilter}
+                    maxHeight={zoom * (height * TENSIX_SIZE) + 30} // + 30 for top + bottom margin from .split-grid
                 />
             </div>
         </div>
