@@ -6,8 +6,6 @@
 @use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
 
-$grid-padding: 10px;
-
 .npe-inline-loaders {
     display: flex;
     flex-direction: row;
@@ -16,9 +14,6 @@ $grid-padding: 10px;
 
 .npe {
     position: relative;
-
-    $highlight-src: #ff0;
-    $highlight-dst: #ff4500;
 
     .npe-controls {
         display: flex;
@@ -62,7 +57,7 @@ $grid-padding: 10px;
         margin-top: 10px;
         margin-bottom: 20px;
         border: 1px solid $tt-grey-5;
-        padding: $grid-padding;
+        padding: variables.$npe-grid-padding;
     }
 
     .metadata {
@@ -101,107 +96,6 @@ $grid-padding: 10px;
         hr {
             margin-top: 10px;
             margin-bottom: 10px;
-        }
-    }
-
-    .side-data {
-        display: flex;
-        flex-direction: column;
-        width: 380px;
-        overflow-y: scroll;
-        flex: 0 1 auto;
-
-        // Offset parent margins so the border in .has-data aligns properly
-        margin-top: -#{$grid-padding};
-        margin-right: -#{$grid-padding};
-        margin-bottom: -#{$grid-padding};
-
-        &:empty {
-            display: none;
-        }
-
-        &.has-data {
-            border-left: 1px solid $tt-grey-5;
-        }
-
-        .wrapper {
-            height: 100%;
-            padding: 10px;
-            background-color: $tt-grey-3;
-        }
-
-        .active-transfer-details-title {
-            display: flex;
-            margin-top: 0;
-            align-items: flex-start;
-            justify-content: space-between;
-            padding: 5px;
-            padding-left: 10px;
-            background-color: $tt-grey-4;
-            margin-bottom: 0;
-
-            span {
-                margin-top: 3px;
-            }
-
-            .bp6-button.bp6-minimal {
-                background-color: transparent;
-
-                &:hover {
-                    background-color: variables.$tt-dark-minimal-button-background-color-hover;
-                }
-            }
-        }
-
-        .noc-id {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-top: 0;
-            margin-bottom: 0;
-
-            .color-square {
-                width: 11px;
-                height: 11px;
-                border: 1px solid $tt-grey-5;
-            }
-        }
-
-        .local-transfer-ctn {
-            margin-bottom: 25px;
-            display: inline-flex;
-            flex-flow: column nowrap;
-            gap: 10px;
-        }
-
-        .transfer-info {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            align-items: flex-start;
-        }
-
-        .local-transfer {
-            display: inline-flex;
-            flex-flow: row wrap;
-            gap: 5px;
-            align-items: center;
-            transition: opacity 0.2s;
-            cursor: pointer;
-        }
-
-        .transfer-src-dst {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .transfer-src {
-            border: 1px solid $highlight-src;
-        }
-
-        .transfer-dst {
-            border: 1px solid $highlight-dst;
         }
     }
 
@@ -313,12 +207,12 @@ $grid-padding: 10px;
             }
 
             &.src {
-                border: 2px solid $highlight-src;
+                border: 2px solid variables.$npe-highlight-src;
                 inset: 2px;
             }
 
             &.dst {
-                border: 2px solid $highlight-dst;
+                border: 2px solid variables.$npe-highlight-dst;
                 inset: 2px;
             }
 
@@ -328,10 +222,10 @@ $grid-padding: 10px;
                 inset: 2px;
                 border: 2px solid transparent;
                 border-image: repeating-conic-gradient(
-                        $highlight-src 0deg,
-                        $highlight-src $dash-size,
-                        $highlight-dst $dash-size,
-                        $highlight-dst calc(2 * $dash-size)
+                        variables.$npe-highlight-src 0deg,
+                        variables.$npe-highlight-src $dash-size,
+                        variables.$npe-highlight-dst $dash-size,
+                        variables.$npe-highlight-dst calc(2 * $dash-size)
                     )
                     1;
             }

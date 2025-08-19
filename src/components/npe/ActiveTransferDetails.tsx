@@ -8,6 +8,7 @@ import classNames from 'classnames';
 import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
 import { calculateLinkCongestionColor, getRouteColor } from './drawingApi';
 import { formatPercentage, formatUnit } from '../../functions/math';
+import 'styles/components/ActiveTransferDetails.scss';
 
 const ActiveTransferDetails = ({
     groupedTransfersByNoCID,
