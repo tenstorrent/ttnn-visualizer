@@ -38,9 +38,9 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
 
     return (
         <>
-            <div className='buttons-container'>
+            <div className='form-container'>
                 <Select
-                    className='remote-connection-select'
+                    className='remote-select'
                     items={connectionList}
                     itemRenderer={(item, itemProps) => renderRemoteConnection(item, itemProps, selectedConnection)}
                     disabled={disabled}

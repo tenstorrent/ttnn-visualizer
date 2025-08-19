@@ -2,7 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Callout, Icon, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import LocalFolderSelector from '../components/report-selection/LocalFolderSelector';
 import RemoteSyncConfigurator from '../components/report-selection/RemoteSyncConfigurator';
@@ -10,6 +9,7 @@ import 'styles/routes/Home.scss';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import getServerConfig from '../functions/getServerConfig';
 import InitialMessage from '../components/InitialMessage';
+import FolderFieldset from '../components/report-selection/FolderFieldset';
 
 function Home() {
     useClearSelectedBuffer();
@@ -19,57 +19,21 @@ function Home() {
 
     return (
         <div className='home'>
-            <div className='folder-picker-options'>
-                <fieldset>
-                    <legend>Local folder</legend>
+            <div className='fieldset-container'>
+                <FolderFieldset
+                    title='Local folder'
+                    icon={IconNames.FOLDER_OPEN}
+                >
+                    <LocalFolderSelector />
+                </FolderFieldset>
 
-                    <Icon
-                        icon={IconNames.FOLDER_OPEN}
-                        size={150}
-                    />
-
-                    <div className='folder-picker-wrapper'>
-                        <LocalFolderSelector />
-                    </div>
-                </fieldset>
-
-                <fieldset>
-                    <legend>Remote Sync</legend>
-
-                    <Icon
-                        icon={IconNames.CLOUD}
-                        size={150}
-                    />
-
-                    <div className='folder-picker-wrapper'>
-                        <RemoteSyncConfigurator />
-                    </div>
-
-                    {isServerMode || isDirectReportMode ? (
-                        <div
-                            className='feature-disabled'
-                            data-testid='remote-sync-disabled'
-                        >
-                            <Callout
-                                className='callout'
-                                title='Feature unavailable'
-                                intent={Intent.NONE}
-                            >
-                                <p>
-                                    This feature is not available in the server version of the app. Download{' '}
-                                    <a
-                                        href='https://github.com/tenstorrent/ttnn-visualizer/'
-                                        target='_blank'
-                                        rel='noreferrer'
-                                    >
-                                        TT-NN Visualizer
-                                    </a>{' '}
-                                    to access this feature.
-                                </p>
-                            </Callout>
-                        </div>
-                    ) : null}
-                </fieldset>
+                <FolderFieldset
+                    title='Remote sync'
+                    icon={IconNames.CLOUD}
+                    isFeatureDisabled={isServerMode || isDirectReportMode}
+                >
+                    <RemoteSyncConfigurator />
+                </FolderFieldset>
             </div>
 
             {isServerMode && <InitialMessage />}

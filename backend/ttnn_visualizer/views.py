@@ -12,6 +12,7 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import List
 
+import orjson
 import yaml
 import zstd
 from flask import Blueprint, Response, current_app, jsonify, request, session
@@ -1272,7 +1273,8 @@ def get_npe_data(instance: Instance):
         with open(uncompressed_path, "r") as file:
             npe_data = json.load(file)
 
-    return jsonify(npe_data)
+    # Use orjson for much faster JSON serialization of large files
+    return Response(orjson.dumps(npe_data), mimetype="application/json")
 
 
 @api.route("/notify", methods=["POST"])
