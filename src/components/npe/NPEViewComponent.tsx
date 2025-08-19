@@ -5,7 +5,7 @@
 
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, Intent, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
@@ -55,6 +55,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
     const [fabricEventsOnlyFilter, setFabricEventsOnlyFilter] = useState<boolean>(false);
+
+    const splitGridRef = useRef<HTMLDivElement>(null);
 
     const isFabricTransfersFilteringEnabled = useMemo(() => {
         return npeData.noc_transfers.some((tr) => tr.fabric_event_type);
@@ -234,6 +236,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     };
 
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
+    const sideBarMaxHeight = useMemo(() => splitGridRef?.current?.getBoundingClientRect().height || 0, [splitGridRef]);
 
     return (
         <div className='npe'>
@@ -335,7 +338,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     nocType={nocFilter}
                 />
             </div>
-            <div className='split-grid'>
+            <div
+                className='split-grid'
+                ref={splitGridRef}
+            >
                 <div
                     className={classNames('chip-cluster-wrap', {
                         'details-open': selectedNode !== null,
@@ -547,7 +553,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     highlightedTransfer={highlightedTransfer}
                     setHighlightedTransfer={setHighlightedTransfer}
                     nocType={nocFilter}
-                    maxHeight={zoom * (height * TENSIX_SIZE) + 30} // + 30 for top + bottom margin from .split-grid
+                    maxHeight={sideBarMaxHeight}
                 />
             </div>
         </div>

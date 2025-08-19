@@ -100,7 +100,7 @@ $grid-padding: 10px;
     .side-data {
         display: flex;
         flex-direction: column;
-        max-width: 380px;
+        width: 380px;
         overflow-y: scroll;
         flex: 0 1 auto;
 
@@ -109,11 +109,16 @@ $grid-padding: 10px;
         margin-right: -#{$grid-padding};
         margin-bottom: -#{$grid-padding};
 
+        &:empty {
+            display: none;
+        }
+
         &.has-data {
             border-left: 1px solid $tt-grey-5;
         }
 
         .wrapper {
+            height: 100%;
             padding: 10px;
             background-color: $tt-grey-3;
         }
