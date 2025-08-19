@@ -70,7 +70,10 @@ const ActiveTransferDetails = ({
                                     </h4>
 
                                     {localTransferList.map((transfer) => (
-                                        <div className='transfer-info'>
+                                        <div
+                                            className='transfer-info'
+                                            key={transfer.id}
+                                        >
                                             <div
                                                 className='local-transfer'
                                                 key={transfer.id}

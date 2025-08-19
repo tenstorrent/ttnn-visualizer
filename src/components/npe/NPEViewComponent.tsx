@@ -239,7 +239,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     };
 
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
-    const sideBarMaxHeight = useMemo(() => splitGridRef?.current?.getBoundingClientRect().height || 0, [splitGridRef]);
+    const sideBarMaxHeight = splitGridRef?.current?.getBoundingClientRect().height || 0; // Can't be memoised as it relies on the inner content of split-grid which loads after splitGridRef.current is available
 
     return (
         <div className='npe'>
