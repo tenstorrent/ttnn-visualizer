@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+.folder-fieldset {
+    position: relative;
+    border: solid 1px $tt-grey-5;
+    border-radius: 5px;
+    padding: 5px 20px 20px;
+    display: flex;
+    gap: 20px;
+    align-items: start;
+    justify-content: stretch;
+    min-height: fit-content;
+    flex-basis: 45%;
+    flex-grow: 1;
+    max-width: 550px;
+
+    .legend-title {
+        font-size: 30px;
+        font-weight: 400;
+        padding: 0 10px;
+        margin: 0;
+    }
+
+    .legend-icon {
+        color: $tt-grey-4;
+    }
+
+    .folder-picker-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .form-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+
+        .bp6-file-input {
+            width: 250px;
+        }
+
+        .remote-select {
+            .bp6-button-text {
+                width: 8rem;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+        }
+    }
+
+    .feature-disabled {
+        position: absolute;
+        inset: -10px;
+        top: -40px;
+        background: rgb(52 52 52 / 90%);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 20px;
+
+        .callout-title {
+            font-size: 18px;
+        }
+
+        .callout-link {
+            white-space: pre;
+        }
+    }
+}

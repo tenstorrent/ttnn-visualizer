@@ -19,7 +19,7 @@ const AddRemoteConnection: FC<AddRemoteConnectionProps> = ({ disabled, onAddConn
     const [isAddConnectionDialogOpen, setIsAddConnectionDialogOpen] = useState(false);
 
     return (
-        <div className='buttons-container'>
+        <div className='form-container'>
             <Button
                 icon={IconNames.PLUS}
                 text='Add new connection'
