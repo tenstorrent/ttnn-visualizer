@@ -46,16 +46,28 @@ const queryClient = new QueryClient({
         },
     },
 });
-ReactDOM.createRoot(document.getElementById('root')!).render(
-    <QueryClientProvider client={queryClient}>
-        <HelmetProvider>
-            <React.StrictMode>
+const root = ReactDOM.createRoot(document.getElementById('root')!);
+const AppTree = import.meta.env.DEV ? (
+    <React.StrictMode>
+        <QueryClientProvider client={queryClient}>
+            <HelmetProvider>
                 <SocketProvider>
                     <OverlaysProvider>
                         <RouterProvider router={router} />
                     </OverlaysProvider>
                 </SocketProvider>
-            </React.StrictMode>
+            </HelmetProvider>
+        </QueryClientProvider>
+    </React.StrictMode>
+) : (
+    <QueryClientProvider client={queryClient}>
+        <HelmetProvider>
+            <SocketProvider>
+                <OverlaysProvider>
+                    <RouterProvider router={router} />
+                </OverlaysProvider>
+            </SocketProvider>
         </HelmetProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
 );
+root.render(AppTree);
