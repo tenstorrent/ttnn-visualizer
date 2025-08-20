@@ -78,6 +78,7 @@ class Buffer(SerializeableDataclass):
     address: int
     max_size_per_bank: int
     buffer_type: BufferType
+    buffer_layout: Optional[int] = None
 
 
 @dataclasses.dataclass
