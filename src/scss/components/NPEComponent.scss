@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+@use 'sass:color';
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 .npe-inline-loaders {
     display: flex;
@@ -11,9 +14,6 @@
 
 .npe {
     position: relative;
-
-    $highlight-src: #ff0;
-    $highlight-dst: #ff4500;
 
     .npe-controls {
         display: flex;
@@ -52,8 +52,12 @@
 
     .split-grid {
         display: flex;
-        align-items: flex-start;
+
+        // align-items: stretch;
         gap: 10px;
+        margin-top: 10px;
+        margin-bottom: 20px;
+        border: 1px solid $tt-grey-5;
     }
 
     .metadata {
@@ -68,7 +72,7 @@
         right: 20px;
         top: -100px;
         gap: 5px;
-        background-color: #343434dd;
+        background-color: rgba($tt-grey-2, 0.87);
         z-index: 10;
 
         .collapsible-component {
@@ -95,64 +99,6 @@
         }
     }
 
-    .side-data {
-        display: inline-flex;
-        flex-direction: column;
-        max-width: 380px;
-        padding-left: 10px;
-        border-left: 1px solid $tt-slate;
-        height: 100vh;
-        overflow-y: scroll;
-
-        h3 {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        h4 {
-            margin-bottom: 5px;
-        }
-
-        .local-transfer-ctn {
-            margin-bottom: 20px;
-            display: inline-flex;
-            flex-flow: column nowrap;
-
-            h4 {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-
-                .color-square {
-                    width: 11px;
-                    height: 11px;
-                    border: 1px solid $tt-grey-5;
-                }
-            }
-        }
-
-        .local-transfer {
-            display: inline-flex;
-            flex-flow: row wrap;
-            gap: 5px;
-            align-content: center;
-            align-items: center;
-            padding: 5px;
-            margin: 2px;
-            transition: opacity 0.2s;
-            cursor: pointer;
-        }
-
-        .transfer-src {
-            border: 1px solid $highlight-src;
-        }
-
-        .transfer-dst {
-            border: 1px solid $highlight-dst;
-        }
-    }
-
     button.timestep {
         font-size: 10px;
         padding: 2px;
@@ -162,26 +108,27 @@
 
     .chip-cluster-wrap {
         display: grid;
-        gap: 5px;
+        gap: 10px;
         overflow: auto;
         scrollbar-gutter: stable;
-
-        &.details-open {
-            width: calc(100% - 300px);
-        }
+        flex: 1 1 0;
+        padding: 10px;
     }
 
     .chip {
         position: relative;
-        border: 1.5px solid $tt-grey-5;
     }
 
     .tensix-grid {
+        display: grid;
+        gap: 1px;
+
         &.empty {
             position: absolute;
             z-index: -1;
             top: 0;
             left: 0;
+            border: 2px dashed $tt-grey-5;
         }
 
         &.transfers,
@@ -195,9 +142,6 @@
         &.transfer-single {
             z-index: 1;
         }
-
-        display: grid;
-        gap: 1px;
 
         .chip-id {
             font-size: 100px;
@@ -264,12 +208,12 @@
             }
 
             &.src {
-                border: 2px solid $highlight-src;
+                border: 2px solid variables.$npe-highlight-src;
                 inset: 2px;
             }
 
             &.dst {
-                border: 2px solid $highlight-dst;
+                border: 2px solid variables.$npe-highlight-dst;
                 inset: 2px;
             }
 
@@ -279,10 +223,10 @@
                 inset: 2px;
                 border: 2px solid transparent;
                 border-image: repeating-conic-gradient(
-                        $highlight-src 0deg,
-                        $highlight-src $dash-size,
-                        $highlight-dst $dash-size,
-                        $highlight-dst calc(2 * $dash-size)
+                        variables.$npe-highlight-src 0deg,
+                        variables.$npe-highlight-src $dash-size,
+                        variables.$npe-highlight-dst $dash-size,
+                        variables.$npe-highlight-dst calc(2 * $dash-size)
                     )
                     1;
             }

@@ -2,6 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+@use 'sass:color';
+@use './colours' as *;
+
 // Fonts
 $base-font: 'Arial Nova', arial, sans-serif;
 $monospace-font: monospace;
@@ -9,3 +12,12 @@ $monospace-font: monospace;
 // Breakpoints
 $bp-large: 1300px;
 $bp-medium: 1100px;
+
+// Colors
+// TODO: Temporary placing of these here - reconcile with usage in _blueprintjs.scss
+$dark-button-background-base: $tt-grey-2;
+$tt-dark-minimal-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: 5%);
+
+// NPE
+$npe-highlight-src: #ff0;
+$npe-highlight-dst: #ff4500;
