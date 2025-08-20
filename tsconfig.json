@@ -1,47 +1,52 @@
 {
-   "compilerOptions":{
-      "target":"ES2022",
-      "useDefineForClassFields":true,
-      "lib":[
-         "ES2022",
-         "DOM",
-         "DOM.Iterable"
-      ],
-      "module":"ESNext",
-      "skipLibCheck":true,
-      "moduleResolution":"bundler",
-      "allowImportingTsExtensions":false,
-      "resolveJsonModule":true,
-      "isolatedModules":true,
-      "noEmit":true,
-      "jsx":"react-jsx",
-      "strict":true,
-      "noUnusedLocals":true,
-      "noUnusedParameters":false,
-      "noFallthroughCasesInSwitch":true,
-      "paths":{
-         "styles/*":[
-            "./src/scss/*"
-         ],
-         "@blueprintjs":[
-            "./node_modules/@blueprintjs"
-         ]
-      },
-      "allowSyntheticDefaultImports":true,
-      "types":[
-         "vitest/importMeta"
-      ],
-   },
-    "include":[
+    "compilerOptions": {
+        "target": "ES2022",
+        "useDefineForClassFields": true,
+        "incremental": true,
+        "lib": [
+            "ES2022",
+            "DOM",
+            "DOM.Iterable"
+        ],
+        "module": "ESNext",
+        "skipLibCheck": true,
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": false,
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "noEmit": true,
+        "jsx": "react-jsx",
+        "strict": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": false,
+        "noFallthroughCasesInSwitch": true,
+        "paths": {
+            "styles/*": [
+                "./src/scss/*"
+            ],
+            "@blueprintjs": [
+                "./node_modules/@blueprintjs"
+            ]
+        },
+        "allowSyntheticDefaultImports": true,
+        "types": [
+            "vitest/importMeta"
+        ],
+        "noImplicitReturns": true,
+        "noImplicitOverride": true,
+        "forceConsistentCasingInFileNames": true,
+        "esModuleInterop": true
+    },
+    "include": [
         "vite.config.ts",
         "vitest.config.ts",
         "vitest.setup.ts",
         "src/**/*",
-        "tests/**/*",
+        "tests/**/*"
     ],
-   "references":[
-      {
-         "path":"./tsconfig.node.json"
-      }
-   ],
+    "references": [
+        {
+            "path": "./tsconfig.node.json"
+        }
+    ]
 }
