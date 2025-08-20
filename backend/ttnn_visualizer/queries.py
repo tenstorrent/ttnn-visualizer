@@ -146,7 +146,7 @@ class DatabaseQueries:
     ) -> Generator[Buffer, None, None]:
         rows = self._query_table("buffers", filters)
         for row in rows:
-            yield Buffer(*row)
+            yield Buffer(*row[:6])
 
     def query_stack_traces(
         self, filters: Optional[Dict[str, Any]] = None
