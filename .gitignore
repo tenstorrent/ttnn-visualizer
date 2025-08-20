@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 .env
+*.tsbuildinfo
 
 # Editor directories and files
 .vscode/*
@@ -24,18 +25,15 @@ dist-ssr
 *.sln
 *.sw?
 
+# Backend
 myenv
 ttnn_env
 **.sqlite
 **/__pycache__/
-
-# Backend
 backend/ttnn_visualizer/data
 backend/ttnn_visualizer/static
 /backend/data/*
 backend/*egg-info
 build
 .env
-
-
 *.db
