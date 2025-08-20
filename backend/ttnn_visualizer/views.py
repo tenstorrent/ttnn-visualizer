@@ -1273,3 +1273,65 @@ def get_npe_data(instance: Instance):
 
     # Use orjson for much faster JSON serialization of large files
     return Response(orjson.dumps(npe_data), mimetype="application/json")
+
+
+@api.route("/notify", methods=["POST"])
+def notify_report_update():
+    """
+    Endpoint to receive notifications about report updates and broadcast them via websockets.
+    """
+    from ttnn_visualizer.sockets import (
+        ExitStatus,
+        ReportGenerated,
+        emit_report_generated,
+    )
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        report_name = data.get("report_name")
+        exit_status_str = data.get("exit_status")
+
+        if not report_name:
+            return jsonify({"error": "report_name is required"}), 400
+
+        # Validate status
+        try:
+            exit_status = (
+                ExitStatus(exit_status_str.upper()) if exit_status_str else None
+            )
+        except ValueError:
+            return (
+                jsonify({"error": "Invalid exit_status."}),
+                400,
+            )
+
+        # Create and emit the report update
+        report_generated = ReportGenerated(
+            report_name=report_name,
+            exit_status=exit_status,
+            profiler_path=data.get("profiler_path"),
+            performance_path=data.get("performance_path"),
+        )
+        emit_report_generated(report_generated)
+
+        logger.info(f"Report generated notification processed: {report_name}")
+
+        return (
+            jsonify(
+                {
+                    "report_name": report_name,
+                    "profiler_path": report_generated.profiler_path,
+                    "performance_path": report_generated.performance_path,
+                    "exit_status": exit_status.value if exit_status else None,
+                    "timestamp": report_generated.timestamp,
+                }
+            ),
+            200,
+        )
+
+    except Exception as e:
+        logger.error(f"Error processing report update notification: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
