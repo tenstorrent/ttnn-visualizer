@@ -85,8 +85,6 @@ const NPEFileLoader: React.FC = () => {
 };
 
 // Remove file extension from the file name
-const sanitiseFileName = (fileName: string) => {
-    return fileName.split('.').slice(0, -1).join('.');
-};
+const sanitiseFileName = (fileName: string) => fileName.split('.').slice(0, -1).join('.');
 
 export default NPEFileLoader;
