@@ -1310,7 +1310,10 @@ def notify_report_update():
 
         # Create and emit the report update
         report_generated = ReportGenerated(
-            report_name=report_name, exit_status=exit_status
+            report_name=report_name,
+            exit_status=exit_status,
+            profiler_path=data.get("profiler_path"),
+            performance_path=data.get("performance_path"),
         )
         emit_report_generated(report_generated)
 
@@ -1322,6 +1325,8 @@ def notify_report_update():
                     "success": True,
                     "message": "Report update notification sent",
                     "report_name": report_name,
+                    "profiler_path": report_generated.profiler_path,
+                    "performance_path": report_generated.performance_path,
                     "exit_status": exit_status.value if exit_status else None,
                     "timestamp": report_generated.timestamp,
                 }
