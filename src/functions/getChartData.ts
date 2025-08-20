@@ -30,13 +30,13 @@ export default function getChartData(
             color = tensorColor !== undefined ? tensorColor : getBufferColor(address + (overrides?.colorVariance || 0));
         }
 
-        const tensorMemoryLayout = tensor?.memory_config?.memory_layout;
+        const stringTensorMemoryLayout = tensor?.memory_config?.memory_layout;
 
         let pattern = {};
 
         if (options?.renderPattern) {
             //  shape options "" | "/" | "\\" | "x" | "-" | "|" | "+" | ".";
-            if (tensorMemoryLayout === TensorMemoryLayout.INTERLEAVED) {
+            if (stringTensorMemoryLayout === TensorMemoryLayout.INTERLEAVED) {
                 pattern = {
                     shape: '.',
                     fillmode: 'overlay',
@@ -45,7 +45,7 @@ export default function getChartData(
                     fgopacity: 0.3,
                 };
             }
-            if (tensorMemoryLayout === TensorMemoryLayout.BLOCK_SHARDED) {
+            if (stringTensorMemoryLayout === TensorMemoryLayout.BLOCK_SHARDED) {
                 pattern = {
                     shape: '+',
                     fillmode: 'overlay',
@@ -54,7 +54,7 @@ export default function getChartData(
                     fgopacity: 0.2,
                 };
             }
-            if (tensorMemoryLayout === TensorMemoryLayout.HEIGHT_SHARDED) {
+            if (stringTensorMemoryLayout === TensorMemoryLayout.HEIGHT_SHARDED) {
                 pattern = {
                     shape: '|',
                     fillmode: 'overlay',
@@ -63,7 +63,7 @@ export default function getChartData(
                     fgopacity: 0.2,
                 };
             }
-            if (tensorMemoryLayout === TensorMemoryLayout.WIDTH_SHARDED) {
+            if (stringTensorMemoryLayout === TensorMemoryLayout.WIDTH_SHARDED) {
                 pattern = {
                     shape: '-',
                     fillmode: 'overlay',
@@ -100,7 +100,7 @@ export default function getChartData(
                     : `
 <span style="color:${color};font-size:20px;">&#9632;</span>
 ${address} (${toHex(address)}) <br>Size: ${formatSize(size)}
-${tensor ? `<br>${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} Tensor${tensor.id}<br>${tensorMemoryLayout || ''}` : ''}
+${tensor ? `<br>${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} Tensor${tensor.id}<br>${stringTensorMemoryLayout || ''}` : ''}
 <extra></extra>`,
 
             hoverlabel: {

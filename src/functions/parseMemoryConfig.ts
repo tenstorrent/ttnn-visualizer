@@ -23,6 +23,13 @@ export enum TensorMemoryLayout {
     'WIDTH_SHARDED' = 'TensorMemoryLayout::WIDTH_SHARDED',
 }
 
+export enum BufferMemoryLayout {
+    INTERLEAVED = 0,
+    HEIGHT_SHARDED = 2,
+    WIDTH_SHARDED = 3,
+    BLOCK_SHARDED = 4,
+}
+
 export type MemoryKeys =
     | 'shard_spec'
     | 'memory_layout'
