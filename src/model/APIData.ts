@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
-import { MemoryConfig } from '../functions/parseMemoryConfig';
+import { BufferMemoryLayout, MemoryConfig } from '../functions/parseMemoryConfig';
 import { BufferType } from './BufferType';
 
 export interface Operation {
@@ -64,6 +64,7 @@ export interface Buffer {
     buffer_type: number;
     device_id: number;
     size: number;
+    buffer_layout?: BufferMemoryLayout | null;
 }
 
 export interface OperationDetailsData extends Operation {
