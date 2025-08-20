@@ -5,7 +5,7 @@
 
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
@@ -58,9 +58,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
     const [fabricEventsOnlyFilter, setFabricEventsOnlyFilter] = useState<boolean>(false);
     const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
-
-    const [sideBarMaxHeight, setSideBarMaxHeight] = useState<number>(0);
-    const splitGridRef = useRef<HTMLDivElement>(null);
 
     const isFabricTransfersFilteringEnabled = useMemo(() => {
         return npeData.noc_transfers.some((tr) => tr.fabric_event_type);
@@ -136,13 +133,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setHighlightedTransfer(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [npeData]);
-
-    useEffect(() => {
-        if (splitGridRef?.current) {
-            const splitGridHeight = splitGridRef.current.getBoundingClientRect().height;
-            setSideBarMaxHeight(splitGridHeight);
-        }
-    }, [zoom]);
 
     const { transferListSelectionRendering, groupedTransfersByNoCID } = useSelectedTransferGrouping(
         selectedTransferList,
@@ -372,10 +362,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     nocType={nocFilter}
                 />
             </div>
-            <div
-                className='split-grid'
-                ref={splitGridRef}
-            >
+            <div className='split-grid'>
                 <div
                     className={classNames('chip-cluster-wrap', {
                         'details-open': selectedNode !== null,
@@ -587,7 +574,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     highlightedTransfer={highlightedTransfer}
                     setHighlightedTransfer={setHighlightedTransfer}
                     nocType={nocFilter}
-                    maxHeight={sideBarMaxHeight}
                 />
             </div>
         </div>
