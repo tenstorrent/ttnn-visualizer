@@ -51,7 +51,7 @@ const NPEFileLoader: React.FC = () => {
             setErrorMessage(response?.data?.message);
         } else {
             const fileName = file.name;
-            setActiveNpe(fileName);
+            setActiveNpe(sanitiseFileName(fileName));
             createToastNotification('Active NPE', fileName);
             setUploadStatus(ConnectionTestStates.OK);
             setErrorMessage(`${fileName} uploaded successfully`);
@@ -83,5 +83,8 @@ const NPEFileLoader: React.FC = () => {
         </div>
     );
 };
+
+// Remove file extension from the file name
+const sanitiseFileName = (fileName: string) => fileName.replace(/\.[^/.]+$/, '');
 
 export default NPEFileLoader;

@@ -199,6 +199,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                 </Tooltip>
             )}
             <canvas
+                title='NOC timeline'
                 style={{ width: '100%', height: `${canvasHeight}px` }}
                 ref={canvasRef}
                 width={canvasWidth}

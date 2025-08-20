@@ -866,12 +866,10 @@ def create_npe_files():
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
     for file in files:
-        if not file.filename.endswith(".json") and not file.filename.endswith(
-            ".npeviz.zst"
-        ):
+        if not file.filename.endswith(".json") and not file.filename.endswith(".zst"):
             return StatusMessage(
                 status=ConnectionTestStates.FAILED,
-                message="NPE requires a valid .json or .npeviz.zst file",
+                message="NPE requires a valid .json or .zst file",
             ).model_dump()
 
     npe_name = extract_npe_name(files)
