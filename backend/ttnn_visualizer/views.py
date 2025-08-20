@@ -1322,8 +1322,6 @@ def notify_report_update():
         return (
             jsonify(
                 {
-                    "success": True,
-                    "message": "Report update notification sent",
                     "report_name": report_name,
                     "profiler_path": report_generated.profiler_path,
                     "performance_path": report_generated.performance_path,
