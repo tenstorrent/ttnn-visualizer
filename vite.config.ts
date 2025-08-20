@@ -10,7 +10,6 @@ import { sassNodeModulesLoadPaths } from '@blueprintjs/node-build-scripts';
 // @ts-expect-error don't have types declaration for legacySassSvgInlinerFactory
 import { legacySassSvgInlinerFactory } from './src/libs/blueprintjs/legacySassSvgInlinerFactory';
 import { version } from './package.json';
-import { compilerOptions } from './tsconfig.json';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
@@ -18,7 +17,7 @@ export default defineConfig(({ command }) => {
         build: {
             outDir: './backend/ttnn_visualizer/static/',
             emptyOutDir: true,
-            target: compilerOptions.target,
+            target: 'es2022',
         },
         base: command === 'serve' ? '/' : '/static/',
         define: {
