@@ -1281,17 +1281,11 @@ def get_npe_data(instance: Instance):
 def notify_report_update():
     """
     Endpoint to receive notifications about report updates and broadcast them via websockets.
-
-    Expected JSON payload:
-    {
-        "report_name": "string",
-        "status": "PASS" | "FAIL"
-    }
     """
     from ttnn_visualizer.sockets import (
-        ReportUpdate,
-        ReportUpdateStatus,
-        emit_report_update,
+        ExitStatus,
+        ReportGenerated,
+        emit_report_generated,
     )
 
     try:
@@ -1300,35 +1294,29 @@ def notify_report_update():
             return jsonify({"error": "No JSON data provided"}), 400
 
         report_name = data.get("report_name")
-        status_str = data.get("status")
+        exit_status_str = data.get("exit_status")
 
         if not report_name:
             return jsonify({"error": "report_name is required"}), 400
 
-        if not status_str:
-            return jsonify({"error": "status is required"}), 400
-
         # Validate status
         try:
-            status = ReportUpdateStatus(status_str.upper())
+            exit_status = (
+                ExitStatus(exit_status_str.upper()) if exit_status_str else None
+            )
         except ValueError:
             return (
-                jsonify(
-                    {
-                        "error": f"Invalid status. Must be 'PASS' or 'FAIL', got '{status_str}'"
-                    }
-                ),
+                jsonify({"error": "Invalid exit_status."}),
                 400,
             )
 
         # Create and emit the report update
-        report_update = ReportUpdate(report_name=report_name, status=status)
-
-        emit_report_update(report_update)
-
-        logger.info(
-            f"Report update notification processed: {report_name} - {status.value}"
+        report_generated = ReportGenerated(
+            report_name=report_name, exit_status=exit_status
         )
+        emit_report_generated(report_generated)
+
+        logger.info(f"Report generated notification processed: {report_name}")
 
         return (
             jsonify(
@@ -1336,8 +1324,8 @@ def notify_report_update():
                     "success": True,
                     "message": "Report update notification sent",
                     "report_name": report_name,
-                    "status": status.value,
-                    "timestamp": report_update.timestamp,
+                    "exit_status": exit_status.value if exit_status else None,
+                    "timestamp": report_generated.timestamp,
                 }
             ),
             200,

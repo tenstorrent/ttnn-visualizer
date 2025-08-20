@@ -17,7 +17,7 @@ logger = getLogger(__name__)
 
 class Messages(object):
     FILE_TRANSFER_PROGRESS = "fileTransferProgress"
-    REPORT_UPDATED = "reportUpdated"
+    REPORT_GENERATED = "reportGenerated"
 
 
 class FileStatus(Enum):
@@ -28,7 +28,7 @@ class FileStatus(Enum):
     STARTED = "STARTED"
 
 
-class ReportUpdateStatus(Enum):
+class ExitStatus(Enum):
     PASS = "PASS"
     FAIL = "FAIL"
     ERROR = "ERROR"
@@ -48,11 +48,12 @@ class FileProgress(SerializeableDataclass):
 
 
 @dataclass
-class ReportUpdate(SerializeableDataclass):
+class ReportGenerated(SerializeableDataclass):
     report_name: str
-    status: ReportUpdateStatus
-    message_type: str = "report_updated"
-    instance_id: str | None = None
+    profiler_path: str | None = None
+    performance_path: str | None = None
+    exit_status: ExitStatus | None = None
+    message_type: str = "report_generated"
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
@@ -93,14 +94,14 @@ def emit_file_status(progress: FileProgress, instance_id=None):
         debounce_timer.start()
 
 
-def emit_report_update(report_update: ReportUpdate):
+def emit_report_generated(report_generated: ReportGenerated):
     """Emit a report update notification to all connected clients."""
     try:
         if socketio is not None and hasattr(socketio, "emit"):
-            data = report_update.to_dict()
-            socketio.emit(Messages.REPORT_UPDATED, data)
+            data = report_generated.to_dict()
+            socketio.emit(Messages.REPORT_GENERATED, data)
             logger.info(
-                f"Report update notification sent: {report_update.report_name} - {report_update.status.value}"
+                f"Report update notification sent: {report_generated.report_name}"
             )
     except NameError:
         logger.warning("SocketIO not available - skipping report update notification")
