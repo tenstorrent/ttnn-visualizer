@@ -33,7 +33,7 @@ const NPE_REPO_URL = (
 const NPE: FC = () => {
     const { filepath } = useParams<{ filepath?: string }>();
     const npeFileName = useAtomValue(activeNpeOpTraceAtom);
-    const { data: loadedData, isLoading, error: processingError } = useNpe(npeFileName);
+    const { data: loadedData, isLoading: isLoadingNPE, error: processingError } = useNpe(npeFileName);
     const { data: loadedTimeline, isLoading: isLoadingTimeline } = useNPETimelineFile(filepath);
     const [demoData, setDemoData] = useState<NPEData | null>(null);
     const [selectedDemo, setSelectedDemo] = useState<NPEDemoData | null>(null);
@@ -43,6 +43,7 @@ const NPE: FC = () => {
     const isDemoEnabled = getServerConfig()?.SERVER_MODE;
     const matchedVersion = matchNpeDataVersion(npeData?.common_info?.version);
     const hasUploadedFile = !!npeFileName || !!filepath;
+    const isLoading = isLoadingNPE || isLoadingTimeline;
 
     useEffect(() => {
         if (loadedData || loadedTimeline) {
@@ -64,6 +65,7 @@ const NPE: FC = () => {
             <h1 className='page-title'>NOC performance estimator</h1>
             <div className='npe-inline-loaders'>
                 {!filepath && <NPEFileLoader />}
+
                 {isDemoEnabled && (
                     <>
                         <NPEDemoSelect
@@ -76,17 +78,15 @@ const NPE: FC = () => {
                 )}
             </div>
 
-            {(isLoading || isLoadingTimeline) && <LoadingSpinner />}
+            {isLoading && <LoadingSpinner />}
 
-            {!hasUploadedFile && (
+            {!isLoading && !hasUploadedFile && (
                 <div className='npe-message-container'>
                     <Callout compact>See {NPE_REPO_URL} for details on how to generate NPE report files.</Callout>
                 </div>
             )}
 
-            {hasUploadedFile && npeData && (isValidNpeData(npeData) || processingError) && (
-                <NPEView npeData={npeData} />
-            )}
+            {hasUploadedFile && npeData && isValidNpeData(npeData) && !processingError && <NPEView npeData={npeData} />}
 
             {hasUploadedFile && (processingError || npeData) && (
                 <div className='npe-message-container'>
@@ -125,7 +125,7 @@ const isValidNpeData = (data: NPEData): boolean => {
     return true;
 };
 
-const matchNpeDataVersion = (version?: string): string => {
+const matchNpeDataVersion = (version?: string): string | null => {
     const parsedVersion = semverParse(version);
 
     switch (parsedVersion) {

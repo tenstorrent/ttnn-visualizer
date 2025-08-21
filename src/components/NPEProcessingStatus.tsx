@@ -17,7 +17,7 @@ const NPE_REPO_URL = (
 );
 
 interface NPEProcessingStatusProps {
-    matchedVersion?: string;
+    matchedVersion: string | null;
     expectedVersion: string;
     fetchError: AxiosError | null;
     npeData?: {
@@ -46,7 +46,7 @@ const PROCESSING_ERRORS = {
 };
 
 const NPEProcessingStatus = ({ matchedVersion, expectedVersion, npeData, fetchError }: NPEProcessingStatusProps) => {
-    const errorType = getErrorType(fetchError, matchedVersion);
+    const errorType = getErrorType(fetchError, matchedVersion === expectedVersion);
 
     return (
         <Callout
@@ -76,8 +76,10 @@ const NPEProcessingStatus = ({ matchedVersion, expectedVersion, npeData, fetchEr
                     case ErrorCodes.INVALID_JSON:
                         return (
                             <>
-                                <p className='status-text'>The uploaded data is invalid JSON.</p>
-                                <p className='status-text'>Use {NPE_REPO_URL} to generate a new dataset.</p>
+                                <p className='status-text'>The uploaded data cannot be parsed as valid JSON.</p>
+                                <p className='status-text'>
+                                    Check the file contents or use {NPE_REPO_URL} to generate a new dataset.
+                                </p>
                             </>
                         );
                     case ErrorCodes.INVALID_NPE_DATA:
@@ -95,12 +97,12 @@ const NPEProcessingStatus = ({ matchedVersion, expectedVersion, npeData, fetchEr
     );
 };
 
-const getErrorType = (errorData: AxiosError | null, matchedVersion?: string): ErrorCodes => {
+const getErrorType = (errorData: AxiosError | null, isVersionMatch: boolean): ErrorCodes => {
     if (errorData?.status === HttpStatusCode.UnprocessableEntity) {
         return ErrorCodes.INVALID_JSON;
     }
 
-    if (matchedVersion) {
+    if (isVersionMatch) {
         return ErrorCodes.INVALID_NPE_VERSION;
     }
 
