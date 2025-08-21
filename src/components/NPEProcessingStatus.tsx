@@ -53,7 +53,6 @@ const NPEProcessingStatus = ({ matchedVersion, expectedVersion, npeData, fetchEr
             intent={Intent.WARNING}
             title={PROCESSING_ERRORS[errorType].title}
             className='npe-processing-status'
-            compact
         >
             {(() => {
                 switch (errorType) {
