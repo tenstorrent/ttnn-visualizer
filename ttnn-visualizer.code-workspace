@@ -27,6 +27,7 @@
             "pipx",
             "plotly",
             "Pyenv",
+            "pyproject",
             "pytest",
             "tinycolor",
             "toastify",
