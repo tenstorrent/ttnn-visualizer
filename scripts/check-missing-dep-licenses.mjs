@@ -88,7 +88,7 @@ const checkMissingDepLicensesPython = () => {
                     dep
                         .replace(/["'\s]/g, '')
                         .split('=')[0]
-                        .replace(/([><=~!]=?.*)$/, '')
+                        .replace(/[><=~!^]=?.*$/, '')
                         .trim(),
                 )
                 .filter(Boolean);
