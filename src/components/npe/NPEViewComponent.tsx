@@ -189,12 +189,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedNode(null);
         setSelectedTransferList([]);
     };
-
     const hideAllTransfers = () => {
         setIsShowingAllTransfers(false);
         setSelectedTransferList([]);
     };
-
     const showActiveTransfers = useShowActiveTransfers({
         npeData,
         selectedNode,
@@ -335,6 +333,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 </ButtonGroup>
                 <div style={{ position: 'relative', width: `${switchwidth}px` }}>
                     <Slider
+                        handleHtmlProps={{ 'aria-label': 'Timeline scrubber' }}
                         min={0}
                         max={npeData.timestep_data.length - 1}
                         stepSize={1}
@@ -562,6 +561,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         );
                     })}
                 </div>
+
                 <ActiveTransferDetails
                     groupedTransfersByNoCID={groupedTransfersByNoCID}
                     selectedNode={selectedNode}

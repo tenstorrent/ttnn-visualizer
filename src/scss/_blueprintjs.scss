@@ -4,6 +4,7 @@
 
 @use 'sass:color';
 @use './definitions/colours' as *;
+@use './definitions/variables' as variables;
 @use '@blueprintjs/colors/lib/scss/colors' as *;
 
 $dark-button-background-base: $tt-grey-2;
@@ -24,7 +25,7 @@ $pt-intent-text-colors: (
     $dark-button-background-color: $dark-button-background-base,
     $dark-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: -5%),
     $dark-minimal-button-background-color: $dark-button-background-base,
-    $dark-minimal-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: 5%),
+    $dark-minimal-button-background-color-hover: variables.$tt-dark-minimal-button-background-color-hover,
     $pt-dark-link-color: $tt-teal-accent,
     $control-checked-background-color: $tt-teal-accent,
     $control-checked-background-color-hover: color.adjust($tt-teal-accent, $lightness: -3%),
