@@ -6,7 +6,7 @@
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, ButtonGroup, Intent, Slider, Switch } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
@@ -34,6 +34,9 @@ const SVG_SIZE = TENSIX_SIZE;
 const PLAYBACK_SPEED = 1;
 const PLAYBACK_SPEED_2X = 2;
 
+const LABEL_STEP_COUNT_TIMESTEPSCALE = 20;
+const LABEL_STEP_COUNT_CYCLESCALE = 10;
+
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [selectedTimestep, setSelectedTimestep] = useState<number>(0);
@@ -53,14 +56,45 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
+    const [fabricEventsOnlyFilter, setFabricEventsOnlyFilter] = useState<boolean>(false);
+    const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
+
+    const isFabricTransfersFilteringEnabled = useMemo(() => {
+        return npeData.noc_transfers.some((tr) => tr.fabric_event_type);
+    }, [npeData]);
 
     const links = useMemo(() => {
-        return npeData.timestep_data[selectedTimestep];
-    }, [npeData.timestep_data, selectedTimestep]);
+        const timestepData = npeData.timestep_data[selectedTimestep];
+        timestepData.active_transfers.forEach((id) => {
+            const transfer = npeData.noc_transfers.find((tr) => tr.id === id);
+            // TODO: this functionality should move to BE. https://github.com/orgs/tenstorrent/projects/178/views/1?pane=issue&itemId=124188622&issue=tenstorrent%7Cttnn-visualizer%7C745
+            if (transfer && transfer.fabric_event_type && fabricEventsOnlyFilter) {
+                transfer.route.forEach((route) => {
+                    route.links.forEach((link) => {
+                        timestepData.link_demand.forEach((linkDemand) => {
+                            if (
+                                linkDemand[NPE_LINK.CHIP_ID] === link[NPE_LINK.CHIP_ID] &&
+                                linkDemand[NPE_LINK.NOC_ID] === link[NPE_LINK.NOC_ID] &&
+                                linkDemand[NPE_LINK.Y] === link[NPE_LINK.Y] &&
+                                linkDemand[NPE_LINK.X] === link[NPE_LINK.X]
+                            ) {
+                                linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] = true;
+                            }
+                        });
+                    });
+                });
+            }
+        });
+        return timestepData;
+    }, [npeData.noc_transfers, npeData.timestep_data, selectedTimestep, fabricEventsOnlyFilter]);
 
     const transfers = useMemo(() => {
-        return npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));
-    }, [npeData.noc_transfers, links]);
+        return npeData.noc_transfers
+            .filter((tr) => links?.active_transfers.includes(tr.id))
+            .filter((tr) => {
+                return fabricEventsOnlyFilter ? tr.fabric_event_type : true;
+            });
+    }, [npeData.noc_transfers, links?.active_transfers, fabricEventsOnlyFilter]);
 
     const showNOCType = (value: NoCType) => {
         if (nocFilter === null) {
@@ -155,12 +189,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedNode(null);
         setSelectedTransferList([]);
     };
-
     const hideAllTransfers = () => {
         setIsShowingAllTransfers(false);
         setSelectedTransferList([]);
     };
-
     const showActiveTransfers = useShowActiveTransfers({
         npeData,
         selectedNode,
@@ -214,71 +246,107 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             />
             <div className='header'>
                 <ButtonGroup className='npe-controls'>
-                    <Button
-                        icon={IconNames.StepBackward}
-                        onClick={onBackward}
-                    />
-                    <Button
-                        icon={IconNames.Play}
-                        intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
-                        onClick={onPlay}
-                    />
-                    <Button
-                        icon={IconNames.FastForward}
-                        onClick={onPlay2x}
-                        intent={playbackSpeed === PLAYBACK_SPEED_2X ? Intent.PRIMARY : Intent.NONE}
-                    />
-                    <Button
-                        icon={IconNames.STOP}
-                        onClick={onPause}
-                    />
-                    <Button
-                        icon={IconNames.StepForward}
-                        onClick={onForward}
-                    />
-                    |
-                    <Switch
-                        label='Show all active transfers'
-                        checked={isShowingAllTransfers}
-                        onChange={() => (isShowingAllTransfers ? hideAllTransfers() : showAllTransfers())}
-                    />
-                    <Switch
-                        label='Annotate cores'
-                        checked={isAnnotatingCores}
-                        onChange={() => setIsAnnotatingCores(!isAnnotatingCores)}
-                    />
-                    <Switch
-                        label='NOC0'
-                        checked={nocFilter === NoCType.NOC0 || nocFilter === null}
-                        onChange={() => showNOCType(NoCType.NOC0)}
-                    />
-                    <Switch
-                        label='NOC1'
-                        checked={nocFilter === NoCType.NOC1 || nocFilter === null}
-                        onChange={() => showNOCType(NoCType.NOC1)}
-                    />
-                    |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-                    <label>
-                        Zoom
-                        <Slider
-                            aria-label='zoom'
-                            min={0.1}
-                            max={2}
-                            stepSize={0.1}
-                            labelStepSize={1}
-                            value={zoom}
-                            onChange={(value: number) => setZoom(value)}
-                            labelRenderer={(value) => `${value.toFixed(1)}`}
+                    <div className='npe-controls-line'>
+                        <Button
+                            icon={IconNames.StepBackward}
+                            onClick={onBackward}
                         />
-                    </label>
+                        <Button
+                            icon={IconNames.Play}
+                            intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
+                            onClick={onPlay}
+                        />
+                        <Button
+                            icon={IconNames.FastForward}
+                            onClick={onPlay2x}
+                            intent={playbackSpeed === PLAYBACK_SPEED_2X ? Intent.PRIMARY : Intent.NONE}
+                        />
+                        <Button
+                            icon={IconNames.STOP}
+                            onClick={onPause}
+                        />
+                        <Button
+                            icon={IconNames.StepForward}
+                            onClick={onForward}
+                        />
+                        |
+                        <Switch
+                            label='Show all active transfers'
+                            checked={isShowingAllTransfers}
+                            onChange={() => (isShowingAllTransfers ? hideAllTransfers() : showAllTransfers())}
+                        />
+                        <Switch
+                            label='Annotate cores'
+                            checked={isAnnotatingCores}
+                            onChange={() => setIsAnnotatingCores(!isAnnotatingCores)}
+                        />
+                        <ButtonGroup
+                            variant={ButtonVariant.OUTLINED}
+                            size={Size.SMALL}
+                        >
+                            <Button
+                                text='Timesteps'
+                                icon={timestepsScale ? IconNames.ENDORSED : IconNames.CIRCLE}
+                                active={timestepsScale}
+                                onClick={() => setTimestepsScale(true)}
+                            />
+                            <Button
+                                text='Cycles'
+                                icon={!timestepsScale ? IconNames.ENDORSED : IconNames.CIRCLE}
+                                active={!timestepsScale}
+                                onClick={() => setTimestepsScale(false)}
+                            />
+                        </ButtonGroup>
+                    </div>
+                    <div className='npe-controls-line'>
+                        <Switch
+                            label='NOC0'
+                            checked={nocFilter === NoCType.NOC0 || nocFilter === null}
+                            onChange={() => showNOCType(NoCType.NOC0)}
+                        />
+                        <Switch
+                            label='NOC1'
+                            checked={nocFilter === NoCType.NOC1 || nocFilter === null}
+                            onChange={() => showNOCType(NoCType.NOC1)}
+                        />
+                        <Switch
+                            label='Fabric events only'
+                            checked={fabricEventsOnlyFilter}
+                            disabled={!isFabricTransfersFilteringEnabled}
+                            onChange={() => setFabricEventsOnlyFilter(!fabricEventsOnlyFilter)}
+                        />
+                        |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                        <label>
+                            Zoom
+                            <Slider
+                                aria-label='zoom'
+                                min={0.1}
+                                max={2}
+                                stepSize={0.1}
+                                labelStepSize={1}
+                                value={zoom}
+                                onChange={(value: number) => setZoom(value)}
+                                labelRenderer={(value) => `${value.toFixed(1)}`}
+                            />
+                        </label>
+                    </div>
                 </ButtonGroup>
                 <div style={{ position: 'relative', width: `${switchwidth}px` }}>
                     <Slider
+                        handleHtmlProps={{ 'aria-label': 'Timeline scrubber' }}
                         min={0}
                         max={npeData.timestep_data.length - 1}
                         stepSize={1}
                         labelStepSize={
-                            npeData.timestep_data.length > LABEL_STEP_THRESHOLD ? npeData.timestep_data.length / 20 : 1
+                            npeData.timestep_data.length > LABEL_STEP_THRESHOLD
+                                ? npeData.timestep_data.length /
+                                  (timestepsScale ? LABEL_STEP_COUNT_TIMESTEPSCALE : LABEL_STEP_COUNT_CYCLESCALE)
+                                : 1
+                        }
+                        labelRenderer={(value: number) =>
+                            timestepsScale
+                                ? value.toFixed(0)
+                                : ((npeData.common_info.cycles_per_timestep ?? 1) * value).toFixed(0)
                         }
                         value={selectedTimestep}
                         onChange={(value: number) => handleScrubberChange(value)}
@@ -346,10 +414,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     ))}
 
                                     {links?.link_demand.map((linkUtilization, index) => {
+                                        const fabricCondition = fabricEventsOnlyFilter
+                                            ? linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE]
+                                            : true;
                                         if (
                                             linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id &&
                                             (nocFilter === null ||
-                                                linkUtilization[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0)
+                                                linkUtilization[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0) &&
+                                            fabricCondition
                                         ) {
                                             return (
                                                 <button
@@ -489,6 +561,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         );
                     })}
                 </div>
+
                 <ActiveTransferDetails
                     groupedTransfersByNoCID={groupedTransfersByNoCID}
                     selectedNode={selectedNode}

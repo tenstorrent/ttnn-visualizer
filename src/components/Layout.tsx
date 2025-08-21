@@ -12,7 +12,7 @@ import 'styles/components/ToastOverrides.scss';
 import { useEffect } from 'react';
 import { activeNpeOpTraceAtom, activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
 import MainNavigation from './MainNavigation';
-import { useSession } from '../hooks/useAPI';
+import { useInstance } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
 import FooterInfobar from './FooterInfobar';
 import ClusterRenderer from './cluster/ClusterRenderer';
@@ -33,17 +33,17 @@ function Layout() {
     const setActiveProfilerReport = useSetAtom(activeProfilerReportAtom);
     const setActivePerformanceReport = useSetAtom(activePerformanceReportAtom);
     const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
-    const { data: session } = useSession();
+    const { data: instance } = useInstance();
     const location = useLocation();
     const state = location.state as { background?: Location };
 
     useEffect(() => {
-        if (session?.active_report) {
-            setActiveProfilerReport(session.active_report?.profiler_name ?? null);
-            setActivePerformanceReport(session.active_report?.performance_name ?? null);
-            setActiveNpe(session.active_report?.npe_name ?? null);
+        if (instance?.active_report) {
+            setActiveProfilerReport(instance.active_report?.profiler_name ?? null);
+            setActivePerformanceReport(instance.active_report?.performance_name ?? null);
+            setActiveNpe(instance.active_report?.npe_name ?? null);
         }
-    }, [session, setActiveProfilerReport, setActivePerformanceReport, setActiveNpe]);
+    }, [instance, setActiveProfilerReport, setActivePerformanceReport, setActiveNpe]);
 
     return (
         <div className={Classes.DARK}>

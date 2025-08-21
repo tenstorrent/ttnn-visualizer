@@ -11,7 +11,7 @@ import Performance from '../src/routes/Performance';
 import mockPerformanceReport from './data/mockPerformanceReport.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
 import mockDeviceLog from './data/mockDeviceLog.json';
-import mockSession from './data/mockSession.json';
+import mockInstance from './data/mockInstance.json';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import getButtonWithText from './helpers/getButtonWithText';
 import { TestProviders } from './helpers/TestProviders';
@@ -27,7 +27,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useDeviceLog: () => ({ data: mockDeviceLog }),
     usePerfFolderList: () => ({ data: mockPerformanceReportFolders }),
     usePerformanceRange: () => ({ data: null }),
-    useSession: () => ({ data: mockSession }),
+    useInstance: () => ({ data: mockInstance }),
     useOpToPerfIdFiltered: () => [],
     useOperationsList: () => ({ data: [] }),
     useReportFolderList: () => ({ data: mockProfilerFolderList }),

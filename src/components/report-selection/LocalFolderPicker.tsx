@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { Alert, Button, ButtonVariant, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import { useSession } from '../../hooks/useAPI';
+import { useInstance } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
@@ -28,7 +28,7 @@ const LocalFolderPicker = ({
     handleDelete,
     defaultLabel = 'Select a report...',
 }: LocalFolderPickerProps) => {
-    const { data: session } = useSession();
+    const { data: instance } = useInstance();
     const isDisabled = !items || items.length === 0;
     const path = value || '';
 
@@ -134,7 +134,7 @@ const LocalFolderPicker = ({
                 />
             }
             onItemSelect={handleSelect}
-            disabled={!items || !session}
+            disabled={!items || !instance}
         >
             <Tooltip content={path ? `/${getPrettyPath(path)}` : ''}>
                 <Button
@@ -144,7 +144,7 @@ const LocalFolderPicker = ({
                             ? getReportName(itemsWithUniqueReportNames, path)
                             : defaultLabel
                     }
-                    disabled={isDisabled || !session}
+                    disabled={isDisabled || !instance}
                     alignText='start'
                     icon={IconNames.DOCUMENT_OPEN}
                     endIcon={IconNames.CARET_DOWN}

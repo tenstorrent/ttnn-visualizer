@@ -12,6 +12,7 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import List
 
+import orjson
 import yaml
 import zstd
 from flask import Blueprint, Response, current_app, jsonify, request, session
@@ -68,6 +69,7 @@ from ttnn_visualizer.sftp_operations import (
 )
 from ttnn_visualizer.ssh_client import SSHClient
 from ttnn_visualizer.utils import (
+    create_path_resolver,
     get_cluster_descriptor_path,
     read_last_synced_file,
     timer,
@@ -368,20 +370,18 @@ def get_operation_buffers(operation_id, instance: Instance):
 @api.route("/profiler", methods=["GET"])
 @with_instance
 def get_profiler_data_list(instance: Instance):
-    # Doesn't handle remote at the moment
-    # is_remote = True if instance.remote_connection else False
-    # config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    config_key = "LOCAL_DATA_DIRECTORY"
-    data_directory = Path(current_app.config[config_key])
+    # Use PathResolver to get the base path for profiler reports
+    resolver = create_path_resolver(current_app)
 
-    # if is_remote:
-    #     connection = RemoteConnection.model_validate(instance.remote_connection, strict=False)
-    #     path = data_directory / connection.host / current_app.config["PROFILER_DIRECTORY_NAME"]
-    # else:
-    path = data_directory / current_app.config["PROFILER_DIRECTORY_NAME"]
+    # Note: "profiler" in app terminology maps to tt-metal's ttnn/reports
+    path = resolver.get_base_report_path("profiler", instance.remote_connection)
 
     if not path.exists():
-        path.mkdir(parents=True, exist_ok=True)
+        if resolver.is_direct_report_mode:
+            logger.warning(f"TT-Metal profiler reports not found: {path}")
+            return jsonify([])
+        else:
+            path.mkdir(parents=True, exist_ok=True)
 
     valid_dirs = []
 
@@ -437,7 +437,6 @@ def get_profiler_data_list(instance: Instance):
             continue
         if not any(file.name == "config.json" for file in files):
             continue
-
         valid_dirs.append({"path": dir_path.name, "reportName": report_name})
 
     return jsonify(valid_dirs)
@@ -491,13 +490,20 @@ def delete_profiler_report(profiler_name, instance: Instance):
 @api.route("/performance", methods=["GET"])
 @with_instance
 def get_performance_data_list(instance: Instance):
-    is_remote = True if instance.remote_connection else False
-    config_key = "REMOTE_DATA_DIRECTORY" if is_remote else "LOCAL_DATA_DIRECTORY"
-    data_directory = Path(current_app.config[config_key])
-    path = data_directory / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
+    # Use PathResolver to get the base path for performance reports
+    resolver = create_path_resolver(current_app)
 
-    if not is_remote and not path.exists():
-        path.mkdir(parents=True, exist_ok=True)
+    # Note: "performance" in app terminology maps to tt-metal's profiler/reports
+    path = resolver.get_base_report_path("performance", instance.remote_connection)
+
+    is_remote = True if instance.remote_connection else False
+
+    if not path.exists():
+        if resolver.is_direct_report_mode:
+            logger.warning(f"TT-Metal performance reports not found: {path}")
+            return jsonify([])
+        elif not is_remote:
+            path.mkdir(parents=True, exist_ok=True)
 
     if current_app.config["SERVER_MODE"]:
         session_instances = session.get("instances", [])
@@ -521,15 +527,7 @@ def get_performance_data_list(instance: Instance):
             set(db_directory_names + session_directory_names + demo_directory_names)
         )
     else:
-        if is_remote:
-            connection = RemoteConnection.model_validate(
-                instance.remote_connection, strict=False
-            )
-            path = (
-                data_directory
-                / connection.host
-                / current_app.config["PERFORMANCE_DIRECTORY_NAME"]
-            )
+        # PathResolver already handles remote vs local logic
         directory_names = (
             [directory.name for directory in path.iterdir() if directory.is_dir()]
             if path.exists()
@@ -868,12 +866,10 @@ def create_npe_files():
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
     for file in files:
-        if not file.filename.endswith(".json") and not file.filename.endswith(
-            ".npeviz.zst"
-        ):
+        if not file.filename.endswith(".json") and not file.filename.endswith(".zst"):
             return StatusMessage(
                 status=ConnectionTestStates.FAILED,
-                message="NPE requires a valid .json or .npeviz.zst file",
+                message="NPE requires a valid .json or .zst file",
             ).model_dump()
 
     npe_name = extract_npe_name(files)
@@ -1275,4 +1271,67 @@ def get_npe_data(instance: Instance):
         with open(uncompressed_path, "r") as file:
             npe_data = json.load(file)
 
-    return jsonify(npe_data)
+    # Use orjson for much faster JSON serialization of large files
+    return Response(orjson.dumps(npe_data), mimetype="application/json")
+
+
+@api.route("/notify", methods=["POST"])
+def notify_report_update():
+    """
+    Endpoint to receive notifications about report updates and broadcast them via websockets.
+    """
+    from ttnn_visualizer.sockets import (
+        ExitStatus,
+        ReportGenerated,
+        emit_report_generated,
+    )
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        report_name = data.get("report_name")
+        exit_status_str = data.get("exit_status")
+
+        if not report_name:
+            return jsonify({"error": "report_name is required"}), 400
+
+        # Validate status
+        try:
+            exit_status = (
+                ExitStatus(exit_status_str.upper()) if exit_status_str else None
+            )
+        except ValueError:
+            return (
+                jsonify({"error": "Invalid exit_status."}),
+                400,
+            )
+
+        # Create and emit the report update
+        report_generated = ReportGenerated(
+            report_name=report_name,
+            exit_status=exit_status,
+            profiler_path=data.get("profiler_path"),
+            performance_path=data.get("performance_path"),
+        )
+        emit_report_generated(report_generated)
+
+        logger.info(f"Report generated notification processed: {report_name}")
+
+        return (
+            jsonify(
+                {
+                    "report_name": report_name,
+                    "profiler_path": report_generated.profiler_path,
+                    "performance_path": report_generated.performance_path,
+                    "exit_status": exit_status.value if exit_status else None,
+                    "timestamp": report_generated.timestamp,
+                }
+            ),
+            200,
+        )
+
+    except Exception as e:
+        logger.error(f"Error processing report update notification: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500

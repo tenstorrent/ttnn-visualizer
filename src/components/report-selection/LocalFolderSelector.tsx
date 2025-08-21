@@ -6,7 +6,6 @@ import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core'
 import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
-import 'styles/components/OldFolderPicker.scss';
 import { useQueryClient } from 'react-query';
 import { useAtom, useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
@@ -19,16 +18,17 @@ import {
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification from '../../functions/createToastNotification';
+import getServerConfig from '../../functions/getServerConfig';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 import {
     PERFORMANCE_FOLDER_QUERY_KEY,
     PROFILER_FOLDER_QUERY_KEY,
     deletePerformance,
     deleteProfiler,
-    updateTabSession,
+    updateInstance,
+    useInstance,
     usePerfFolderList,
     useReportFolderList,
-    useSession,
 } from '../../hooks/useAPI';
 import LocalFolderPicker from './LocalFolderPicker';
 import { ReportFolder } from '../../definitions/Reports';
@@ -88,7 +88,7 @@ const LocalFolderOptions: FC = () => {
     } = useLocalConnection();
     const { data: perfFolderList } = usePerfFolderList();
     const { data: reportFolderList } = useReportFolderList();
-    const { data: session } = useSession();
+    const { data: instance } = useInstance();
 
     const [profilerFolder, setProfilerFolder] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
@@ -189,7 +189,7 @@ const LocalFolderOptions: FC = () => {
     }, [isUploadingReport, isUploadingPerformance]);
 
     const handleSelectProfiler = async (item: ReportFolder) => {
-        await updateTabSession({ ...session, active_report: { profiler_name: item.path } });
+        await updateInstance({ ...instance, active_report: { profiler_name: item.path } });
 
         createToastNotification('Active memory report', getReportName(reportFolderList, item.path) ?? '');
         setActiveProfilerReport(item.path);
@@ -210,7 +210,7 @@ const LocalFolderOptions: FC = () => {
     };
 
     const handleSelectPerformance = async (item: ReportFolder) => {
-        await updateTabSession({ ...session, active_report: { performance_name: item.path } });
+        await updateInstance({ ...instance, active_report: { performance_name: item.path } });
 
         createToastNotification('Active performance report', item.reportName);
         setActivePerformanceReport(item.path);
@@ -228,6 +228,8 @@ const LocalFolderOptions: FC = () => {
             setPerformanceFolder(undefined);
         }
     };
+
+    const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
 
     return (
         <>
@@ -248,38 +250,41 @@ const LocalFolderOptions: FC = () => {
                 />
             </FormGroup>
 
-            <FormGroup subLabel='Upload a local memory report'>
-                <div className='buttons-container'>
-                    <FileInput
-                        id='local-upload'
-                        onInputChange={handleReportDirectoryOpen}
-                        text={profilerUploadLabel}
-                        inputProps={{
-                            // @ts-expect-error 'directory' (needed for Safari) and 'webkitdirectory' - TypeScript’s DOM types do not include non-standard attributes
-                            directory: '',
-                            webkitdirectory: '',
-                            multiple: true,
-                            'data-testid': 'local-profiler-upload',
-                        }}
-                    />
+            {!isDirectReportMode && (
+                <FormGroup subLabel='Upload a local memory report'>
+                    <div className='form-container'>
+                        <FileInput
+                            id='local-upload'
+                            onInputChange={handleReportDirectoryOpen}
+                            text={profilerUploadLabel}
+                            inputProps={{
+                                // @ts-expect-error 'directory' (needed for Safari) and 'webkitdirectory' - TypeScript’s DOM types do not include non-standard attributes
+                                directory: '',
+                                webkitdirectory: '',
+                                multiple: true,
+                                'data-testid': 'local-profiler-upload',
+                            }}
+                        />
 
-                    <FileStatusOverlay />
+                        <FileStatusOverlay />
 
-                    {profilerFolder && !isUploadingReport && (
-                        <div className={`verify-connection-item status-${ConnectionTestStates[profilerFolder.status]}`}>
-                            <Icon
-                                className='connection-status-icon'
-                                icon={ICON_MAP[profilerFolder.status]}
-                                size={20}
-                                intent={INTENT_MAP[profilerFolder.status]}
-                            />
+                        {profilerFolder && !isUploadingReport && (
+                            <div
+                                className={`verify-connection-item status-${ConnectionTestStates[profilerFolder.status]}`}
+                            >
+                                <Icon
+                                    className='connection-status-icon'
+                                    icon={ICON_MAP[profilerFolder.status]}
+                                    size={20}
+                                    intent={INTENT_MAP[profilerFolder.status]}
+                                />
 
-                            <span className='connection-status-text'>{profilerFolder.message}</span>
-                        </div>
-                    )}
-                </div>
-            </FormGroup>
-
+                                <span className='connection-status-text'>{profilerFolder.message}</span>
+                            </div>
+                        )}
+                    </div>
+                </FormGroup>
+            )}
             <FormGroup
                 className='form-group'
                 label={<h3 className='label'>Performance report</h3>}
@@ -299,37 +304,39 @@ const LocalFolderOptions: FC = () => {
                 />
             </FormGroup>
 
-            <FormGroup subLabel='Upload a local performance report'>
-                <div className='buttons-container'>
-                    <FileInput
-                        id='local-performance-upload'
-                        onInputChange={handlePerformanceDirectoryOpen}
-                        text={performanceDataUploadLabel}
-                        inputProps={{
-                            // @ts-expect-error 'directory' (needed for Safari) and 'webkitdirectory' - TypeScript’s DOM types do not include non-standard attributes
-                            directory: '',
-                            webkitdirectory: '',
-                            multiple: true,
-                            'data-testid': 'local-performance-upload',
-                        }}
-                    />
+            {!isDirectReportMode && (
+                <FormGroup subLabel='Upload a local performance report'>
+                    <div className='form-container'>
+                        <FileInput
+                            id='local-performance-upload'
+                            onInputChange={handlePerformanceDirectoryOpen}
+                            text={performanceDataUploadLabel}
+                            inputProps={{
+                                // @ts-expect-error 'directory' (needed for Safari) and 'webkitdirectory' - TypeScript’s DOM types do not include non-standard attributes
+                                directory: '',
+                                webkitdirectory: '',
+                                multiple: true,
+                                'data-testid': 'local-performance-upload',
+                            }}
+                        />
 
-                    {performanceFolder && !isUploadingPerformance && (
-                        <div
-                            className={`verify-connection-item status-${ConnectionTestStates[performanceFolder.status]}`}
-                        >
-                            <Icon
-                                className='connection-status-icon'
-                                icon={ICON_MAP[performanceFolder.status]}
-                                size={20}
-                                intent={INTENT_MAP[performanceFolder.status]}
-                            />
+                        {performanceFolder && !isUploadingPerformance && (
+                            <div
+                                className={`verify-connection-item status-${ConnectionTestStates[performanceFolder.status]}`}
+                            >
+                                <Icon
+                                    className='connection-status-icon'
+                                    icon={ICON_MAP[performanceFolder.status]}
+                                    size={20}
+                                    intent={INTENT_MAP[performanceFolder.status]}
+                                />
 
-                            <span className='connection-status-text'>{performanceFolder.message}</span>
-                        </div>
-                    )}
-                </div>
-            </FormGroup>
+                                <span className='connection-status-text'>{performanceFolder.message}</span>
+                            </div>
+                        )}
+                    </div>
+                </FormGroup>
+            )}
         </>
     );
 };

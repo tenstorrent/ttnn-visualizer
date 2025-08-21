@@ -67,7 +67,7 @@ const TensorList = () => {
         tensorsWithRange || [],
     );
 
-    // TODO: Figure out an initial scroll position based on last used tensor
+    // TODO: Figure out an initial scroll position based on last used tensor - https://github.com/tenstorrent/ttnn-visualizer/issues/737
     const virtualizer = useVirtualizer({
         count: filteredTensorList?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => scrollElementRef.current,
@@ -142,7 +142,6 @@ const TensorList = () => {
             });
 
             // Navigating to the same page replaces the entry in the browser history
-            // TODO: Revisit this code later to make sure it's not causing any weird side effects
             navigate(ROUTES.OPERATIONS, { replace: true });
         }
     }, [virtualizer, fetchedTensors, location, navigate]);

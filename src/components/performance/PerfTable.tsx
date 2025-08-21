@@ -100,14 +100,15 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
 
     // TODO: Refactor so that sortAndFilterPerfTableData is not used here and PerfReport.
     // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
-    const tableFields: TypedPerfTableRow[] = useMemo(() => {
+    const tableFields = useMemo<TypedPerfTableRow[]>(() => {
         const parsedRows = sortAndFilterPerfTableData(data, filters, filterableColumnKeys, mathFidelityFilter);
 
-        return sortTableFields(parsedRows);
+        // Still some awkward casting here
+        return [...sortTableFields(parsedRows as [])];
     }, [data, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields]);
 
-    const comparisonDataTableFields = useMemo(() => {
-        return (
+    const comparisonDataTableFields = useMemo<TypedPerfTableRow[][]>(
+        () =>
             comparisonData?.map((dataset) => {
                 const parsedRows = sortAndFilterPerfTableData(
                     dataset,
@@ -116,10 +117,11 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                     mathFidelityFilter,
                 );
 
-                return sortTableFields(parsedRows);
-            }) || []
-        );
-    }, [comparisonData, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields]);
+                // Still some awkward casting here
+                return [...sortTableFields(parsedRows as [])];
+            }) || [],
+        [comparisonData, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields],
+    );
 
     const visibleHeaders = [
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
@@ -140,7 +142,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         const { key } = header;
 
         if (key === 'global_call_count') {
-            // TODO: this is an imefficient way of doing things but its also temporary. will update next iteration
+            // TODO: this is an inefficient way of doing things but its also temporary. will update next iteration
             const value = parseInt(String(row[key]), 10) || 0;
             const manifestRecord = npeManifest?.find((el) => {
                 return el.global_call_count === value;

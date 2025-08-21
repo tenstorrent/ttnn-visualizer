@@ -1,0 +1,104 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
+
+$outer-padding: 10px;
+
+.side-data {
+    display: flex;
+    flex-direction: column;
+    width: 380px;
+    overflow-y: scroll;
+    flex: 0 1 auto;
+    background-color: $tt-grey-3;
+    position: sticky;
+    top: 0;
+    right: 0;
+    left: 0;
+    max-height: 100vh;
+
+    &:empty {
+        display: none;
+    }
+
+    &.has-data {
+        border-left: 1px solid $tt-grey-5;
+    }
+
+    .wrapper {
+        padding: $outer-padding;
+    }
+
+    .active-transfer-details-title {
+        display: flex;
+        margin-top: 0;
+        align-items: center;
+        justify-content: space-between;
+        padding: 5px 5px 5px $outer-padding; // Button size in this heading means we can't use $outer-padding in most directions
+        background-color: $tt-grey-4;
+        margin-bottom: 0;
+
+        .bp6-button.bp6-minimal {
+            background-color: transparent;
+            padding: 0;
+
+            &:hover {
+                background-color: variables.$tt-dark-minimal-button-background-color-hover;
+            }
+        }
+    }
+
+    .noc-id {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 0;
+        margin-bottom: 0;
+
+        .color-square {
+            width: 11px;
+            height: 11px;
+            border: 1px solid $tt-grey-5;
+        }
+    }
+
+    .local-transfer-ctn {
+        margin-bottom: 25px;
+        display: inline-flex;
+        flex-flow: column nowrap;
+        gap: 10px;
+    }
+
+    .transfer-info {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        align-items: flex-start;
+    }
+
+    .local-transfer {
+        display: inline-flex;
+        flex-flow: row wrap;
+        gap: 5px;
+        align-items: center;
+        transition: opacity 0.2s;
+        cursor: pointer;
+    }
+
+    .transfer-src-dst {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .transfer-src {
+        border: 1px solid variables.$npe-highlight-src;
+    }
+
+    .transfer-dst {
+        border: 1px solid variables.$npe-highlight-dst;
+    }
+}

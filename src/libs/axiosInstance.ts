@@ -13,12 +13,14 @@ const axiosInstance = axios.create({
 });
 
 export const getOrCreateInstanceId = () => {
-    let instanceId = sessionStorage.getItem('instanceId');
     const urlInstanceId = new URLSearchParams(window.location.search).get('instanceId');
+    let instanceId = sessionStorage.getItem('instanceId');
+
     if (urlInstanceId) {
         instanceId = urlInstanceId;
         sessionStorage.setItem('instanceId', instanceId);
     }
+
     if (!instanceId) {
         instanceId =
             Math.random().toString(36).substring(2, 15) +
@@ -28,12 +30,14 @@ export const getOrCreateInstanceId = () => {
         sessionStorage.setItem('displayInitialMessage', 'true');
         sessionStorage.setItem('instanceId', instanceId);
     }
+
     return instanceId;
 };
 
 axiosInstance.interceptors.request.use(
     (config) => {
         const instanceId = getOrCreateInstanceId();
+
         if (instanceId) {
             // Add the instanceId to the query params
             config.params = {

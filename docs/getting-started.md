@@ -119,6 +119,7 @@ The `ttnn-visualizer` command supports two CLI arguments for passing custom data
 
 * `--profiler-path` - specify the local path to the folder containing the report
 * `--performance-path` - specify the local path to the folder containing the profiler data
+* `--tt-metal-home` - specify the path to the TT Metal repo when running directly on the machine where reports are being generated.
 
 These options allow you to pass the folders when starting the visualizer, instead of uploading the report and profiler
 data files from the browser after loading the site. This can be used for starting `ttnn-visualizer` from other tools
@@ -127,3 +128,18 @@ with the data preloaded, or for restarting the visualizer with the same data, wi
 ```bash
 ttnn-visualizer --report-path ~/Downloads/report/generated/ttnn/reports/17274205533343344897 --profiler-path ~/Downloads/report/generated/profiler/reports/2025_02_24_23_17_27
 ```
+
+### TT-Metal Home
+
+If reports are being generated on a machine which is accessible to your local workstation,
+the `ttnn-visualizer` command can be run directly on the remote machine and load reports
+directly from the directory specified by the `--tt-metal-home` CLI arg or the `TT_METAL_HOME`
+env var.
+
+When running this way, you must ensure that the HOST and PORT used by the Flask webserver
+on the remote machine or container are accessible to the browser on your local machine. When
+working directly with the TT-Metal home directory, the remote sync and upload features are
+disabled, and you can see the reports generated on that machine only.
+
+This feature is intended for custom tools and integrations only, that bypass the default ways
+of loading data into `ttnn-visualizer`.

@@ -77,56 +77,101 @@ Third-Party Dependencies:
 
 The following separate and independent dependencies are utilized by this project but are not distributed as part of the software and are subject to their own license terms listed as follows:
 
-- @blueprintjs/colors – Apache-2.0 – https://github.com/palantir/blueprint/blob/develop/packages/colors/LICENSE
-- @blueprintjs/core – Apache-2.0 – https://github.com/palantir/blueprint/blob/develop/packages/core/LICENSE
-- @blueprintjs/icons – Apache-2.0 – https://github.com/palantir/blueprint/blob/develop/packages/icons/LICENSE
-- @blueprintjs/select – Apache-2.0 – https://github.com/palantir/blueprint/blob/develop/packages/select/LICENSE
-- @blueprintjs/table – Apache-2.0 – https://github.com/palantir/blueprint/blob/develop/packages/table/LICENSE
-- @eslint/eslintrc – MIT – https://github.com/eslint/eslintrc/blob/main/LICENSE
-- @eslint/js – MIT – https://github.com/eslint/eslint/blob/main/LICENSE
-- @eslint/rewrite – Apache-2.0 – https://github.com/eslint/rewrite/blob/main/LICENSE
-- @tanstack/react-virtual – MIT – https://github.com/TanStack/virtual/blob/main/LICENSE
-- @types/tinycolor2 – MIT – https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/tinycolor2/LICENSE
-- axios – MIT – https://github.com/axios/axios/blob/v1.x/LICENSE
-- css-select – BSD‑2-Clause – https://github.com/fb55/css-select/blob/master/LICENSE
-- dom-serializer – MIT – https://github.com/cheeriojs/dom-serializer/blob/master/LICENSE
-- globals – MIT – https://github.com/sindresorhus/globals/blob/main/license
-- immutable – MIT – https://github.com/immutable-js/immutable-js/blob/master/LICENSE
-- jotai – MIT – https://github.com/pmndrs/jotai/blob/main/LICENSE
+- @blueprintjs/colors - Apache-2.0 - https://github.com/palantir/blueprint/blob/develop/packages/colors/LICENSE
+- @blueprintjs/core - Apache-2.0 - https://github.com/palantir/blueprint/blob/develop/packages/core/LICENSE
+- @blueprintjs/icons - Apache-2.0 - https://github.com/palantir/blueprint/blob/develop/packages/icons/LICENSE
+- @blueprintjs/node-build-scripts - Apache-2.0 - https://github.com/palantir/blueprint/blob/develop/packages/node-build-scripts/LICENSE
+- @blueprintjs/select - Apache-2.0 - https://github.com/palantir/blueprint/blob/develop/packages/select/LICENSE
+- @blueprintjs/table - Apache-2.0 - https://github.com/palantir/blueprint/blob/develop/packages/table/LICENSE
+- @eslint/compat - Apache-2.0 - https://github.com/eslint/rewrite/blob/main/packages/compat/LICENSE
+- @eslint/eslintrc - MIT - https://github.com/eslint/eslintrc/blob/main/LICENSE
+- @eslint/js - MIT - https://github.com/eslint/eslint/blob/main/LICENSE
+- @eslint/rewrite - Apache-2.0 - https://github.com/eslint/rewrite/blob/main/LICENSE
+- @tanstack/react-virtual - MIT - https://github.com/TanStack/virtual/blob/main/LICENSE
+- @testing-library/dom - MIT - https://github.com/testing-library/dom-testing-library/blob/main/LICENSE
+- @testing-library/jest-dom - MIT - https://github.com/testing-library/jest-dom/blob/main/LICENSE
+- @testing-library/react - MIT - https://github.com/testing-library/react-testing-library/blob/main/LICENSE
+- @types/papaparse - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
+- @types/react - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
+- @types/react-dom - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
+- @types/react-plotly.js - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
+- @types/tinycolor2 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/tinycolor2/LICENSE
+- @typescript-eslint/eslint-plugin - MIT - https://github.com/typescript-eslint/typescript-eslint/blob/main/LICENSE
+- @typescript-eslint/parser - MIT - https://github.com/typescript-eslint/typescript-eslint/blob/main/LICENSE
+- @vitejs/plugin-react - MIT - https://github.com/vitejs/vite-plugin-react/blob/main/LICENSE
+- ajv - MIT - https://github.com/ajv-validator/ajv/blob/master/LICENSE
+- axios - MIT - https://github.com/axios/axios/blob/v1.x/LICENSE
+- classnames - MIT - https://github.com/JedWatson/classnames/blob/main/LICENSE
+- css-select - BSD‑2-Clause - https://github.com/fb55/css-select/blob/master/LICENSE
+- dom-serializer - MIT - https://github.com/cheeriojs/dom-serializer/blob/master/LICENSE
+- eslint - MIT - https://github.com/eslint/eslint/blob/main/LICENSE
+- eslint-config-airbnb-base - MIT - https://github.com/airbnb/javascript/blob/master/packages/eslint-config-airbnb-base/LICENSE.md
+- eslint-config-erb - MIT - https://github.com/electron-react-boilerplate/eslint-config-erb/blob/main/LICENSE
+- eslint-config-prettier - MIT - https://github.com/prettier/eslint-config-prettier/blob/main/LICENSE
+- eslint-import-resolver-alias - MIT - https://github.com/johvin/eslint-import-resolver-alias/blob/master/LICENSE
+- eslint-import-resolver-typescript - ISC - https://github.com/import-js/eslint-import-resolver-typescript/blob/master/LICENSE
+- eslint-plugin-compat - MIT - https://github.com/amilajack/eslint-plugin-compat/blob/main/LICENSE
+- eslint-plugin-import - MIT - https://github.com/import-js/eslint-plugin-import/blob/main/LICENSE
+- eslint-plugin-jsx-a11y - MIT - https://github.com/jsx-eslint/eslint-plugin-jsx-a11y/blob/main/LICENSE.md
+- eslint-plugin-prettier - MIT - https://github.com/prettier/eslint-plugin-prettier/blob/main/LICENSE.md
+- eslint-plugin-promise - ISC - https://github.com/eslint-community/eslint-plugin-promise/blob/main/LICENSE.md
+- eslint-plugin-react - MIT - https://github.com/jsx-eslint/eslint-plugin-react/blob/master/LICENSE
+- eslint-plugin-react-hooks - MIT - https://github.com/facebook/react/blob/main/LICENSE
+- eslint-plugin-react-refresh - MIT - https://github.com/ArnaudBarre/eslint-plugin-react-refresh/blob/main/LICENSE
+- eslint-plugin-unused-imports - MIT - https://github.com/sweepline/eslint-plugin-unused-imports/blob/master/LICENSE
+- globals - MIT - https://github.com/sindresorhus/globals/blob/main/license
+- highlight.js - BSD-3-Clause - https://github.com/highlightjs/highlight.js/blob/main/LICENSE
+- htmlparser2 - MIT - https://github.com/fb55/htmlparser2/blob/master/LICENSE
+- husky - MIT - https://github.com/typicode/husky/blob/main/LICENSE
+- immutable - MIT - https://github.com/immutable-js/immutable-js/blob/master/LICENSE
+- jotai - MIT - https://github.com/pmndrs/jotai/blob/main/LICENSE
 - jsdom - MIT - https://github.com/jsdom/jsdom/blob/main/LICENSE.txt
-- mini-svg-data-uri – MIT – https://github.com/tigt/mini-svg-data-uri/blob/master/LICENSE
-- normalize.css – MIT – https://github.com/necolas/normalize.css/blob/master/LICENSE.md
-- papaparse – MIT – https://github.com/mholt/PapaParse/blob/master/LICENSE
-- plotly.js – MIT – https://github.com/plotly/plotly.js/blob/master/LICENSE
-- react – MIT – https://github.com/facebook/react/blob/main/LICENSE
-- react-dom – MIT – https://github.com/facebook/react/blob/main/LICENSE
-- react-helmet-async – MIT – https://github.com/staylor/react-helmet-async/blob/main/LICENSE
-- react-plotly.js – MIT – https://github.com/plotly/react-plotly.js/blob/master/LICENSE
-- react-query – MIT – https://github.com/TanStack/query/blob/main/LICENSE
-- react-router – MIT – https://github.com/remix-run/react-router/blob/main/LICENSE
-- react-router-dom – MIT – https://github.com/remix-run/react-router/blob/main/LICENSE.md
-- react-toastify – MIT – https://github.com/fkhadra/react-toastify/blob/main/LICENSE
-- socket.io-client – MIT – https://www.npmjs.com/package/socket.io-client
-- tinycolor2 – MIT – https://github.com/bgrins/TinyColor/blob/master/LICENSE
-- vis-data – Dual-license Apache‑2.0 or MIT – https://github.com/visjs/vis-data/blob/master/LICENSE-MIT and LICENSE-APACHE-2.0
-- vis-network – Dual-license Apache‑2.0 or MIT – part of vis.js suite; see https://almende.github.io/vis/ (“Vis.js is dual licensed under both Apache-2.0 and MIT”)
+- lint-staged - MIT - https://github.com/lint-staged/lint-staged/blob/main/LICENSE
+- mini-svg-data-uri - MIT - https://github.com/tigt/mini-svg-data-uri/blob/master/LICENSE
+- normalize.css - MIT - https://github.com/necolas/normalize.css/blob/master/LICENSE.md
+- only-allow - MIT - https://github.com/pnpm/only-allow/blob/master/LICENSE
+- papaparse - MIT - https://github.com/mholt/PapaParse/blob/master/LICENSE
+- plotly.js - MIT - https://github.com/plotly/plotly.js/blob/master/LICENSE
+- prettier - MIT - https://github.com/prettier/eslint-config-prettier/blob/main/LICENSE
+- react - MIT - https://github.com/facebook/react/blob/main/LICENSE
+- react-dom - MIT - https://github.com/facebook/react/blob/main/LICENSE
+- react-helmet-async - MIT - https://github.com/staylor/react-helmet-async/blob/main/LICENSE
+- react-plotly.js - MIT - https://github.com/plotly/react-plotly.js/blob/master/LICENSE
+- react-query - MIT - https://github.com/TanStack/query/blob/main/LICENSE
+- react-router - MIT - https://github.com/remix-run/react-router/blob/main/LICENSE
+- react-router-dom - MIT - https://github.com/remix-run/react-router/blob/main/LICENSE.md
+- react-toastify - MIT - https://github.com/fkhadra/react-toastify/blob/main/LICENSE
+- sass - MIT - https://github.com/sass/dart-sass/blob/main/LICENSE
+- socket.io-client - MIT - https://www.npmjs.com/package/socket.io-client
+- stylelint - MIT - https://github.com/stylelint/stylelint/blob/main/LICENSE
+- stylelint-config-standard-scss - MIT - https://github.com/stylelint-scss/stylelint-config-standard-scss/blob/main/LICENSE
+- stylelint-prettier - MIT - https://github.com/prettier/stylelint-prettier/blob/main/LICENSE.md
+- svgo - MIT - https://github.com/svg/svgo/blob/main/LICENSE
+- tinycolor2 - MIT - https://github.com/bgrins/TinyColor/blob/master/LICENSE
+- typescript - Apache-2.0 - https://github.com/microsoft/TypeScript/blob/main/LICENSE.txt
+- vis-data - Dual-license Apache‑2.0 or MIT - https://github.com/visjs/vis-data/blob/master/LICENSE-APACHE-2.0 and https://github.com/visjs/vis-data/blob/master/LICENSE-MIT
+- vis-network - Dual-license Apache‑2.0 or MIT - https://github.com/visjs/vis-network/blob/master/LICENSE-APACHE-2.0 or
+- vite - MIT - https://github.com/vitejs/vite/blob/main/LICENSE
+- vitest - MIT - https://github.com/vitest-dev/vitest/blob/main/LICENSE
+- vitest-canvas-mock - MIT - https://github.com/wobsoriano/vitest-canvas-mock/blob/main/LICENSE
 
-- Flask – BSD‑3‑Clause – https://github.com/pallets/flask/blob/main/LICENSE.txt
-- gunicorn – MIT – https://github.com/benoitc/gunicorn/blob/master/LICENSE
-- uvicorn – BSD‑3‑Clause – https://github.com/encode/uvicorn/blob/master/LICENSE.md
-- flask_cors – MIT – https://github.com/corydolphin/flask-cors/blob/main/LICENSE
-- pydantic – MIT – https://github.com/pydantic/pydantic-settings/blob/main/LICENSE
-- setuptools – MIT – https://github.com/pypa/setuptools/blob/main/LICENSE
-- python-dotenv – BSD‑3‑Clause – https://github.com/theskumar/python-dotenv/blob/main/LICENSE
-- flask-sqlalchemy – BSD‑3‑Clause – https://github.com/pallets-eco/flask-sqlalchemy/blob/main/LICENSE
-- flask-socketio – MIT – https://github.com/miguelgrinberg/Flask-SocketIO/blob/main/LICENSE
-- PyYAML – MIT – https://github.com/yaml/pyyaml/blob/main/LICENSE
-- gevent – MIT – https://github.com/gevent/gevent/blob/master/LICENSE
-- pandas – BSD‑3‑Clause – https://github.com/pandas-dev/pandas/blob/main/LICENSE
-- wheel – MIT https://opensource.org/license/mit
-- build – MIT https://opensource.org/license/mit
-- tt-perf-report – MIT https://opensource.org/license/mit
-- zstd (python-zstandard) – BSD‑3‑Clause – https://github.com/indygreg/python-zstandard/blob/main/LICENSE
-- playwright – Apache-2.0 – https://github.com/microsoft/playwright-python/blob/main/LICENSE
+- build - MIT https://opensource.org/license/mit
+- Flask - BSD‑3‑Clause - https://github.com/pallets/flask/blob/main/LICENSE.txt
+- flask_cors - MIT - https://github.com/corydolphin/flask-cors/blob/main/LICENSE
+- flask-socketio - MIT - https://github.com/miguelgrinberg/Flask-SocketIO/blob/main/LICENSE
+- flask-sqlalchemy - BSD‑3‑Clause - https://github.com/pallets-eco/flask-sqlalchemy/blob/main/LICENSE
+- gevent - MIT - https://github.com/gevent/gevent/blob/master/LICENSE
+- gunicorn - MIT - https://github.com/benoitc/gunicorn/blob/master/LICENSE
+- orjson - Dual-license Apache-2.0 or MIT - https://github.com/ijl/orjson/blob/master/LICENSE-APACHE and https://github.com/ijl/orjson/blob/master/LICENSE-MIT
+- pandas - BSD‑3‑Clause - https://github.com/pandas-dev/pandas/blob/main/LICENSE
+- playwright - Apache-2.0 - https://github.com/microsoft/playwright-python/blob/main/LICENSE
+- pydantic - MIT - https://github.com/pydantic/pydantic-settings/blob/main/LICENSE
+- python-dotenv - BSD‑3‑Clause - https://github.com/theskumar/python-dotenv/blob/main/LICENSE
+- PyYAML - MIT - https://github.com/yaml/pyyaml/blob/main/LICENSE
+- setuptools - MIT - https://github.com/pypa/setuptools/blob/main/LICENSE
+- tt-perf-report - MIT https://opensource.org/license/mit
+- uvicorn - BSD‑3‑Clause - https://github.com/encode/uvicorn/blob/master/LICENSE.md
+- wheel - MIT https://opensource.org/license/mit
+- zstd (python-zstandard) - BSD‑3‑Clause - https://github.com/indygreg/python-zstandard/blob/main/LICENSE
 
 - Upload Release Assets - GitHub Action - MIT - https://github.com/AButler/upload-release-assets/blob/master/LICENSE

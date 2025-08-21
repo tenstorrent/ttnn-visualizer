@@ -14,11 +14,11 @@ import {
     Buffer,
     BufferData,
     BufferPage,
+    Instance,
     NodeType,
     OperationDescription,
     OperationDetailsData,
     ReportMetaData,
-    TabSession,
     Tensor,
     defaultBuffer,
     defaultOperationDetailsData,
@@ -52,16 +52,15 @@ const parseFileOperationIdentifier = (stackTrace: string): string => {
     return '';
 };
 
-// Possibly rename this and related functions to be "Instance"
-export const fetchTabSession = async (): Promise<TabSession | null> => {
+export const fetchInstance = async (): Promise<Instance | null> => {
     // eslint-disable-next-line promise/valid-params
-    const response = await axiosInstance.get<TabSession>('/api/instance').catch();
+    const response = await axiosInstance.get<Instance>('/api/instance').catch();
     return response?.data;
 };
 
-export const updateTabSession = async (payload: Partial<TabSession>): Promise<TabSession | null> => {
+export const updateInstance = async (payload: Partial<Instance>): Promise<Instance | null> => {
     // eslint-disable-next-line promise/valid-params
-    const response = await axiosInstance.put<TabSession>('/api/instance', payload).catch();
+    const response = await axiosInstance.put<Instance>('/api/instance', payload).catch();
     return response?.data;
 };
 
@@ -280,9 +279,9 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
 const fetchDevices = async () => {
     const { data: meta } = await axiosInstance.get<DeviceData[]>('/api/devices');
     if (meta.length === 0) {
-        // TODO: make this an in app message
+        // TODO: make this an in app message - https://github.com/tenstorrent/ttnn-visualizer/issues/739
         // eslint-disable-next-line no-console
-        console.error(' Data integrity warning: No device information provided.');
+        console.error('Data integrity warning: No device information provided.');
     }
     return [...new Map(meta.map((device) => [device.device_id, device])).values()];
 };
@@ -839,14 +838,14 @@ export const usePerformanceComparisonReport = (reportNames: string[] | null) => 
     }, [response]);
 };
 
-export const useSession = () => {
+export const useInstance = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeNpe = useAtomValue(activeNpeOpTraceAtom);
 
     return useQuery({
-        queryFn: () => fetchTabSession(),
-        queryKey: ['get-session', activeProfilerReport, activePerformanceReport, activeNpe],
+        queryFn: () => fetchInstance(),
+        queryKey: ['fetch-instance', activeProfilerReport, activePerformanceReport, activeNpe],
         initialData: null,
     });
 };
