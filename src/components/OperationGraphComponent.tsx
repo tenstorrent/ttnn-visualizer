@@ -302,7 +302,7 @@ const OperationGraph: React.FC<{
                     <Tooltip
                         placement={PopoverPosition.TOP}
                         content={
-                            !previousOperation || isLoading
+                            previousOperation
                                 ? `Go to previous operation ${previousOperation}`
                                 : 'No previous operation'
                         }
@@ -314,7 +314,7 @@ const OperationGraph: React.FC<{
                             disabled={!previousOperation || isLoading}
                             variant='outlined'
                             aria-label={
-                                !previousOperation || isLoading
+                                previousOperation
                                     ? `Go to previous operation ${previousOperation}`
                                     : 'No previous operation'
                             }
@@ -336,7 +336,7 @@ const OperationGraph: React.FC<{
                     </Tooltip>
                     <Tooltip
                         placement={PopoverPosition.TOP}
-                        content={!nextOperation ? `Go to next operation ${nextOperation}` : 'No next operation'}
+                        content={nextOperation ? `Go to next operation ${nextOperation}` : 'No next operation'}
                         disabled={isLoading}
                     >
                         <Button
@@ -344,7 +344,7 @@ const OperationGraph: React.FC<{
                             onClick={() => focusOnNode(nextOperation || 0)}
                             disabled={!nextOperation || isLoading}
                             variant='outlined'
-                            aria-label={!nextOperation ? `Go to next operation ${nextOperation}` : 'No next operation'}
+                            aria-label={nextOperation ? `Go to next operation ${nextOperation}` : 'No next operation'}
                         />
                     </Tooltip>
                     <SearchField
