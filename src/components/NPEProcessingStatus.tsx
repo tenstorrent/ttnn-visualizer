@@ -42,8 +42,8 @@ const PROCESSING_ERRORS = {
 };
 
 const NPEProcessingStatus = ({ expectedVersion, dataVersion, fetchError }: NPEProcessingStatusProps) => {
-    const compatibleVersion = getCompatibleNpeDataVersion(dataVersion);
-    const errorType = getErrorType(fetchError, compatibleVersion);
+    const legacyVersion = getLegacyNpeVersion(dataVersion);
+    const errorType = getErrorType(fetchError, legacyVersion);
 
     return (
         <Callout
@@ -64,9 +64,7 @@ const NPEProcessingStatus = ({ expectedVersion, dataVersion, fetchError }: NPEPr
                                 <p className='status-text'>
                                     Use {NPE_REPO_URL} to generate new NPE dataset or install an older version of the
                                     visualizer{' '}
-                                    <code className='formatted-code'>
-                                        pip install ttnn-visualizer=={compatibleVersion}
-                                    </code>
+                                    <code className='formatted-code'>pip install ttnn-visualizer=={legacyVersion}</code>
                                 </p>
                             </>
                         );
@@ -102,19 +100,19 @@ const NPEProcessingStatus = ({ expectedVersion, dataVersion, fetchError }: NPEPr
     );
 };
 
-const getErrorType = (errorData: AxiosError | null, matchedVersion: string | null): ErrorCodes => {
+const getErrorType = (errorData: AxiosError | null, legacyVersion: string | null): ErrorCodes => {
     if (errorData?.status === HttpStatusCode.UnprocessableEntity) {
         return ErrorCodes.INVALID_JSON;
     }
 
-    if (matchedVersion) {
+    if (legacyVersion) {
         return ErrorCodes.INVALID_NPE_VERSION;
     }
 
     return ErrorCodes.INVALID_NPE_DATA;
 };
 
-const getCompatibleNpeDataVersion = (version: string | null): string | null => {
+const getLegacyNpeVersion = (version: string | null): string | null => {
     const parsedVersion = version ? semverParse(version) : null;
 
     if (!parsedVersion) {
