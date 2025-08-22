@@ -318,6 +318,7 @@ const TensorList = () => {
                                                             <Icon
                                                                 icon={IconNames.ISSUE}
                                                                 intent={Intent.DANGER}
+                                                                title='Unusually high number of consumers'
                                                             />
                                                         </Tooltip>
                                                     ) : null}

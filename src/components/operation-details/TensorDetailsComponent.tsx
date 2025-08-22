@@ -80,6 +80,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         <Icon
                             icon={IconNames.ISSUE}
                             intent={Intent.DANGER}
+                            title='Unusually high number of consumers'
                         />
                     </Tooltip>
                 )}
@@ -89,7 +90,10 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         content={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
                         placement={PopoverPosition.TOP}
                     >
-                        <Icon icon={IconNames.INFO_SIGN} />
+                        <Icon
+                            icon={IconNames.INFO_SIGN}
+                            title={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
+                        />
                     </Tooltip>
                 ) : null}
 

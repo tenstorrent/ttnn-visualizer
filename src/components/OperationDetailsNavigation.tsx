@@ -74,7 +74,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                         variant={ButtonVariant.OUTLINED}
                         aria-label={
                             previousOperation
-                                ? `${previousOperation?.id} ${previousOperation?.name}`
+                                ? `Go to previous operation ${previousOperation?.id} ${previousOperation?.name}`
                                 : 'No previous operation'
                         }
                     />
@@ -108,7 +108,11 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                         disabled={!nextOperation}
                         onClick={navigateToNextOperation}
                         variant={ButtonVariant.OUTLINED}
-                        aria-label={nextOperation ? `${nextOperation?.id} ${nextOperation?.name}` : 'No next operation'}
+                        aria-label={
+                            nextOperation
+                                ? `Go to next operation ${nextOperation?.id} ${nextOperation?.name}`
+                                : 'No next operation'
+                        }
                     />
                 </Tooltip>
 

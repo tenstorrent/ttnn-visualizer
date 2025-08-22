@@ -67,6 +67,7 @@ const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({
                         setComparisonReportList(updatedReports?.length === 0 ? null : updatedReports);
                     }}
                     disabled={!comparisonReportList?.[reportIndex]}
+                    aria-label={!comparisonReportList?.[reportIndex] ? `Remove report` : 'No report selected'}
                 />
             </div>
         </FormGroup>
