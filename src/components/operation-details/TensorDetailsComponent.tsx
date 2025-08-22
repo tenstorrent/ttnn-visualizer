@@ -68,7 +68,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         }}
                     />
                     <h4>Tensor ID: {tensor.id}</h4>
-                    <h5>{tensor.operationIdentifier}</h5>
+                    {tensor.operationIdentifier && <h5>{tensor.operationIdentifier}</h5>}
                 </button>
 
                 {(tensor.consumers.length > MAX_NUM_CONSUMERS || tensor.producers.length > MAX_NUM_CONSUMERS) && (

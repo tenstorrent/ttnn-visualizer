@@ -32,6 +32,7 @@ function ClusterRenderer() {
                 onClick={() => {
                     navigate(-1);
                 }}
+                aria-label='Close cluster view'
             />
         </h1>
     );
@@ -95,6 +96,8 @@ function ClusterRenderer() {
                     style={{
                         gridTemplateColumns: `repeat(${totalCols || 0}, ${clusterChipSize}px)`,
                     }}
+                    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+                    tabIndex={0}
                 >
                     {chips.map((clusterChip) => {
                         const ethPosition: Map<CLUSTER_ETH_POSITION, string[]> = new Map();

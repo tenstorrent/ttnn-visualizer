@@ -176,6 +176,7 @@ const TensorList = () => {
                             disabled={!tensorsWithRange?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
                             intent={Intent.DANGER}
                             variant={showHighConsumerTensors ? 'outlined' : undefined}
+                            aria-label='Toggle high consumer tensors'
                         >
                             {filteredTensorList?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS).length}
                         </Button>
@@ -188,6 +189,7 @@ const TensorList = () => {
                         <Button
                             onClick={() => handleExpandAllToggle()}
                             endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
+                            aria-label={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
                         />
                     </Tooltip>
 
@@ -200,6 +202,7 @@ const TensorList = () => {
                                 virtualizer.scrollToIndex(0);
                             }}
                             icon={IconNames.DOUBLE_CHEVRON_UP}
+                            aria-label='Scroll to top'
                         />
                     </Tooltip>
 
@@ -212,6 +215,7 @@ const TensorList = () => {
                                 virtualizer.scrollToIndex(numberOfTensors - 1);
                             }}
                             icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                            aria-label='Scroll to bottom'
                         />
                     </Tooltip>
 
