@@ -5,6 +5,7 @@
 import { Callout, Intent } from '@blueprintjs/core';
 import { AxiosError, HttpStatusCode } from 'axios';
 import 'styles/components/NPEProcessingStatus.scss';
+import { semverParse } from '../functions/semverParse';
 
 const NPE_REPO_URL = (
     <a
@@ -17,20 +18,15 @@ const NPE_REPO_URL = (
 );
 
 interface NPEProcessingStatusProps {
-    matchedVersion: string | null;
     expectedVersion: string;
     fetchError: AxiosError | null;
-    npeData?: {
-        common_info?: {
-            version?: string;
-        };
-    };
+    dataVersion: string | null;
 }
 
 enum ErrorCodes {
-    INVALID_NPE_VERSION = 0,
-    INVALID_JSON = 1,
-    INVALID_NPE_DATA = 2,
+    INVALID_NPE_VERSION,
+    INVALID_JSON,
+    INVALID_NPE_DATA,
 }
 
 const PROCESSING_ERRORS = {
@@ -45,13 +41,14 @@ const PROCESSING_ERRORS = {
     },
 };
 
-const NPEProcessingStatus = ({ matchedVersion, expectedVersion, npeData, fetchError }: NPEProcessingStatusProps) => {
-    const errorType = getErrorType(fetchError, matchedVersion === expectedVersion);
+const NPEProcessingStatus = ({ expectedVersion, dataVersion, fetchError }: NPEProcessingStatusProps) => {
+    const matchedVersion = matchNpeDataVersion(dataVersion);
+    const errorType = getErrorType(fetchError, matchedVersion);
 
     return (
         <Callout
             intent={Intent.WARNING}
-            title={PROCESSING_ERRORS[errorType].title}
+            title={PROCESSING_ERRORS?.[errorType]?.title || 'Unknown error'}
             className='npe-processing-status'
         >
             {(() => {
@@ -61,7 +58,7 @@ const NPEProcessingStatus = ({ matchedVersion, expectedVersion, npeData, fetchEr
                             <>
                                 <p className='status-text'>
                                     Current supported version is <u>{expectedVersion}</u>, uploaded data version is{' '}
-                                    <u>{npeData?.common_info?.version || 'null'}</u>.
+                                    <u>{dataVersion || 'null'}</u>.
                                 </p>
 
                                 <p className='status-text'>
@@ -90,23 +87,43 @@ const NPEProcessingStatus = ({ matchedVersion, expectedVersion, npeData, fetchEr
                             </>
                         );
                     default:
-                        return null;
+                        return (
+                            <>
+                                <p className='status-text'>A previously unknown error has occurred.</p>
+                                <p className='status-text'>
+                                    Please contact the development team by creating an issue at {NPE_REPO_URL} with as
+                                    much detail as possible and including the relevant NPE data.
+                                </p>
+                            </>
+                        );
                 }
             })()}
         </Callout>
     );
 };
 
-const getErrorType = (errorData: AxiosError | null, isVersionMatch: boolean): ErrorCodes => {
+const getErrorType = (errorData: AxiosError | null, matchedVersion: string | null): ErrorCodes => {
     if (errorData?.status === HttpStatusCode.UnprocessableEntity) {
         return ErrorCodes.INVALID_JSON;
     }
 
-    if (isVersionMatch) {
+    if (matchedVersion) {
         return ErrorCodes.INVALID_NPE_VERSION;
     }
 
     return ErrorCodes.INVALID_NPE_DATA;
+};
+
+const matchNpeDataVersion = (version: string | null): string | null => {
+    const parsedVersion = version ? semverParse(version) : null;
+
+    switch (parsedVersion) {
+        case null:
+        case undefined:
+            return '0.32.3'; // Version of the visualizer that supports old NPE data format
+        default:
+            return '';
+    }
 };
 
 export default NPEProcessingStatus;

@@ -2,11 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, useEffect, useState } from 'react';
+import { FC, useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { Callout } from '@blueprintjs/core';
 import { useParams } from 'react-router';
+import { AxiosError } from 'axios';
 import NPEFileLoader from '../components/npe/NPEFileLoader';
 import NPEView from '../components/npe/NPEViewComponent';
 import { useNPETimelineFile, useNpe } from '../hooks/useAPI';
@@ -39,11 +40,11 @@ const NPE: FC = () => {
     const [selectedDemo, setSelectedDemo] = useState<NPEDemoData | null>(null);
 
     // Determine the current NPE data source
-    const npeData = demoData || loadedData || loadedTimeline;
+    const npeData = useMemo(() => demoData || loadedData || loadedTimeline, [demoData, loadedData, loadedTimeline]);
     const isDemoEnabled = getServerConfig()?.SERVER_MODE;
-    const matchedVersion = matchNpeDataVersion(npeData?.common_info?.version);
     const hasUploadedFile = !!npeFileName || !!filepath;
     const isLoading = isLoadingNPE || isLoadingTimeline;
+    const hasError = !!(processingError || (npeData && !isValidNpeData(npeData)));
 
     useEffect(() => {
         if (loadedData || loadedTimeline) {
@@ -78,28 +79,69 @@ const NPE: FC = () => {
                 )}
             </div>
 
-            {isLoading && <LoadingSpinner />}
+            <LoaderAndMessage
+                isLoading={isLoading}
+                hasUploadedFile={hasUploadedFile}
+            />
 
-            {!isLoading && !hasUploadedFile && (
-                <div className='npe-message-container'>
-                    <Callout compact>See {NPE_REPO_URL} for details on how to generate NPE report files.</Callout>
-                </div>
-            )}
-
-            {hasUploadedFile && npeData && isValidNpeData(npeData) && !processingError && <NPEView npeData={npeData} />}
-
-            {hasUploadedFile && (processingError || npeData) && (
-                <div className='npe-message-container'>
-                    <NPEProcessingStatus
-                        matchedVersion={matchedVersion}
-                        expectedVersion={NPE_DATA_VERSION}
-                        npeData={npeData}
-                        fetchError={processingError}
-                    />
-                </div>
-            )}
+            <NPEContent
+                hasUploadedFile={hasUploadedFile}
+                npeData={npeData}
+                hasError={hasError}
+                processingError={processingError}
+            />
         </>
     );
+};
+
+const LoaderAndMessage = ({ isLoading, hasUploadedFile }: { isLoading: boolean; hasUploadedFile: boolean }) => {
+    if (isLoading) {
+        return <LoadingSpinner />;
+    }
+
+    if (!hasUploadedFile) {
+        return (
+            <div className='npe-message-container'>
+                <Callout compact>See {NPE_REPO_URL} for details on how to generate NPE report files.</Callout>
+            </div>
+        );
+    }
+
+    return null;
+};
+
+const NPEContent = ({
+    hasUploadedFile,
+    npeData,
+    hasError,
+    processingError,
+}: {
+    hasUploadedFile: boolean;
+    npeData?: NPEData;
+    hasError: boolean;
+    processingError: AxiosError | null;
+}) => {
+    if (!hasUploadedFile) {
+        return null;
+    }
+
+    if (hasError) {
+        return (
+            <div className='npe-message-container'>
+                <NPEProcessingStatus
+                    expectedVersion={NPE_DATA_VERSION}
+                    dataVersion={npeData?.common_info?.version || null}
+                    fetchError={processingError}
+                />
+            </div>
+        );
+    }
+
+    if (npeData) {
+        return <NPEView npeData={npeData} />;
+    }
+
+    return null;
 };
 
 const isValidNpeData = (data: NPEData): boolean => {
@@ -123,18 +165,6 @@ const isValidNpeData = (data: NPEData): boolean => {
     }
 
     return true;
-};
-
-const matchNpeDataVersion = (version?: string): string | null => {
-    const parsedVersion = semverParse(version);
-
-    switch (parsedVersion) {
-        case null:
-        case undefined:
-            return '0.32.3';
-        default:
-            return '';
-    }
 };
 
 export default NPE;
