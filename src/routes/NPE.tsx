@@ -147,20 +147,10 @@ const NPEContent = ({
 const isValidNpeData = (data: NPEData): boolean => {
     const requiredKeys: (keyof NPEData)[] = ['common_info', 'noc_transfers', 'timestep_data'];
     const hasAllKeys = requiredKeys.every((key) => key in data);
-
-    if (!hasAllKeys) {
-        return false;
-    }
-
     const version = semverParse(data.common_info.version);
-
-    if (!version) {
-        return false;
-    }
-
     const expectedVersion = semverParse(NPE_DATA_VERSION);
 
-    if (version?.major !== expectedVersion?.major) {
+    if (!hasAllKeys || version?.major !== expectedVersion?.major) {
         return false;
     }
 

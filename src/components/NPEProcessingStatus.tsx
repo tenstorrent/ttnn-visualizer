@@ -42,8 +42,8 @@ const PROCESSING_ERRORS = {
 };
 
 const NPEProcessingStatus = ({ expectedVersion, dataVersion, fetchError }: NPEProcessingStatusProps) => {
-    const matchedVersion = matchNpeDataVersion(dataVersion);
-    const errorType = getErrorType(fetchError, matchedVersion);
+    const compatibleVersion = getCompatibleNpeDataVersion(dataVersion);
+    const errorType = getErrorType(fetchError, compatibleVersion);
 
     return (
         <Callout
@@ -65,7 +65,7 @@ const NPEProcessingStatus = ({ expectedVersion, dataVersion, fetchError }: NPEPr
                                     Use {NPE_REPO_URL} to generate new NPE dataset or install an older version of the
                                     visualizer{' '}
                                     <code className='formatted-code'>
-                                        pip install ttnn-visualizer=={matchedVersion}
+                                        pip install ttnn-visualizer=={compatibleVersion}
                                     </code>
                                 </p>
                             </>
@@ -114,16 +114,14 @@ const getErrorType = (errorData: AxiosError | null, matchedVersion: string | nul
     return ErrorCodes.INVALID_NPE_DATA;
 };
 
-const matchNpeDataVersion = (version: string | null): string | null => {
+const getCompatibleNpeDataVersion = (version: string | null): string | null => {
     const parsedVersion = version ? semverParse(version) : null;
 
-    switch (parsedVersion) {
-        case null:
-        case undefined:
-            return '0.32.3'; // Version of the visualizer that supports old NPE data format
-        default:
-            return '';
+    if (!parsedVersion) {
+        return '0.32.3'; // Version of the visualizer that supports pre-version data format
     }
+
+    return null;
 };
 
 export default NPEProcessingStatus;
