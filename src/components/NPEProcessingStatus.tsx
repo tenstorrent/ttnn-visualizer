@@ -7,6 +7,7 @@ import { Callout, Intent } from '@blueprintjs/core';
 import { HttpStatusCode } from 'axios';
 import 'styles/components/NPEProcessingStatus.scss';
 import { semverParse } from '../functions/semverParse';
+import { NPE_DATA_VERSION } from '../definitions/NPEData';
 
 const NPE_REPO_URL = (
     <a
@@ -28,15 +29,20 @@ interface NPEProcessingStatusProps {
         };
     };
     hasUploadedFile?: boolean;
+    isInvalidData?: boolean;
 }
 
 enum ErrorCodes {
+    DEFAULT,
     INVALID_NPE_VERSION,
     INVALID_JSON,
     INVALID_NPE_DATA,
 }
 
 const PROCESSING_ERRORS = {
+    [ErrorCodes.DEFAULT]: {
+        title: 'Unknown error',
+    },
     [ErrorCodes.INVALID_NPE_VERSION]: {
         title: 'Invalid NPE version',
     },
@@ -54,23 +60,30 @@ const SHARED_PROPS = {
 };
 
 const NPEProcessingStatus = ({
-    expectedVersion,
     dataVersion,
     fetchErrorCode,
     hasUploadedFile,
+    isInvalidData,
 }: NPEProcessingStatusProps) => {
     if (!hasUploadedFile) {
-        return <Callout {...SHARED_PROPS}>See {NPE_REPO_URL} for details on how to generate NPE report files.</Callout>;
+        return (
+            <Callout
+                data-testid='npe-processing-initial'
+                {...SHARED_PROPS}
+            >
+                See {NPE_REPO_URL} for details on how to generate NPE report files.
+            </Callout>
+        );
     }
 
     const legacyVersion = getLegacyNpeVersion(dataVersion);
-    const errorType = getErrorType(legacyVersion, fetchErrorCode);
+    const errorType = getErrorType(legacyVersion, fetchErrorCode, isInvalidData);
 
     return (
         <Callout
             {...SHARED_PROPS}
             intent={Intent.WARNING}
-            title={PROCESSING_ERRORS?.[errorType]?.title || 'Unknown error'}
+            title={PROCESSING_ERRORS?.[errorType]?.title}
             className='npe-processing-status'
         >
             {(() => {
@@ -78,12 +91,12 @@ const NPEProcessingStatus = ({
                     case ErrorCodes.INVALID_NPE_VERSION:
                         return (
                             <>
-                                <p className='status-text'>
-                                    Current supported version is <u>{expectedVersion}</u>, uploaded data version is{' '}
+                                <p data-testid='npe-processing-invalid-version'>
+                                    Current supported version is <u>{NPE_DATA_VERSION}</u>, uploaded data version is{' '}
                                     <u>{dataVersion || 'null'}</u>.
                                 </p>
 
-                                <p className='status-text'>
+                                <p>
                                     Use {NPE_REPO_URL} to generate new NPE dataset or install an older version of the
                                     visualizer{' '}
                                     <code className='formatted-code'>pip install ttnn-visualizer=={legacyVersion}</code>
@@ -93,26 +106,24 @@ const NPEProcessingStatus = ({
                     case ErrorCodes.INVALID_JSON:
                         return (
                             <>
-                                <p className='status-text'>The uploaded data cannot be parsed as valid JSON.</p>
-                                <p className='status-text'>
-                                    Check the file contents or use {NPE_REPO_URL} to generate a new dataset.
+                                <p data-testid='npe-processing-invalid-json'>
+                                    The uploaded data cannot be parsed as valid JSON.
                                 </p>
+                                <p>Check the file contents or use {NPE_REPO_URL} to generate a new dataset.</p>
                             </>
                         );
                     case ErrorCodes.INVALID_NPE_DATA:
                         return (
                             <>
-                                <p className='status-text'>Unable to validate uploaded NPE data.</p>
-                                <p className='status-text'>Use {NPE_REPO_URL} to generate a new dataset.</p>
+                                <p data-testid='npe-processing-invalid-data'>Unable to validate uploaded NPE data.</p>
+                                <p>Use {NPE_REPO_URL} to generate a new dataset.</p>
                             </>
                         );
                     default:
                         return (
                             <>
-                                <p className='status-text'>An unknown error has occurred.</p>
-                                <p className='status-text'>
-                                    Please raise an issue at {NPE_REPO_URL} and include the relevant NPE data.
-                                </p>
+                                <p data-testid='npe-processing-unhandled-error'>An unknown error has occurred.</p>
+                                <p>Please raise an issue at {NPE_REPO_URL} and include the relevant NPE data.</p>
                             </>
                         );
                 }
@@ -121,7 +132,11 @@ const NPEProcessingStatus = ({
     );
 };
 
-const getErrorType = (legacyVersion: string | null, fetchErrorCode?: HttpStatusCode): ErrorCodes => {
+const getErrorType = (
+    legacyVersion: string | null,
+    fetchErrorCode?: HttpStatusCode,
+    isInvalidData?: boolean,
+): ErrorCodes => {
     if (fetchErrorCode === HttpStatusCode.UnprocessableEntity) {
         return ErrorCodes.INVALID_JSON;
     }
@@ -130,7 +145,11 @@ const getErrorType = (legacyVersion: string | null, fetchErrorCode?: HttpStatusC
         return ErrorCodes.INVALID_NPE_VERSION;
     }
 
-    return ErrorCodes.INVALID_NPE_DATA;
+    if (isInvalidData) {
+        return ErrorCodes.INVALID_NPE_DATA;
+    }
+
+    return ErrorCodes.DEFAULT;
 };
 
 const getLegacyNpeVersion = (version: string | null): string | null => {
