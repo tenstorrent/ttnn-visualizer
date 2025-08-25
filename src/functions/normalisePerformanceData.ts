@@ -94,9 +94,10 @@ function alignByOpCode(
         while (arr.length < maxLen) {
             // Use the largest array as a template for id/op_code/raw_op_code
             const largestArr = aligned.reduce((a, b) => (a.length > b.length ? a : b));
-            const id = largestArr[arr.length]?.id ?? null;
-            const opCode = largestArr[arr.length]?.op_code ?? '';
-            const rawOpCode = largestArr[arr.length]?.raw_op_code ?? '';
+            const targetRow = largestArr[arr.length];
+            const id = targetRow?.id ?? null;
+            const opCode = targetRow?.op_code ?? '';
+            const rawOpCode = targetRow?.raw_op_code ?? '';
             const opCodeMessage = getMissingOpPrefix(opCode);
             const rawOpCodeMessage = getMissingOpPrefix(rawOpCode);
 
