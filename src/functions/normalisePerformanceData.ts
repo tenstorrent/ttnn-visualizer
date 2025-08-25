@@ -4,14 +4,17 @@
 
 import { TypedPerfTableRow } from './sortAndFilterPerfTableData';
 
+const MISSING_OP_STRING = 'MISSING';
+const MISSING_PREFIX = `${MISSING_OP_STRING} -`;
+
 const PLACEHOLDER: TypedPerfTableRow = {
     id: null,
     global_call_count: null,
     advice: [],
     total_percent: null,
     bound: '',
-    op_code: 'MISSING',
-    raw_op_code: 'MISSING',
+    op_code: MISSING_OP_STRING,
+    raw_op_code: MISSING_OP_STRING,
     device_time: null,
     op_to_op_gap: null,
     cores: null,
@@ -33,8 +36,6 @@ const PLACEHOLDER: TypedPerfTableRow = {
     pm_ideal_ns: '',
 };
 
-const MISSING_PREFIX = 'MISSING -';
-
 function alignByOpCode(
     refData: TypedPerfTableRow[],
     dataToAlign: TypedPerfTableRow[][],
@@ -42,8 +43,9 @@ function alignByOpCode(
     maxMissingRatio = 0.3,
 ): { data: TypedPerfTableRow[][]; missingRows: TypedPerfTableRow[] } {
     const missingRows = new Map<string, TypedPerfTableRow>();
-    const missingCounts = new Array(dataToAlign.length).fill(0); // Tracks how many placeholder rows have been inserted for each dataset
-    const currentIndexes = new Array(dataToAlign.length).fill(0); // Tracks the current index/position in each dataset as the alignment proceeds.
+    const missingCounts = Array(dataToAlign.length).fill(0); // Tracks how many placeholder rows have been inserted for each dataset
+    const currentIndexes = Array(dataToAlign.length).fill(0); // Tracks the current index/position in each dataset as the alignment proceeds
+    // aligned[0] is the reference, aligned[1..n] are the datasets
     const aligned: TypedPerfTableRow[][] = [[], ...dataToAlign.map(() => [])];
 
     let refIndex = 0;
@@ -53,7 +55,7 @@ function alignByOpCode(
         const refOp = refRow.raw_op_code;
         let allMatched = true;
 
-        aligned[0].push({ ...refRow });
+        aligned[0].push(refRow);
 
         for (let dataIndex = 0; dataIndex < dataToAlign.length; dataIndex++) {
             const dataset = dataToAlign[dataIndex];
@@ -98,26 +100,32 @@ function alignByOpCode(
         refIndex++;
     }
 
-    // Padding to ensure all arrays are same length
+    // Pad all arrays to the same length
     const maxLen = Math.max(...aligned.map((arr) => arr.length));
+
     for (const arr of aligned) {
         while (arr.length < maxLen) {
+            // Use the largest array as a template for id/op_code/raw_op_code
             const largestArr = aligned.reduce((a, b) => (a.length > b.length ? a : b));
-
-            const id = largestArr[arr.length]?.id || null;
-            const opCode = largestArr[arr.length]?.op_code || '';
-            const rawOpCode = largestArr[arr.length]?.raw_op_code || '';
-
+            const id = largestArr[arr.length]?.id ?? null;
+            const opCode = largestArr[arr.length]?.op_code ?? '';
+            const rawOpCode = largestArr[arr.length]?.raw_op_code ?? '';
             const opCodeMessage = `${MISSING_PREFIX} ${opCode}`;
             const rawOpCodeMessage = `${MISSING_PREFIX} ${rawOpCode}`;
 
-            arr.push({ ...PLACEHOLDER, id, op_code: opCodeMessage, raw_op_code: rawOpCodeMessage });
+            arr.push({
+                ...PLACEHOLDER,
+                id,
+                op_code: opCodeMessage,
+                raw_op_code: rawOpCodeMessage,
+            });
         }
     }
 
     // Discard datasets with too many missing rows
     for (let dataIndex = 0; dataIndex < dataToAlign.length; dataIndex++) {
-        const ratio = missingCounts[dataIndex] / maxLen;
+        const ratio = maxLen === 0 ? 0 : missingCounts[dataIndex] / maxLen;
+
         if (ratio > maxMissingRatio) {
             aligned[dataIndex + 1] = [];
         }
@@ -125,7 +133,7 @@ function alignByOpCode(
 
     return {
         data: aligned,
-        missingRows: [...missingRows.values()],
+        missingRows: Array.from(missingRows.values()),
     };
 }
 
