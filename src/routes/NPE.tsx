@@ -77,7 +77,6 @@ const NPE: FC = () => {
                 ) : (
                     <NPEProcessingStatus
                         dataVersion={dataVersion}
-                        fetchErrorCode={processingError?.status}
                         hasUploadedFile={hasUploadedFile}
                         isInvalidData
                     />
@@ -85,8 +84,8 @@ const NPE: FC = () => {
             ) : (
                 <NPEProcessingStatus
                     dataVersion={dataVersion}
-                    fetchErrorCode={processingError?.status}
                     hasUploadedFile={hasUploadedFile}
+                    fetchErrorCode={processingError?.status}
                 />
             )}
         </>
