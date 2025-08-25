@@ -32,14 +32,6 @@ const FORM_GROUP = {
     subLabel: 'Sub label here',
 };
 
-const NPE_INVALID_DATA = {
-    common_info: {
-        version: '',
-    },
-    noc_transfers: [],
-    timestep_data: [],
-};
-
 // const FILE_DOWNLOAD_STATUS = {
 //     currentFileName: 'foo.tar.gz',
 //     numberOfFiles: 12,
@@ -557,15 +549,24 @@ export default function Styleguide() {
 
             <div className='container'>
                 <h3>NPE Processing Status</h3>
-                <NPEProcessingStatus />
+                <NPEProcessingStatus dataVersion={null} />
 
                 <br />
                 <br />
 
                 <NPEProcessingStatus
-                    matchedVersion='0.9.0'
+                    hasUploadedFile
+                    dataVersion='0.1.0'
+                />
+
+                <br />
+                <br />
+
+                <NPEProcessingStatus
+                    fetchErrorCode={422}
+                    hasUploadedFile
                     expectedVersion='1.0.0'
-                    npeData={NPE_INVALID_DATA}
+                    dataVersion='1.0.0'
                 />
             </div>
         </>

@@ -66,9 +66,10 @@
     },
     "extensions": {
         "recommendations": [
-            "esbenp.prettier-vscode",
             "dbaeumer.vscode-eslint",
+            "esbenp.prettier-vscode",
             "Gruntfuggly.todo-tree",
+            "ms-python.black-formatter",
             "ms-python.python",
             "streetsidesoftware.code-spell-checker",
             "stylelint.vscode-stylelint"
