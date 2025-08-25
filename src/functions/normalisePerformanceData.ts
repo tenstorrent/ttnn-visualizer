@@ -5,8 +5,6 @@
 import { TypedPerfTableRow } from './sortAndFilterPerfTableData';
 
 const MISSING_OP_STRING = 'MISSING';
-const MISSING_PREFIX = `${MISSING_OP_STRING} -`;
-
 const PLACEHOLDER: TypedPerfTableRow = {
     id: null,
     global_call_count: null,
@@ -48,9 +46,7 @@ function alignByOpCode(
     // aligned[0] is the reference, aligned[1..n] are the datasets
     const aligned: TypedPerfTableRow[][] = [[], ...dataToAlign.map(() => [])];
 
-    let refIndex = 0;
-
-    while (refIndex < refData.length) {
+    for (let refIndex = 0; refIndex < refData.length; refIndex++) {
         const refRow = refData[refIndex];
         const refOp = refRow.raw_op_code;
         let allMatched = true;
@@ -62,20 +58,13 @@ function alignByOpCode(
             const currentIndex = currentIndexes[dataIndex];
             let matchFound = false;
 
-            for (let lookahead = 0; lookahead <= threshold; lookahead++) {
-                if (currentIndex + lookahead >= dataset.length) {
-                    break;
-                }
+            for (let lookahead = 0; lookahead <= threshold && currentIndex + lookahead < dataset.length; lookahead++) {
+                const candidate = dataset[currentIndex + lookahead];
 
-                const otherOp = dataset[currentIndex + lookahead].raw_op_code;
-
-                if (otherOp === refOp) {
-                    // Found match, insert MISSING for skipped ops
-                    for (let current = 0; current < lookahead; current++) {
-                        missingCounts[dataIndex]++;
-                    }
-
-                    aligned[dataIndex + 1].push({ ...dataset[currentIndex + lookahead] });
+                if (candidate.raw_op_code === refOp) {
+                    // Insert MISSING for skipped ops (if any)
+                    missingCounts[dataIndex] += lookahead;
+                    aligned[dataIndex + 1].push(candidate);
                     currentIndexes[dataIndex] = currentIndex + lookahead + 1;
                     matchFound = true;
                     break;
@@ -87,8 +76,8 @@ function alignByOpCode(
                 allMatched = false;
                 aligned[dataIndex + 1].push({
                     ...PLACEHOLDER,
-                    op_code: `${MISSING_PREFIX} ${refOp}`,
-                    raw_op_code: `${MISSING_PREFIX} ${refOp}`,
+                    op_code: getMissingOpPrefix(refOp),
+                    raw_op_code: getMissingOpPrefix(refOp),
                 });
             }
         }
@@ -96,8 +85,6 @@ function alignByOpCode(
         if (!allMatched && !missingRows.has(refOp)) {
             missingRows.set(refOp, refRow);
         }
-
-        refIndex++;
     }
 
     // Pad all arrays to the same length
@@ -110,8 +97,8 @@ function alignByOpCode(
             const id = largestArr[arr.length]?.id ?? null;
             const opCode = largestArr[arr.length]?.op_code ?? '';
             const rawOpCode = largestArr[arr.length]?.raw_op_code ?? '';
-            const opCodeMessage = `${MISSING_PREFIX} ${opCode}`;
-            const rawOpCodeMessage = `${MISSING_PREFIX} ${rawOpCode}`;
+            const opCodeMessage = getMissingOpPrefix(opCode);
+            const rawOpCodeMessage = getMissingOpPrefix(rawOpCode);
 
             arr.push({
                 ...PLACEHOLDER,
@@ -136,5 +123,7 @@ function alignByOpCode(
         missingRows: Array.from(missingRows.values()),
     };
 }
+
+const getMissingOpPrefix = (opCode: string): string => `${MISSING_OP_STRING} - ${opCode}`;
 
 export default alignByOpCode;

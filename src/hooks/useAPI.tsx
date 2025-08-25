@@ -32,6 +32,7 @@ import {
     activeNpeOpTraceAtom,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
+    comparisonPerformanceReportListAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
@@ -811,10 +812,16 @@ export const usePerformanceReport = (name: string | null) => {
     }, [response.data]);
 };
 
-export const usePerformanceComparisonReport = (reportNames: string[] | null) => {
+export const usePerformanceComparisonReport = () => {
+    const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
+
+    const reportNames = useMemo(() => {
+        return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
+    }, [rawReportNames]);
+
     const response = useQuery({
         queryFn: async () => {
-            if (!reportNames) {
+            if (!reportNames || !Array.isArray(reportNames) || reportNames.length === 0) {
                 return [];
             }
 
@@ -824,18 +831,19 @@ export const usePerformanceComparisonReport = (reportNames: string[] | null) => 
         },
         queryKey: ['get-performance-comparison-report', reportNames],
         staleTime: Infinity,
-        enabled: reportNames !== null,
+        enabled: !!reportNames,
     });
 
-    return useMemo(() => {
+    const filteredData = useMemo(() => {
         if (response.data) {
-            const filtered = response.data.map((report: PerfTableRow[]) =>
+            return response.data.map((report: PerfTableRow[]) =>
                 report.slice().filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === '')),
             );
-            response.data = filtered;
         }
-        return response;
-    }, [response]);
+        return response.data;
+    }, [response.data]);
+
+    return useMemo(() => ({ ...response, data: filteredData }), [response, filteredData]);
 };
 
 export const useInstance = () => {
