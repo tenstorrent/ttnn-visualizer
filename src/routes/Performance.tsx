@@ -81,9 +81,7 @@ export default function Performance() {
         if (activePerformanceReport && comparisonReportList?.includes(activePerformanceReport)) {
             const filteredReports = comparisonReportList.filter((report) => report !== activePerformanceReport);
 
-            if (filteredReports !== comparisonReportList) {
-                setComparisonReportList(filteredReports.length === 0 ? null : filteredReports);
-            }
+            setComparisonReportList(filteredReports.length === 0 ? null : filteredReports);
         }
     }, [comparisonReportList, activePerformanceReport, setComparisonReportList]);
 
