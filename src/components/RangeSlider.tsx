@@ -174,6 +174,7 @@ function Range() {
                                 fill={false}
                                 disabled={!isPerformanceRoute}
                                 size='small'
+                                aria-label='Performance min value'
                             />
                             <InputGroup
                                 value={selectedPerformanceRange[1].toString()}
@@ -187,6 +188,7 @@ function Range() {
                                 fill={false}
                                 disabled={!isPerformanceRoute}
                                 size='small'
+                                aria-label='Performance max value'
                             />
                         </div>
                     </div>
@@ -206,6 +208,10 @@ function Range() {
                                 labelRenderer={(id, options) =>
                                     getPerformanceLabel(id, perfData, options?.isHandleTooltip)
                                 }
+                                handleHtmlProps={{
+                                    start: { 'aria-label': 'Performance min range handle' },
+                                    end: { 'aria-label': 'Performance max range handle' },
+                                }}
                             />
                             <p>Performance</p>
                         </div>
@@ -219,6 +225,7 @@ function Range() {
                                     onClick={() => (isInSync ? resetSliders() : setSelectedPerformanceRange(perfRange))}
                                     disabled={!isPerformanceRoute}
                                     size='small'
+                                    aria-label='Reset performance range'
                                 />
                             </Tooltip>
                         )}
@@ -242,6 +249,7 @@ function Range() {
                                 fill={false}
                                 disabled={shouldDisableOpRange}
                                 size='small'
+                                aria-label='Operation min value'
                             />
                             <InputGroup
                                 value={selectedOperationRange[1].toString()}
@@ -255,6 +263,7 @@ function Range() {
                                 fill={false}
                                 disabled={shouldDisableOpRange}
                                 size='small'
+                                aria-label='Operation max value'
                             />
                         </div>
                     </div>
@@ -273,6 +282,10 @@ function Range() {
                             labelStepSize={getStepSize(opMax)}
                             disabled={shouldDisableOpRange}
                             labelRenderer={(id, options) => getOperationLabel(id, operations, options?.isHandleTooltip)}
+                            handleHtmlProps={{
+                                start: { 'aria-label': 'Operation min range handle' },
+                                end: { 'aria-label': 'Operation max range handle' },
+                            }}
                         />
                         <p>Operations</p>
                     </div>
@@ -285,6 +298,7 @@ function Range() {
                             onClick={() => (isInSync ? resetSliders() : setSelectedOperationRange(operationRange))}
                             disabled={shouldDisableOpRange}
                             size='small'
+                            aria-label='Reset operation range'
                         />
                     </Tooltip>
                 )}

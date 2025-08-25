@@ -99,7 +99,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     return (
         <Dialog
             className='remote-connection-dialog'
-            title={title}
+            title={title} // Blueprint Dialog renders a H6 here regardless of what markup you pass here
             icon='info-sign'
             canOutsideClickClose={false}
             isOpen={open}
@@ -109,42 +109,50 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 <FormGroup
                     label='Name'
                     subLabel='Connection name'
+                    labelFor='remote-connection-name'
                 >
                     <InputGroup
+                        id='remote-connection-name'
                         className='bp6-light'
                         key='name'
                         value={connection.name}
                         onChange={(e) => setConnection({ ...connection, name: e.target.value })}
                     />
                 </FormGroup>
+
                 <FormGroup
                     label='SSH Host'
                     subLabel='SSH host name (e.g., localhost)'
+                    labelFor='remote-ssh-host'
                 >
                     <InputGroup
-                        key='host'
+                        id='remote-ssh-host'
                         value={connection.host}
                         onChange={(e) => setConnection({ ...connection, host: e.target.value })}
                     />
                 </FormGroup>
+
                 <FormGroup
                     label='Username'
                     subLabel='Username to connect with'
+                    labelFor='remote-ssh-username'
                 >
                     <InputGroup
-                        key='username'
+                        id='remote-ssh-username'
                         value={connection.username ?? ''}
                         onChange={(e) => {
                             setConnection({ ...connection, username: e.target.value });
                         }}
                     />
                 </FormGroup>
+
                 <FormGroup
                     label='SSH Port'
                     subLabel='Port to use for the SSH connection (e.g., port 22)'
+                    labelFor='remote-ssh-port'
                 >
                     <InputGroup
-                        key='port'
+                        id='remote-ssh-port'
                         value={connection.port?.toString() ?? ''}
                         onChange={(e) => {
                             const number = Number.parseInt(e.target.value, 10);
@@ -161,9 +169,10 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 <FormGroup
                     label='Memory report folder path'
                     subLabel='Path to a remote folder containing memory reports (e.g., "/<PATH TO TT METAL>/generated/ttnn/reports/")'
+                    labelFor='remote-memory-path'
                 >
                     <InputGroup
-                        key='path'
+                        id='remote-memory-path'
                         value={connection.profilerPath}
                         onChange={(e) => setConnection({ ...connection, profilerPath: e.target.value })}
                     />
@@ -172,9 +181,10 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
                 <FormGroup
                     label='Performance report folder path'
                     subLabel='Path to a remote folder containing performance reports (e.g., "/<PATH TO TT METAL>/generated/profiler/reports/")'
+                    labelFor='remote-performance-path'
                 >
                     <InputGroup
-                        key='path'
+                        id='remote-performance-path'
                         value={connection.performancePath}
                         onChange={(e) => setConnection({ ...connection, performancePath: e.target.value })}
                     />
