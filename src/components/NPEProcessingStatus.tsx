@@ -87,10 +87,9 @@ const NPEProcessingStatus = ({ expectedVersion, dataVersion, fetchError }: NPEPr
                     default:
                         return (
                             <>
-                                <p className='status-text'>A previously unknown error has occurred.</p>
+                                <p className='status-text'>An unknown error has occurred.</p>
                                 <p className='status-text'>
-                                    Please contact the development team by creating an issue at {NPE_REPO_URL} with as
-                                    much detail as possible and including the relevant NPE data.
+                                    Please raise an issue at {NPE_REPO_URL} and include the relevant NPE data.
                                 </p>
                             </>
                         );
