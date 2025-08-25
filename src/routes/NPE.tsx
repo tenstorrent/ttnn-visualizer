@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
-import { Button, ButtonVariant, Callout, MenuItem } from '@blueprintjs/core';
+import { Button, ButtonVariant, MenuItem } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { useParams } from 'react-router';
@@ -21,18 +21,8 @@ import npeDemoDataSinglechip from '../assets/data/npe-demo-single.json';
 import npeDemoDataMultichip from '../assets/data/npe-demo-multi.json';
 import getServerConfig from '../functions/getServerConfig';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
-import 'styles/routes/NPE.scss';
 
 const NPE_DATA_VERSION = '1.0.0';
-const NPE_REPO_URL = (
-    <a
-        target='_blank'
-        href='https://github.com/tenstorrent/tt-npe'
-        rel='noreferrer'
-    >
-        tt-npe
-    </a>
-);
 
 enum NPEDemo {
     SINGLE_CHIP = 'singlechip',
@@ -156,18 +146,14 @@ const NPE: React.FC = () => {
                 isValidNpeData(npeData) ? (
                     <NPEView npeData={npeData} />
                 ) : (
-                    <div className='npe-message-container'>
-                        <NPEProcessingStatus
-                            matchedVersion={matchedVersion}
-                            expectedVersion={NPE_DATA_VERSION}
-                            npeData={npeData}
-                        />
-                    </div>
+                    <NPEProcessingStatus
+                        matchedVersion={matchedVersion}
+                        expectedVersion={NPE_DATA_VERSION}
+                        npeData={npeData}
+                    />
                 )
             ) : (
-                <div className='npe-message-container'>
-                    <Callout compact>See {NPE_REPO_URL} for details on how to generate NPE report files.</Callout>
-                </div>
+                <NPEProcessingStatus />
             )}
         </>
     );

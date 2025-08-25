@@ -5,7 +5,10 @@
 @use '../definitions/colours' as *;
 
 .npe-processing-status {
-    .status-text {
+    display: inline-block;
+    width: auto;
+
+    p {
         margin-bottom: 0;
     }
 

@@ -25,10 +25,19 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import MemoryTag from '../components/MemoryTag';
+import NPEProcessingStatus from '../components/NPEProcessingStatus';
 
 const FORM_GROUP = {
     label: 'Form label',
     subLabel: 'Sub label here',
+};
+
+const NPE_INVALID_DATA = {
+    common_info: {
+        version: '',
+    },
+    noc_transfers: [],
+    timestep_data: [],
 };
 
 // const FILE_DOWNLOAD_STATUS = {
@@ -544,6 +553,20 @@ export default function Styleguide() {
                 <h3>Loading spinner</h3>
 
                 <LoadingSpinner />
+            </div>
+
+            <div className='container'>
+                <h3>NPE Processing Status</h3>
+                <NPEProcessingStatus />
+
+                <br />
+                <br />
+
+                <NPEProcessingStatus
+                    matchedVersion='0.9.0'
+                    expectedVersion='1.0.0'
+                    npeData={NPE_INVALID_DATA}
+                />
             </div>
         </>
     );
