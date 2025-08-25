@@ -595,8 +595,17 @@ export default function Styleguide() {
                 <br />
 
                 <NPEProcessingStatus
+                    dataVersion={null}
                     hasUploadedFile
-                    dataVersion='0.1.0'
+                />
+
+                <br />
+                <br />
+
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion='1.0.0'
+                    isInvalidData
                 />
 
                 <br />
@@ -605,8 +614,16 @@ export default function Styleguide() {
                 <NPEProcessingStatus
                     fetchErrorCode={422}
                     hasUploadedFile
-                    expectedVersion='1.0.0'
                     dataVersion='1.0.0'
+                />
+
+                <br />
+                <br />
+
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion='1.0.0'
+                    fetchErrorCode={500}
                 />
             </div>
         </>

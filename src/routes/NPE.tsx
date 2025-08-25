@@ -17,8 +17,7 @@ import { semverParse } from '../functions/semverParse';
 import getServerConfig from '../functions/getServerConfig';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
-
-const NPE_DATA_VERSION = '1.0.0';
+import { NPE_DATA_VERSION } from '../definitions/NPEData';
 
 const NPE: FC = () => {
     const { filepath } = useParams<{ filepath?: string }>();
@@ -77,18 +76,16 @@ const NPE: FC = () => {
                     <NPEView npeData={npeData} />
                 ) : (
                     <NPEProcessingStatus
-                        expectedVersion={NPE_DATA_VERSION}
                         dataVersion={dataVersion}
-                        fetchErrorCode={processingError?.status}
                         hasUploadedFile={hasUploadedFile}
+                        isInvalidData
                     />
                 )
             ) : (
                 <NPEProcessingStatus
-                    expectedVersion={NPE_DATA_VERSION}
                     dataVersion={dataVersion}
-                    fetchErrorCode={processingError?.status}
                     hasUploadedFile={hasUploadedFile}
+                    fetchErrorCode={processingError?.status}
                 />
             )}
         </>
