@@ -17,7 +17,9 @@ interface FolderFieldsetProps {
 const FolderFieldset = ({ title, icon, isFeatureDisabled = false, children }: FolderFieldsetProps) => {
     return (
         <fieldset className='folder-fieldset'>
-            <legend className='legend-title'>{title}</legend>
+            <legend>
+                <h2 className='legend-title'>{title}</h2>
+            </legend>
 
             <Icon
                 className='legend-icon'

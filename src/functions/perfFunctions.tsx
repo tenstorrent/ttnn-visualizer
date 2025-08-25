@@ -57,6 +57,7 @@ export const formatCell = (
                 <Icon
                     color='#ff0'
                     icon={IconNames.WARNING_SIGN}
+                    title='Op with > 6µs dispatch latency'
                 />
             </Tooltip>
         );

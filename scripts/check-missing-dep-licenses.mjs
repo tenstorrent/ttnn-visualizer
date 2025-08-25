@@ -3,20 +3,15 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import fs from 'fs';
-import findMissingDepLicenses from './find-missing-dep-licenses.mjs';
+import fs, { readFileSync } from 'fs';
+import findMissingJsDepLicenses from './find-missing-js-dep-licenses.mjs';
+
+const LICENSE_REGEX = /^-\s+([^\s–]+)\s*-\s*([^-–]+?(?: or [^-–]+)?)\s*-\s*(.+\S[^-])$/gm;
 
 const checkMissingDepLicenses = () => {
-    // Read package.json
-    const PKG = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-    const DIRECT_DEPS = [...Object.keys(PKG.dependencies || {}), ...Object.keys(PKG.devDependencies || {})];
-
-    // Read LICENSE
-    const LICENSE_FILE = fs.readFileSync('LICENSE', 'utf8');
-
-    const LICENSE_REGEX = /^-\s+([^\s–]+)\s*-\s*([^-–]+?(?: or [^-–]+)?)\s*-\s*(.+\S[^-])$/gm;
-
-    // Read stdin (pnpm licenses ls --json output)
+    const packages = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    const directDeps = [...Object.keys(packages.dependencies || {}), ...Object.keys(packages.devDependencies || {})];
+    const licenseFile = fs.readFileSync('LICENSE', 'utf8');
     let input = '';
 
     process.stdin.on('data', (chunk) => {
@@ -24,11 +19,10 @@ const checkMissingDepLicenses = () => {
     });
 
     process.stdin.on('end', async () => {
-        // Parse output from pnpm licenses ls --json
-        const packages = Object.values(JSON.parse(input)).flat() || [];
+        const jsPackages = Object.values(JSON.parse(input)).flat() || [];
         const depLicenses = {};
 
-        for (const entry of packages) {
+        for (const entry of jsPackages) {
             const { name, homepage } = entry;
 
             if (!depLicenses[name]) {
@@ -39,14 +33,13 @@ const checkMissingDepLicenses = () => {
             }
         }
 
-        const missingDeps = DIRECT_DEPS.filter((dep) => {
-            // Find a line in LICENSE_FILE that includes dep and matches LICENSE_REGEX
+        const missingDeps = directDeps.filter((dep) => {
             let found = false;
             let match;
 
-            for (const line of LICENSE_FILE.split('\n')) {
+            for (const line of licenseFile.split('\n')) {
                 match = LICENSE_REGEX.exec(line);
-                LICENSE_REGEX.lastIndex = 0; // Reset regex state for each line
+                LICENSE_REGEX.lastIndex = 0;
 
                 if (match && match[1] === dep) {
                     found = true;
@@ -54,7 +47,8 @@ const checkMissingDepLicenses = () => {
                 }
             }
 
-            LICENSE_REGEX.lastIndex = 0; // Reset regex state for next dep
+            LICENSE_REGEX.lastIndex = 0;
+
             return !found;
         });
 
@@ -66,7 +60,7 @@ const checkMissingDepLicenses = () => {
             const fixFlag = args.some((arg) => arg === '--fix=true');
 
             if (fixFlag) {
-                await findMissingDepLicenses(missingDeps, depLicenses);
+                await findMissingJsDepLicenses(missingDeps, depLicenses);
             }
 
             process.exit(1);
@@ -77,6 +71,63 @@ const checkMissingDepLicenses = () => {
     });
 };
 
+const checkMissingDepLicensesPython = () => {
+    const pyprojectPath = 'pyproject.toml';
+    const licenseFile = fs.readFileSync('LICENSE', 'utf8');
+
+    if (fs.existsSync(pyprojectPath)) {
+        const pyprojectContent = readFileSync(pyprojectPath, 'utf8');
+        const depRegex = /^\s*(?:dependencies|dev)\s*=\s*\[(.*?)\]/gms;
+        const deps = [];
+        let match = depRegex.exec(pyprojectContent);
+
+        while (match !== null) {
+            const depsList = match[1]
+                .split(',')
+                .map((dep) =>
+                    dep
+                        .replace(/["'\s]/g, '')
+                        .split('=')[0]
+                        .replace(/[><=~!^]=?.*$/, '')
+                        .trim(),
+                )
+                .filter(Boolean);
+
+            deps.push(...depsList);
+            match = depRegex.exec(pyprojectContent);
+        }
+
+        const missingDeps = deps.filter((dep) => {
+            let found = false;
+            let pyMatch;
+
+            for (const line of licenseFile.split('\n')) {
+                pyMatch = LICENSE_REGEX.exec(line);
+                LICENSE_REGEX.lastIndex = 0;
+
+                if (pyMatch && pyMatch[1] === dep) {
+                    found = true;
+                    break;
+                }
+            }
+
+            LICENSE_REGEX.lastIndex = 0;
+
+            return !found;
+        });
+
+        if (missingDeps.length) {
+            console.error(JSON.stringify(missingDeps, null, 2));
+            console.error(`\n${missingDeps.length} missing licenses found in LICENSE file.\n`);
+            process.exit(1);
+        } else {
+            console.info('No missing licenses found for Python dependencies.\n');
+            process.exit(0);
+        }
+    }
+};
+
 checkMissingDepLicenses();
+checkMissingDepLicensesPython();
 
 export default checkMissingDepLicenses;

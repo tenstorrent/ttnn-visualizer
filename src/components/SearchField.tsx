@@ -41,6 +41,7 @@ function SearchField({
                                 onQueryChanged('');
                             }}
                             icon={IconNames.CROSS}
+                            aria-label='Clear search query'
                         />
                     ) : (
                         <Icon icon={IconNames.SEARCH} />

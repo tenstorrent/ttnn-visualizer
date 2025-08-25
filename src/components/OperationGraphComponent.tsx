@@ -292,20 +292,32 @@ const OperationGraph: React.FC<{
 
     const focusedNode = currentOperationId ?? operationList[0].id;
 
+    const previousOperation = getPreviousOperationId(currentOperationId);
+    const nextOperation = getNextOperationId(currentOperationId);
+
     return (
         <div className='operation-graph-component'>
             <div className='operation-graph-header'>
                 <div className='operation-graph-nav'>
                     <Tooltip
                         placement={PopoverPosition.TOP}
-                        content={`Go to previous operation ${getPreviousOperationId(currentOperationId)}`}
+                        content={
+                            previousOperation
+                                ? `Go to previous operation ${previousOperation}`
+                                : 'No previous operation'
+                        }
                         disabled={isLoading}
                     >
                         <Button
                             icon={IconNames.ArrowLeft}
-                            onClick={() => focusOnNode(getPreviousOperationId(currentOperationId) || 0)}
-                            disabled={!getPreviousOperationId(currentOperationId) || isLoading}
+                            onClick={() => focusOnNode(previousOperation || 0)}
+                            disabled={!previousOperation || isLoading}
                             variant='outlined'
+                            aria-label={
+                                previousOperation
+                                    ? `Go to previous operation ${previousOperation}`
+                                    : 'No previous operation'
+                            }
                         />
                     </Tooltip>
                     <Tooltip
@@ -317,20 +329,22 @@ const OperationGraph: React.FC<{
                             variant='outlined'
                             onClick={() => focusOnNode(focusedNode)}
                             disabled={isLoading}
+                            aria-label={`Center on operation ${focusedNode}`}
                         >
                             {focusedNode}
                         </Button>
                     </Tooltip>
                     <Tooltip
                         placement={PopoverPosition.TOP}
-                        content={`Go to next operation ${getNextOperationId(currentOperationId)}`}
+                        content={nextOperation ? `Go to next operation ${nextOperation}` : 'No next operation'}
                         disabled={isLoading}
                     >
                         <Button
                             icon={IconNames.ArrowRight}
-                            onClick={() => focusOnNode(getNextOperationId(currentOperationId) || 0)}
-                            disabled={!getNextOperationId(currentOperationId) || isLoading}
+                            onClick={() => focusOnNode(nextOperation || 0)}
+                            disabled={!nextOperation || isLoading}
                             variant='outlined'
+                            aria-label={nextOperation ? `Go to next operation ${nextOperation}` : 'No next operation'}
                         />
                     </Tooltip>
                     <SearchField
@@ -354,6 +368,7 @@ const OperationGraph: React.FC<{
                         }}
                         disabled={isLoading || filteredNodeIdList.length === 0}
                         variant='outlined'
+                        aria-label='Previous result'
                     />
                     {currentFilteredIndex !== null && filteredNodeIdList.length > 0 ? currentFilteredIndex + 1 : 0}/
                     {filteredNodeIdList.length}
@@ -364,6 +379,7 @@ const OperationGraph: React.FC<{
                         }}
                         disabled={isLoading || filteredNodeIdList.length === 0}
                         variant='outlined'
+                        aria-label='Next result'
                     />
                     <Switch
                         checked={filterDeallocate}
@@ -375,6 +391,9 @@ const OperationGraph: React.FC<{
                 <div className='slider-wrapper'>
                     <Label disabled={isLoading}>Scale</Label>
                     <Slider
+                        handleHtmlProps={{
+                            'aria-label': 'Scale slider',
+                        }}
                         min={0.1}
                         max={3}
                         labelRenderer={(value) => `${value.toFixed(2)}`}

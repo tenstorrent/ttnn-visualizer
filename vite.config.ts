@@ -17,6 +17,7 @@ export default defineConfig(({ command }) => {
         build: {
             outDir: './backend/ttnn_visualizer/static/',
             emptyOutDir: true,
+            target: 'es2022',
         },
         base: command === 'serve' ? '/' : '/static/',
         define: {

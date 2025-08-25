@@ -153,7 +153,7 @@ export default function Performance() {
                                     key={`${index}-comparison-report-selector`}
                                     folderList={folderList}
                                     reportIndex={index}
-                                    label={index === 0 ? <h3 className='label'>Compare</h3> : null}
+                                    label={index === 0 ? <h2 className='label'>Compare</h2> : null}
                                     subLabel={index === 0 ? 'Select from performance reports to compare' : ''}
                                 />
                             ))}
