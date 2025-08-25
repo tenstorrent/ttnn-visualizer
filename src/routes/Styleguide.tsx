@@ -25,6 +25,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import MemoryTag from '../components/MemoryTag';
+import NPEProcessingStatus from '../components/NPEProcessingStatus';
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -544,6 +545,29 @@ export default function Styleguide() {
                 <h3>Loading spinner</h3>
 
                 <LoadingSpinner />
+            </div>
+
+            <div className='container'>
+                <h3>NPE Processing Status</h3>
+                <NPEProcessingStatus dataVersion={null} />
+
+                <br />
+                <br />
+
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion='0.1.0'
+                />
+
+                <br />
+                <br />
+
+                <NPEProcessingStatus
+                    fetchErrorCode={422}
+                    hasUploadedFile
+                    expectedVersion='1.0.0'
+                    dataVersion='1.0.0'
+                />
             </div>
         </>
     );

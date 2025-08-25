@@ -1,9 +1,10 @@
+/* eslint-disable react/jsx-props-no-spreading */
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Callout, Intent } from '@blueprintjs/core';
-import { AxiosError, HttpStatusCode } from 'axios';
+import { HttpStatusCode } from 'axios';
 import 'styles/components/NPEProcessingStatus.scss';
 import { semverParse } from '../functions/semverParse';
 
@@ -18,9 +19,15 @@ const NPE_REPO_URL = (
 );
 
 interface NPEProcessingStatusProps {
-    expectedVersion: string;
-    fetchError: AxiosError | null;
+    expectedVersion?: string;
     dataVersion: string | null;
+    fetchErrorCode?: HttpStatusCode;
+    npeData?: {
+        common_info?: {
+            version?: string;
+        };
+    };
+    hasUploadedFile?: boolean;
 }
 
 enum ErrorCodes {
@@ -41,12 +48,27 @@ const PROCESSING_ERRORS = {
     },
 };
 
-const NPEProcessingStatus = ({ expectedVersion, dataVersion, fetchError }: NPEProcessingStatusProps) => {
+const SHARED_PROPS = {
+    className: 'npe-processing-status',
+    compact: true,
+};
+
+const NPEProcessingStatus = ({
+    expectedVersion,
+    dataVersion,
+    fetchErrorCode,
+    hasUploadedFile,
+}: NPEProcessingStatusProps) => {
+    if (!hasUploadedFile) {
+        return <Callout {...SHARED_PROPS}>See {NPE_REPO_URL} for details on how to generate NPE report files.</Callout>;
+    }
+
     const legacyVersion = getLegacyNpeVersion(dataVersion);
-    const errorType = getErrorType(fetchError, legacyVersion);
+    const errorType = getErrorType(legacyVersion, fetchErrorCode);
 
     return (
         <Callout
+            {...SHARED_PROPS}
             intent={Intent.WARNING}
             title={PROCESSING_ERRORS?.[errorType]?.title || 'Unknown error'}
             className='npe-processing-status'
@@ -99,8 +121,8 @@ const NPEProcessingStatus = ({ expectedVersion, dataVersion, fetchError }: NPEPr
     );
 };
 
-const getErrorType = (errorData: AxiosError | null, legacyVersion: string | null): ErrorCodes => {
-    if (errorData?.status === HttpStatusCode.UnprocessableEntity) {
+const getErrorType = (legacyVersion: string | null, fetchErrorCode?: HttpStatusCode): ErrorCodes => {
+    if (fetchErrorCode === HttpStatusCode.UnprocessableEntity) {
         return ErrorCodes.INVALID_JSON;
     }
 

@@ -71,7 +71,6 @@
             "Gruntfuggly.todo-tree",
             "ms-python.black-formatter",
             "ms-python.python",
-            "orta.vscode-jest",
             "streetsidesoftware.code-spell-checker",
             "stylelint.vscode-stylelint"
         ],
