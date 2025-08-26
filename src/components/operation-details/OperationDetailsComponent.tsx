@@ -382,7 +382,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 ) : (
                     <p className='not-found-message'>Operation {operationId} not found</p>
                 )}
-                {deviceOperationsGraphOpen && details.device_operations && (
+                {deviceOperationsGraphOpen && details.device_operations && details.device_operations.length && (
                     <GraphComponent
                         data={details.device_operations}
                         open={deviceOperationsGraphOpen}
