@@ -97,6 +97,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                 : { data: [], missingRows: [] },
         [processedRows, processedComparisonRows],
     );
+    const normalisedComparisonData = normalisedData.data.slice(1);
 
     const filteredRows = useMemo(
         () =>
@@ -275,8 +276,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             <PerfTable
                                 data={useNormalisedData ? normalisedData.data[0] : filteredRows}
                                 comparisonData={
-                                    useNormalisedData && normalisedData.data.length > 1
-                                        ? normalisedData.data.slice(1)
+                                    useNormalisedData && normalisedComparisonData.length > 0
+                                        ? normalisedComparisonData
                                         : []
                                 }
                                 filters={filters}
@@ -293,7 +294,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             id={report}
                             key={index}
                             icon={IconNames.TH_LIST}
-                            disabled={useNormalisedData && normalisedData?.data?.slice(1)?.[index]?.length === 0}
+                            disabled={useNormalisedData && normalisedComparisonData?.[index]?.length === 0}
                             title={
                                 normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
                                     <Tooltip
@@ -309,8 +310,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             panel={
                                 <PerfTable
                                     data={
-                                        useNormalisedData && normalisedData.data.length > 1
-                                            ? normalisedData.data.slice(1)[comparisonIndex]
+                                        useNormalisedData && normalisedComparisonData.length > 0
+                                            ? normalisedComparisonData[comparisonIndex]
                                             : filteredComparisonRows
                                     }
                                     comparisonData={
