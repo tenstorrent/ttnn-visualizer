@@ -358,13 +358,15 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                         {details.device_operations && (
                             <>
                                 <h3>Device operations</h3>
-                                <Button
-                                    icon={IconNames.Graph}
-                                    intent={Intent.PRIMARY}
-                                    onClick={() => setDeviceOperationsGraphOpen(true)}
-                                >
-                                    Device operations graph view
-                                </Button>
+                                {details.device_operations && details.device_operations.length && (
+                                    <Button
+                                        icon={IconNames.Graph}
+                                        intent={Intent.PRIMARY}
+                                        onClick={() => setDeviceOperationsGraphOpen(true)}
+                                    >
+                                        Device operations graph view
+                                    </Button>
+                                )}
                                 <DeviceOperationsFullRender
                                     deviceOperations={details.device_operations}
                                     details={details}
@@ -382,7 +384,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 ) : (
                     <p className='not-found-message'>Operation {operationId} not found</p>
                 )}
-                {deviceOperationsGraphOpen && details.device_operations && (
+                {deviceOperationsGraphOpen && details.device_operations && details.device_operations.length && (
                     <GraphComponent
                         data={details.device_operations}
                         open={deviceOperationsGraphOpen}
