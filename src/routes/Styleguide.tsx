@@ -16,6 +16,8 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
+import { useState } from 'react';
+import { useAtom } from 'jotai';
 import ConnectionTestMessage from '../components/report-selection/ConnectionTestMessage';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import ProgressBar from '../components/ProgressBar';
@@ -25,6 +27,9 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import MemoryTag from '../components/MemoryTag';
+import FileStatusOverlay from '../components/FileStatusOverlay';
+import { fileTransferProgressAtom } from '../store/app';
+import { FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 
 const FORM_GROUP = {
@@ -32,15 +37,43 @@ const FORM_GROUP = {
     subLabel: 'Sub label here',
 };
 
-// const FILE_DOWNLOAD_STATUS = {
-//     currentFileName: 'foo.tar.gz',
-//     numberOfFiles: 12,
-//     percentOfCurrent: 49,
-//     finishedFiles: 6,
-// };
+const FILE_DOWNLOAD_IN_PROGRESS = {
+    currentFileName: 'example_test_file_1.txt',
+    numberOfFiles: 3,
+    percentOfCurrent: 25,
+    finishedFiles: 1,
+    status: FileStatus.DOWNLOADING,
+};
+
+const FILE_DOWNLOAD_INACTIVE = {
+    currentFileName: '',
+    numberOfFiles: 0,
+    percentOfCurrent: 0,
+    finishedFiles: 0,
+    status: FileStatus.INACTIVE,
+};
+
+const TIME_REMAINING_INTERVAL = 100;
 
 export default function Styleguide() {
-    // const [showProgressOverlay, setShowProgressOverlay] = useState(false);
+    const [updateFileTransferProgress, setUpdateFileTransferProgress] = useAtom(fileTransferProgressAtom);
+    const [autoCloseTime, setAutoCloseTime] = useState(1000);
+    const [timeRemaining, setTimeRemaining] = useState(autoCloseTime);
+
+    const handleUpdateFileTransferProgress = () => {
+        setUpdateFileTransferProgress(FILE_DOWNLOAD_IN_PROGRESS);
+        setTimeRemaining(autoCloseTime);
+
+        const calculateRemainingTime = setInterval(() => {
+            setTimeRemaining((prev) => prev - TIME_REMAINING_INTERVAL);
+        }, TIME_REMAINING_INTERVAL);
+
+        setTimeout(() => {
+            setUpdateFileTransferProgress(FILE_DOWNLOAD_INACTIVE);
+            clearInterval(calculateRemainingTime);
+            setTimeRemaining(autoCloseTime);
+        }, autoCloseTime);
+    };
 
     useClearSelectedBuffer();
 
@@ -504,21 +537,28 @@ export default function Styleguide() {
                 />
             </div>
 
-            {/* TODO: Get these working again - https://github.com/tenstorrent/ttnn-visualizer/issues/740 */}
-            {/* <div className='container'>
-                <Button
-                    onClick={() => setShowProgressOverlay(true)}
-                    intent={Intent.PRIMARY}
-                >
-                    File status overlay
-                </Button>
+            <div className='container flex'>
+                <FormGroup label='File Status Overlay auto close time (ms)'>
+                    <InputGroup
+                        type='number'
+                        value={autoCloseTime.toString()}
+                        onChange={(e) => setAutoCloseTime(Number(e.target.value))}
+                    />
 
-                <FileStatusOverlay
-                    open={showProgressOverlay}
-                    progress={FILE_DOWNLOAD_STATUS}
-                    canEscapeKeyClose
-                />
-            </div> */}
+                    <Button
+                        onClick={handleUpdateFileTransferProgress}
+                        intent={Intent.PRIMARY}
+                        disabled={updateFileTransferProgress.status !== FileStatus.INACTIVE}
+                    >
+                        Open file status overlay
+                    </Button>
+                </FormGroup>
+
+                {updateFileTransferProgress.status !== FileStatus.INACTIVE && (
+                    <p className='countdown'>{timeRemaining}ms</p>
+                )}
+                <FileStatusOverlay />
+            </div>
 
             <div className='container flex flex-column'>
                 <h3>Connection message</h3>
@@ -555,8 +595,17 @@ export default function Styleguide() {
                 <br />
 
                 <NPEProcessingStatus
+                    dataVersion={null}
                     hasUploadedFile
-                    dataVersion='0.1.0'
+                />
+
+                <br />
+                <br />
+
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion='1.0.0'
+                    isInvalidData
                 />
 
                 <br />
@@ -565,8 +614,16 @@ export default function Styleguide() {
                 <NPEProcessingStatus
                     fetchErrorCode={422}
                     hasUploadedFile
-                    expectedVersion='1.0.0'
                     dataVersion='1.0.0'
+                />
+
+                <br />
+                <br />
+
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion='1.0.0'
+                    fetchErrorCode={500}
                 />
             </div>
         </>

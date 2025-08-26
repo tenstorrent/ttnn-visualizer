@@ -8,12 +8,16 @@ import 'styles/components/ProgressBar.scss';
 interface ProgressBarProps {
     progress?: number;
     estimated?: number;
+    ariaLabel?: string;
 }
 
-function ProgressBar({ progress, estimated }: ProgressBarProps) {
+function ProgressBar({ progress, estimated, ariaLabel = 'Progress bar' }: ProgressBarProps) {
     return (
         <div className='progress-bar'>
-            <BlueprintProgressBar value={progress} />
+            <BlueprintProgressBar
+                value={progress}
+                aria-label={ariaLabel}
+            />
 
             {progress && estimated ? (
                 <span className='status'>
