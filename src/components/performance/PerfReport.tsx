@@ -65,10 +65,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
-    const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
+    // TODO: Reimplement merge/expand device data toggle
+    // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
+    // const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
-    const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false); // TODO: Investigate this unused feature
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState<boolean>(true);
@@ -160,12 +161,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
     return (
         <>
-            <Switch
+            {/* See note above by the useState declarations */}
+            {/* <Switch
                 label={!mergeDeviceData ? 'Expanded device data' : 'Merged device data'}
                 onChange={() => setMergeDeviceData(!mergeDeviceData)}
                 checked={mergeDeviceData && isMultiDevice}
                 disabled={!isMultiDevice}
-            />
+            /> */}
 
             <Switch
                 label='Show Matmul optimization analysis'
