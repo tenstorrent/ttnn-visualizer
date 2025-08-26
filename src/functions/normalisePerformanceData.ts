@@ -43,55 +43,60 @@ function alignByOpCode(
     const missingRows = new Map<string, TypedPerfTableRow>();
     const missingCounts = Array(dataToAlign.length).fill(0); // Tracks how many placeholder rows have been inserted for each dataset
     const currentIndexes = Array(dataToAlign.length).fill(0); // Tracks the current index/position in each dataset as the alignment proceeds
-    // aligned[0] is the reference, aligned[1..n] are the datasets
-    const aligned: TypedPerfTableRow[][] = [[], ...dataToAlign.map(() => [])];
 
+    // Return early if there's nothing to align
     if (refData.length === 0 || dataToAlign.length === 0) {
-        return { data: aligned, missingRows: [] };
+        return { data: [[]], missingRows: [] };
     }
 
-    for (let refIndex = 0; refIndex < refData.length; refIndex++) {
-        const refRow = refData[refIndex];
-        const refOp = refRow.raw_op_code;
+    // aligned[0] will be the refData, aligned[1..n] will be the datasets
+    const alignedData: TypedPerfTableRow[][] = [[...refData], ...dataToAlign.map(() => [])];
+
+    // Iterate through each op in the reference data
+    for (let refIndex = 0; refIndex < alignedData[0].length; refIndex++) {
+        const currentRow = alignedData[0][refIndex];
+        const currentOp = currentRow.raw_op_code;
         let allMatched = true;
 
-        aligned[0].push(refRow);
-
+        // Try to find a matching op in each comparison dataset within the lookahead threshold
         for (let dataIndex = 0; dataIndex < dataToAlign.length; dataIndex++) {
             const dataset = dataToAlign[dataIndex];
             const currentIndex = currentIndexes[dataIndex];
             let matchFound = false;
 
+            // Only look ahead up to the threshold to find a matching op
             for (let lookahead = 0; lookahead <= threshold && currentIndex + lookahead < dataset.length; lookahead++) {
-                const candidate = dataset[currentIndex + lookahead];
+                const candidateOp = dataset[currentIndex + lookahead];
 
-                if (candidate.raw_op_code === refOp) {
-                    // Insert MISSING for skipped ops (if any)
+                // If a match is found, add it to the aligned data and update the current index so we don't re-check earlier ops in the next loop
+                if (candidateOp.raw_op_code === currentOp) {
                     missingCounts[dataIndex] += lookahead;
-                    aligned[dataIndex + 1].push(candidate);
+                    alignedData[dataIndex + 1].push(candidateOp);
                     currentIndexes[dataIndex] = currentIndex + lookahead + 1;
                     matchFound = true;
+
                     break;
                 }
             }
 
+            // If no match was found within the threshold, insert a placeholder row
             if (!matchFound) {
                 missingCounts[dataIndex]++;
                 allMatched = false;
-                aligned[dataIndex + 1].push(generatePlaceholder(refOp, refOp));
+                alignedData[dataIndex + 1].push(generatePlaceholder(currentOp, currentOp));
             }
         }
 
-        if (!allMatched && !missingRows.has(refOp)) {
-            missingRows.set(refOp, refRow);
+        if (!allMatched && !missingRows.has(currentOp)) {
+            missingRows.set(currentOp, currentRow);
         }
     }
 
-    // Pad all arrays to the same length
-    const maxLength = Math.max(...aligned.map((arr) => arr.length));
-    const largestArr = aligned[0];
+    const largestArr = alignedData.reduce((a, b) => (a.length > b.length ? a : b), alignedData[0]);
+    const maxLength = largestArr.length;
 
-    for (const arr of aligned) {
+    // Pad all arrays to the same length if needed
+    for (const arr of alignedData) {
         while (arr.length < maxLength) {
             const targetRow = largestArr[arr.length];
             const id = targetRow?.id ?? null;
@@ -107,12 +112,12 @@ function alignByOpCode(
         const ratio = missingCounts[dataIndex] / maxLength;
 
         if (ratio > maxMissingRatio) {
-            aligned[dataIndex + 1] = [];
+            alignedData[dataIndex + 1] = [];
         }
     }
 
     return {
-        data: aligned,
+        data: alignedData,
         missingRows: Array.from(missingRows.values()),
     };
 }
