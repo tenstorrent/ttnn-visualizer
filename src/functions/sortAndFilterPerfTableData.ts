@@ -45,6 +45,10 @@ const sortAndFilterPerfTableData = (
     filterableColumnKeys: TableKeys[],
     activeFilters: (string | number)[],
 ): TypedPerfTableRow[] => {
+    if (data?.length === 0) {
+        return data;
+    }
+
     let filteredRows = data || [];
 
     if (areFiltersActive(filters) && filterableColumnKeys) {

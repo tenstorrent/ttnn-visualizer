@@ -56,6 +56,7 @@ const TABLE_HEADERS: TableHeader[] = [
 ];
 
 const INITIAL_TAB_ID = 'perf-table-0';
+const FILTERABLE_COLUMN_KEYS = TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key);
 
 const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData }) => {
     const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
@@ -64,29 +65,23 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
-    const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
+    // TODO: Reimplement merge/expand device data toggle
+    // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
+    // const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
-    const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState<boolean>(true);
 
-    const filterableColumnKeys = useMemo(
-        () => TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key),
-        [],
-    );
     const [filters, setFilters] = useState<TableFilter>(
-        Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
+        Object.fromEntries(FILTERABLE_COLUMN_KEYS.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
             string
         >,
     );
 
-    const comparisonIndex =
-        (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId) > -1
-            ? (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId)
-            : 0;
+    const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
 
     const processedRows: TypedPerfTableRow[] = useMemo(() => {
         return data ? enrichRowData(data, opIdsMap) : [];
@@ -98,37 +93,34 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
     const normalisedData = useMemo(
         () =>
-            processedRows && processedComparisonRows
+            processedRows?.length > 0 && processedComparisonRows?.length > 0
                 ? alignByOpCode(processedRows, processedComparisonRows)
                 : { data: [], missingRows: [] },
         [processedRows, processedComparisonRows],
     );
+    const normalisedComparisonData = normalisedData.data.slice(1);
 
-    const filteredRows = useMemo(() => {
-        return sortAndFilterPerfTableData(
-            useNormalisedData ? normalisedData.data[0] : processedRows,
-            filters,
-            filterableColumnKeys,
-            activeFilters,
-        );
-    }, [processedRows, filters, filterableColumnKeys, activeFilters, useNormalisedData, normalisedData.data]);
+    const filteredRows = useMemo(
+        () =>
+            sortAndFilterPerfTableData(
+                useNormalisedData ? normalisedData.data[0] : processedRows,
+                filters,
+                FILTERABLE_COLUMN_KEYS,
+                activeFilters,
+            ),
+        [processedRows, filters, activeFilters, useNormalisedData, normalisedData.data],
+    );
 
-    const filteredComparisonRows = useMemo(() => {
-        return sortAndFilterPerfTableData(
-            useNormalisedData ? normalisedData.data[comparisonIndex] : processedComparisonRows[comparisonIndex],
-            filters,
-            filterableColumnKeys,
-            activeFilters,
-        );
-    }, [
-        comparisonIndex,
-        processedComparisonRows,
-        filters,
-        filterableColumnKeys,
-        activeFilters,
-        useNormalisedData,
-        normalisedData.data,
-    ]);
+    const filteredComparisonRows = useMemo(
+        () =>
+            sortAndFilterPerfTableData(
+                useNormalisedData ? normalisedData.data[comparisonIndex] : processedComparisonRows[comparisonIndex],
+                filters,
+                FILTERABLE_COLUMN_KEYS,
+                activeFilters,
+            ),
+        [comparisonIndex, processedComparisonRows, filters, activeFilters, useNormalisedData, normalisedData.data],
+    );
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
         setFilters({
@@ -148,14 +140,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
     // Resets various state if we remove all comparison reports
     useEffect(() => {
-        if (!activeComparisonReportList?.includes(selectedTabId as string)) {
+        if (!activeComparisonReportList?.includes(selectedTabId as string) && selectedTabId !== INITIAL_TAB_ID) {
             setSelectedTabId(INITIAL_TAB_ID);
         }
 
         if (!activeComparisonReportList) {
-            setHighlightRows(false);
             setUseNormalisedData(false);
-            setSelectedTabId(INITIAL_TAB_ID);
         }
     }, [activeComparisonReportList, selectedTabId]);
 
@@ -171,12 +161,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
 
     return (
         <>
-            <Switch
+            {/* See note above by the useState declarations */}
+            {/* <Switch
                 label={!mergeDeviceData ? 'Expanded device data' : 'Merged device data'}
                 onChange={() => setMergeDeviceData(!mergeDeviceData)}
                 checked={mergeDeviceData && isMultiDevice}
                 disabled={!isMultiDevice}
-            />
+            /> */}
 
             <Switch
                 label='Show Matmul optimization analysis'
@@ -232,7 +223,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                 </div>
 
                 <div className='filters'>
-                    {filterableColumnKeys.map((key) => (
+                    {FILTERABLE_COLUMN_KEYS.map((key) => (
                         <SearchField
                             key={key}
                             onQueryChanged={(value) => updateColumnFilter(key, value)}
@@ -287,8 +278,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             <PerfTable
                                 data={useNormalisedData ? normalisedData.data[0] : filteredRows}
                                 comparisonData={
-                                    useNormalisedData && normalisedData.data.length > 1
-                                        ? normalisedData.data.slice(1)
+                                    useNormalisedData && normalisedComparisonData.length > 0
+                                        ? normalisedComparisonData
                                         : []
                                 }
                                 filters={filters}
@@ -305,7 +296,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             id={report}
                             key={index}
                             icon={IconNames.TH_LIST}
-                            disabled={useNormalisedData && normalisedData?.data?.slice(1)?.[index]?.length === 0}
+                            disabled={useNormalisedData && normalisedComparisonData?.[index]?.length === 0}
                             title={
                                 normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
                                     <Tooltip
@@ -321,8 +312,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             panel={
                                 <PerfTable
                                     data={
-                                        useNormalisedData && normalisedData.data.length > 1
-                                            ? normalisedData.data.slice(1)[comparisonIndex]
+                                        useNormalisedData && normalisedComparisonData.length > 0
+                                            ? normalisedComparisonData[comparisonIndex]
                                             : filteredComparisonRows
                                     }
                                     comparisonData={
