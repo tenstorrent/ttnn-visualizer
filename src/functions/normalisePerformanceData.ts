@@ -46,6 +46,10 @@ function alignByOpCode(
     // aligned[0] is the reference, aligned[1..n] are the datasets
     const aligned: TypedPerfTableRow[][] = [[], ...dataToAlign.map(() => [])];
 
+    if (refData.length === 0 || dataToAlign.length === 0) {
+        return { data: aligned, missingRows: [] };
+    }
+
     for (let refIndex = 0; refIndex < refData.length; refIndex++) {
         const refRow = refData[refIndex];
         const refOp = refRow.raw_op_code;
@@ -74,11 +78,7 @@ function alignByOpCode(
             if (!matchFound) {
                 missingCounts[dataIndex]++;
                 allMatched = false;
-                aligned[dataIndex + 1].push({
-                    ...PLACEHOLDER,
-                    op_code: getMissingOpPrefix(refOp),
-                    raw_op_code: getMissingOpPrefix(refOp),
-                });
+                aligned[dataIndex + 1].push(generatePlaceholder(refOp, refOp));
             }
         }
 
@@ -88,31 +88,23 @@ function alignByOpCode(
     }
 
     // Pad all arrays to the same length
-    const maxLen = Math.max(...aligned.map((arr) => arr.length));
+    const maxLength = Math.max(...aligned.map((arr) => arr.length));
+    const largestArr = aligned[0];
 
     for (const arr of aligned) {
-        while (arr.length < maxLen) {
-            // Use the largest array as a template for id/op_code/raw_op_code
-            const largestArr = aligned.reduce((a, b) => (a.length > b.length ? a : b));
+        while (arr.length < maxLength) {
             const targetRow = largestArr[arr.length];
             const id = targetRow?.id ?? null;
             const opCode = targetRow?.op_code ?? '';
             const rawOpCode = targetRow?.raw_op_code ?? '';
-            const opCodeMessage = getMissingOpPrefix(opCode);
-            const rawOpCodeMessage = getMissingOpPrefix(rawOpCode);
 
-            arr.push({
-                ...PLACEHOLDER,
-                id,
-                op_code: opCodeMessage,
-                raw_op_code: rawOpCodeMessage,
-            });
+            arr.push(generatePlaceholder(opCode, rawOpCode, id));
         }
     }
 
     // Discard datasets with too many missing rows
     for (let dataIndex = 0; dataIndex < dataToAlign.length; dataIndex++) {
-        const ratio = maxLen === 0 ? 0 : missingCounts[dataIndex] / maxLen;
+        const ratio = missingCounts[dataIndex] / maxLength;
 
         if (ratio > maxMissingRatio) {
             aligned[dataIndex + 1] = [];
@@ -126,5 +118,14 @@ function alignByOpCode(
 }
 
 const getMissingOpPrefix = (opCode: string): string => `${MISSING_OP_STRING} - ${opCode}`;
+
+const generatePlaceholder = (opCode: string, rawOpCode: string, id?: number | null): TypedPerfTableRow => {
+    return {
+        ...PLACEHOLDER,
+        id: id ?? null,
+        op_code: getMissingOpPrefix(opCode),
+        raw_op_code: getMissingOpPrefix(rawOpCode),
+    };
+};
 
 export default alignByOpCode;
