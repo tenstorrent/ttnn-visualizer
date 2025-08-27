@@ -282,7 +282,7 @@ const fetchDevices = async (reportName: string) => {
     const { data: meta } = await axiosInstance.get<DeviceData[]>('/api/devices');
 
     if (meta.length === 0) {
-        createToastNotification('Data integrity warning: No device information provided.', reportName, true);
+        createToastNotification('Data integrity warning: No device information provided.', `/${reportName}`, true);
     }
 
     return [...new Map(meta.map((device) => [device.device_id, device])).values()];
