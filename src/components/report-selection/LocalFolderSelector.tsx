@@ -121,18 +121,29 @@ const LocalFolderOptions: FC = () => {
             connectionStatus = connectionFailedStatus;
         } else {
             setProfilerUploadLabel(`${files.length} files uploaded`);
-            setReportLocation('local');
-            setSelectedDevice(DEFAULT_DEVICE_ID);
 
-            if (response.data) {
+            if (!validateReportFolder(response?.data)) {
+                if (response.data.path) {
+                    await deleteProfiler(response.data.path);
+                }
+
+                setProfilerFolder(invalidReportStatus);
+                createToastNotification(
+                    'Error validating uploaded data - missing path or report name',
+                    getErroredReportFolderLabel(response.data),
+                    true,
+                );
+            } else if (response.data) {
+                setSelectedDevice(DEFAULT_DEVICE_ID);
                 setActiveProfilerReport(response.data.path);
                 createToastNotification('Active memory report', response.data.reportName);
+                setReportLocation('local');
+                setProfilerFolder(connectionStatus);
             }
         }
 
         queryClient.clear();
         setIsUploadingReport(false);
-        setProfilerFolder(connectionStatus);
     };
 
     const handlePerformanceDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -345,6 +356,20 @@ const getFolderName = (files: FileList) => files[0].webkitRelativePath.split('/'
 
 const getReportName = (reports: ReportFolder[], path: string | null) => {
     return reports?.find((report) => report.path === path)?.reportName;
+};
+
+const validateReportFolder = (folder: ReportFolder): boolean => !!folder.path && !!folder.reportName;
+
+const getErroredReportFolderLabel = (folder: ReportFolder): string => {
+    if (folder.reportName) {
+        return folder.reportName;
+    }
+
+    if (folder.path) {
+        return `/${folder.path}`;
+    }
+
+    return 'Unknown report';
 };
 
 export default LocalFolderOptions;
