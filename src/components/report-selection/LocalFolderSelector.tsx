@@ -32,6 +32,7 @@ import {
 } from '../../hooks/useAPI';
 import LocalFolderPicker from './LocalFolderPicker';
 import { ReportFolder } from '../../definitions/Reports';
+import { getErroredReportFolderLabel, validateReportFolder } from '../../functions/validateReportFolder';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -356,20 +357,6 @@ const getFolderName = (files: FileList) => files[0].webkitRelativePath.split('/'
 
 const getReportName = (reports: ReportFolder[], path: string | null) => {
     return reports?.find((report) => report.path === path)?.reportName;
-};
-
-const validateReportFolder = (folder: ReportFolder): boolean => !!folder.path && !!folder.reportName;
-
-const getErroredReportFolderLabel = (folder: ReportFolder): string => {
-    if (folder.reportName) {
-        return folder.reportName;
-    }
-
-    if (folder.path) {
-        return `/${folder.path}`;
-    }
-
-    return 'Unknown report';
 };
 
 export default LocalFolderOptions;

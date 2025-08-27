@@ -25,6 +25,7 @@ import {
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
+import { getErroredReportFolderLabel, validateReportFolder } from '../../functions/validateReportFolder';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
@@ -297,6 +298,18 @@ const RemoteSyncConfigurator: FC = () => {
                                             selectedReportFolder,
                                         );
 
+                                        updatedFolder.reportName = '';
+
+                                        if (!validateReportFolder(updatedFolder)) {
+                                            createToastNotification(
+                                                'Error validating uploaded data - missing path or report name',
+                                                getErroredReportFolderLabel(updatedFolder),
+                                                true,
+                                            );
+
+                                            throw Error('Invalid remote folder');
+                                        }
+
                                         const savedRemoteFolders = remote.persistentState.getSavedReportFolders(
                                             remote.persistentState.selectedConnection,
                                         );
@@ -313,24 +326,24 @@ const RemoteSyncConfigurator: FC = () => {
                                         );
 
                                         setSelectedReportFolder(savedRemoteFolders[updatedFolderIndex]);
+
+                                        if (remote.persistentState.selectedConnection && selectedReportFolder) {
+                                            const response = await remote.mountRemoteFolder(
+                                                remote.persistentState.selectedConnection,
+                                                selectedReportFolder,
+                                            );
+
+                                            if (response.status === 200) {
+                                                updateReportSelection(selectedReportFolder);
+                                                queryClient.clear();
+                                            }
+                                        }
                                     }
                                 } catch {
                                     // eslint-disable-next-line no-alert
                                     alert('Unable to sync remote folder');
                                 } finally {
                                     setIsSyncingReportFolder(false);
-                                    setReportLocation('remote');
-
-                                    if (remote.persistentState.selectedConnection && selectedReportFolder) {
-                                        const response = await remote.mountRemoteFolder(
-                                            remote.persistentState.selectedConnection,
-                                            selectedReportFolder,
-                                        );
-
-                                        if (response.status === 200) {
-                                            updateReportSelection(selectedReportFolder);
-                                        }
-                                    }
                                 }
                             }}
                         />
