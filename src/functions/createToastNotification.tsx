@@ -23,6 +23,9 @@ export default function createToastNotification(message: string, fileName: strin
         theme: 'light' as Theme,
     };
 
-    // eslint-disable-next-line no-unused-expressions, @typescript-eslint/no-unused-expressions
-    isError ? toast.error(template, args) : toast(template, args);
+    if (isError) {
+        toast.error(template, args);
+    } else {
+        toast(template, args);
+    }
 }
