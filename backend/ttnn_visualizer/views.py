@@ -25,12 +25,9 @@ from ttnn_visualizer.csv_queries import (
 from ttnn_visualizer.decorators import local_only, with_instance
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
-    AuthenticationException,
     AuthenticationFailedException,
     DataFormatError,
-    NoValidConnectionsError,
     RemoteConnectionException,
-    SSHException,
 )
 from ttnn_visualizer.file_uploads import (
     extract_folder_name_from_files,
@@ -46,7 +43,7 @@ from ttnn_visualizer.models import (
     StatusMessage,
 )
 from ttnn_visualizer.queries import DatabaseQueries
-from ttnn_visualizer.remote_sqlite_setup import check_sqlite_path, get_sqlite_path
+from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path
 from ttnn_visualizer.serializers import (
     serialize_buffer,
     serialize_buffer_pages,
@@ -369,12 +366,12 @@ def get_operation_buffers(operation_id, instance: Instance):
 
 @api.route("/profiler", methods=["GET"])
 @with_instance
-def get_profiler_data_list(instance: Instance):
+def get_profiler_data_list():
     # Use PathResolver to get the base path for profiler reports
     resolver = create_path_resolver(current_app)
 
     # Note: "profiler" in app terminology maps to tt-metal's ttnn/reports
-    path = resolver.get_base_report_path("profiler", instance.remote_connection)
+    path = resolver.get_base_report_path("profiler")
 
     if not path.exists():
         if resolver.is_direct_report_mode:
@@ -489,21 +486,17 @@ def delete_profiler_report(profiler_name, instance: Instance):
 
 @api.route("/performance", methods=["GET"])
 @with_instance
-def get_performance_data_list(instance: Instance):
+def get_performance_data_list():
     # Use PathResolver to get the base path for performance reports
     resolver = create_path_resolver(current_app)
 
     # Note: "performance" in app terminology maps to tt-metal's profiler/reports
-    path = resolver.get_base_report_path("performance", instance.remote_connection)
-
-    is_remote = True if instance.remote_connection else False
+    path = resolver.get_base_report_path("performance")
 
     if not path.exists():
         if resolver.is_direct_report_mode:
             logger.warning(f"TT-Metal performance reports not found: {path}")
             return jsonify([])
-        elif not is_remote:
-            path.mkdir(parents=True, exist_ok=True)
 
     if current_app.config["SERVER_MODE"]:
         session_instances = session.get("instances", [])
