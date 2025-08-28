@@ -52,6 +52,13 @@ $group-row-pattern: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%
         margin-bottom: 15px;
     }
 
+    .data-options {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 5px;
+        margin-bottom: 15px;
+    }
+
     .cell-header {
         text-align: left;
         vertical-align: initial;

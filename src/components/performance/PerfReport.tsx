@@ -4,11 +4,21 @@
 
 import { FC, useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Icon, MenuItem, PopoverPosition, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
+import {
+    Button,
+    Intent,
+    MenuItem,
+    PopoverPosition,
+    Position,
+    Size,
+    Tab,
+    TabId,
+    Tabs,
+    Tooltip,
+} from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { PerfTableRow, TableFilter, TableHeader, TableKeys } from '../../definitions/PerfTable';
-import 'styles/components/PerfReport.scss';
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
@@ -17,6 +27,7 @@ import PerfTable from './PerfTable';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
+import 'styles/components/PerfReport.scss';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -169,46 +180,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                 disabled={!isMultiDevice}
             /> */}
 
-            <Switch
-                label='Show Matmul optimization analysis'
-                onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
-                checked={provideMatmulAdvice}
-            />
-
-            <Switch
-                label='Highlight high dispatch ops'
-                onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
-                checked={hiliteHighDispatch}
-            />
-
-            <Switch
-                labelElement={
-                    <Tooltip content='Tries to match up operations between the performance reports'>
-                        <span className='switch-label-with-icon'>
-                            <span>Normalise performance data</span>
-                            <Icon icon={IconNames.SMALL_INFO_SIGN} />
-                        </span>
-                    </Tooltip>
-                }
-                onChange={() => setUseNormalisedData(!useNormalisedData)}
-                checked={useNormalisedData}
-                disabled={!activeComparisonReportList}
-            />
-
-            <Switch
-                labelElement={
-                    <Tooltip content='Highlights rows where ops have been added or are missing after normalising the data'>
-                        <span className='switch-label-with-icon'>
-                            <span>Highlight row difference</span>
-                            <Icon icon={IconNames.SMALL_INFO_SIGN} />
-                        </span>
-                    </Tooltip>
-                }
-                onChange={() => setHighlightRows(!highlightRows)}
-                checked={highlightRows}
-                disabled={!activeComparisonReportList || !useNormalisedData}
-            />
-
             <div className='perf-report'>
                 <div className='table-header'>
                     <h3 className='title'>Performance report</h3>
@@ -218,6 +189,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             {filteredDataLength !== totalDataLength
                                 ? `Showing ${filteredDataLength} of ${totalDataLength} rows`
                                 : `Showing ${filteredDataLength} rows`}
+
+                            {useNormalisedData && normalisedData.missingRows.length > 0
+                                ? ` (${normalisedData.missingRows.length} rows with missing ops)`
+                                : ''}
                         </p>
                     </div>
                 </div>
@@ -253,15 +228,52 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         }
                         resetOnSelect
                     />
+                </div>
 
-                    {/* Need to refactor to have the reset working */}
-                    {/* <Button
-                        onClick={() => changeSorting(null)(null)}
-                        variant={ButtonVariant.OUTLINED}
-                        disabled={sortingColumn === null}
+                <div className='data-options'>
+                    <Button
+                        icon={IconNames.PREDICTIVE_ANALYSIS}
+                        text='Matmul optimization analysis'
+                        aria-label='Matmul optimization analysis'
+                        intent={provideMatmulAdvice ? Intent.PRIMARY : Intent.NONE}
+                        onClick={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                    />
+
+                    <Button
+                        icon={IconNames.WARNING_SIGN}
+                        text='Highlight high dispatch ops'
+                        aria-label='Highlight high dispatch ops'
+                        intent={hiliteHighDispatch ? Intent.WARNING : Intent.NONE}
+                        onClick={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                    />
+
+                    <Tooltip
+                        content='Tries to match up operations between the performance reports'
+                        position={Position.TOP}
                     >
-                        Reset sort
-                    </Button> */}
+                        <Button
+                            icon={IconNames.MANY_TO_ONE}
+                            text='Normalise data'
+                            aria-label='Normalise data'
+                            intent={useNormalisedData ? Intent.PRIMARY : Intent.NONE}
+                            disabled={!activeComparisonReportList}
+                            onClick={() => setUseNormalisedData(!useNormalisedData)}
+                        />
+                    </Tooltip>
+
+                    <Tooltip
+                        content='Highlights rows where ops have been added or are missing after normalising the data'
+                        position={Position.TOP}
+                    >
+                        <Button
+                            icon={IconNames.SMALL_INFO_SIGN}
+                            text='Highlight row differences'
+                            aria-label='Highlight row differences'
+                            onClick={() => setHighlightRows(!highlightRows)}
+                            intent={useNormalisedData && highlightRows ? Intent.DANGER : Intent.NONE}
+                            disabled={!activeComparisonReportList || !useNormalisedData}
+                        />
+                    </Tooltip>
                 </div>
 
                 <Tabs
