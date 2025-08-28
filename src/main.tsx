@@ -12,7 +12,6 @@ import { HelmetProvider } from 'react-helmet-async';
 import { RouterProvider } from 'react-router';
 import ErrorPage from './error-page';
 import Layout from './components/Layout';
-import ROUTES from './definitions/Routes';
 import getServerConfig from './functions/getServerConfig';
 import { SocketProvider } from './libs/SocketProvider';
 import { routeObjectList } from './definitions/RouteObjectList';
@@ -21,7 +20,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 const router = createBrowserRouter(
     [
         {
-            path: ROUTES.HOME,
+            path: '*',
             element: (
                 <ProtectedRoute>
                     <Layout />
