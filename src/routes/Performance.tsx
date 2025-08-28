@@ -41,7 +41,7 @@ export default function Performance() {
 
     const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport(activePerformanceReport);
-    const { data: comparisonData } = usePerformanceComparisonReport(comparisonReportList || null);
+    const { data: comparisonData } = usePerformanceComparisonReport();
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
 
@@ -80,6 +80,7 @@ export default function Performance() {
     useEffect(() => {
         if (activePerformanceReport && comparisonReportList?.includes(activePerformanceReport)) {
             const filteredReports = comparisonReportList.filter((report) => report !== activePerformanceReport);
+
             setComparisonReportList(filteredReports.length === 0 ? null : filteredReports);
         }
     }, [comparisonReportList, activePerformanceReport, setComparisonReportList]);
@@ -153,7 +154,7 @@ export default function Performance() {
                                     key={`${index}-comparison-report-selector`}
                                     folderList={folderList}
                                     reportIndex={index}
-                                    label={index === 0 ? <h3 className='label'>Compare</h3> : null}
+                                    label={index === 0 ? <h2 className='label'>Compare</h2> : null}
                                     subLabel={index === 0 ? 'Select from performance reports to compare' : ''}
                                 />
                             ))}

@@ -2,6 +2,4 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-.npe-message-container {
-    display: inline-block;
-}
+export const NPE_DATA_VERSION = '1.0.0';

@@ -35,7 +35,10 @@ const FileStatusOverlay: React.FC = () => {
                 {status && <p>Status: {status.valueOf()}</p>}
             </div>
 
-            <ProgressBar progress={percentOfCurrent / 100} />
+            <ProgressBar
+                progress={percentOfCurrent / 100}
+                ariaLabel='File transfer progress'
+            />
         </Overlay>
     );
 };

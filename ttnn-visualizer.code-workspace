@@ -9,7 +9,14 @@
         "less.validate": false,
         "scss.validate": false,
         "editor.formatOnSave": true,
-        "stylelint.validate": ["css", "scss"],
+        "eslint.validate": [
+            "typescript",
+            "typescriptreact"
+        ],
+        "stylelint.validate": [
+            "css",
+            "scss"
+        ],
         "editor.defaultFormatter": "esbenp.prettier-vscode",
         "editor.codeActionsOnSave": {
             "source.fixAll.eslint": "always",
@@ -27,6 +34,7 @@
             "pipx",
             "plotly",
             "Pyenv",
+            "pyproject",
             "pytest",
             "tinycolor",
             "toastify",
@@ -39,16 +47,32 @@
             "yref",
         ],
         "[python]": {
+            "editor.codeActionsOnSave": {
+                "source.organizeImports": "explicit"
+            },
             "editor.defaultFormatter": "ms-python.black-formatter",
             "editor.formatOnSave": true,
+        },
+        "isort.args": [
+            "--profile",
+            "black"
+        ],
+        "[json]": {
+            "editor.defaultFormatter": "vscode.json-language-features",
+        },
+        "[jsonc]": {
+            "editor.defaultFormatter": "vscode.json-language-features",
         },
     },
     "extensions": {
         "recommendations": [
-            "esbenp.prettier-vscode",
-            "stylelint.vscode-stylelint",
             "dbaeumer.vscode-eslint",
-            "gruntfuggly.todo-tree",
+            "esbenp.prettier-vscode",
+            "Gruntfuggly.todo-tree",
+            "ms-python.black-formatter",
+            "ms-python.python",
+            "streetsidesoftware.code-spell-checker",
+            "stylelint.vscode-stylelint"
         ],
     },
 }

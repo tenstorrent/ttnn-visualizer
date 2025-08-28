@@ -197,6 +197,7 @@ const OperationList = () => {
                         <Button
                             onClick={() => handleExpandAllToggle()}
                             endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
+                            aria-label={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
                         />
                     </Tooltip>
 
@@ -216,6 +217,11 @@ const OperationList = () => {
                                     : IconNames.SortAlphabetical
                             }
                             variant={isSortingModeActive(shouldSortByID) ? 'outlined' : undefined}
+                            aria-label={
+                                shouldSortByID === SortingOptions.DESCENDING
+                                    ? 'Sort by id descending'
+                                    : 'Sort by id ascending'
+                            }
                         />
                     </Tooltip>
 
@@ -235,6 +241,11 @@ const OperationList = () => {
                                     : IconNames.SortNumerical
                             }
                             variant={isSortingModeActive(shouldSortDuration) ? 'outlined' : undefined}
+                            aria-label={
+                                shouldSortDuration === SortingOptions.DESCENDING
+                                    ? 'Sort by duration descending'
+                                    : 'Sort by duration ascending'
+                            }
                         />
                     </Tooltip>
 
@@ -247,6 +258,7 @@ const OperationList = () => {
                                 virtualizer.scrollToIndex(0);
                             }}
                             icon={IconNames.DOUBLE_CHEVRON_UP}
+                            aria-label='Scroll to top'
                         />
                     </Tooltip>
 
@@ -259,6 +271,7 @@ const OperationList = () => {
                                 virtualizer.scrollToIndex(numberOfOperations - 1);
                             }}
                             icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                            aria-label='Scroll to bottom'
                         />
                     </Tooltip>
                 </ButtonGroup>

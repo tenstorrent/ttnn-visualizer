@@ -1262,14 +1262,18 @@ def get_npe_data(instance: Instance):
         )
         return Response(status=HTTPStatus.NOT_FOUND)
 
-    if compressed_path and compressed_path.exists():
-        with open(compressed_path, "rb") as file:
-            compressed_data = file.read()
-            uncompressed_data = zstd.uncompress(compressed_data)
-            npe_data = json.loads(uncompressed_data)
-    else:
-        with open(uncompressed_path, "r") as file:
-            npe_data = json.load(file)
+    try:
+        if compressed_path and compressed_path.exists():
+            with open(compressed_path, "rb") as file:
+                compressed_data = file.read()
+                uncompressed_data = zstd.uncompress(compressed_data)
+                npe_data = json.loads(uncompressed_data)
+        else:
+            with open(uncompressed_path, "r") as file:
+                npe_data = json.load(file)
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in NPE file: {e}")
+        return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
     # Use orjson for much faster JSON serialization of large files
     return Response(orjson.dumps(npe_data), mimetype="application/json")

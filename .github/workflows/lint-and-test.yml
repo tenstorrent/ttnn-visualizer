@@ -1,4 +1,4 @@
-name: Lint and Test Workflow
+name: Lint and Test
 
 on:
   pull_request:
@@ -13,6 +13,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          version: 10
+          run_install: false
+
       -   name: Read .nvmrc
           id: nvm
           run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
@@ -21,16 +27,16 @@ jobs:
           uses: actions/setup-node@v4
           with:
               node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
+              cache: 'pnpm'
 
       - name: Install dependencies
-        run: |
-          npm install -g pnpm@latest-10
-          pnpm install
+        run: pnpm install
 
       - name: Lint and test
         run: |
           pnpm lint
           pnpm test
+
   backend-lint-and-test:
     name: Lint and Test (Backend)
     runs-on: ubuntu-latest
