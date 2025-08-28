@@ -366,7 +366,7 @@ def get_operation_buffers(operation_id, instance: Instance):
 
 @api.route("/profiler", methods=["GET"])
 @with_instance
-def get_profiler_data_list():
+def get_profiler_data_list(instance: Instance):
     # Use PathResolver to get the base path for profiler reports
     resolver = create_path_resolver(current_app)
 
@@ -486,7 +486,7 @@ def delete_profiler_report(profiler_name, instance: Instance):
 
 @api.route("/performance", methods=["GET"])
 @with_instance
-def get_performance_data_list():
+def get_performance_data_list(instance: Instance):
     # Use PathResolver to get the base path for performance reports
     resolver = create_path_resolver(current_app)
 
