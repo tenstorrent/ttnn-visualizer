@@ -17,7 +17,6 @@ import ROUTES from '../definitions/Routes';
 import FooterInfobar from './FooterInfobar';
 import ClusterRenderer from './cluster/ClusterRenderer';
 import { ModalAwareOutlet } from '../libs/ModalAwareOutlet';
-import { routeObjectList } from '../definitions/RouteObjectList';
 import FeedbackButton from './FeedbackButton';
 
 const BounceIn = cssTransition({
@@ -80,7 +79,7 @@ function Layout() {
             </header>
 
             <main>
-                <ModalAwareOutlet routes={routeObjectList} />
+                <ModalAwareOutlet />
                 {location.pathname === ROUTES.CLUSTER && state?.background && <ClusterRenderer />}
             </main>
 
