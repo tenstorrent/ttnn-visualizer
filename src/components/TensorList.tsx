@@ -30,6 +30,7 @@ import useTableFilter from '../hooks/useTableFilter';
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
+const HIGH_CONSUMER_INTENT = Intent.DANGER;
 
 const TensorList = () => {
     const location = useLocation();
@@ -174,7 +175,7 @@ const TensorList = () => {
                             onClick={() => setShowHighConsumerTensors(!showHighConsumerTensors)}
                             endIcon={IconNames.ISSUE}
                             disabled={!tensorsWithRange?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
-                            intent={Intent.DANGER}
+                            intent={HIGH_CONSUMER_INTENT}
                             variant={showHighConsumerTensors ? 'outlined' : undefined}
                             aria-label='Toggle high consumer tensors'
                         >
@@ -317,7 +318,7 @@ const TensorList = () => {
                                                         >
                                                             <Icon
                                                                 icon={IconNames.ISSUE}
-                                                                intent={Intent.DANGER}
+                                                                intent={HIGH_CONSUMER_INTENT}
                                                                 title='Unusually high number of consumers'
                                                             />
                                                         </Tooltip>
