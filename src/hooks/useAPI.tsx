@@ -106,9 +106,23 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
     return defaultOperationDetailsData;
 };
 
+const MAX_RETRY_COUNT = 2;
+
 const fetchOperations = async (): Promise<OperationDescription[]> => {
     const tensorList: Map<number, Tensor> = new Map<number, Tensor>();
-    const { data: operationList } = await axiosInstance.get<OperationDescription[]>('/api/operations');
+    let response = await axiosInstance.get<OperationDescription[]>('/api/operations');
+    let operationList = response.data;
+    let retryCount = 0;
+
+    // TODO: Figure out why we sometimes get a string back instead of an array so we don't need this hack
+    while (!Array.isArray(operationList) && retryCount < MAX_RETRY_COUNT) {
+        // eslint-disable-next-line no-console
+        console.info('Data is not a JSON array, refetching operations list');
+        // eslint-disable-next-line no-await-in-loop
+        response = await axiosInstance.get<OperationDescription[]>('/api/operations');
+        operationList = response.data;
+        retryCount++;
+    }
 
     return operationList.map((operation: OperationDescription) => {
         operation.operationFileIdentifier = parseFileOperationIdentifier(operation.stack_trace);
