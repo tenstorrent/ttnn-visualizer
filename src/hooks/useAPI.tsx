@@ -42,6 +42,7 @@ import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import createToastNotification from '../functions/createToastNotification';
+import { normaliseReportFolder } from '../functions/validateReportFolder';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -934,7 +935,7 @@ export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';
 const fetchReportFolderList = async () => {
     const { data } = await axiosInstance.get('/api/profiler');
 
-    return data;
+    return data.map(normaliseReportFolder);
 };
 
 export const deleteProfiler = async (report: string) => {

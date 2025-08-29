@@ -25,7 +25,7 @@ import {
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
-import { getErroredReportFolderLabel, validateReportFolder } from '../../functions/validateReportFolder';
+import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
@@ -277,6 +277,10 @@ const RemoteSyncConfigurator: FC = () => {
 
                             if (response.status === 200) {
                                 updateReportSelection(folder);
+
+                                if (hasBeenNormalised(folder)) {
+                                    createDataIntegrityWarning(folder);
+                                }
                             }
                         }
                     }}
@@ -298,16 +302,8 @@ const RemoteSyncConfigurator: FC = () => {
                                             selectedReportFolder,
                                         );
 
-                                        updatedFolder.reportName = '';
-
-                                        if (!validateReportFolder(updatedFolder)) {
-                                            createToastNotification(
-                                                'Error validating uploaded data - missing path or report name',
-                                                getErroredReportFolderLabel(updatedFolder),
-                                                true,
-                                            );
-
-                                            throw Error('Invalid remote folder');
+                                        if (hasBeenNormalised(updatedFolder)) {
+                                            createDataIntegrityWarning(updatedFolder);
                                         }
 
                                         const savedRemoteFolders = remote.persistentState.getSavedReportFolders(
@@ -328,12 +324,12 @@ const RemoteSyncConfigurator: FC = () => {
                                         setSelectedReportFolder(savedRemoteFolders[updatedFolderIndex]);
 
                                         if (remote.persistentState.selectedConnection && selectedReportFolder) {
-                                            const response = await remote.mountRemoteFolder(
+                                            const mountResponse = await remote.mountRemoteFolder(
                                                 remote.persistentState.selectedConnection,
                                                 selectedReportFolder,
                                             );
 
-                                            if (response.status === 200) {
+                                            if (mountResponse.status === 200) {
                                                 updateReportSelection(selectedReportFolder);
                                                 queryClient.clear();
                                             }

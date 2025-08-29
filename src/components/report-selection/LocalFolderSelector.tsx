@@ -32,7 +32,11 @@ import {
 } from '../../hooks/useAPI';
 import LocalFolderPicker from './LocalFolderPicker';
 import { ReportFolder } from '../../definitions/Reports';
-import { getErroredReportFolderLabel, validateReportFolder } from '../../functions/validateReportFolder';
+import {
+    createDataIntegrityWarning,
+    hasBeenNormalised,
+    normaliseReportFolder,
+} from '../../functions/validateReportFolder';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -122,25 +126,17 @@ const LocalFolderOptions: FC = () => {
             connectionStatus = connectionFailedStatus;
         } else {
             setProfilerUploadLabel(`${files.length} files uploaded`);
+            response.data = normaliseReportFolder(response.data);
 
-            if (!validateReportFolder(response?.data)) {
-                if (response.data.path) {
-                    await deleteProfiler(response.data.path);
-                }
-
-                setProfilerFolder(invalidReportStatus);
-                createToastNotification(
-                    'Error validating uploaded data - missing path or report name',
-                    getErroredReportFolderLabel(response.data),
-                    true,
-                );
-            } else if (response.data) {
-                setSelectedDevice(DEFAULT_DEVICE_ID);
-                setActiveProfilerReport(response.data.path);
-                createToastNotification('Active memory report', response.data.reportName);
-                setReportLocation('local');
-                setProfilerFolder(connectionStatus);
+            if (hasBeenNormalised(response?.data)) {
+                createDataIntegrityWarning(response.data);
             }
+
+            setSelectedDevice(DEFAULT_DEVICE_ID);
+            setActiveProfilerReport(response.data.path);
+            createToastNotification('Active memory report', response.data.reportName);
+            setReportLocation('local');
+            setProfilerFolder(connectionStatus);
         }
 
         queryClient.clear();
@@ -202,6 +198,10 @@ const LocalFolderOptions: FC = () => {
 
     const handleSelectProfiler = async (item: ReportFolder) => {
         await updateInstance({ ...instance, active_report: { profiler_name: item.path } });
+
+        if (hasBeenNormalised(item)) {
+            createDataIntegrityWarning(item);
+        }
 
         createToastNotification('Active memory report', getReportName(reportFolderList, item.path) ?? '');
         setActiveProfilerReport(item.path);
