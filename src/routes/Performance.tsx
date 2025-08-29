@@ -144,6 +144,13 @@ export default function Performance() {
 
             <h1 className='page-title'>Performance analysis</h1>
 
+            <p>
+                <strong>Arch:</strong> {architecture}
+            </p>
+            <p>
+                <strong>Cores:</strong> {maxCores}
+            </p>
+
             {!shouldDisableComparison &&
                 (folderList ? (
                     <div className='comparison-selectors'>
@@ -188,12 +195,7 @@ export default function Performance() {
                     icon={IconNames.TIMELINE_AREA_CHART}
                     panel={
                         <div className='chart-tab'>
-                            <p>
-                                <strong>Arch:</strong> {architecture}
-                            </p>
-                            <p>
-                                <strong>Cores:</strong> {maxCores}
-                            </p>
+                            <h3 className='title'>Performance charts</h3>
 
                             {perfData ? (
                                 <>

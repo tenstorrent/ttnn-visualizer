@@ -148,6 +148,28 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         comparisonData?.[comparisonIndex],
     );
     const filteredDataLength = getFilteredDataLength(selectedTabId, filteredRows, filteredComparisonRows);
+    const rowDelta = useMemo(() => {
+        if (!useNormalisedData) {
+            return 0;
+        }
+
+        if (selectedTabId === INITIAL_TAB_ID) {
+            return processedRows.length - (normalisedData.data?.[0]?.length || 0);
+        }
+
+        if (processedComparisonRows?.[comparisonIndex] && normalisedData.data?.[comparisonIndex + 1]) {
+            return processedComparisonRows[comparisonIndex].length - normalisedData.data[comparisonIndex + 1].length;
+        }
+
+        return 0;
+    }, [
+        useNormalisedData,
+        selectedTabId,
+        processedRows,
+        normalisedData.data,
+        comparisonIndex,
+        processedComparisonRows,
+    ]);
 
     // Resets various state if we remove all comparison reports
     useEffect(() => {
@@ -190,9 +212,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                 ? `Showing ${filteredDataLength} of ${totalDataLength} rows`
                                 : `Showing ${filteredDataLength} rows`}
 
-                            {useNormalisedData && normalisedData.missingRows.length > 0
-                                ? ` (${normalisedData.missingRows.length} rows with missing ops)`
-                                : ''}
+                            {useNormalisedData && rowDelta
+                                ? ` (${rowDelta > 0 ? `${rowDelta} ops removed` : `${rowDelta * -1} ops added`})`
+                                : null}
                         </p>
                     </div>
                 </div>

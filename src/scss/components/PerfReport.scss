@@ -9,9 +9,7 @@
 $group-row-pattern: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
 
 .perf-report {
-    background: #222;
     color: #fff;
-    padding: 1rem;
     min-width: 1240px;
     overflow: auto;
 
@@ -28,10 +26,6 @@ $group-row-pattern: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%
     .perf-table {
         border-collapse: collapse;
         width: 100%;
-    }
-
-    .title {
-        margin-top: 0;
     }
 
     .header-aside {
@@ -55,7 +49,7 @@ $group-row-pattern: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%
     .data-options {
         display: flex;
         flex-wrap: nowrap;
-        gap: 5px;
+        gap: 10px;
         margin-bottom: 15px;
     }
 
