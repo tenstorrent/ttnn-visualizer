@@ -7,6 +7,7 @@ import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
 import axiosInstance from '../libs/axiosInstance';
 import useAppConfig from './useAppConfig';
+import { normaliseReportFolder } from '../functions/validateReportFolder';
 
 const FAILED_NO_CONNECTION = {
     status: ConnectionTestStates.FAILED,
@@ -45,7 +46,7 @@ const useRemoteConnection = () => {
 
         const response = await axiosInstance.post<RemoteFolder[]>('/api/remote/profiler', connection);
 
-        return response.data;
+        return response.data.map(normaliseReportFolder) as RemoteFolder[];
     };
 
     const listPerformanceFolders = async (connection?: RemoteConnection): Promise<RemoteFolder[]> => {
