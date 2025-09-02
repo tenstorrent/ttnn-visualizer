@@ -25,7 +25,7 @@ function PerfDeviceKernelRuntimeChart({ datasets = [] }: PerfDeviceKernelRuntime
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const maxDataSize = datasets.reduce((max, data) => Math.max(max, data?.length || 0), 0);
     const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
-    const maxCores = getCoreCount(architecture, datasets[0]);
+    const maxCores = getCoreCount(architecture, datasets[0] ?? []);
 
     const chartDataCoreCount = useMemo(
         () =>

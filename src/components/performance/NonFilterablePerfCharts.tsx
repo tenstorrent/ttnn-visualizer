@@ -35,7 +35,7 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
 
     const datasets = [chartData, ...(secondaryData || [])].filter((set) => set.length > 0);
     const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
-    const maxCores = getCoreCount(architecture, datasets[0]);
+    const maxCores = getCoreCount(architecture, datasets[0] ?? []);
 
     const matmulData = useMemo(
         () => datasets.map((set) => set.filter((row) => row.raw_op_code.toLowerCase().includes('matmul'))),
