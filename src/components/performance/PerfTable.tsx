@@ -82,8 +82,8 @@ const COMPARISON_KEYS: TableKeys[] = [
 
 const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
-
 const NO_META_DATA = 'n/a';
+const PATTERN_COUNT = 3; // Number of row patterns defined in PerfReport.scss
 
 const PerformanceTable: FC<PerformanceTableProps> = ({
     data,
@@ -307,6 +307,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                     shouldHighlightRows && dataset[i]?.raw_op_code.includes('MISSING'),
                                             },
                                             'comparison-row',
+                                            `report-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
                                         )}
                                     >
                                         {visibleHeaders.map((h) => (
