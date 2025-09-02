@@ -104,6 +104,10 @@ $row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50
 
     tbody {
         tr {
+            &:hover {
+                background-color: rgb(255 255 255 / 5%);
+            }
+
             &.comparison-row {
                 border-bottom: 1px solid colours.$tt-sand-accent;
                 background-size: 5px 5px;
