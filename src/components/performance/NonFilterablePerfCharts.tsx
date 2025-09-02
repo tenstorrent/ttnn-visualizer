@@ -13,24 +13,29 @@ import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationC
 import 'styles/components/PerfCharts.scss';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import PerfDeviceTimeChart from './PerfDeviceTimeChart';
+import getCoreCount from '../../functions/getCoreCount';
+import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
+import { useDeviceLog } from '../../hooks/useAPI';
 
 interface NonFilterablePerfChartsProps {
     chartData: PerfTableRow[];
     secondaryData?: PerfTableRow[][];
-    maxCores: number;
     opCodeOptions: Marker[];
 }
 
 const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
     chartData,
     secondaryData = [],
-    maxCores,
     opCodeOptions,
 }) => {
+    const { data: deviceLog } = useDeviceLog();
+
     const performanceReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const datasets = [chartData, ...(secondaryData || [])].filter((set) => set.length > 0);
+    const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
+    const maxCores = getCoreCount(architecture, datasets[0]);
 
     const matmulData = useMemo(
         () => datasets.map((set) => set.filter((row) => row.raw_op_code.toLowerCase().includes('matmul'))),
