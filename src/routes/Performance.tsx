@@ -8,7 +8,6 @@ import { Size, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import {
-    useDeviceLog,
     usePerfFolderList,
     usePerformanceComparisonReport,
     usePerformanceRange,
@@ -17,8 +16,6 @@ import {
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceReport from '../components/performance/PerfReport';
-import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import getCoreCount from '../functions/getCoreCount';
 import {
     activePerformanceReportAtom,
     comparisonPerformanceReportListAtom,
@@ -39,7 +36,6 @@ export default function Performance() {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
 
-    const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
     const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport(activePerformanceReport);
     const { data: comparisonData } = usePerformanceComparisonReport();
     const { data: folderList } = usePerfFolderList();
@@ -129,14 +125,10 @@ export default function Performance() {
         [selectedRange, filteredPerfData, comparisonReportList],
     );
 
-    if (isLoadingPerformance || isLoadingDeviceLog) {
+    if (isLoadingPerformance) {
         return <LoadingSpinner />;
     }
 
-    const activeData =
-        comparisonReportList && filteredComparisonData.length > 0 ? filteredComparisonData[0] : rangedData;
-    const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
-    const maxCores = activeData ? getCoreCount(architecture, activeData) : 0;
     const reportSelectors =
         comparisonReportList && comparisonReportList?.length > 0 ? [...comparisonReportList, null] : [null];
 
@@ -204,7 +196,6 @@ export default function Performance() {
                                         <PerfCharts
                                             filteredPerfData={rangedData}
                                             comparisonData={filteredComparisonData}
-                                            maxCores={maxCores}
                                             selectedOpCodes={selectedOpCodes}
                                         />
                                     </div>
@@ -216,7 +207,6 @@ export default function Performance() {
                                             <NonFilterablePerfCharts
                                                 chartData={rangedData}
                                                 secondaryData={comparisonData || []}
-                                                maxCores={maxCores}
                                                 opCodeOptions={opCodeOptions}
                                             />
                                         </div>
