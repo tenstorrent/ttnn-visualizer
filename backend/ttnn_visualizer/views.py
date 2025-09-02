@@ -25,12 +25,9 @@ from ttnn_visualizer.csv_queries import (
 from ttnn_visualizer.decorators import local_only, with_instance
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
-    AuthenticationException,
     AuthenticationFailedException,
     DataFormatError,
-    NoValidConnectionsError,
     RemoteConnectionException,
-    SSHException,
 )
 from ttnn_visualizer.file_uploads import (
     extract_folder_name_from_files,
@@ -46,7 +43,7 @@ from ttnn_visualizer.models import (
     StatusMessage,
 )
 from ttnn_visualizer.queries import DatabaseQueries
-from ttnn_visualizer.remote_sqlite_setup import check_sqlite_path, get_sqlite_path
+from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path
 from ttnn_visualizer.serializers import (
     serialize_buffer,
     serialize_buffer_pages,
@@ -102,8 +99,7 @@ def operation_list(instance: Instance):
         inputs = list(db.query_input_tensors())
         devices = list(db.query_devices())
         producers_consumers = list(db.query_producers_consumers())
-
-        return serialize_operations(
+        serialized_operations = serialize_operations(
             inputs,
             operation_arguments,
             operations,
@@ -113,6 +109,10 @@ def operation_list(instance: Instance):
             devices,
             producers_consumers,
             device_operations,
+        )
+        return Response(
+            orjson.dumps(serialized_operations),
+            mimetype="application/json",
         )
 
 
@@ -173,7 +173,7 @@ def operation_detail(operation_id, instance: Instance):
 
         devices = list(db.query_devices())
 
-        return serialize_operation(
+        serialized_operation = serialize_operation(
             buffers,
             inputs,
             operation,
@@ -188,6 +188,11 @@ def operation_detail(operation_id, instance: Instance):
             device_operations,
         )
 
+        return Response(
+            orjson.dumps(serialized_operation),
+            mimetype="application/json",
+        )
+
 
 @api.route("/operation-history", methods=["GET"])
 @with_instance
@@ -198,9 +203,12 @@ def operation_history(instance: Instance):
         Path(str(instance.profiler_path)).parent / operation_history_filename
     )
     if not operation_history_file.exists():
-        return []
+        return jsonify([])
     with open(operation_history_file, "r") as file:
-        return json.load(file)
+        return Response(
+            orjson.dumps(json.load(file)),
+            mimetype="application/json",
+        )
 
 
 @api.route("/config")
@@ -211,7 +219,10 @@ def get_config(instance: Instance):
     if not config_file.exists():
         return {}
     with open(config_file, "r") as file:
-        return json.load(file)
+        return Response(
+            orjson.dumps(json.load(file)),
+            mimetype="application/json",
+        )
 
 
 @api.route("/tensors", methods=["GET"])
@@ -224,8 +235,12 @@ def tensors_list(instance: Instance):
         local_comparisons = list(db.query_tensor_comparisons())
         global_comparisons = list(db.query_tensor_comparisons(local=False))
         producers_consumers = list(db.query_producers_consumers())
-        return serialize_tensors(
+        serialized_tensors = serialize_tensors(
             tensors, producers_consumers, local_comparisons, global_comparisons
+        )
+        return Response(
+            orjson.dumps(serialized_tensors),
+            mimetype="application/json",
         )
 
 
@@ -248,7 +263,10 @@ def buffer_detail(instance: Instance):
         buffer = db.query_next_buffer(operation_id, address)
         if not buffer:
             return Response(status=HTTPStatus.NOT_FOUND)
-        return dataclasses.asdict(buffer)
+        return Response(
+            orjson.dumps(dataclasses.asdict(buffer)),
+            mimetype="application/json",
+        )
 
 
 @api.route("/buffer-pages", methods=["GET"])
@@ -283,7 +301,10 @@ def buffer_pages(instance: Instance):
                 )
             )
         )
-        return serialize_buffer_pages(buffers)
+        return Response(
+            orjson.dumps(serialize_buffer_pages(buffers)),
+            mimetype="application/json",
+        )
 
 
 @api.route("/tensors/<tensor_id>", methods=["GET"])
@@ -295,7 +316,10 @@ def tensor_detail(tensor_id, instance: Instance):
         if not tensors:
             return Response(status=HTTPStatus.NOT_FOUND)
 
-        return dataclasses.asdict(tensors[0])
+        return Response(
+            orjson.dumps(dataclasses.asdict(tensors[0])),
+            mimetype="application/json",
+        )
 
 
 @api.route("/buffers", methods=["GET"])
@@ -315,7 +339,7 @@ def get_all_buffers(instance: Instance):
             )
         )
         serialized = [serialize_buffer(b) for b in buffers]
-        return jsonify(serialized)
+        return Response(orjson.dumps(serialized), mimetype="application/json")
 
 
 @api.route("/operation-buffers", methods=["GET"])
@@ -335,7 +359,10 @@ def get_operations_buffers(instance: Instance):
             )
         )
         operations = list(db.query_operations())
-        return serialize_operations_buffers(operations, buffers)
+        return Response(
+            orjson.dumps(serialize_operations_buffers(operations, buffers)),
+            mimetype="application/json",
+        )
 
 
 @api.route("/operation-buffers/<operation_id>", methods=["GET"])
@@ -364,7 +391,11 @@ def get_operation_buffers(operation_id, instance: Instance):
         )
         if not operation:
             return Response(status=HTTPStatus.NOT_FOUND)
-        return serialize_operation_buffers(operation, buffers)
+
+        return Response(
+            orjson.dumps(serialize_operation_buffers(operation, buffers)),
+            mimetype="application/json",
+        )
 
 
 @api.route("/profiler", methods=["GET"])
@@ -374,12 +405,12 @@ def get_profiler_data_list(instance: Instance):
     resolver = create_path_resolver(current_app)
 
     # Note: "profiler" in app terminology maps to tt-metal's ttnn/reports
-    path = resolver.get_base_report_path("profiler", instance.remote_connection)
+    path = resolver.get_base_report_path("profiler")
 
     if not path.exists():
         if resolver.is_direct_report_mode:
             logger.warning(f"TT-Metal profiler reports not found: {path}")
-            return jsonify([])
+            return []
         else:
             path.mkdir(parents=True, exist_ok=True)
 
@@ -439,7 +470,7 @@ def get_profiler_data_list(instance: Instance):
             continue
         valid_dirs.append({"path": dir_path.name, "reportName": report_name})
 
-    return jsonify(valid_dirs)
+    return Response(orjson.dumps(valid_dirs), mimetype="application/json")
 
 
 @api.route("/profiler/<profiler_name>", methods=["DELETE"])
@@ -494,16 +525,12 @@ def get_performance_data_list(instance: Instance):
     resolver = create_path_resolver(current_app)
 
     # Note: "performance" in app terminology maps to tt-metal's profiler/reports
-    path = resolver.get_base_report_path("performance", instance.remote_connection)
-
-    is_remote = True if instance.remote_connection else False
+    path = resolver.get_base_report_path("performance")
 
     if not path.exists():
         if resolver.is_direct_report_mode:
             logger.warning(f"TT-Metal performance reports not found: {path}")
             return jsonify([])
-        elif not is_remote:
-            path.mkdir(parents=True, exist_ok=True)
 
     if current_app.config["SERVER_MODE"]:
         session_instances = session.get("instances", [])
@@ -564,7 +591,7 @@ def get_performance_data_list(instance: Instance):
             }
         )
 
-    return jsonify(valid_dirs)
+    return Response(orjson.dumps(valid_dirs), mimetype="application/json")
 
 
 @api.route("/performance/device-log", methods=["GET"])
@@ -572,9 +599,10 @@ def get_performance_data_list(instance: Instance):
 def get_performance_data(instance: Instance):
     if not instance.performance_path:
         return Response(status=HTTPStatus.NOT_FOUND)
+
     with DeviceLogProfilerQueries(instance) as csv:
         result = csv.get_all_entries(as_dict=True, limit=100)
-        return jsonify(result)
+        return Response(orjson.dumps(result), mimetype="application/json")
 
 
 @api.route("/performance/perf-results", methods=["GET"])
@@ -585,7 +613,7 @@ def get_profiler_performance_data(instance: Instance):
     with OpsPerformanceQueries(instance) as csv:
         # result = csv.query_by_op_code(op_code="(torch) contiguous", as_dict=True)
         result = csv.get_all_entries(as_dict=True, limit=100)
-        return jsonify(result)
+        return Response(orjson.dumps(result), mimetype="application/json")
 
 
 @api.route("/performance/<performance_name>", methods=["DELETE"])
@@ -670,7 +698,7 @@ def get_performance_results_report(instance: Instance):
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
-    return jsonify(report), 200
+    return Response(orjson.dumps(report), mimetype="application/json")
 
 
 @api.route("/performance/device-log/raw", methods=["GET"])
@@ -705,7 +733,7 @@ def get_npe_manifest(instance: Instance):
     except FileNotFoundError:
         return jsonify([])
 
-    return jsonify(content)
+    return Response(orjson.dumps(content), mimetype="application/json")
 
 
 @api.route("/performance/npe/timeline", methods=["GET"])
@@ -717,16 +745,16 @@ def get_npe_timeline(instance: Instance):
     filename = request.args.get("filename", default=None)
 
     if not filename:
-        return jsonify({})
+        return Response(orjson.dumps({}), mimetype="application/json")
 
     filename = Path(filename).name
 
     try:
         content = NPEQueries.get_npe_timeline(instance, filename=filename)
     except FileNotFoundError:
-        return jsonify({})
+        return Response(orjson.dumps({}), mimetype="application/json")
 
-    return jsonify(content)
+    return Response(orjson.dumps(content), mimetype="application/json")
 
 
 @api.route("/performance/device-log/zone/<zone>", methods=["GET"])
@@ -736,7 +764,7 @@ def get_zone_statistics(zone, instance: Instance):
         return Response(status=HTTPStatus.NOT_FOUND)
     with DeviceLogProfilerQueries(instance) as csv:
         result = csv.query_zone_statistics(zone_name=zone, as_dict=True)
-        return jsonify(result)
+        return Response(orjson.dumps(result), mimetype="application/json")
 
 
 @api.route("/devices", methods=["GET"])
@@ -744,7 +772,10 @@ def get_zone_statistics(zone, instance: Instance):
 def get_devices(instance: Instance):
     with DatabaseQueries(instance) as db:
         devices = list(db.query_devices())
-        return serialize_devices(devices)
+        return Response(
+            orjson.dumps(serialize_devices(devices)),
+            mimetype="application/json",
+        )
 
 
 @api.route("/local/upload/profiler", methods=["POST"])
@@ -924,7 +955,10 @@ def get_remote_folders_profiler():
             if not rf.lastSynced:
                 logger.info(f"{directory_name} not yet synced")
 
-        return [r.model_dump() for r in remote_folders]
+        return Response(
+            orjson.dumps([r.model_dump() for r in remote_folders]),
+            mimetype="application/json",
+        )
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
 
@@ -957,7 +991,10 @@ def get_remote_folders_performance():
             if not rf.lastSynced:
                 logger.info(f"{performance_name} not yet synced")
 
-        return [r.model_dump() for r in remote_performance_folders]
+        return Response(
+            orjson.dumps([r.model_dump() for r in remote_performance_folders]),
+            mimetype="application/json",
+        )
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
 
@@ -990,7 +1027,10 @@ def get_cluster_descriptor(instance: Instance):
         try:
             with open(local_path) as cluster_desc_file:
                 yaml_data = yaml.safe_load(cluster_desc_file)
-                return jsonify(yaml_data), 200
+                return Response(
+                    orjson.dumps(yaml_data),
+                    mimetype="application/json",
+                )
         except yaml.YAMLError as e:
             return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
 
@@ -1020,7 +1060,7 @@ def test_remote_folder():
         add_status(
             ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
         )
-        return [status.model_dump() for status in statuses], e.http_status
+        return jsonify([status.model_dump() for status in statuses]), e.http_status
     except RemoteConnectionException as e:
         add_status(
             ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
@@ -1035,7 +1075,7 @@ def test_remote_folder():
             add_status(
                 ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
             )
-            return [status.model_dump() for status in statuses], e.http_status
+            return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
             add_status(
                 ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
@@ -1050,7 +1090,7 @@ def test_remote_folder():
             add_status(
                 ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
             )
-            return [status.model_dump() for status in statuses], e.http_status
+            return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
             add_status(
                 ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
@@ -1064,13 +1104,16 @@ def test_remote_folder():
             add_status(
                 ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
             )
-            return [status.model_dump() for status in statuses], e.http_status
+            return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
             add_status(
                 ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
             )
 
-    return [status.model_dump() for status in statuses]
+    return Response(
+        orjson.dumps([status.model_dump() for status in statuses]),
+        mimetype="application/json",
+    )
 
 
 @api.route("/remote/read", methods=["POST"])
@@ -1135,7 +1178,10 @@ def sync_remote_folder():
 
         remote_profiler_folder.lastSynced = int(time.time())
 
-        return remote_profiler_folder.model_dump()
+        return Response(
+            orjson.dumps(remote_profiler_folder.model_dump()),
+            mimetype="application/json",
+        )
 
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
@@ -1163,7 +1209,10 @@ def detect_sqlite_path():
             message="Unable to detect SQLite3 path. See logs",
         )
     finally:
-        return status_message.model_dump()
+        return Response(
+            orjson.dumps(status_message.model_dump()),
+            mimetype="application/json",
+        )
 
 
 @api.route("/remote/use", methods=["POST"])
@@ -1213,7 +1262,10 @@ def health_check():
 @with_instance
 def get_instance(instance: Instance):
     # Used to gate UI functions if no report is active
-    return instance.model_dump()
+    return Response(
+        orjson.dumps(instance.model_dump()),
+        mimetype="application/json",
+    )
 
 
 @api.route("/instance", methods=["PUT"])
@@ -1284,7 +1336,6 @@ def get_npe_data(instance: Instance):
         logger.error(f"Invalid JSON in NPE file: {e}")
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
-    # Use orjson for much faster JSON serialization of large files
     return Response(orjson.dumps(npe_data), mimetype="application/json")
 
 
@@ -1332,8 +1383,8 @@ def notify_report_update():
 
         logger.info(f"Report generated notification processed: {report_name}")
 
-        return (
-            jsonify(
+        return Response(
+            orjson.dumps(
                 {
                     "report_name": report_name,
                     "profiler_path": report_generated.profiler_path,
@@ -1342,9 +1393,13 @@ def notify_report_update():
                     "timestamp": report_generated.timestamp,
                 }
             ),
-            200,
+            mimetype="application/json",
         )
 
     except Exception as e:
         logger.error(f"Error processing report update notification: {str(e)}")
-        return jsonify({"error": "Internal server error"}), 500
+        return Response(
+            orjson.dumps({"error": "Internal server error"}),
+            mimetype="application/json",
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+        )

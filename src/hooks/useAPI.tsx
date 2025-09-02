@@ -41,6 +41,8 @@ import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { NPEData, NPEManifestEntry } from '../model/NPEModel';
 import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
+import createToastNotification from '../functions/createToastNotification';
+import { normaliseReportFolder } from '../functions/validateReportFolder';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -106,9 +108,23 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
     return defaultOperationDetailsData;
 };
 
+const MAX_RETRY_COUNT = 2;
+
 const fetchOperations = async (): Promise<OperationDescription[]> => {
     const tensorList: Map<number, Tensor> = new Map<number, Tensor>();
-    const { data: operationList } = await axiosInstance.get<OperationDescription[]>('/api/operations');
+    let response = await axiosInstance.get<OperationDescription[]>('/api/operations');
+    let operationList = response.data;
+    let retryCount = 0;
+
+    // TODO: Figure out why we sometimes get a string back instead of an array so we don't need this hack
+    while (!Array.isArray(operationList) && retryCount < MAX_RETRY_COUNT) {
+        // eslint-disable-next-line no-console
+        console.info('Data is not a JSON array, refetching operations list');
+        // eslint-disable-next-line no-await-in-loop
+        response = await axiosInstance.get<OperationDescription[]>('/api/operations');
+        operationList = response.data;
+        retryCount++;
+    }
 
     return operationList.map((operation: OperationDescription) => {
         operation.operationFileIdentifier = parseFileOperationIdentifier(operation.stack_trace);
@@ -277,13 +293,14 @@ const fetchReportMeta = async (): Promise<ReportMetaData> => {
     return meta;
 };
 
-const fetchDevices = async () => {
+const fetchDevices = async (reportName: string) => {
     const { data: meta } = await axiosInstance.get<DeviceData[]>('/api/devices');
+
     if (meta.length === 0) {
-        // TODO: make this an in app message - https://github.com/tenstorrent/ttnn-visualizer/issues/739
-        // eslint-disable-next-line no-console
-        console.error('Data integrity warning: No device information provided.');
+        // TODO: Report Name here is actually the path because that's what we store in the atom - atom should store ReportFolder object
+        createToastNotification('Data integrity warning: No device information provided.', `/${reportName}`, true);
     }
+
     return [...new Map(meta.map((device) => [device.device_id, device])).values()];
 };
 
@@ -734,7 +751,7 @@ export const useDevices = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<DeviceData[], AxiosError>({
-        queryFn: () => (activeProfilerReport !== null ? fetchDevices() : Promise.resolve([])),
+        queryFn: () => (activeProfilerReport !== null ? fetchDevices(activeProfilerReport) : Promise.resolve([])),
         queryKey: ['get-devices', activeProfilerReport],
         retry: false,
         staleTime: Infinity,
@@ -934,7 +951,7 @@ export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';
 const fetchReportFolderList = async () => {
     const { data } = await axiosInstance.get('/api/profiler');
 
-    return data;
+    return data.map(normaliseReportFolder);
 };
 
 export const deleteProfiler = async (report: string) => {
