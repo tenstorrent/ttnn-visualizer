@@ -4,18 +4,7 @@
 
 import { FC, useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import {
-    Button,
-    Intent,
-    MenuItem,
-    PopoverPosition,
-    Position,
-    Size,
-    Tab,
-    TabId,
-    Tabs,
-    Tooltip,
-} from '@blueprintjs/core';
+import { MenuItem, PopoverPosition, Position, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { PerfTableRow, TableFilter, TableHeader, TableKeys } from '../../definitions/PerfTable';
@@ -84,7 +73,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState<boolean>(true);
-
     const [filters, setFilters] = useState<TableFilter>(
         Object.fromEntries(FILTERABLE_COLUMN_KEYS.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
@@ -253,49 +241,43 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                 </div>
 
                 <div className='data-options'>
-                    <Button
-                        icon={IconNames.PREDICTIVE_ANALYSIS}
-                        text='Matmul optimization analysis'
-                        aria-label='Matmul optimization analysis'
-                        intent={provideMatmulAdvice ? Intent.PRIMARY : Intent.NONE}
-                        onClick={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                    <Switch
+                        label='Matmul optimization analysis'
+                        onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                        checked={provideMatmulAdvice}
                     />
 
-                    <Button
-                        icon={IconNames.WARNING_SIGN}
-                        text='Highlight high dispatch ops'
-                        aria-label='Highlight high dispatch ops'
-                        intent={hiliteHighDispatch ? Intent.WARNING : Intent.NONE}
-                        onClick={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                    <Switch
+                        label='Highlight high dispatch ops'
+                        onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                        checked={hiliteHighDispatch}
                     />
 
                     <Tooltip
                         content='Tries to match up operations between the performance reports'
                         position={Position.TOP}
                     >
-                        <Button
-                            icon={IconNames.MANY_TO_ONE}
-                            text='Normalise data'
-                            aria-label='Normalise data'
-                            intent={useNormalisedData ? Intent.PRIMARY : Intent.NONE}
+                        <Switch
+                            label='Normalise data'
                             disabled={!activeComparisonReportList}
-                            onClick={() => setUseNormalisedData(!useNormalisedData)}
+                            onChange={() => setUseNormalisedData(!useNormalisedData)}
+                            checked={useNormalisedData}
                         />
                     </Tooltip>
 
-                    <Tooltip
-                        content='Highlights rows where ops have been added or are missing after normalising the data'
-                        position={Position.TOP}
-                    >
-                        <Button
-                            icon={IconNames.SMALL_INFO_SIGN}
-                            text='Highlight row differences'
-                            aria-label='Highlight row differences'
-                            onClick={() => setHighlightRows(!highlightRows)}
-                            intent={useNormalisedData && highlightRows ? Intent.DANGER : Intent.NONE}
-                            disabled={!activeComparisonReportList || !useNormalisedData}
-                        />
-                    </Tooltip>
+                    {activeComparisonReportList && useNormalisedData && (
+                        <Tooltip
+                            content='Highlights rows where ops have been added or are missing after normalising the data'
+                            position={Position.TOP}
+                        >
+                            <Switch
+                                label='Highlight row differences'
+                                onChange={() => setHighlightRows(!highlightRows)}
+                                disabled={!activeComparisonReportList || !useNormalisedData}
+                                checked={highlightRows}
+                            />
+                        </Tooltip>
+                    )}
                 </div>
 
                 <Tabs
@@ -303,11 +285,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                     onChange={setSelectedTabId}
                     renderActiveTabPanelOnly
                     size={Size.LARGE}
+                    id='performance-tabs'
                 >
                     <Tab
                         id={INITIAL_TAB_ID}
                         title={activePerformanceReport}
                         icon={IconNames.TH_LIST}
+                        className='tab-panel'
                         panel={
                             <PerfTable
                                 data={useNormalisedData ? normalisedData.data[0] : filteredRows}
@@ -330,6 +314,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             id={report}
                             key={index}
                             icon={IconNames.TH_LIST}
+                            className='tab-panel'
                             disabled={useNormalisedData && normalisedComparisonData?.[index]?.length === 0}
                             title={
                                 normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
@@ -360,6 +345,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
+                                    reportName={report}
                                 />
                             }
                         />

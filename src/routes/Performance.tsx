@@ -133,8 +133,10 @@ export default function Performance() {
         return <LoadingSpinner />;
     }
 
+    const activeData =
+        comparisonReportList && filteredComparisonData.length > 0 ? filteredComparisonData[0] : rangedData;
     const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
-    const maxCores = perfData ? getCoreCount(architecture, perfData) : 0;
+    const maxCores = activeData ? getCoreCount(architecture, activeData) : 0;
     const reportSelectors =
         comparisonReportList && comparisonReportList?.length > 0 ? [...comparisonReportList, null] : [null];
 
@@ -143,13 +145,6 @@ export default function Performance() {
             <Helmet title='Performance' />
 
             <h1 className='page-title'>Performance analysis</h1>
-
-            <p>
-                <strong>Arch:</strong> {architecture}
-            </p>
-            <p>
-                <strong>Cores:</strong> {maxCores}
-            </p>
 
             {!shouldDisableComparison &&
                 (folderList ? (
