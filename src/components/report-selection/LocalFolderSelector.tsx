@@ -32,6 +32,11 @@ import {
 } from '../../hooks/useAPI';
 import LocalFolderPicker from './LocalFolderPicker';
 import { ReportFolder } from '../../definitions/Reports';
+import {
+    createDataIntegrityWarning,
+    hasBeenNormalised,
+    normaliseReportFolder,
+} from '../../functions/validateReportFolder';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -121,18 +126,21 @@ const LocalFolderOptions: FC = () => {
             connectionStatus = connectionFailedStatus;
         } else {
             setProfilerUploadLabel(`${files.length} files uploaded`);
-            setReportLocation('local');
-            setSelectedDevice(DEFAULT_DEVICE_ID);
+            response.data = normaliseReportFolder(response.data);
 
-            if (response.data) {
-                setActiveProfilerReport(response.data.path);
-                createToastNotification('Active memory report', response.data.reportName);
+            if (hasBeenNormalised(response?.data)) {
+                createDataIntegrityWarning(response.data);
             }
+
+            setSelectedDevice(DEFAULT_DEVICE_ID);
+            setActiveProfilerReport(response.data.path);
+            createToastNotification('Active memory report', response.data.reportName);
+            setReportLocation('local');
+            setProfilerFolder(connectionStatus);
         }
 
         queryClient.clear();
         setIsUploadingReport(false);
-        setProfilerFolder(connectionStatus);
     };
 
     const handlePerformanceDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -190,6 +198,10 @@ const LocalFolderOptions: FC = () => {
 
     const handleSelectProfiler = async (item: ReportFolder) => {
         await updateInstance({ ...instance, active_report: { profiler_name: item.path } });
+
+        if (hasBeenNormalised(item)) {
+            createDataIntegrityWarning(item);
+        }
 
         createToastNotification('Active memory report', getReportName(reportFolderList, item.path) ?? '');
         setActiveProfilerReport(item.path);
