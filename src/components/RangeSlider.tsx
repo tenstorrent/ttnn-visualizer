@@ -30,6 +30,7 @@ import {
 import { OperationDescription } from '../model/APIData';
 import { PerfTableRow } from '../definitions/PerfTable';
 import LoadingSpinner from './LoadingSpinner';
+import createToastNotification from '../functions/createToastNotification';
 
 const RANGE_STEP = 25;
 
@@ -45,7 +46,7 @@ function Range() {
     const setHasClusterDescription = useSetAtom(hasClusterDescriptionAtom);
 
     const { data: operations } = useOperationsList();
-    const { data: perfData } = usePerformanceReport(activePerformanceReport);
+    const { data: perfData, error: perfDataError } = usePerformanceReport(activePerformanceReport);
     const { data: clusterData } = useGetClusterDescription();
     const location = useLocation();
     const listPerf = useGetDeviceOperationListPerf();
@@ -155,6 +156,16 @@ function Range() {
     useEffect(() => {
         setHasClusterDescription(!!clusterData);
     }, [clusterData, setHasClusterDescription]);
+
+    useEffect(() => {
+        if (perfDataError && activePerformanceReport) {
+            createToastNotification(
+                'Performance data format is not supported, use TT-NN Visualizer v0.49.0',
+                activePerformanceReport,
+                true,
+            );
+        }
+    }, [perfDataError, activePerformanceReport]);
 
     return selectedOperationRange || selectedPerformanceRange ? (
         <div className='range-slider'>
