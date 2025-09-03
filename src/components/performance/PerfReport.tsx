@@ -4,11 +4,10 @@
 
 import { FC, useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { Icon, MenuItem, PopoverPosition, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
+import { MenuItem, PopoverPosition, Position, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { PerfTableRow, TableFilter, TableHeader, TableKeys } from '../../definitions/PerfTable';
-import 'styles/components/PerfReport.scss';
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
@@ -17,6 +16,7 @@ import PerfTable from './PerfTable';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
+import 'styles/components/PerfReport.scss';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -73,7 +73,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState<boolean>(true);
-
     const [filters, setFilters] = useState<TableFilter>(
         Object.fromEntries(FILTERABLE_COLUMN_KEYS.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
@@ -137,6 +136,28 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
         comparisonData?.[comparisonIndex],
     );
     const filteredDataLength = getFilteredDataLength(selectedTabId, filteredRows, filteredComparisonRows);
+    const rowDelta = useMemo(() => {
+        if (!useNormalisedData) {
+            return 0;
+        }
+
+        if (selectedTabId === INITIAL_TAB_ID) {
+            return processedRows.length - (normalisedData.data?.[0]?.length || 0);
+        }
+
+        if (processedComparisonRows?.[comparisonIndex] && normalisedData.data?.[comparisonIndex + 1]) {
+            return processedComparisonRows[comparisonIndex].length - normalisedData.data[comparisonIndex + 1].length;
+        }
+
+        return 0;
+    }, [
+        useNormalisedData,
+        selectedTabId,
+        processedRows,
+        normalisedData.data,
+        comparisonIndex,
+        processedComparisonRows,
+    ]);
 
     // Resets various state if we remove all comparison reports
     useEffect(() => {
@@ -169,46 +190,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                 disabled={!isMultiDevice}
             /> */}
 
-            <Switch
-                label='Show Matmul optimization analysis'
-                onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
-                checked={provideMatmulAdvice}
-            />
-
-            <Switch
-                label='Highlight high dispatch ops'
-                onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
-                checked={hiliteHighDispatch}
-            />
-
-            <Switch
-                labelElement={
-                    <Tooltip content='Tries to match up operations between the performance reports'>
-                        <span className='switch-label-with-icon'>
-                            <span>Normalise performance data</span>
-                            <Icon icon={IconNames.SMALL_INFO_SIGN} />
-                        </span>
-                    </Tooltip>
-                }
-                onChange={() => setUseNormalisedData(!useNormalisedData)}
-                checked={useNormalisedData}
-                disabled={!activeComparisonReportList}
-            />
-
-            <Switch
-                labelElement={
-                    <Tooltip content='Highlights rows where ops have been added or are missing after normalising the data'>
-                        <span className='switch-label-with-icon'>
-                            <span>Highlight row difference</span>
-                            <Icon icon={IconNames.SMALL_INFO_SIGN} />
-                        </span>
-                    </Tooltip>
-                }
-                onChange={() => setHighlightRows(!highlightRows)}
-                checked={highlightRows}
-                disabled={!activeComparisonReportList || !useNormalisedData}
-            />
-
             <div className='perf-report'>
                 <div className='table-header'>
                     <h3 className='title'>Performance report</h3>
@@ -218,6 +199,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             {filteredDataLength !== totalDataLength
                                 ? `Showing ${filteredDataLength} of ${totalDataLength} rows`
                                 : `Showing ${filteredDataLength} rows`}
+
+                            {useNormalisedData && rowDelta
+                                ? ` (${rowDelta > 0 ? `${rowDelta} ops removed` : `${rowDelta * -1} ops added`})`
+                                : null}
                         </p>
                     </div>
                 </div>
@@ -253,15 +238,46 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         }
                         resetOnSelect
                     />
+                </div>
 
-                    {/* Need to refactor to have the reset working */}
-                    {/* <Button
-                        onClick={() => changeSorting(null)(null)}
-                        variant={ButtonVariant.OUTLINED}
-                        disabled={sortingColumn === null}
+                <div className='data-options'>
+                    <Switch
+                        label='Matmul optimization analysis'
+                        onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                        checked={provideMatmulAdvice}
+                    />
+
+                    <Switch
+                        label='Highlight high dispatch ops'
+                        onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                        checked={hiliteHighDispatch}
+                    />
+
+                    <Tooltip
+                        content='Tries to match up operations between the performance reports'
+                        position={Position.TOP}
                     >
-                        Reset sort
-                    </Button> */}
+                        <Switch
+                            label='Normalise data'
+                            disabled={!activeComparisonReportList}
+                            onChange={() => setUseNormalisedData(!useNormalisedData)}
+                            checked={useNormalisedData}
+                        />
+                    </Tooltip>
+
+                    {activeComparisonReportList && useNormalisedData && (
+                        <Tooltip
+                            content='Highlights rows where ops have been added or are missing after normalising the data'
+                            position={Position.TOP}
+                        >
+                            <Switch
+                                label='Highlight row differences'
+                                onChange={() => setHighlightRows(!highlightRows)}
+                                disabled={!activeComparisonReportList || !useNormalisedData}
+                                checked={highlightRows}
+                            />
+                        </Tooltip>
+                    )}
                 </div>
 
                 <Tabs
@@ -269,11 +285,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                     onChange={setSelectedTabId}
                     renderActiveTabPanelOnly
                     size={Size.LARGE}
+                    id='performance-tabs'
                 >
                     <Tab
                         id={INITIAL_TAB_ID}
                         title={activePerformanceReport}
                         icon={IconNames.TH_LIST}
+                        className='tab-panel'
                         panel={
                             <PerfTable
                                 data={useNormalisedData ? normalisedData.data[0] : filteredRows}
@@ -296,6 +314,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             id={report}
                             key={index}
                             icon={IconNames.TH_LIST}
+                            className='tab-panel'
                             disabled={useNormalisedData && normalisedComparisonData?.[index]?.length === 0}
                             title={
                                 normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
@@ -326,6 +345,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
+                                    reportName={report}
                                 />
                             }
                         />

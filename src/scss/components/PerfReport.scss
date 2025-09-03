@@ -6,12 +6,12 @@
 @use '../definitions/colours' as colours;
 @use '../mixins/perfReportColours' as perf;
 
-$group-row-pattern: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
+$row-pattern-0: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
+$row-pattern-1: linear-gradient(0deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
+$row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
 
 .perf-report {
-    background: #222;
     color: #fff;
-    padding: 1rem;
     min-width: 1240px;
     overflow: auto;
 
@@ -30,10 +30,6 @@ $group-row-pattern: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%
         width: 100%;
     }
 
-    .title {
-        margin-top: 0;
-    }
-
     .header-aside {
         display: flex;
         flex-wrap: nowrap;
@@ -50,6 +46,23 @@ $group-row-pattern: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%
         flex-wrap: nowrap;
         gap: 5px;
         margin-bottom: 15px;
+    }
+
+    .data-options {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 10px;
+    }
+
+    .tab-panel {
+        margin-top: 10px;
+    }
+
+    .meta-data {
+        display: flex;
+        flex-direction: column;
+        height: 46px;
+        margin-bottom: 20px;
     }
 
     .cell-header {
@@ -91,10 +104,25 @@ $group-row-pattern: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%
 
     tbody {
         tr {
+            &:hover {
+                background-color: rgb(255 255 255 / 5%);
+            }
+
             &.comparison-row {
                 border-bottom: 1px solid colours.$tt-sand-accent;
-                background-image: $group-row-pattern;
                 background-size: 5px 5px;
+
+                &.pattern-0 {
+                    background-image: $row-pattern-0;
+                }
+
+                &.pattern-1 {
+                    background-image: $row-pattern-1;
+                }
+
+                &.pattern-2 {
+                    background-image: $row-pattern-2;
+                }
             }
         }
     }

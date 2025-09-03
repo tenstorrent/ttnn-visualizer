@@ -12,11 +12,10 @@ import 'styles/components/PerfCharts.scss';
 interface PerfChartsProps {
     filteredPerfData: PerfTableRow[];
     comparisonData?: PerfTableRow[][];
-    maxCores: number;
     selectedOpCodes: Marker[];
 }
 
-const PerfCharts: FC<PerfChartsProps> = ({ filteredPerfData, comparisonData, maxCores, selectedOpCodes }) => {
+const PerfCharts: FC<PerfChartsProps> = ({ filteredPerfData, comparisonData, selectedOpCodes }) => {
     const data = [filteredPerfData, ...(comparisonData || [])].filter((set) => set.length > 0);
 
     return (
@@ -26,10 +25,7 @@ const PerfCharts: FC<PerfChartsProps> = ({ filteredPerfData, comparisonData, max
                 selectedOpCodes={selectedOpCodes}
             />
 
-            <PerfDeviceKernelRuntimeChart
-                datasets={data}
-                maxCores={maxCores}
-            />
+            <PerfDeviceKernelRuntimeChart datasets={data} />
 
             <PerfDeviceKernelDurationChart datasets={data} />
         </div>

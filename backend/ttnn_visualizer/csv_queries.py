@@ -14,7 +14,7 @@ import pandas as pd
 import zstd
 from tt_perf_report import perf_report
 from ttnn_visualizer.exceptions import DataFormatError
-from ttnn_visualizer.models import Instance, RemoteConnection
+from ttnn_visualizer.models import Instance
 
 
 class LocalCSVQueryRunner:
@@ -433,18 +433,25 @@ class OpsPerformanceReportQueries:
         raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
         csv_file = StringIO(raw_csv)
         csv_output_file = tempfile.mktemp(suffix=".csv")
-        perf_report.generate_perf_report(
-            csv_file,
-            cls.DEFAULT_SIGNPOST,
-            cls.DEFAULT_IGNORE_SIGNPOSTS,
-            cls.DEFAULT_MIN_PERCENTAGE,
-            cls.DEFAULT_ID_RANGE,
-            csv_output_file,
-            cls.DEFAULT_NO_ADVICE,
-            cls.DEFAULT_TRACING_MODE,
-            True,
-            True,
-        )
+
+        try:
+            perf_report.generate_perf_report(
+                csv_file,
+                cls.DEFAULT_SIGNPOST,
+                cls.DEFAULT_IGNORE_SIGNPOSTS,
+                cls.DEFAULT_MIN_PERCENTAGE,
+                cls.DEFAULT_ID_RANGE,
+                csv_output_file,
+                cls.DEFAULT_NO_ADVICE,
+                cls.DEFAULT_TRACING_MODE,
+                True,
+                True,
+                True,
+                True,
+                False,
+            )
+        except Exception as e:
+            raise DataFormatError(f"Error generating performance report: {e}") from e
 
         ops_perf_results = []
         ops_perf_results_reader = csv.DictReader(StringIO(raw_csv))

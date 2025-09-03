@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+@use '../definitions/colours' as *;
+
 .comparison-selectors {
     display: flex;
     align-items: flex-end;
@@ -18,4 +20,14 @@
     display: flex;
     align-items: center;
     gap: 5px;
+}
+
+.perf-report,
+.chart-tab {
+    background: $tt-black;
+    padding: 1rem;
+
+    .title {
+        margin-top: 0;
+    }
 }

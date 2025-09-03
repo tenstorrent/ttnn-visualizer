@@ -132,7 +132,9 @@ export function useSelectedTransferGrouping(
                         if (!groups[nocId]) {
                             groups[nocId] = [];
                         }
-                        groups[nocId].push(transfer);
+                        if (!groups[nocId].some((t) => t.id === transfer.id)) {
+                            groups[nocId].push(transfer);
+                        }
                     }
                 });
             });
