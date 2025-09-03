@@ -9,12 +9,16 @@ import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { TableHeader, TableKeys } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
-import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
+import { useDeviceLog, useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import { formatCell } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
 import { OperationDescription } from '../../model/APIData';
 import ROUTES from '../../definitions/Routes';
+import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
+import getCoreCount from '../../functions/getCoreCount';
+import LoadingSpinner from '../LoadingSpinner';
+import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -24,6 +28,7 @@ interface PerformanceTableProps {
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     shouldHighlightRows: boolean;
+    reportName?: string;
 }
 
 enum COLUMN_HEADERS {
@@ -77,6 +82,8 @@ const COMPARISON_KEYS: TableKeys[] = [
 
 const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
+const NO_META_DATA = 'n/a';
+const PATTERN_COUNT = 3; // Number of row patterns defined in PerfReport.scss
 
 const PerformanceTable: FC<PerformanceTableProps> = ({
     data,
@@ -86,12 +93,17 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     provideMatmulAdvice,
     hiliteHighDispatch,
     shouldHighlightRows,
+    reportName = null,
 }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
     const { data: operations } = useOperationsList();
     const { data: npeManifest, error: npeManifestError } = useGetNPEManifest();
     const navigate = useNavigate();
+    const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog(reportName);
+
+    const architecture = deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
+    const maxCores = data ? getCoreCount(architecture, data) : 0;
 
     const filterableColumnKeys = useMemo(
         () => TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key),
@@ -179,6 +191,23 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                     <p>Invalid NPE manifest: {npeManifestError.message}</p>
                 </div>
             )}
+
+            <div className='meta-data'>
+                {isLoadingDeviceLog ? (
+                    <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
+                ) : (
+                    <>
+                        <p>
+                            <strong>Arch: </strong>
+                            {architecture || NO_META_DATA}
+                        </p>
+                        <p>
+                            <strong>Cores: </strong>
+                            {maxCores || NO_META_DATA}
+                        </p>
+                    </>
+                )}
+            </div>
 
             <table className='perf-table monospace'>
                 <thead>
@@ -278,6 +307,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                     shouldHighlightRows && dataset[i]?.raw_op_code.includes('MISSING'),
                                             },
                                             'comparison-row',
+                                            `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
                                         )}
                                     >
                                         {visibleHeaders.map((h) => (

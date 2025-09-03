@@ -366,7 +366,7 @@ export const useNPETimelineFile = (fileName: string | undefined) => {
 };
 
 interface MetaData {
-    architecture: string | null;
+    architecture: DeviceArchitecture | null;
     frequency: number | null;
 }
 
@@ -375,13 +375,15 @@ interface FetchDeviceLogRawResult {
     deviceLog: ParseResult<Record<string, string>[]>;
 }
 
-const fetchDeviceLogRaw = async (): Promise<FetchDeviceLogRawResult> => {
-    const { data } = await axiosInstance.get<string>('/api/performance/device-log/raw');
+const fetchDeviceLogRaw = async (name: string | null): Promise<FetchDeviceLogRawResult> => {
+    const { data } = await axiosInstance.get<string>('/api/performance/device-log/raw', {
+        params: { name },
+    });
 
     function parseArchAndFreq(input: string): MetaData {
         const archMatch = input.match(/ARCH:\s*([\w\d_]+)/);
         const freqMatch = input.match(/CHIP_FREQ\[MHz\]:\s*(\d+)/);
-        const architecture = archMatch ? archMatch[1] : null;
+        const architecture = archMatch ? (archMatch[1] as DeviceArchitecture) : null;
         const frequency = freqMatch ? parseInt(freqMatch[1], 10) : null;
 
         return { architecture, frequency };
@@ -798,12 +800,12 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     }, [range, response.data, useRange]);
 };
 
-export const useDeviceLog = () => {
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+export const useDeviceLog = (name?: string | null) => {
+    const key = name || null;
 
     return useQuery({
-        queryFn: () => fetchDeviceLogRaw(),
-        queryKey: ['get-device-log-raw', activePerformanceReport],
+        queryFn: () => fetchDeviceLogRaw(key),
+        queryKey: ['get-device-log-raw', key],
         staleTime: Infinity,
     });
 };
