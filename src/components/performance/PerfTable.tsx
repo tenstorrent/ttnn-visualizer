@@ -307,7 +307,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                     shouldHighlightRows && dataset[i]?.raw_op_code.includes('MISSING'),
                                             },
                                             'comparison-row',
-                                            `report-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
+                                            `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
                                         )}
                                     >
                                         {visibleHeaders.map((h) => (

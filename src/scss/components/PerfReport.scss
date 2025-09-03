@@ -112,15 +112,15 @@ $row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50
                 border-bottom: 1px solid colours.$tt-sand-accent;
                 background-size: 5px 5px;
 
-                &.report-0 {
+                &.pattern-0 {
                     background-image: $row-pattern-0;
                 }
 
-                &.report-1 {
+                &.pattern-1 {
                     background-image: $row-pattern-1;
                 }
 
-                &.report-2 {
+                &.pattern-2 {
                     background-image: $row-pattern-2;
                 }
             }
