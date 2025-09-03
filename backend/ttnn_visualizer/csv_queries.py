@@ -14,7 +14,7 @@ import pandas as pd
 import zstd
 from tt_perf_report import perf_report
 from ttnn_visualizer.exceptions import DataFormatError
-from ttnn_visualizer.models import Instance, RemoteConnection
+from ttnn_visualizer.models import Instance
 
 
 class LocalCSVQueryRunner:
@@ -444,6 +444,9 @@ class OpsPerformanceReportQueries:
             cls.DEFAULT_TRACING_MODE,
             True,
             True,
+            True,
+            True,
+            False,
         )
 
         ops_perf_results = []
