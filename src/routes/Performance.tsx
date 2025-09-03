@@ -142,8 +142,9 @@ export default function Performance() {
                     Data format is not supported, try using{' '}
                     <a href='https://github.com/tenstorrent/ttnn-visualizer/releases/tag/v0.49.0'>
                         TT-NN Visualizer v0.49.0
-                    </a>
-                    .
+                    </a>{' '}
+                    or earlier, or regenerate performance report using a newer version of{' '}
+                    <a href='https://github.com/tenstorrent/tt-metal/'>TT-Metal</a>.
                 </p>
             </>
         );
