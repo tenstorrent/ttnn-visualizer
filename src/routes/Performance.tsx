@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Size, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
+import { HttpStatusCode } from 'axios';
 import {
     usePerfFolderList,
     usePerformanceComparisonReport,
@@ -36,7 +37,11 @@ export default function Performance() {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
 
-    const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport(activePerformanceReport);
+    const {
+        data: perfData,
+        isLoading: isLoadingPerformance,
+        error: perfDataError,
+    } = usePerformanceReport(activePerformanceReport);
     const { data: comparisonData } = usePerformanceComparisonReport();
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
@@ -125,8 +130,23 @@ export default function Performance() {
         [selectedRange, filteredPerfData, comparisonReportList],
     );
 
-    if (isLoadingPerformance) {
+    if (isLoadingPerformance && !perfDataError) {
         return <LoadingSpinner />;
+    }
+
+    if (perfDataError?.status === HttpStatusCode.UnprocessableEntity) {
+        return (
+            <>
+                <h2>Unable to process performance data</h2>
+                <p>
+                    Data format is not supported, try using{' '}
+                    <a href='https://github.com/tenstorrent/ttnn-visualizer/releases/tag/v0.49.0'>
+                        TT-NN Visualizer v0.49.0
+                    </a>
+                    .
+                </p>
+            </>
+        );
     }
 
     const reportSelectors =

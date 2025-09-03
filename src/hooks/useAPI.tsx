@@ -811,10 +811,11 @@ export const useDeviceLog = (name?: string | null) => {
 };
 
 export const usePerformanceReport = (name: string | null) => {
-    const response = useQuery({
+    const response = useQuery<PerfTableRow[], AxiosError>({
         queryFn: () => (name !== null ? fetchPerformanceReport(name) : Promise.resolve([])),
         queryKey: ['get-performance-report', name],
         enabled: name !== null,
+        retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
     });
 
     return useMemo(() => {
@@ -828,7 +829,7 @@ export const usePerformanceReport = (name: string | null) => {
 
         return response;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.data]);
+    }, [response.data, response.error]);
 };
 
 export const usePerformanceComparisonReport = () => {
