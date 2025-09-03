@@ -2,7 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, Icon, Intent, Tag } from '@blueprintjs/core';
+import { useState } from 'react';
+import { Button, Icon, Intent, Switch, Tag } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
@@ -17,6 +18,8 @@ const ActiveTransferDetails = ({
     highlightedTransfer,
     setHighlightedTransfer,
     congestionData,
+    highlightedRoute,
+    setHighlightedRoute,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     nocType, // this may or may not be used in the future
 }: {
@@ -26,10 +29,12 @@ const ActiveTransferDetails = ({
     highlightedTransfer: NoCTransfer | null;
     setHighlightedTransfer: (transfer: NoCTransfer | null) => void;
     congestionData: LinkUtilization[];
+    highlightedRoute: number | null;
+    setHighlightedRoute: (route: number | null) => void;
     nocType: NoCType | null;
 }) => {
     const hasData = Object.keys(groupedTransfersByNoCID).length !== 0;
-
+    const [showRoutes, setShowRoutes] = useState(false);
     return (
         <aside
             className={classNames('side-data', {
@@ -47,7 +52,17 @@ const ActiveTransferDetails = ({
                             onClick={() => showActiveTransfers(null)}
                         />
                     </h3>
-
+                    <h4 className='active-transfer-details-title'>
+                        <Switch
+                            labelElement={
+                                <>
+                                    <Icon icon={IconNames.FLOW_LINEAR} /> Show individual routes
+                                </>
+                            }
+                            checked={showRoutes}
+                            onChange={() => setShowRoutes(!showRoutes)}
+                        />
+                    </h4>
                     <div className='wrapper'>
                         {Object.entries(groupedTransfersByNoCID).map(([nocId, localTransferList]) => {
                             const nocData = congestionData.find((el) => el[NPE_LINK.NOC_ID] === nocId);
@@ -70,11 +85,10 @@ const ActiveTransferDetails = ({
                                     {localTransferList.map((transfer) => (
                                         <div
                                             className='transfer-info'
-                                            key={transfer.id}
+                                            key={`${nocId}${transfer.id}`}
                                         >
                                             <div
                                                 className='local-transfer'
-                                                key={transfer.id}
                                                 style={{
                                                     opacity:
                                                         highlightedTransfer === null || highlightedTransfer === transfer
@@ -117,6 +131,34 @@ const ActiveTransferDetails = ({
                                                     >
                                                         Fabric
                                                     </Tag>
+                                                )}
+                                                {showRoutes && (
+                                                    <ul className='routes'>
+                                                        {transfer.route.map((route, index) => (
+                                                            <li
+                                                                key={`${transfer.id}-${route.src}-${route.dst.join('-')}`}
+                                                                // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                                                onMouseOver={() => setHighlightedRoute(index)}
+                                                                // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                                                onMouseOut={() => setHighlightedRoute(null)}
+                                                                style={{
+                                                                    opacity:
+                                                                        highlightedRoute === null ||
+                                                                        highlightedRoute === index
+                                                                            ? 1
+                                                                            : 0.5,
+                                                                }}
+                                                            >
+                                                                <Icon icon={IconNames.FLOW_LINEAR} />
+                                                                {route.src.join('-')}
+                                                                <Icon
+                                                                    size={11}
+                                                                    icon={IconNames.ArrowRight}
+                                                                />{' '}
+                                                                {route.dst.map((el) => el.join('-')).join('-')}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
                                                 )}
                                             </div>
                                         </div>

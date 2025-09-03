@@ -49,6 +49,10 @@ $outer-padding: 10px;
                 background-color: variables.$tt-dark-minimal-button-background-color-hover;
             }
         }
+
+        .bp6-switch {
+            margin-bottom: 0;
+        }
     }
 
     .noc-id {
@@ -100,5 +104,18 @@ $outer-padding: 10px;
 
     .transfer-dst {
         border: 1px solid variables.$npe-highlight-dst;
+    }
+
+    .routes {
+        list-style: none;
+        margin-top: 0;
+        padding-left: 20px;
+
+        li {
+            display: flex;
+            flex-flow: row;
+            align-items: center;
+            gap: 5px;
+        }
     }
 }

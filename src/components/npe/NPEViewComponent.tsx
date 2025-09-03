@@ -39,6 +39,7 @@ const LABEL_STEP_COUNT_CYCLESCALE = 10;
 
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
+    const [highlightedRoute, setHighlightedRoute] = useState<number | null>(null);
     const [selectedTimestep, setSelectedTimestep] = useState<number>(0);
     const [animationInterval, setAnimationInterval] = useState<number | null>(null);
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
@@ -131,6 +132,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedNode(null);
         setSelectedTransferList([]);
         setHighlightedTransfer(null);
+        setHighlightedRoute(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [npeData]);
 
@@ -214,6 +216,17 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedTransferList(activeTransfers as NoCTransfer[]);
     };
 
+    // DEBUG CODE, keeping for now
+    // useEffect(() => {
+    //     console.log('------------ selected transfers -------------');
+    //     console.log(selectedTransferList);
+    //     selectedTransferList
+    //         .find((transfer) => {
+    //             return transfer.id === 50;
+    //         })
+    //         ?.route.forEach((r) => console.log(r));
+    // }, [selectedTransferList]);
+
     const getOriginOpacity = (transfer: NoCTransfer): number => {
         if (isShowingAllTransfers) {
             return 0;
@@ -233,7 +246,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return 0.15;
         }
 
-        return 0.5;
+        return 0.1;
     };
 
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
@@ -522,9 +535,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                                         }}
                                     >
-                                        {highlightedTransfer?.route.map((route) =>
+                                        {highlightedTransfer?.route.map((route, index) =>
                                             route.links.map((link) => {
-                                                if (link[NPE_LINK.CHIP_ID] === clusterChip.id) {
+                                                if (
+                                                    link[NPE_LINK.CHIP_ID] === clusterChip.id &&
+                                                    (highlightedRoute === null || highlightedRoute === index)
+                                                ) {
                                                     return (
                                                         <div
                                                             key={`${link[NPE_LINK.Y]}-${link[NPE_LINK.X]}-${link[NPE_LINK.NOC_ID]}`}
@@ -573,6 +589,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     showActiveTransfers={showActiveTransfers}
                     highlightedTransfer={highlightedTransfer}
                     setHighlightedTransfer={setHighlightedTransfer}
+                    highlightedRoute={highlightedRoute}
+                    setHighlightedRoute={setHighlightedRoute}
                     nocType={nocFilter}
                 />
             </div>
