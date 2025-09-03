@@ -132,35 +132,35 @@ const ActiveTransferDetails = ({
                                                         Fabric
                                                     </Tag>
                                                 )}
-                                                {showRoutes && (
-                                                    <ul className='routes'>
-                                                        {transfer.route.map((route, index) => (
-                                                            <li
-                                                                key={`${transfer.id}-${route.src}-${route.dst.join('-')}`}
-                                                                // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
-                                                                onMouseOver={() => setHighlightedRoute(index)}
-                                                                // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
-                                                                onMouseOut={() => setHighlightedRoute(null)}
-                                                                style={{
-                                                                    opacity:
-                                                                        highlightedRoute === null ||
-                                                                        highlightedRoute === index
-                                                                            ? 1
-                                                                            : 0.5,
-                                                                }}
-                                                            >
-                                                                <Icon icon={IconNames.FLOW_LINEAR} />
-                                                                {route.src.join('-')}
-                                                                <Icon
-                                                                    size={11}
-                                                                    icon={IconNames.ArrowRight}
-                                                                />{' '}
-                                                                {route.dst.map((el) => el.join('-')).join('-')}
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                )}
                                             </div>
+                                            {showRoutes && (
+                                                <ul className='routes'>
+                                                    {transfer.route.map((route, index) => (
+                                                        <li
+                                                            key={`${transfer.id}-${route.src}-${route.dst.join('-')}`}
+                                                            // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                                            onMouseOver={() => setHighlightedRoute(index)}
+                                                            // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                                            onMouseOut={() => setHighlightedRoute(null)}
+                                                            style={{
+                                                                opacity:
+                                                                    highlightedRoute === null ||
+                                                                    highlightedRoute === index
+                                                                        ? 1
+                                                                        : 0.5,
+                                                            }}
+                                                        >
+                                                            <Icon icon={IconNames.FLOW_LINEAR} />
+                                                            {route.src.join('-')}
+                                                            <Icon
+                                                                size={11}
+                                                                icon={IconNames.ArrowRight}
+                                                            />{' '}
+                                                            {route.dst.map((el) => el.join('-')).join('-')}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
