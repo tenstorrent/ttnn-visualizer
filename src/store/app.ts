@@ -15,7 +15,8 @@ export enum ReportLocation {
     REMOTE = 'remote',
 }
 
-export const reportLocationAtom = atom<ReportLocation | null>(null);
+export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
+export const performanceReportLocationAtom = atom<ReportLocation | null>(null);
 export const activeProfilerReportAtom = atom<string | null>(null);
 export const activePerformanceReportAtom = atom<string | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
