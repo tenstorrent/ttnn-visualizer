@@ -17,6 +17,7 @@ import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemote from '../../hooks/useRemote';
 import {
+    ReportLocation,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     reportLocationAtom,
@@ -126,7 +127,7 @@ const RemoteSyncConfigurator: FC = () => {
 
     const updateReportSelection = (folder: RemoteFolder) => {
         queryClient.clear();
-        setReportLocation('remote');
+        setReportLocation(ReportLocation.REMOTE);
         setSelectedDevice(DEFAULT_DEVICE_ID);
         setActiveProfilerReport(getFolderNameFromPath(folder.remotePath));
         createToastNotification('Active memory report', folder.reportName);
@@ -134,7 +135,7 @@ const RemoteSyncConfigurator: FC = () => {
 
     const updatePerformanceSelection = (fileName: string) => {
         queryClient.clear();
-        setReportLocation('remote');
+        setReportLocation(ReportLocation.REMOTE);
         setSelectedDevice(DEFAULT_DEVICE_ID);
         setActivePerformanceReport(fileName);
         createToastNotification('Active performance report', fileName);

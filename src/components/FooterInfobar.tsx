@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
 import {
+    ReportLocation,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     operationRangeAtom,
@@ -60,7 +61,7 @@ function FooterInfobar() {
     };
 
     const activeReportName =
-        connectionType === 'remote'
+        connectionType === ReportLocation.REMOTE
             ? getRemoteReportName(remoteFolders, activeProfilerReport)
             : getLocalReportName(reports, activeProfilerReport);
 

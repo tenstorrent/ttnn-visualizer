@@ -10,6 +10,7 @@ import { useQueryClient } from 'react-query';
 import { useAtom, useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
 import {
+    ReportLocation,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     reportLocationAtom,
@@ -135,7 +136,7 @@ const LocalFolderOptions: FC = () => {
             setSelectedDevice(DEFAULT_DEVICE_ID);
             setActiveProfilerReport(response.data.path);
             createToastNotification('Active memory report', response.data.reportName);
-            setReportLocation('local');
+            setReportLocation(ReportLocation.LOCAL);
             setProfilerFolder(connectionStatus);
         }
 
@@ -170,7 +171,7 @@ const LocalFolderOptions: FC = () => {
         } else {
             const fileName = getFolderName(files);
             setPerformanceDataUploadLabel(`${files.length} files uploaded`);
-            setReportLocation('local');
+            setReportLocation(ReportLocation.LOCAL);
             setActivePerformanceReport(fileName);
             createToastNotification('Active performance report', fileName);
         }
@@ -205,7 +206,7 @@ const LocalFolderOptions: FC = () => {
 
         createToastNotification('Active memory report', getReportName(reportFolderList, item.path) ?? '');
         setActiveProfilerReport(item.path);
-        setReportLocation('local');
+        setReportLocation(ReportLocation.LOCAL);
     };
 
     const handleDeleteProfiler = async (folder: ReportFolder) => {

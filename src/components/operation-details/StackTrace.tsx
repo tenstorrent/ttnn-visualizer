@@ -10,7 +10,7 @@ import { Button, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useAtom, useAtomValue } from 'jotai';
-import { isFullStackTraceAtom, reportLocationAtom } from '../../store/app';
+import { ReportLocation, isFullStackTraceAtom, reportLocationAtom } from '../../store/app';
 import useRemoteConnection from '../../hooks/useRemote';
 import Overlay from '../Overlay';
 import 'styles/components/StackTrace.scss';
@@ -43,7 +43,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
     const connectionType = useAtomValue(reportLocationAtom);
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
 
-    const isRemote = connectionType === 'remote';
+    const isRemote = connectionType === ReportLocation.REMOTE;
 
     const stackTraceWithHighlights = useMemo(() => {
         const filePathMatches = FILE_PATH_REGEX.exec(stackTrace);
