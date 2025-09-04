@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useEffect, useState } from 'react';
-import { Alignment, Button, ButtonVariant, Navbar, Position, Size, Tooltip } from '@blueprintjs/core';
+import { Alignment, Button, ButtonVariant, Icon, Navbar, Position, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useAtomValue } from 'jotai';
@@ -94,7 +94,10 @@ function MainNavigation() {
                     size={Size.LARGE}
                     className='reports-button'
                 />
-
+                <Icon
+                    icon={IconNames.DragHandleVertical}
+                    className='separator'
+                />
                 <Tooltip
                     content={MEMORY_PROFILER_DISABLED}
                     position={Position.BOTTOM}
