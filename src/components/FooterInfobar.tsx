@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Button, Collapse, NumberRange, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, Collapse, Icon, NumberRange, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
@@ -96,7 +96,7 @@ function FooterInfobar() {
                                 position={PopoverPosition.TOP}
                             >
                                 <div className='title'>
-                                    <strong>Dir:</strong>
+                                    <Icon icon={isProfilerRemote ? IconNames.CLOUD : IconNames.FOLDER_OPEN} />
                                     <div className='report-name'>{profilerReportPath}</div>
                                 </div>
                             </Tooltip>
@@ -106,7 +106,7 @@ function FooterInfobar() {
                                 position={PopoverPosition.TOP}
                             >
                                 <div className='title'>
-                                    <strong>Dir:</strong>
+                                    <Icon icon={isPerformanceRemote ? IconNames.CLOUD : IconNames.FOLDER_OPEN} />
                                     <div className='report-name'>{performanceReportPath}</div>
                                 </div>
                             </Tooltip>
@@ -121,7 +121,7 @@ function FooterInfobar() {
                             position={PopoverPosition.TOP}
                         >
                             <div className='title'>
-                                <strong>Dir:</strong>
+                                <Icon icon={IconNames.FOLDER_OPEN} />
                                 <div className='report-name'>{serverConfig.REPORT_DATA_DIRECTORY}</div>
                             </div>
                         </Tooltip>
