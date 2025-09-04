@@ -69,6 +69,11 @@ $row-background: $tt-grey-2;
         text-align: left;
     }
 
+    td {
+        // Stops lengthy config values breaking the layout - https://github.com/tenstorrent/ttnn-visualizer/issues/809
+        word-break: break-word;
+    }
+
     &.has-vertical-headings {
         tr {
             td {
