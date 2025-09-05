@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Button, Collapse, Icon, NumberRange, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Collapse, NumberRange, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
@@ -14,7 +14,6 @@ import {
     activeProfilerReportAtom,
     operationRangeAtom,
     performanceRangeAtom,
-    performanceReportLocationAtom,
     profilerReportLocationAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
@@ -27,6 +26,7 @@ import { ReportFolder } from '../definitions/Reports';
 import useRemoteConnection from '../hooks/useRemote';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import getServerConfig from '../functions/getServerConfig';
+import { Instance } from '../model/APIData';
 
 const MAX_TITLE_LENGTH = 20;
 
@@ -38,7 +38,6 @@ function FooterInfobar() {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const profilerReportLocationType = useAtomValue(profilerReportLocationAtom);
-    const performanceReportLocationType = useAtomValue(performanceReportLocationAtom);
     const remote = useRemoteConnection();
     const { data: instance } = useInstance();
 
@@ -68,64 +67,34 @@ function FooterInfobar() {
         profilerReportLocationType === ReportLocation.REMOTE
             ? getRemoteReportName(remoteFolders, activeProfilerReport)
             : getLocalReportName(reports, activeProfilerReport);
+    const hasLoadedRemoteReport =
+        instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
 
     const serverConfig = getServerConfig();
-    const isProfilerRemote = profilerReportLocationType === ReportLocation.REMOTE;
-    const isPerformanceRemote = performanceReportLocationType === ReportLocation.REMOTE;
-    const profilerReportPath =
-        isProfilerRemote && instance?.remote_profiler_folder
-            ? getCleanRemotePath(instance.remote_profiler_folder.remotePath)
-            : serverConfig.REPORT_DATA_DIRECTORY;
-    const performanceReportPath =
-        isPerformanceRemote && instance?.remote_performance_folder
-            ? getCleanRemotePath(instance.remote_performance_folder.remotePath)
-            : serverConfig.REPORT_DATA_DIRECTORY;
 
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
             <div className='current-data'>
                 <div className='active-reports'>
-                    {isProfilerRemote || isPerformanceRemote ? (
-                        <>
-                            <Tooltip
-                                content={
-                                    profilerReportPath && profilerReportPath.length > MAX_TITLE_LENGTH
-                                        ? `${profilerReportPath}`
-                                        : ''
-                                }
-                                position={PopoverPosition.TOP}
-                            >
-                                <div className='title'>
-                                    <Icon icon={isProfilerRemote ? IconNames.CLOUD : IconNames.FOLDER_OPEN} />
-                                    <div className='report-name'>{profilerReportPath}</div>
-                                </div>
-                            </Tooltip>
-
-                            <Tooltip
-                                content={`${performanceReportPath}`}
-                                position={PopoverPosition.TOP}
-                            >
-                                <div className='title'>
-                                    <Icon icon={isPerformanceRemote ? IconNames.CLOUD : IconNames.FOLDER_OPEN} />
-                                    <div className='report-name'>{performanceReportPath}</div>
-                                </div>
-                            </Tooltip>
-                        </>
-                    ) : (
-                        <Tooltip
-                            content={
-                                profilerReportPath && profilerReportPath.length > MAX_TITLE_LENGTH
-                                    ? `${profilerReportPath}`
-                                    : ''
-                            }
-                            position={PopoverPosition.TOP}
-                        >
-                            <div className='title'>
-                                <Icon icon={IconNames.FOLDER_OPEN} />
-                                <div className='report-name'>{serverConfig.REPORT_DATA_DIRECTORY}</div>
-                            </div>
-                        </Tooltip>
-                    )}
+                    <Tooltip
+                        content={
+                            <>
+                                <strong>Local report path:</strong> {serverConfig.REPORT_DATA_DIRECTORY}
+                                {hasLoadedRemoteReport && (
+                                    <>
+                                        <br />
+                                        <strong>Remote report paths: </strong> {getRemotePaths(instance)}
+                                    </>
+                                )}
+                            </>
+                        }
+                        position={PopoverPosition.TOP}
+                    >
+                        <Button
+                            icon={IconNames.FOLDER_OPEN}
+                            variant={ButtonVariant.OUTLINED}
+                        />
+                    </Tooltip>
 
                     {activeProfilerReportName && (
                         <Tooltip
@@ -133,7 +102,7 @@ function FooterInfobar() {
                             position={PopoverPosition.TOP}
                         >
                             <div className='title'>
-                                <strong>Report:</strong>
+                                <strong>Memory:</strong>
                                 <span className='report-name'>{activeProfilerReportName}</span>
                             </div>
                         </Tooltip>
@@ -203,6 +172,13 @@ const getLocalReportName = (reports: ReportFolder[], path: string | null) =>
 const getRemoteReportName = (remoteFolders: RemoteFolder[], folderName: string | null) =>
     folderName ? remoteFolders?.find((report) => report.remotePath.includes(folderName))?.reportName : false;
 
-const getCleanRemotePath = (remotePath: string): string => remotePath.split('/').slice(0, -1).join('/');
+const getRemotePaths = (instance: Instance): string => {
+    const paths = [instance?.remote_connection?.profilerPath, instance?.remote_connection?.performancePath].filter(
+        (path) => path,
+    );
+
+    // Return a more easily readable stringified array
+    return `[ ${paths.toString().replace(/,/g, ', ')} ]`;
+};
 
 export default FooterInfobar;
