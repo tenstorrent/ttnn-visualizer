@@ -80,7 +80,7 @@ def create_app(settings_override=None):
                 "SERVER_MODE": app.config["SERVER_MODE"],
                 "BASE_PATH": app.config["BASE_PATH"],
                 "TT_METAL_HOME": app.config["TT_METAL_HOME"],
-                "REPORT_DATA_DIRECTORY": app.config["REPORT_DATA_DIRECTORY"],
+                "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
             }
             js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(js_config)};"
 
