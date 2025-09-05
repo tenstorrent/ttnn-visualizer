@@ -53,7 +53,7 @@ export default function Performance() {
     const opCodeOptions = useMemo(() => {
         const opCodes = Array.from(
             new Set([
-                ...(perfData
+                ...(perfData?.report
                     ?.map((row) => row.raw_op_code)
                     .filter((opCode): opCode is string => opCode !== undefined) || []),
                 ...(comparisonData
@@ -107,7 +107,7 @@ export default function Performance() {
 
     useEffect(() => {
         setFilteredPerfData(
-            perfData?.filter((row) =>
+            perfData?.report?.filter((row) =>
                 selectedOpCodes.length
                     ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
                     : false,

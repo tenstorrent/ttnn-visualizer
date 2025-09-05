@@ -26,7 +26,7 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
-import { PerfTableRow } from '../definitions/PerfTable';
+import { PerfTableRow, StackedPerfRow } from '../definitions/PerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import {
     activeNpeOpTraceAtom,
@@ -317,8 +317,13 @@ const fetchDevices = async (reportName: string) => {
 //     });
 // };
 
-const fetchPerformanceReport = async (name?: string | null): Promise<PerfTableRow[]> => {
-    const { data } = await axiosInstance.get<PerfTableRow[]>(`/api/performance/perf-results/report`, {
+interface PerformanceReportResponse {
+    report: PerfTableRow[];
+    stacked_report: StackedPerfRow[];
+}
+
+const fetchPerformanceReport = async (name?: string | null) => {
+    const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
         params: { name },
     });
 
@@ -622,13 +627,13 @@ export interface DeviceOperationMapping {
 }
 
 // Unused
-const useProxyPerformanceReport = (): PerfTableRow[] => {
+const useProxyPerformanceReport = (): PerformanceReportResponse => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const response = usePerformanceReport(activePerformanceReport);
 
     return useMemo(() => {
         if (!response.data) {
-            return [];
+            return { report: [], stacked_report: [] };
         }
         return response.data;
     }, [response.data]);
@@ -640,13 +645,16 @@ export const useGetDeviceOperationListPerf = () => {
 
     return useMemo(() => {
         const isValid = deviceOperations.every((deviceOperation, index) => {
-            const perfData = data[index];
+            const perfData = data.report[index];
+
             if (perfData && perfData.raw_op_code === deviceOperation.name) {
                 deviceOperation.perfData = perfData;
                 return true;
             }
+
             return false;
         });
+
         return isValid ? deviceOperations : [];
     }, [data, deviceOperations]);
 };
@@ -675,10 +683,10 @@ export const usePerformanceRange = (): NumberRange | null => {
 
     return useMemo(
         () =>
-            perfData?.length
+            perfData?.report?.length
                 ? [
-                      Math.min(...perfData.map((data) => parseInt(data.id, 10))),
-                      Math.max(...perfData.map((data) => parseInt(data.id, 10))),
+                      Math.min(...perfData.report.map((data) => parseInt(data.id, 10))),
+                      Math.max(...perfData.report.map((data) => parseInt(data.id, 10))),
                   ]
                 : null,
         [perfData],
@@ -811,8 +819,9 @@ export const useDeviceLog = (name?: string | null) => {
 };
 
 export const usePerformanceReport = (name: string | null) => {
-    const response = useQuery<PerfTableRow[], AxiosError>({
-        queryFn: () => (name !== null ? fetchPerformanceReport(name) : Promise.resolve([])),
+    const response = useQuery<PerformanceReportResponse, AxiosError>({
+        queryFn: () =>
+            name !== null ? fetchPerformanceReport(name) : Promise.resolve({ report: [], stacked_report: [] }),
         queryKey: ['get-performance-report', name],
         enabled: name !== null,
         retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
@@ -820,11 +829,11 @@ export const usePerformanceReport = (name: string | null) => {
 
     return useMemo(() => {
         if (response.data) {
-            const df: PerfTableRow[] = response.data
+            const df: PerfTableRow[] = response.data.report
                 .slice()
                 .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
 
-            response.data = df;
+            response.data.report = df;
         }
 
         return response;
@@ -856,8 +865,8 @@ export const usePerformanceComparisonReport = () => {
 
     const filteredData = useMemo(() => {
         if (response.data) {
-            return response.data.map((report: PerfTableRow[]) =>
-                report.slice().filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === '')),
+            return response.data.map((perfReport: PerformanceReportResponse) =>
+                perfReport.report.slice().filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === '')),
             );
         }
         return response.data;

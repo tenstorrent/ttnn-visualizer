@@ -48,6 +48,17 @@ export interface PerfTableRow {
     missing?: boolean;
 }
 
+export interface StackedPerfRow {
+    '%': string;
+    'OP Code Joined': string;
+    Device_Time_Sum_us: string;
+    Ops_Count: string;
+    Flops_min: string;
+    Flops_max: string;
+    Flops_mean: string;
+    Flops_std: string;
+}
+
 export type MathFidelity = 'HiFi4' | 'HiFi2' | 'LoFi';
 
 export const MARKER_COLOURS = [

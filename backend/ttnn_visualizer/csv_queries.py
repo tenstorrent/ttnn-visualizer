@@ -525,4 +525,4 @@ class OpsPerformanceReportQueries:
             if os.path.exists(stacked_png_file):
                 os.unlink(stacked_png_file)
 
-        return report, stacked_report
+        return {"report": report, "stacked_report": stacked_report}
