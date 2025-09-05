@@ -71,30 +71,33 @@ function FooterInfobar() {
         instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
 
     const serverConfig = getServerConfig();
+    const isServerMode = serverConfig.SERVER_MODE;
 
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
             <div className='current-data'>
                 <div className='active-reports'>
-                    <Tooltip
-                        content={
-                            <>
-                                <strong>Local report path:</strong> {serverConfig.REPORT_DATA_DIRECTORY}
-                                {hasLoadedRemoteReport && (
-                                    <>
-                                        <br />
-                                        <strong>Remote report paths: </strong> {getRemotePaths(instance)}
-                                    </>
-                                )}
-                            </>
-                        }
-                        position={PopoverPosition.TOP}
-                    >
-                        <Button
-                            icon={IconNames.FOLDER_OPEN}
-                            variant={ButtonVariant.OUTLINED}
-                        />
-                    </Tooltip>
+                    {!isServerMode && (
+                        <Tooltip
+                            content={
+                                <>
+                                    <strong>Local report path:</strong> {serverConfig.REPORT_DATA_DIRECTORY}
+                                    {hasLoadedRemoteReport && (
+                                        <>
+                                            <br />
+                                            <strong>Remote report paths: </strong> {getRemotePaths(instance)}
+                                        </>
+                                    )}
+                                </>
+                            }
+                            position={PopoverPosition.TOP}
+                        >
+                            <Button
+                                icon={IconNames.FOLDER_OPEN}
+                                variant={ButtonVariant.OUTLINED}
+                            />
+                        </Tooltip>
+                    )}
 
                     {activeProfilerReportName && (
                         <Tooltip
