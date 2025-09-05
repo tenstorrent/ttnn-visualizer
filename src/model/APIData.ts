@@ -78,6 +78,7 @@ export interface Instance {
     active_report?: { performance_name?: string; profiler_name?: string; npe_name?: string };
     remote_connection?: RemoteConnection;
     remote_profiler_folder?: RemoteFolder;
+    remote_performance_folder?: RemoteFolder;
 }
 
 export enum FileStatus {

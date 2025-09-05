@@ -17,9 +17,11 @@ import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemote from '../../hooks/useRemote';
 import {
+    ReportLocation,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
-    reportLocationAtom,
+    performanceReportLocationAtom,
+    profilerReportLocationAtom,
     selectedDeviceAtom,
 } from '../../store/app';
 import AddRemoteConnection from './AddRemoteConnection';
@@ -32,7 +34,8 @@ const RemoteSyncConfigurator: FC = () => {
     const queryClient = useQueryClient();
     const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
 
-    const setReportLocation = useSetAtom(reportLocationAtom);
+    const setProfilerReportLocation = useSetAtom(profilerReportLocationAtom);
+    const setPerformanceReportLocation = useSetAtom(performanceReportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
@@ -126,7 +129,7 @@ const RemoteSyncConfigurator: FC = () => {
 
     const updateReportSelection = (folder: RemoteFolder) => {
         queryClient.clear();
-        setReportLocation('remote');
+        setProfilerReportLocation(ReportLocation.REMOTE);
         setSelectedDevice(DEFAULT_DEVICE_ID);
         setActiveProfilerReport(getFolderNameFromPath(folder.remotePath));
         createToastNotification('Active memory report', folder.reportName);
@@ -134,7 +137,7 @@ const RemoteSyncConfigurator: FC = () => {
 
     const updatePerformanceSelection = (fileName: string) => {
         queryClient.clear();
-        setReportLocation('remote');
+        setPerformanceReportLocation(ReportLocation.REMOTE);
         setSelectedDevice(DEFAULT_DEVICE_ID);
         setActivePerformanceReport(fileName);
         createToastNotification('Active performance report', fileName);

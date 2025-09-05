@@ -6,6 +6,7 @@
 import {
     Button,
     ButtonGroup,
+    ButtonVariant,
     FormGroup,
     InputGroup,
     Intent,
@@ -208,125 +209,153 @@ export default function Styleguide() {
 
             <h2>Buttons</h2>
 
-            <div className='container flex'>
-                <div className='flex flex-column'>
-                    <p>Default</p>
+            <table className='container table'>
+                <thead>
+                    <tr>
+                        <th />
+                        <th>Default</th>
+                        <th>Primary</th>
+                        <th>Success</th>
+                        <th>Warning</th>
+                        <th>Danger</th>
+                    </tr>
+                </thead>
 
-                    <Button icon={IconNames.ADD}>Your text here</Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        variant='outlined'
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        variant='minimal'
-                    >
-                        Your text here
-                    </Button>
-                </div>
-
-                <div className='flex flex-column'>
-                    <p>Primary</p>
-
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.PRIMARY}
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.PRIMARY}
-                        variant='outlined'
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.PRIMARY}
-                        variant='minimal'
-                    >
-                        Your text here
-                    </Button>
-                </div>
-
-                <div className='flex flex-column'>
-                    <p>Success</p>
-
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.SUCCESS}
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.SUCCESS}
-                        variant='outlined'
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.SUCCESS}
-                        variant='minimal'
-                    >
-                        Your text here
-                    </Button>
-                </div>
-
-                <div className='flex flex-column'>
-                    <p>Warning</p>
-
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.WARNING}
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.WARNING}
-                        variant='outlined'
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.WARNING}
-                        variant='minimal'
-                    >
-                        Your text here
-                    </Button>
-                </div>
-
-                <div className='flex flex-column'>
-                    <p>Danger</p>
-
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.DANGER}
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.DANGER}
-                        variant='outlined'
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.DANGER}
-                        variant='minimal'
-                    >
-                        Your text here
-                    </Button>
-                </div>
-            </div>
+                <tbody>
+                    <tr>
+                        <th>Default</th>
+                        <td>
+                            <Button icon={IconNames.ADD}>Your text here</Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.PRIMARY}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.SUCCESS}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.WARNING}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.DANGER}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Outlined</th>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                variant={ButtonVariant.OUTLINED}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.PRIMARY}
+                                variant={ButtonVariant.OUTLINED}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.SUCCESS}
+                                variant={ButtonVariant.OUTLINED}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.WARNING}
+                                variant={ButtonVariant.OUTLINED}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.DANGER}
+                                variant={ButtonVariant.OUTLINED}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Minimal</th>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                variant={ButtonVariant.MINIMAL}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.PRIMARY}
+                                variant={ButtonVariant.MINIMAL}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.SUCCESS}
+                                variant={ButtonVariant.MINIMAL}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.WARNING}
+                                variant={ButtonVariant.MINIMAL}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.DANGER}
+                                variant={ButtonVariant.MINIMAL}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
 
             <div className='container'>
                 <h3>Icons</h3>
@@ -334,21 +363,21 @@ export default function Styleguide() {
                 <ButtonGroup>
                     <Button
                         icon={IconNames.ArrowLeft}
-                        variant='outlined'
+                        variant={ButtonVariant.OUTLINED}
                     />
 
                     <Button
                         icon={IconNames.LIST}
-                        variant='outlined'
+                        variant={ButtonVariant.OUTLINED}
                     />
 
                     <Button
                         endIcon={IconNames.ArrowRight}
-                        variant='outlined'
+                        variant={ButtonVariant.OUTLINED}
                     />
                 </ButtonGroup>
 
-                <ButtonGroup variant='minimal'>
+                <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
                         content='Expand all'
                         placement={PopoverPosition.TOP}

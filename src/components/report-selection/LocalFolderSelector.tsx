@@ -10,9 +10,11 @@ import { useQueryClient } from 'react-query';
 import { useAtom, useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
 import {
+    ReportLocation,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
-    reportLocationAtom,
+    performanceReportLocationAtom,
+    profilerReportLocationAtom,
     selectedDeviceAtom,
 } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
@@ -79,7 +81,8 @@ const connectionFailedStatus: ConnectionStatus = {
 
 const LocalFolderOptions: FC = () => {
     const queryClient = useQueryClient();
-    const setReportLocation = useSetAtom(reportLocationAtom);
+    const setProfilerReportLocation = useSetAtom(profilerReportLocationAtom);
+    const setPerformanceReportLocation = useSetAtom(performanceReportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
@@ -135,7 +138,7 @@ const LocalFolderOptions: FC = () => {
             setSelectedDevice(DEFAULT_DEVICE_ID);
             setActiveProfilerReport(response.data.path);
             createToastNotification('Active memory report', response.data.reportName);
-            setReportLocation('local');
+            setProfilerReportLocation(ReportLocation.LOCAL);
             setProfilerFolder(connectionStatus);
         }
 
@@ -170,7 +173,7 @@ const LocalFolderOptions: FC = () => {
         } else {
             const fileName = getFolderName(files);
             setPerformanceDataUploadLabel(`${files.length} files uploaded`);
-            setReportLocation('local');
+            setPerformanceReportLocation(ReportLocation.LOCAL);
             setActivePerformanceReport(fileName);
             createToastNotification('Active performance report', fileName);
         }
@@ -205,7 +208,7 @@ const LocalFolderOptions: FC = () => {
 
         createToastNotification('Active memory report', getReportName(reportFolderList, item.path) ?? '');
         setActiveProfilerReport(item.path);
-        setReportLocation('local');
+        setProfilerReportLocation(ReportLocation.LOCAL);
     };
 
     const handleDeleteProfiler = async (folder: ReportFolder) => {
@@ -226,6 +229,7 @@ const LocalFolderOptions: FC = () => {
 
         createToastNotification('Active performance report', item.reportName);
         setActivePerformanceReport(item.path);
+        setPerformanceReportLocation(ReportLocation.LOCAL);
     };
 
     const handleDeletePerformance = async (folder: ReportFolder) => {
