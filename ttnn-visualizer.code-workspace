@@ -68,6 +68,7 @@
         "recommendations": [
             "dbaeumer.vscode-eslint",
             "esbenp.prettier-vscode",
+            "freakypie.code-python-isort",
             "Gruntfuggly.todo-tree",
             "ms-python.black-formatter",
             "ms-python.python",

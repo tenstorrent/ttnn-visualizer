@@ -100,7 +100,6 @@ class NPEQueries:
 
     @staticmethod
     def get_npe_manifest(instance: Instance):
-
         file_path = Path(
             instance.performance_path,
             NPEQueries.NPE_FOLDER,
@@ -418,14 +417,14 @@ class OpsPerformanceReportQueries:
     ]
 
     STACKED_REPORT_COLUMNS = [
-        "%",
-        "OP Code Joined",
-        "Device_Time_Sum_us",
-        "Ops_Count",
-        "Flops_min",
-        "Flops_max",
-        "Flops_mean",
-        "Flops_std",
+        "percent",
+        "op_code",
+        "device_time_sum_us",
+        "ops_count",
+        "flops_min",
+        "flops_max",
+        "flops_mean",
+        "flops_std",
     ]
 
     PASSTHROUGH_COLUMNS = {

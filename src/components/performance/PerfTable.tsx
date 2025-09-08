@@ -45,8 +45,8 @@ enum COLUMN_HEADERS {
     flops_percent = 'flops_percent',
     math_fidelity = 'math_fidelity',
     OP = 'op',
-    HIGH_DISPATCH = 'high_dispatch',
-    GLOBAL_CALL_COUNT = 'global_call_count',
+    high_dispatch = 'high_dispatch',
+    global_call_count = 'global_call_count',
 }
 
 const TABLE_HEADERS: TableHeader[] = [
@@ -76,8 +76,8 @@ const COMPARISON_KEYS: TableKeys[] = [
     COLUMN_HEADERS.flops,
     COLUMN_HEADERS.flops_percent,
     COLUMN_HEADERS.math_fidelity,
-    COLUMN_HEADERS.HIGH_DISPATCH,
-    COLUMN_HEADERS.GLOBAL_CALL_COUNT,
+    COLUMN_HEADERS.high_dispatch,
+    COLUMN_HEADERS.global_call_count,
 ];
 
 const OP_ID_INSERTION_POINT = 1;
@@ -139,9 +139,9 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
         ...(opIdsMap.length > 0 ? [{ label: 'OP', key: COLUMN_HEADERS.OP, sortable: true }] : []),
         ...TABLE_HEADERS.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
-        ...(hiliteHighDispatch ? [{ label: 'Slow', key: COLUMN_HEADERS.HIGH_DISPATCH }] : []),
+        ...(hiliteHighDispatch ? [{ label: 'Slow', key: COLUMN_HEADERS.high_dispatch }] : []),
         ...TABLE_HEADERS.slice(HIGH_DISPATCH_INSERTION_POINT),
-        ...(npeManifest && npeManifest.length > 0 ? [{ label: 'NPE', key: COLUMN_HEADERS.GLOBAL_CALL_COUNT }] : []),
+        ...(npeManifest && npeManifest.length > 0 ? [{ label: 'NPE', key: COLUMN_HEADERS.global_call_count }] : []),
     ] as TableHeader[];
 
     const cellFormattingProxy = (

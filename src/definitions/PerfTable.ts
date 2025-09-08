@@ -3,12 +3,24 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 export type TableKeys = Partial<keyof PerfTableRow>;
+export type StackedTableKeys = Partial<keyof StackedPerfRow>;
 
 export type TableFilter = Record<TableKeys, string> | null;
+export type StackedTableFilter = Record<StackedTableKeys, string> | null;
 
 export interface TableHeader {
     label: string;
     key: TableKeys;
+    colour?: string;
+    unit?: string;
+    decimals?: number;
+    sortable?: boolean;
+    filterable?: boolean;
+}
+
+export interface StackedTableHeader {
+    label: string;
+    key: StackedTableKeys;
     colour?: string;
     unit?: string;
     decimals?: number;
@@ -49,14 +61,14 @@ export interface PerfTableRow {
 }
 
 export interface StackedPerfRow {
-    '%': string;
-    'OP Code Joined': string;
-    Device_Time_Sum_us: string;
-    Ops_Count: string;
-    Flops_min: string;
-    Flops_max: string;
-    Flops_mean: string;
-    Flops_std: string;
+    percent: string;
+    op_code: string;
+    device_time_sum_us: string;
+    ops_count: string;
+    flops_min: string;
+    flops_max: string;
+    flops_mean: string;
+    flops_std: string;
 }
 
 export type MathFidelity = 'HiFi4' | 'HiFi2' | 'LoFi';

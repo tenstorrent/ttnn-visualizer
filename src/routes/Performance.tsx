@@ -14,7 +14,6 @@ import {
     usePerformanceRange,
     usePerformanceReport,
 } from '../hooks/useAPI';
-import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceReport from '../components/performance/PerfReport';
 import {
@@ -38,7 +37,7 @@ export default function Performance() {
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
 
     const {
-        data: perfData,
+        data,
         isLoading: isLoadingPerformance,
         error: perfDataError,
     } = usePerformanceReport(activePerformanceReport);
@@ -48,12 +47,15 @@ export default function Performance() {
 
     const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
 
-    useClearSelectedBuffer();
+    const perfData = data?.report;
+    const stackedData = data?.stacked_report;
+
+    // useClearSelectedBuffer();
 
     const opCodeOptions = useMemo(() => {
         const opCodes = Array.from(
             new Set([
-                ...(perfData?.report
+                ...(perfData
                     ?.map((row) => row.raw_op_code)
                     .filter((opCode): opCode is string => opCode !== undefined) || []),
                 ...(comparisonData
@@ -107,7 +109,7 @@ export default function Performance() {
 
     useEffect(() => {
         setFilteredPerfData(
-            perfData?.report?.filter((row) =>
+            perfData?.filter((row) =>
                 selectedOpCodes.length
                     ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
                     : false,
@@ -192,6 +194,7 @@ export default function Performance() {
                     panel={
                         <PerformanceReport
                             data={rangedData}
+                            stackedData={stackedData}
                             comparisonData={filteredComparisonData}
                         />
                     }
