@@ -68,9 +68,9 @@
         "recommendations": [
             "dbaeumer.vscode-eslint",
             "esbenp.prettier-vscode",
-            "freakypie.code-python-isort",
             "Gruntfuggly.todo-tree",
             "ms-python.black-formatter",
+            "ms-python.isort",
             "ms-python.python",
             "streetsidesoftware.code-spell-checker",
             "stylelint.vscode-stylelint"
