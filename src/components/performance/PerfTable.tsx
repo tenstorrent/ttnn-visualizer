@@ -7,12 +7,19 @@ import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
-import { TableHeader, TableKeys } from '../../definitions/PerfTable';
+import {
+    ColumnHeaders,
+    ComparisonKeys,
+    TableHeader,
+    TableHeaders,
+    TableKeys,
+    TypedPerfTableRow,
+} from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
 import { useDeviceLog, useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import { formatCell } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
-import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
+import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import { OperationDescription } from '../../model/APIData';
 import ROUTES from '../../definitions/Routes';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
@@ -30,55 +37,6 @@ interface PerformanceTableProps {
     shouldHighlightRows: boolean;
     reportName?: string;
 }
-
-enum COLUMN_HEADERS {
-    id = 'id',
-    total_percent = 'total_percent',
-    bound = 'bound',
-    op_code = 'op_code',
-    device_time = 'device_time',
-    op_to_op_gap = 'op_to_op_gap',
-    cores = 'cores',
-    dram = 'dram',
-    dram_percent = 'dram_percent',
-    flops = 'flops',
-    flops_percent = 'flops_percent',
-    math_fidelity = 'math_fidelity',
-    OP = 'op',
-    high_dispatch = 'high_dispatch',
-    global_call_count = 'global_call_count',
-}
-
-const TABLE_HEADERS: TableHeader[] = [
-    { label: 'ID', key: COLUMN_HEADERS.id, sortable: true },
-    { label: 'Total %', key: COLUMN_HEADERS.total_percent, unit: '%', decimals: 1, sortable: true },
-    { label: 'Bound', key: COLUMN_HEADERS.bound, colour: 'yellow' },
-    { label: 'OP Code', key: COLUMN_HEADERS.op_code, colour: 'blue', sortable: true, filterable: true },
-    { label: 'Device Time', key: COLUMN_HEADERS.device_time, unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Op-to-Op Gap', key: COLUMN_HEADERS.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Cores', key: COLUMN_HEADERS.cores, colour: 'green', sortable: true },
-    { label: 'DRAM', key: COLUMN_HEADERS.dram, colour: 'yellow', unit: 'GB/s', sortable: true },
-    { label: 'DRAM %', key: COLUMN_HEADERS.dram_percent, colour: 'yellow', unit: '%', sortable: true },
-    { label: 'FLOPs', key: COLUMN_HEADERS.flops, unit: 'TFLOPs', sortable: true },
-    { label: 'FLOPs %', key: COLUMN_HEADERS.flops_percent, unit: '%', sortable: true },
-    { label: 'Math Fidelity', key: COLUMN_HEADERS.math_fidelity, colour: 'cyan' },
-];
-
-const COMPARISON_KEYS: TableKeys[] = [
-    COLUMN_HEADERS.op_code,
-    COLUMN_HEADERS.bound,
-    COLUMN_HEADERS.total_percent,
-    COLUMN_HEADERS.device_time,
-    COLUMN_HEADERS.op_to_op_gap,
-    COLUMN_HEADERS.cores,
-    COLUMN_HEADERS.dram,
-    COLUMN_HEADERS.dram_percent,
-    COLUMN_HEADERS.flops,
-    COLUMN_HEADERS.flops_percent,
-    COLUMN_HEADERS.math_fidelity,
-    COLUMN_HEADERS.high_dispatch,
-    COLUMN_HEADERS.global_call_count,
-];
 
 const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
@@ -106,7 +64,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     const maxCores = data ? getCoreCount(architecture, data) : 0;
 
     const filterableColumnKeys = useMemo(
-        () => TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key),
+        () => TableHeaders.filter((column) => column.filterable).map((column) => column.key),
         [],
     );
 
@@ -136,12 +94,12 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     );
 
     const visibleHeaders = [
-        ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
-        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: COLUMN_HEADERS.OP, sortable: true }] : []),
-        ...TABLE_HEADERS.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
-        ...(hiliteHighDispatch ? [{ label: 'Slow', key: COLUMN_HEADERS.high_dispatch }] : []),
-        ...TABLE_HEADERS.slice(HIGH_DISPATCH_INSERTION_POINT),
-        ...(npeManifest && npeManifest.length > 0 ? [{ label: 'NPE', key: COLUMN_HEADERS.global_call_count }] : []),
+        ...TableHeaders.slice(0, OP_ID_INSERTION_POINT),
+        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: ColumnHeaders.OP, sortable: true }] : []),
+        ...TableHeaders.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
+        ...(hiliteHighDispatch ? [{ label: 'Slow', key: ColumnHeaders.high_dispatch }] : []),
+        ...TableHeaders.slice(HIGH_DISPATCH_INSERTION_POINT),
+        ...(npeManifest && npeManifest.length > 0 ? [{ label: 'NPE', key: ColumnHeaders.global_call_count }] : []),
     ] as TableHeader[];
 
     const cellFormattingProxy = (
@@ -289,7 +247,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                     <td
                                         key={h.key}
                                         className={classNames('cell', {
-                                            'align-right': h.key === COLUMN_HEADERS.math_fidelity,
+                                            'align-right': h.key === ColumnHeaders.math_fidelity,
                                         })}
                                     >
                                         {cellFormattingProxy(row, h, operations, filters?.[h.key])}
@@ -314,10 +272,10 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                             <td
                                                 key={h.key}
                                                 className={classNames('cell', {
-                                                    'align-right': h.key === COLUMN_HEADERS.math_fidelity,
+                                                    'align-right': h.key === ColumnHeaders.math_fidelity,
                                                 })}
                                             >
-                                                {COMPARISON_KEYS.includes(h.key) &&
+                                                {ComparisonKeys.includes(h.key) &&
                                                     dataset[i] &&
                                                     formatCell(dataset[i], h, operations, filters?.[h.key])}
                                             </td>

@@ -6,12 +6,11 @@ import React from 'react';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
-import { MathFidelity, TableHeader, TableKeys } from '../definitions/PerfTable';
+import { MathFidelity, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
 import { formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
-import { TypedPerfTableRow } from './sortAndFilterPerfTableData';
 
 type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'orange' | 'grey';
 

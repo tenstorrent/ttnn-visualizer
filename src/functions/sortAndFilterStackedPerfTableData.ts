@@ -2,21 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { StackedPerfRow, StackedTableFilter, StackedTableKeys } from '../definitions/PerfTable';
-
-export interface TypedStackedPerfRow
-    extends Omit<
-        StackedPerfRow,
-        'percent' | 'device_time_sum_us' | 'ops_count' | 'flops_min' | 'flops_max' | 'flops_mean' | 'flops_std'
-    > {
-    percent: number | null;
-    device_time_sum_us: number | null;
-    ops_count: number | null;
-    flops_min: number | null;
-    flops_max: number | null;
-    flops_mean: number | null;
-    flops_std: number | null;
-}
+import { StackedTableFilter, StackedTableKeys, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
 const areFiltersActive = (filters: Record<StackedTableKeys, string> | null) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;

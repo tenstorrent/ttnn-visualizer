@@ -1,8 +1,7 @@
 import React from 'react';
-import { StackedTableHeader } from '../definitions/PerfTable';
 import HighlightedText from '../components/HighlightedText';
 import { formatPercentage, formatSize } from './math';
-import { TypedStackedPerfRow } from './sortAndFilterStackedPerfTableData';
+import { StackedTableHeader, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
 const PERCENTAGE_KEYS = ['percent', 'flops_min', 'flops_max', 'flops_mean', 'flops_std'];
 

@@ -26,7 +26,8 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
-import { PerfTableRow, StackedPerfRow } from '../definitions/PerfTable';
+import { PerfTableRow } from '../definitions/PerfTable';
+import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import {
     activeNpeOpTraceAtom,

@@ -7,7 +7,14 @@ import { useAtomValue } from 'jotai';
 import { MenuItem, PopoverPosition, Position, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import { PerfTableRow, StackedPerfRow, TableFilter, TableHeader, TableKeys } from '../../definitions/PerfTable';
+import {
+    FilterableColumnKeys,
+    PerfTableRow,
+    TableFilter,
+    TableHeaders,
+    TableKeys,
+    TypedPerfTableRow,
+} from '../../definitions/PerfTable';
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
@@ -15,10 +22,10 @@ import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
-import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
+import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
-import { TypedStackedPerfRow } from '../../functions/sortAndFilterStackedPerfTableData';
+import { StackedPerfRow, TypedStackedPerfRow } from '../../definitions/StackedPerfTable';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -26,41 +33,7 @@ interface PerformanceReportProps {
     comparisonData?: PerfTableRow[][];
 }
 
-enum COLUMN_HEADERS {
-    id = 'id',
-    total_percent = 'total_percent',
-    bound = 'bound',
-    op_code = 'op_code',
-    device_time = 'device_time',
-    op_to_op_gap = 'op_to_op_gap',
-    cores = 'cores',
-    dram = 'dram',
-    dram_percent = 'dram_percent',
-    flops = 'flops',
-    flops_percent = 'flops_percent',
-    math_fidelity = 'math_fidelity',
-    OP = 'op',
-    high_dispatch = 'high_dispatch',
-    global_call_count = 'global_call_count',
-}
-
-const TABLE_HEADERS: TableHeader[] = [
-    { label: 'ID', key: COLUMN_HEADERS.id, sortable: true },
-    { label: 'Total %', key: COLUMN_HEADERS.total_percent, unit: '%', decimals: 1, sortable: true },
-    { label: 'Bound', key: COLUMN_HEADERS.bound, colour: 'yellow' },
-    { label: 'OP Code', key: COLUMN_HEADERS.op_code, colour: 'blue', sortable: true, filterable: true },
-    { label: 'Device Time', key: COLUMN_HEADERS.device_time, unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Op-to-Op Gap', key: COLUMN_HEADERS.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Cores', key: COLUMN_HEADERS.cores, colour: 'green', sortable: true },
-    { label: 'DRAM', key: COLUMN_HEADERS.dram, colour: 'yellow', unit: 'GB/s', sortable: true },
-    { label: 'DRAM %', key: COLUMN_HEADERS.dram_percent, colour: 'yellow', unit: '%', sortable: true },
-    { label: 'FLOPs', key: COLUMN_HEADERS.flops, unit: 'TFLOPs', sortable: true },
-    { label: 'FLOPs %', key: COLUMN_HEADERS.flops_percent, unit: '%', sortable: true },
-    { label: 'Math Fidelity', key: COLUMN_HEADERS.math_fidelity, colour: 'cyan' },
-];
-
 const INITIAL_TAB_ID = 'perf-table-0';
-const FILTERABLE_COLUMN_KEYS = TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key);
 
 const PerformanceReport: FC<PerformanceReportProps> = ({ data, stackedData, comparisonData }) => {
     const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
@@ -79,7 +52,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, stackedData, comp
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState<boolean>(true);
     const [filters, setFilters] = useState<TableFilter>(
-        Object.fromEntries(FILTERABLE_COLUMN_KEYS.map((key) => [key, ''] as [TableKeys, string])) as Record<
+        Object.fromEntries(FilterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
             string
         >,
@@ -113,7 +86,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, stackedData, comp
             sortAndFilterPerfTableData(
                 useNormalisedData ? normalisedData.data[0] : processedRows,
                 filters,
-                FILTERABLE_COLUMN_KEYS,
+                FilterableColumnKeys,
                 activeFilters,
             ),
         [processedRows, filters, activeFilters, useNormalisedData, normalisedData.data],
@@ -124,7 +97,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, stackedData, comp
             sortAndFilterPerfTableData(
                 useNormalisedData ? normalisedData.data[comparisonIndex] : processedComparisonRows[comparisonIndex],
                 filters,
-                FILTERABLE_COLUMN_KEYS,
+                FilterableColumnKeys,
                 activeFilters,
             ),
         [comparisonIndex, processedComparisonRows, filters, activeFilters, useNormalisedData, normalisedData.data],
@@ -217,11 +190,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, stackedData, comp
                 </div>
 
                 <div className='filters'>
-                    {FILTERABLE_COLUMN_KEYS.map((key) => (
+                    {FilterableColumnKeys.map((key) => (
                         <SearchField
                             key={key}
                             onQueryChanged={(value) => updateColumnFilter(key, value)}
-                            placeholder={`Filter ${TABLE_HEADERS.find((header) => header.key === key)?.label}`}
+                            placeholder={`Filter ${TableHeaders.find((header) => header.key === key)?.label}`}
                             searchQuery={filters?.[key] || ''}
                         />
                     ))}

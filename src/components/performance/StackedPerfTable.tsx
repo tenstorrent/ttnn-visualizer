@@ -6,19 +6,22 @@ import { FC, useMemo } from 'react';
 import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { StackedTableHeader } from '../../definitions/PerfTable';
+import {
+    FilterableColumnKeys,
+    StackedTableHeader,
+    TableHeaders,
+    TypedStackedPerfRow,
+} from '../../definitions/StackedPerfTable';
 import 'styles/components/PerfReport.scss';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
-import { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
 import { useDeviceLog, useGetNPEManifest } from '../../hooks/useAPI';
 import LoadingSpinner from '../LoadingSpinner';
 import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import getCoreCount from '../../functions/getCoreCount';
-import sortAndFilterStackedPerfTableData, {
-    TypedStackedPerfRow,
-} from '../../functions/sortAndFilterStackedPerfTableData';
+import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 import { formatStackedCell } from '../../functions/stackedPerfFunctions';
+import { TypedPerfTableRow } from '../../definitions/PerfTable';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -26,30 +29,6 @@ interface StackedPerformanceTableProps {
     stackedData?: TypedStackedPerfRow[];
     reportName?: string;
 }
-
-enum COLUMN_HEADERS {
-    Percent = 'percent',
-    OpCodeJoined = 'op_code',
-    DeviceTimeSumUs = 'device_time_sum_us',
-    OpsCount = 'ops_count',
-    FlopsMin = 'flops_min',
-    FlopsMax = 'flops_max',
-    FlopsMean = 'flops_mean',
-    FlopsStd = 'flops_std',
-}
-
-const TABLE_HEADERS: StackedTableHeader[] = [
-    { label: 'Percent', key: COLUMN_HEADERS.Percent, unit: '%', decimals: 1, sortable: true },
-    { label: 'Op Code', key: COLUMN_HEADERS.OpCodeJoined, sortable: true, filterable: true },
-    { label: 'Device Time', key: COLUMN_HEADERS.DeviceTimeSumUs, unit: 'µs', decimals: 1, sortable: true },
-    { label: 'Ops Count', key: COLUMN_HEADERS.OpsCount, sortable: true },
-    { label: 'Min FLOPS', key: COLUMN_HEADERS.FlopsMin, unit: '%', decimals: 1, sortable: true },
-    { label: 'Max FLOPS', key: COLUMN_HEADERS.FlopsMax, unit: '%', decimals: 1, sortable: true },
-    { label: 'Mean FLOPS', key: COLUMN_HEADERS.FlopsMean, unit: '%', decimals: 1, sortable: true },
-    { label: 'Std FLOPS', key: COLUMN_HEADERS.FlopsStd, unit: '%', decimals: 1, sortable: true },
-];
-
-const FILTERABLE_COLUMN_KEYS = TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key);
 
 const NO_META_DATA = 'n/a';
 
@@ -63,7 +42,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
         const parsedRows = stackedData
-            ? sortAndFilterStackedPerfTableData(stackedData, filters, FILTERABLE_COLUMN_KEYS)
+            ? sortAndFilterStackedPerfTableData(stackedData, filters, FilterableColumnKeys)
             : [];
 
         // Still some awkward casting here
@@ -103,7 +82,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
             <table className='perf-table monospace'>
                 <thead>
                     <tr>
-                        {TABLE_HEADERS.map((h) => {
+                        {TableHeaders.map((h) => {
                             const targetSortDirection =
                                 // eslint-disable-next-line no-nested-ternary
                                 sortingColumn === h.key
@@ -171,7 +150,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
                 <tbody>
                     {tableFields?.map((row, i) => (
                         <tr key={i}>
-                            {TABLE_HEADERS.map((h: StackedTableHeader) => (
+                            {TableHeaders.map((h: StackedTableHeader) => (
                                 <td
                                     key={h.key}
                                     className={classNames('cell')}

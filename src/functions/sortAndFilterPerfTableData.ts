@@ -2,33 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { PerfTableRow, TableFilter, TableKeys } from '../definitions/PerfTable';
-
-export interface TypedPerfTableRow
-    extends Omit<
-        PerfTableRow,
-        | 'id'
-        | 'global_call_count'
-        | 'total_percent'
-        | 'device_time'
-        | 'op_to_op_gap'
-        | 'cores'
-        | 'dram'
-        | 'dram_percent'
-        | 'flops'
-        | 'flops_percent'
-    > {
-    id: number | null;
-    global_call_count: number | null;
-    total_percent: number | null;
-    device_time: number | null;
-    op_to_op_gap: number | null;
-    cores: number | null;
-    dram: number | null;
-    dram_percent: number | null;
-    flops: number | null;
-    flops_percent: number | null;
-}
+import { TableFilter, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 
 const areFiltersActive = (filters: Record<TableKeys, string> | null) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
