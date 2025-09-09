@@ -16,13 +16,13 @@ interface ServerConfig {
 }
 
 const getServerConfig = (): ServerConfig => {
-    // Dev mode configuration
+    // Dev mode configuration - use environment variables to simulate the server config
     if (import.meta.env.DEV) {
         return {
             BASE_PATH: '/',
             SERVER_MODE: !!import.meta.env.VITE_SERVER_MODE || false,
             TT_METAL_HOME: import.meta.env.VITE_TT_METAL_HOME,
-            REPORT_DATA_DIRECTORY: import.meta.env.VITE_REPORT_DATA_DIRECTORY,
+            REPORT_DATA_DIRECTORY: import.meta.env.VITE_REPORT_DATA_DIRECTORY || '/data',
         };
     }
 
