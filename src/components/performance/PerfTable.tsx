@@ -117,6 +117,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             const manifestRecord = npeManifest?.find((el) => {
                 return el.global_call_count === value;
             });
+
             if (manifestRecord) {
                 return (
                     npeManifest &&
@@ -132,8 +133,10 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                     )
                 );
             }
+
             return null;
         }
+
         return formatCell(row, header, operations, highlight);
     };
 

@@ -50,6 +50,9 @@ export default function Performance() {
     const perfData = data?.report;
     const stackedData = data?.stacked_report;
 
+    const comparisonPerfData = useMemo(() => comparisonData?.map((d) => d.report) || [], [comparisonData]);
+    const comparisonStackedData = useMemo(() => comparisonData?.map((d) => d.stacked_report) || [], [comparisonData]);
+
     // useClearSelectedBuffer();
 
     const opCodeOptions = useMemo(() => {
@@ -58,8 +61,8 @@ export default function Performance() {
                 ...(perfData
                     ?.map((row) => row.raw_op_code)
                     .filter((opCode): opCode is string => opCode !== undefined) || []),
-                ...(comparisonData
-                    ? comparisonData.flatMap((report) =>
+                ...(comparisonPerfData
+                    ? comparisonPerfData.flatMap((report) =>
                           report
                               .map((row) => row.raw_op_code)
                               .filter((opCode): opCode is string => opCode !== undefined),
@@ -72,7 +75,7 @@ export default function Performance() {
             opCode,
             colour: MARKER_COLOURS[index],
         }));
-    }, [perfData, comparisonData]);
+    }, [perfData, comparisonPerfData]);
 
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
@@ -97,7 +100,7 @@ export default function Performance() {
 
     useEffect(() => {
         setFilteredComparisonData(
-            comparisonData?.map((dataset) =>
+            comparisonPerfData?.map((dataset) =>
                 dataset.filter((row) =>
                     selectedOpCodes.length
                         ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
@@ -105,7 +108,7 @@ export default function Performance() {
                 ),
             ) || [],
         );
-    }, [selectedOpCodes, comparisonData]);
+    }, [selectedOpCodes, comparisonPerfData]);
 
     useEffect(() => {
         setFilteredPerfData(
@@ -194,8 +197,9 @@ export default function Performance() {
                     panel={
                         <PerformanceReport
                             data={rangedData}
-                            stackedData={stackedData}
                             comparisonData={filteredComparisonData}
+                            stackedData={stackedData}
+                            comparisonStackedData={comparisonStackedData}
                         />
                     }
                 />
@@ -230,7 +234,7 @@ export default function Performance() {
                                         <div>
                                             <NonFilterablePerfCharts
                                                 chartData={rangedData}
-                                                secondaryData={comparisonData || []}
+                                                secondaryData={comparisonPerfData || []}
                                                 opCodeOptions={opCodeOptions}
                                             />
                                         </div>

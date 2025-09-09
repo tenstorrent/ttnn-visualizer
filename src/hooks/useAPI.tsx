@@ -318,7 +318,7 @@ const fetchDevices = async (reportName: string) => {
 //     });
 // };
 
-interface PerformanceReportResponse {
+export interface PerformanceReportResponse {
     report: PerfTableRow[];
     stacked_report: StackedPerfRow[];
 }
@@ -849,7 +849,7 @@ export const usePerformanceComparisonReport = () => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
     }, [rawReportNames]);
 
-    const response = useQuery({
+    const response = useQuery<PerformanceReportResponse[], AxiosError>({
         queryFn: async () => {
             if (!reportNames || !Array.isArray(reportNames) || reportNames.length === 0) {
                 return [];
@@ -866,10 +866,15 @@ export const usePerformanceComparisonReport = () => {
 
     const filteredData = useMemo(() => {
         if (response.data) {
-            return response.data.map((perfReport: PerformanceReportResponse) =>
-                perfReport.report.slice().filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === '')),
-            );
+            return response.data.map((perfReport: PerformanceReportResponse) => {
+                perfReport.report = perfReport.report
+                    .slice()
+                    .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
+
+                return perfReport;
+            });
         }
+
         return response.data;
     }, [response.data]);
 

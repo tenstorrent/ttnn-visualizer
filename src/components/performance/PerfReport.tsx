@@ -43,13 +43,19 @@ import { StackedPerfRow, TypedStackedPerfRow } from '../../definitions/StackedPe
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
-    stackedData?: StackedPerfRow[];
     comparisonData?: PerfTableRow[][];
+    stackedData?: StackedPerfRow[];
+    comparisonStackedData?: StackedPerfRow[][];
 }
 
 const INITIAL_TAB_ID = 'perf-table-0';
 
-const PerformanceReport: FC<PerformanceReportProps> = ({ data, stackedData, comparisonData }) => {
+const PerformanceReport: FC<PerformanceReportProps> = ({
+    data,
+    comparisonData,
+    stackedData,
+    comparisonStackedData,
+}) => {
     const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
     const opIdsMap = useOpToPerfIdFiltered();
 
@@ -79,12 +85,16 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, stackedData, comp
     }, [data, opIdsMap]);
 
     const processedComparisonRows: TypedPerfTableRow[][] = useMemo(() => {
-        return comparisonData ? comparisonData.map((dataset) => enrichRowData(dataset, opIdsMap)) : [];
+        return comparisonData?.map((dataset) => enrichRowData(dataset, opIdsMap)) || [];
     }, [comparisonData, opIdsMap]);
 
     const processedStackedRows: TypedStackedPerfRow[] = useMemo(() => {
         return stackedData ? enrichStackedRowData(stackedData) : [];
     }, [stackedData]);
+
+    const processedComparisonStackedRows: TypedStackedPerfRow[][] = useMemo(() => {
+        return comparisonStackedData?.map(enrichStackedRowData) || [];
+    }, [comparisonStackedData]);
 
     const normalisedData = useMemo(
         () =>
@@ -278,7 +288,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, stackedData, comp
                     >
                         <Switch
                             label='Normalise data'
-                            disabled={!activeComparisonReportList}
+                            disabled={!activeComparisonReportList || isStackedView}
                             onChange={() => setUseNormalisedData(!useNormalisedData)}
                             checked={useNormalisedData}
                             className='no-margin'
@@ -293,8 +303,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, stackedData, comp
                             <Switch
                                 label='Highlight row differences'
                                 onChange={() => setHighlightRows(!highlightRows)}
-                                disabled={!activeComparisonReportList || !useNormalisedData}
+                                disabled={!activeComparisonReportList || !useNormalisedData || isStackedView}
                                 checked={highlightRows}
+                                className='no-margin'
                             />
                         </Tooltip>
                     )}
@@ -357,24 +368,32 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, stackedData, comp
                                 )
                             }
                             panel={
-                                <PerfTable
-                                    data={
-                                        useNormalisedData && normalisedComparisonData.length > 0
-                                            ? normalisedComparisonData[comparisonIndex]
-                                            : filteredComparisonRows
-                                    }
-                                    comparisonData={
-                                        useNormalisedData && normalisedData.data.length > 1
-                                            ? normalisedData.data.filter((_, i) => i !== comparisonIndex + 1)
-                                            : []
-                                    }
-                                    filters={filters}
-                                    mathFidelityFilter={activeFilters}
-                                    provideMatmulAdvice={provideMatmulAdvice}
-                                    hiliteHighDispatch={hiliteHighDispatch}
-                                    shouldHighlightRows={highlightRows && useNormalisedData}
-                                    reportName={report}
-                                />
+                                isStackedView ? (
+                                    <StackedPerformanceTable
+                                        data={useNormalisedData ? normalisedData.data[0] : filteredRows}
+                                        stackedData={processedComparisonStackedRows[comparisonIndex]}
+                                        filters={filters}
+                                    />
+                                ) : (
+                                    <PerfTable
+                                        data={
+                                            useNormalisedData && normalisedComparisonData.length > 0
+                                                ? normalisedComparisonData[comparisonIndex]
+                                                : filteredComparisonRows
+                                        }
+                                        comparisonData={
+                                            useNormalisedData && normalisedData.data.length > 1
+                                                ? normalisedData.data.filter((_, i) => i !== comparisonIndex + 1)
+                                                : []
+                                        }
+                                        filters={filters}
+                                        mathFidelityFilter={activeFilters}
+                                        provideMatmulAdvice={provideMatmulAdvice}
+                                        hiliteHighDispatch={hiliteHighDispatch}
+                                        shouldHighlightRows={highlightRows && useNormalisedData}
+                                        reportName={report}
+                                    />
+                                )
                             }
                         />
                     ))}
