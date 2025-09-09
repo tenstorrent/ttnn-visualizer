@@ -62,13 +62,14 @@ function* colorGenerator(): IterableIterator<string> {
 const getNextColor = colorGenerator();
 const routeColorMap = new Map<number, string>();
 export const getRouteColor = (transferId: number | null): string => {
+    const DEFAULT_COLOR = '#ffffff';
     if (transferId === null) {
-        return '#ffffff';
+        return DEFAULT_COLOR;
     }
     if (!routeColorMap.has(transferId)) {
         routeColorMap.set(transferId, getNextColor.next().value);
     }
-    return routeColorMap.get(transferId) || '#ffffff';
+    return routeColorMap.get(transferId) || DEFAULT_COLOR;
 };
 export const resetRouteColors = (): void => {
     routeColorMap.clear();
