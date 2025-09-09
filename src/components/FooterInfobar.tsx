@@ -93,8 +93,9 @@ function FooterInfobar() {
                             position={PopoverPosition.TOP}
                         >
                             <Button
+                                className='path-button'
                                 icon={IconNames.FOLDER_OPEN}
-                                variant={ButtonVariant.OUTLINED}
+                                variant={ButtonVariant.MINIMAL}
                             />
                         </Tooltip>
                     )}
