@@ -440,7 +440,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                 transfer={highlightedTransfer.route[highlightedRoute]}
                                                 clusterChip={clusterChip}
                                                 index={highlightedRoute}
-                                                getOriginOpacity={() => 1}
+                                                getOriginOpacity={getOriginOpacity}
                                             />
                                         )}
 
