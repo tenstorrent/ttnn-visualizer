@@ -14,7 +14,6 @@ from ttnn_visualizer.exceptions import (
     NoProjectsException,
     NoValidConnectionsError,
     RemoteConnectionException,
-    RemoteSqliteException,
     SSHException,
 )
 from ttnn_visualizer.instances import get_or_create_instance
@@ -115,14 +114,6 @@ def remote_exception_handler(func):
                 message=user_message,
             )
 
-        except RemoteSqliteException as err:
-            current_app.logger.error(f"Remote Sqlite exception: {str(err)}")
-            message = err.message
-            if "No such file" in str(err):
-                message = "Unable to open SQLite binary, check path"
-            raise RemoteConnectionException(
-                status=ConnectionTestStates.FAILED, message=message
-            )
         except IOError as err:
             message = f"Error opening remote folder: {str(err)}"
             if "Name or service not known" in str(err):
