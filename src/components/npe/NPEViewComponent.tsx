@@ -232,6 +232,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     // }, [highlightedRoute, highlightedTransfer]);
 
     const getOriginOpacity = (transfer: NoCFlowBase): number => {
+        if (transfer.id === null || transfer.id === undefined) {
+            return 1;
+        }
         if (isShowingAllTransfers) {
             return 0;
         }

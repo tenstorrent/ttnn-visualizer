@@ -29,7 +29,7 @@ export const RouteOriginsRenderer = ({
                     style={{
                         gridColumn: transfer.src[NPE_LINK.X] + 1,
                         gridRow: transfer.src[NPE_LINK.Y] + 1,
-                        opacity: transfer.id === null ? 1 : getOriginOpacity(transfer),
+                        opacity: getOriginOpacity(transfer),
                     }}
                 />
             )}
@@ -45,7 +45,7 @@ export const RouteOriginsRenderer = ({
                             style={{
                                 gridColumn: dst[NPE_LINK.X] + 1,
                                 gridRow: dst[NPE_LINK.Y] + 1,
-                                opacity: transfer.id === null ? 1 : getOriginOpacity(transfer),
+                                opacity: getOriginOpacity(transfer),
                             }}
                         />
                     );
