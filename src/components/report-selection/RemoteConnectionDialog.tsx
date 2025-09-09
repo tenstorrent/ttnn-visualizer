@@ -53,7 +53,6 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const { testConnection } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
-    const [isDetectingBinaryPath] = useState(false);
 
     const isValidConnection = connectionTests.every((status) => status.status === ConnectionTestStates.OK);
 
@@ -214,7 +213,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                     <Button
                         text='Run tests'
-                        disabled={isTestingConnection || isDetectingBinaryPath}
+                        disabled={isTestingConnection}
                         loading={isTestingConnection}
                         onClick={testConnectionStatus}
                     />
