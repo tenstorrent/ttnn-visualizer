@@ -272,14 +272,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         label='Matmul optimization analysis'
                         onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
                         checked={provideMatmulAdvice}
-                        className='no-margin'
+                        className='option-switch'
                     />
 
                     <Switch
                         label='Highlight high dispatch ops'
                         onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
                         checked={hiliteHighDispatch}
-                        className='no-margin'
+                        className='option-switch'
                     />
 
                     <Tooltip
@@ -291,7 +291,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             disabled={!activeComparisonReportList || isStackedView}
                             onChange={() => setUseNormalisedData(!useNormalisedData)}
                             checked={useNormalisedData}
-                            className='no-margin'
+                            className='option-switch'
                         />
                     </Tooltip>
 
@@ -305,7 +305,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                 onChange={() => setHighlightRows(!highlightRows)}
                                 disabled={!activeComparisonReportList || !useNormalisedData || isStackedView}
                                 checked={highlightRows}
-                                className='no-margin'
+                                className='option-switch'
                             />
                         </Tooltip>
                     )}

@@ -444,7 +444,7 @@ class OpsPerformanceReportQueries:
         csv_file = StringIO(raw_csv)
         csv_output_file = tempfile.mktemp(suffix=".csv")
         csv_stacked_output_file = tempfile.mktemp(suffix=".csv")
-        # perf_report currently generates a PNG alongside the CSV using the same temp name
+        # perf_report currently generates a PNG alongside the CSV using the same temp name - we'll just delete it afterwards
         stacked_png_file = os.path.splitext(csv_output_file)[0] + ".png"
 
         try:
