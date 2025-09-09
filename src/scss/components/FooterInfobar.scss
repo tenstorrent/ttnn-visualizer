@@ -21,7 +21,9 @@
 
     .active-reports {
         display: flex;
-        gap: 30px;
+        gap: 15px;
+        align-items: center;
+        margin-right: 10px;
     }
 
     .slider-controls {
@@ -51,6 +53,12 @@
             max-width: 200px;
             overflow: hidden;
             text-overflow: ellipsis;
+            text-wrap: nowrap;
         }
+    }
+
+    .path-button {
+        min-height: 24px;
+        min-width: 26px;
     }
 }
