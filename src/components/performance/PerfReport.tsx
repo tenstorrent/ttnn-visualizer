@@ -4,7 +4,21 @@
 
 import { FC, useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { MenuItem, PopoverPosition, Position, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
+import {
+    Button,
+    ButtonGroup,
+    ButtonVariant,
+    Intent,
+    MenuItem,
+    PopoverPosition,
+    Position,
+    Size,
+    Switch,
+    Tab,
+    TabId,
+    Tabs,
+    Tooltip,
+} from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import {
@@ -224,22 +238,38 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, stackedData, comp
                 </div>
 
                 <div className='data-options'>
-                    <Switch
-                        label='Stacked display'
-                        onChange={() => setIsStackedView(!isStackedView)}
-                        checked={isStackedView}
-                    />
+                    <ButtonGroup
+                        variant={ButtonVariant.OUTLINED}
+                        size={Size.SMALL}
+                    >
+                        <Button
+                            text='All'
+                            icon={IconNames.LIST}
+                            active={!isStackedView}
+                            onClick={() => setIsStackedView(false)}
+                            intent={Intent.PRIMARY}
+                        />
+                        <Button
+                            text='Stacked'
+                            icon={IconNames.LAYOUT_TWO_ROWS}
+                            active={isStackedView}
+                            onClick={() => setIsStackedView(true)}
+                            intent={Intent.PRIMARY}
+                        />
+                    </ButtonGroup>
 
                     <Switch
                         label='Matmul optimization analysis'
                         onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
                         checked={provideMatmulAdvice}
+                        className='no-margin'
                     />
 
                     <Switch
                         label='Highlight high dispatch ops'
                         onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
                         checked={hiliteHighDispatch}
+                        className='no-margin'
                     />
 
                     <Tooltip
@@ -251,6 +281,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, stackedData, comp
                             disabled={!activeComparisonReportList}
                             onChange={() => setUseNormalisedData(!useNormalisedData)}
                             checked={useNormalisedData}
+                            className='no-margin'
                         />
                     </Tooltip>
 
