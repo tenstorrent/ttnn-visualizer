@@ -2,9 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup } from '@blueprintjs/core';
+import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup, Tooltip } from '@blueprintjs/core';
 import { AxiosError } from 'axios';
-import { FC, useState } from 'react';
+import { FC, useEffect, useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { RemoteConnection } from '../../definitions/RemoteConnection';
 import useRemoteConnection from '../../hooks/useRemote';
@@ -51,11 +51,12 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     const connectionToTest = remoteConnection ?? DEFAULT_CONNECTION;
     const [connection, setConnection] = useState<Partial<RemoteConnection>>(connectionToTest);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
+    const [hasChangedConnection, setHasChangedConnection] = useState(false);
     const { testConnection } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
-    const [isDetectingBinaryPath] = useState(false);
 
     const isValidConnection = connectionTests.every((status) => status.status === ConnectionTestStates.OK);
+    const isTestable = !isValidConnection || hasChangedConnection;
 
     const testConnectionStatus = async () => {
         setIsTestingconnection(true);
@@ -75,6 +76,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
         try {
             const statuses = await testConnection(connection);
             setConnectionTests(statuses);
+            setHasChangedConnection(false);
         } catch (err) {
             // Check if this is an axios error with response data (e.g., HTTP 422 for auth failures)
             const axiosError = err as AxiosError;
@@ -95,6 +97,18 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
         setConnectionTests([]);
         onClose();
     };
+
+    useEffect(() => {
+        if (open) {
+            setHasChangedConnection(false);
+        }
+    }, [open]);
+
+    useEffect(() => {
+        if (connection) {
+            setHasChangedConnection(true);
+        }
+    }, [connection]);
 
     return (
         <Dialog
@@ -205,16 +219,11 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
 
                     <br />
 
-                    {connectionTests.length === 0 && (
-                        <p>
-                            Check the SSH connection is working correctly, the remote path(s) are valid and contain
-                            expected report types.
-                        </p>
-                    )}
+                    {connectionTests.length === 0 && <p>Check the SSH connection is working correctly.</p>}
 
                     <Button
                         text='Run tests'
-                        disabled={isTestingConnection || isDetectingBinaryPath}
+                        disabled={isTestingConnection}
                         loading={isTestingConnection}
                         onClick={testConnectionStatus}
                     />
@@ -224,16 +233,18 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
             <DialogFooter
                 minimal
                 actions={
-                    <Button
-                        text={buttonLabel}
-                        disabled={!isValidConnection}
-                        onClick={() => {
-                            if (isValidConnection) {
-                                onAddConnection(connection as RemoteConnection);
-                                closeDialog();
-                            }
-                        }}
-                    />
+                    <Tooltip content={isTestable ? 'Ensure connection passes all tests' : ''}>
+                        <Button
+                            text={buttonLabel}
+                            disabled={isTestable}
+                            onClick={() => {
+                                if (isValidConnection) {
+                                    onAddConnection(connection as RemoteConnection);
+                                    closeDialog();
+                                }
+                            }}
+                        />
+                    </Tooltip>
                 }
             />
         </Dialog>
