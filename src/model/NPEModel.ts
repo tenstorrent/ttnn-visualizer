@@ -116,10 +116,14 @@ export type LinkUtilization = [
 export type NoCLink = [device_id: number, row: number, col: number, noc_id: NoCID];
 export type NPE_COORDINATES = [device_id: number, row: number, col: number];
 
-export interface NoCRoute {
-    device_id: number;
+export interface NoCFlowBase {
+    id: NoCTransferId | null;
     src: [device_id, row, col];
     dst: [[device_id, row, col]];
+}
+
+export interface NoCRoute extends NoCFlowBase {
+    device_id: number;
     total_bytes: number;
     noc_event_type: '';
     noc_type: NoCType;
@@ -129,10 +133,8 @@ export interface NoCRoute {
     links: NoCLink[];
 }
 
-export interface NoCTransfer {
+export interface NoCTransfer extends NoCFlowBase {
     id: NoCTransferId;
-    src: [device_id, row, col];
-    dst: [[device_id, row, col]];
     total_bytes: number;
     noc_event_type: '';
     fabric_event_type: boolean;

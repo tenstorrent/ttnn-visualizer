@@ -61,7 +61,10 @@ function* colorGenerator(): IterableIterator<string> {
 
 const getNextColor = colorGenerator();
 const routeColorMap = new Map<number, string>();
-export const getRouteColor = (transferId: number): string => {
+export const getRouteColor = (transferId: number | null): string => {
+    if (transferId === null) {
+        return '#ffffff';
+    }
     if (!routeColorMap.has(transferId)) {
         routeColorMap.set(transferId, getNextColor.next().value);
     }
@@ -236,7 +239,7 @@ export const calculateLinkCongestionColor = (value: number, min: number = 0, isH
     return `rgb(${intensity}, ${255 - intensity}, 0)`;
 };
 
-export const getLines = (nocs: Array<{ transfer: number; nocId: NoCID }>) => {
+export const getLines = (nocs: Array<{ transfer: number | null; nocId: NoCID }>) => {
     return nocs.map((noc) => {
         return getLinkPoints(noc.nocId, getRouteColor(noc.transfer));
     });

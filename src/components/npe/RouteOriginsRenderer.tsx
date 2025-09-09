@@ -3,15 +3,15 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { NPE_LINK, NoCTransfer } from '../../model/NPEModel';
+import { NPE_LINK, NoCFlowBase } from '../../model/NPEModel';
 
 interface SourceDestinationRendererProps {
-    transfer: NoCTransfer;
+    transfer: NoCFlowBase;
     clusterChip: {
         id: number;
     };
     index: number;
-    getOriginOpacity: (transfer: NoCTransfer) => number;
+    getOriginOpacity: (transfer: NoCFlowBase) => number;
 }
 
 export const RouteOriginsRenderer = ({
@@ -25,11 +25,11 @@ export const RouteOriginsRenderer = ({
             {transfer.src && clusterChip.id === transfer.src[NPE_LINK.CHIP_ID] && (
                 <div
                     key={`${transfer.id}-src-${index}`}
-                    className='tensix src-dst src'
+                    className={`tensix src-dst src  ${transfer.id === null || transfer.id === undefined ? ' route-origin ' : ''}`}
                     style={{
                         gridColumn: transfer.src[NPE_LINK.X] + 1,
                         gridRow: transfer.src[NPE_LINK.Y] + 1,
-                        opacity: getOriginOpacity(transfer),
+                        opacity: transfer.id === null ? 1 : getOriginOpacity(transfer),
                     }}
                 />
             )}
@@ -39,11 +39,13 @@ export const RouteOriginsRenderer = ({
                     return (
                         <div
                             key={`${transfer.id}-dst-${index}-${dst[NPE_LINK.Y]}-${dst[NPE_LINK.X]}`}
-                            className={classNames('tensix src-dst', classname)}
+                            className={classNames('tensix src-dst', classname, {
+                                'route-origin': transfer.id === null || transfer.id === undefined,
+                            })}
                             style={{
                                 gridColumn: dst[NPE_LINK.X] + 1,
                                 gridRow: dst[NPE_LINK.Y] + 1,
-                                opacity: getOriginOpacity(transfer),
+                                opacity: transfer.id === null ? 1 : getOriginOpacity(transfer),
                             }}
                         />
                     );
