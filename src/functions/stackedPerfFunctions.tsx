@@ -34,6 +34,9 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
     OptimizedConvNew: CellColour.Orange,
 };
 
+const DEFAULT_COLOUR = CellColour.White;
+const FALLBACK_COLOUR = CellColour.Grey;
+
 export const formatStackedCell = (
     row: TypedStackedPerfRow,
     header: StackedTableHeader,
@@ -82,19 +85,19 @@ export const getCellMarkup = (text: string, colour?: CellColour, highlight?: str
 
 export const getCellColour = (row: TypedStackedPerfRow, key: StackedTableKeys): CellColour => {
     if (PERCENTAGE_KEYS.includes(key)) {
-        return typeof row[key] === 'number' && row[key]! > 0 ? CellColour.White : CellColour.Grey;
+        return typeof row[key] === 'number' && row[key]! > 0 ? DEFAULT_COLOUR : FALLBACK_COLOUR;
     }
 
     if (key === 'op_code') {
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.op_code.includes(opCodeKey));
 
-        return match ? OPERATION_COLOURS[match] : CellColour.Grey;
+        return match ? OPERATION_COLOURS[match] : FALLBACK_COLOUR;
     }
 
     if (key === 'ops_count' || key === 'device_time_sum_us') {
-        return CellColour.White;
+        return DEFAULT_COLOUR;
     }
 
     // Shouldn't get to this point but need to return something
-    return CellColour.Grey;
+    return FALLBACK_COLOUR;
 };
