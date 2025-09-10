@@ -2,23 +2,22 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { TableFilter, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import { StackedTableFilter, StackedTableKeys, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
-const isFiltersActive = (filters: Record<TableKeys, string> | null) =>
+const isFiltersActive = (filters: Record<StackedTableKeys, string> | null) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
 
-const getCellText = (buffer: TypedPerfTableRow, key: TableKeys) => {
+const getCellText = (buffer: TypedStackedPerfRow, key: StackedTableKeys) => {
     const textValue = buffer[key]?.toString() || '';
 
     return textValue;
 };
 
-const sortAndFilterPerfTableData = (
-    data: TypedPerfTableRow[],
-    filters: TableFilter,
-    filterableColumnKeys: TableKeys[],
-    activeFilters: (string | number)[],
-): TypedPerfTableRow[] => {
+const sortAndFilterStackedPerfTableData = (
+    data: TypedStackedPerfRow[],
+    filters: StackedTableFilter,
+    filterableColumnKeys: StackedTableKeys[],
+): TypedStackedPerfRow[] => {
     if (data?.length === 0) {
         return data;
     }
@@ -32,7 +31,7 @@ const sortAndFilterPerfTableData = (
                 Object.entries(filters)
                     .filter(([_key, filterValue]) => String(filterValue).length)
                     .some(([key, filterValue]) => {
-                        const bufferValue = getCellText(row, key as TableKeys);
+                        const bufferValue = getCellText(row, key as StackedTableKeys);
 
                         return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
                     });
@@ -41,13 +40,7 @@ const sortAndFilterPerfTableData = (
         });
     }
 
-    if (activeFilters?.length > 0) {
-        filteredRows = filteredRows.filter(
-            (tensor) => tensor?.math_fidelity !== null && activeFilters.includes(tensor.math_fidelity),
-        );
-    }
-
     return filteredRows;
 };
 
-export default sortAndFilterPerfTableData;
+export default sortAndFilterStackedPerfTableData;

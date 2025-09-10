@@ -43,7 +43,6 @@ from ttnn_visualizer.models import (
     StatusMessage,
 )
 from ttnn_visualizer.queries import DatabaseQueries
-from ttnn_visualizer.remote_sqlite_setup import get_sqlite_path
 from ttnn_visualizer.serializers import (
     serialize_buffer,
     serialize_buffer_pages,
@@ -1185,34 +1184,6 @@ def sync_remote_folder():
 
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
-
-
-@api.route("/remote/sqlite/detect-path", methods=["POST"])
-def detect_sqlite_path():
-    connection = request.json
-    connection = RemoteConnection.model_validate(connection, strict=False)
-    status_message = StatusMessage(
-        status=ConnectionTestStates.OK, message="Unable to Detect Path"
-    )
-    try:
-        path = get_sqlite_path(connection=connection)
-        if path:
-            status_message = StatusMessage(status=ConnectionTestStates.OK, message=path)
-        else:
-            status_message = StatusMessage(
-                status=ConnectionTestStates.OK, message="Unable to Detect Path"
-            )
-    except RemoteConnectionException as e:
-        current_app.logger.error(f"Unable to detect SQLite3 path {str(e)}")
-        status_message = StatusMessage(
-            status=ConnectionTestStates.FAILED,
-            message="Unable to detect SQLite3 path. See logs",
-        )
-    finally:
-        return Response(
-            orjson.dumps(status_message.model_dump()),
-            mimetype="application/json",
-        )
 
 
 @api.route("/remote/use", methods=["POST"])

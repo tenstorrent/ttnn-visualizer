@@ -4,10 +4,31 @@
 
 import { FC, useEffect, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { MenuItem, PopoverPosition, Position, Size, Switch, Tab, TabId, Tabs, Tooltip } from '@blueprintjs/core';
+import {
+    Button,
+    ButtonGroup,
+    ButtonVariant,
+    Intent,
+    MenuItem,
+    PopoverPosition,
+    Position,
+    Size,
+    Switch,
+    Tab,
+    TabId,
+    Tabs,
+    Tooltip,
+} from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import { PerfTableRow, TableFilter, TableHeader, TableKeys } from '../../definitions/PerfTable';
+import {
+    FilterableColumnKeys,
+    PerfTableRow,
+    TableFilter,
+    TableHeaders,
+    TableKeys,
+    TypedPerfTableRow,
+} from '../../definitions/PerfTable';
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
@@ -15,50 +36,26 @@ import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
-import sortAndFilterPerfTableData, { TypedPerfTableRow } from '../../functions/sortAndFilterPerfTableData';
+import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import 'styles/components/PerfReport.scss';
+import StackedPerformanceTable from './StackedPerfTable';
+import { StackedPerfRow, TypedStackedPerfRow } from '../../definitions/StackedPerfTable';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
     comparisonData?: PerfTableRow[][];
+    stackedData?: StackedPerfRow[];
+    comparisonStackedData?: StackedPerfRow[][];
 }
-
-enum COLUMN_HEADERS {
-    id = 'id',
-    total_percent = 'total_percent',
-    bound = 'bound',
-    op_code = 'op_code',
-    device_time = 'device_time',
-    op_to_op_gap = 'op_to_op_gap',
-    cores = 'cores',
-    dram = 'dram',
-    dram_percent = 'dram_percent',
-    flops = 'flops',
-    flops_percent = 'flops_percent',
-    math_fidelity = 'math_fidelity',
-    OP = 'op',
-    HIGH_DISPATCH = 'high_dispatch',
-}
-
-const TABLE_HEADERS: TableHeader[] = [
-    { label: 'ID', key: COLUMN_HEADERS.id, sortable: true },
-    { label: 'Total %', key: COLUMN_HEADERS.total_percent, unit: '%', decimals: 1, sortable: true },
-    { label: 'Bound', key: COLUMN_HEADERS.bound, colour: 'yellow' },
-    { label: 'OP Code', key: COLUMN_HEADERS.op_code, colour: 'blue', sortable: true, filterable: true },
-    { label: 'Device Time', key: COLUMN_HEADERS.device_time, unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Op-to-Op Gap', key: COLUMN_HEADERS.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Cores', key: COLUMN_HEADERS.cores, colour: 'green', sortable: true },
-    { label: 'DRAM', key: COLUMN_HEADERS.dram, colour: 'yellow', unit: 'GB/s', sortable: true },
-    { label: 'DRAM %', key: COLUMN_HEADERS.dram_percent, colour: 'yellow', unit: '%', sortable: true },
-    { label: 'FLOPs', key: COLUMN_HEADERS.flops, unit: 'TFLOPs', sortable: true },
-    { label: 'FLOPs %', key: COLUMN_HEADERS.flops_percent, unit: '%', sortable: true },
-    { label: 'Math Fidelity', key: COLUMN_HEADERS.math_fidelity, colour: 'cyan' },
-];
 
 const INITIAL_TAB_ID = 'perf-table-0';
-const FILTERABLE_COLUMN_KEYS = TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key);
 
-const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData }) => {
+const PerformanceReport: FC<PerformanceReportProps> = ({
+    data,
+    comparisonData,
+    stackedData,
+    comparisonStackedData,
+}) => {
     const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
     const opIdsMap = useOpToPerfIdFiltered();
 
@@ -68,13 +65,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     // const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
+    const [isStackedView, setIsStackedView] = useState<boolean>(false);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState<boolean>(true);
     const [filters, setFilters] = useState<TableFilter>(
-        Object.fromEntries(FILTERABLE_COLUMN_KEYS.map((key) => [key, ''] as [TableKeys, string])) as Record<
+        Object.fromEntries(FilterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
             string
         >,
@@ -87,8 +85,16 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
     }, [data, opIdsMap]);
 
     const processedComparisonRows: TypedPerfTableRow[][] = useMemo(() => {
-        return comparisonData ? comparisonData.map((dataset) => enrichRowData(dataset, opIdsMap)) : [];
+        return comparisonData?.map((dataset) => enrichRowData(dataset, opIdsMap)) || [];
     }, [comparisonData, opIdsMap]);
+
+    const processedStackedRows: TypedStackedPerfRow[] = useMemo(() => {
+        return stackedData ? enrichStackedRowData(stackedData) : [];
+    }, [stackedData]);
+
+    const processedComparisonStackedRows: TypedStackedPerfRow[][] = useMemo(() => {
+        return comparisonStackedData?.map(enrichStackedRowData) || [];
+    }, [comparisonStackedData]);
 
     const normalisedData = useMemo(
         () =>
@@ -104,7 +110,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
             sortAndFilterPerfTableData(
                 useNormalisedData ? normalisedData.data[0] : processedRows,
                 filters,
-                FILTERABLE_COLUMN_KEYS,
+                FilterableColumnKeys,
                 activeFilters,
             ),
         [processedRows, filters, activeFilters, useNormalisedData, normalisedData.data],
@@ -115,7 +121,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
             sortAndFilterPerfTableData(
                 useNormalisedData ? normalisedData.data[comparisonIndex] : processedComparisonRows[comparisonIndex],
                 filters,
-                FILTERABLE_COLUMN_KEYS,
+                FilterableColumnKeys,
                 activeFilters,
             ),
         [comparisonIndex, processedComparisonRows, filters, activeFilters, useNormalisedData, normalisedData.data],
@@ -208,11 +214,11 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                 </div>
 
                 <div className='filters'>
-                    {FILTERABLE_COLUMN_KEYS.map((key) => (
+                    {FilterableColumnKeys.map((key) => (
                         <SearchField
                             key={key}
                             onQueryChanged={(value) => updateColumnFilter(key, value)}
-                            placeholder={`Filter ${TABLE_HEADERS.find((header) => header.key === key)?.label}`}
+                            placeholder={`Filter ${TableHeaders.find((header) => header.key === key)?.label}`}
                             searchQuery={filters?.[key] || ''}
                         />
                     ))}
@@ -229,6 +235,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         itemPredicate={(query, mathFidelity) =>
                             !query || String(mathFidelity).toLowerCase().includes(query.toLowerCase())
                         }
+                        disabled={isStackedView}
                         noResults={
                             <MenuItem
                                 disabled
@@ -241,16 +248,40 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                 </div>
 
                 <div className='data-options'>
+                    <ButtonGroup
+                        variant={ButtonVariant.OUTLINED}
+                        size={Size.SMALL}
+                    >
+                        <Button
+                            text='Standard'
+                            icon={IconNames.LIST}
+                            active={!isStackedView}
+                            onClick={() => setIsStackedView(false)}
+                            intent={!isStackedView ? Intent.PRIMARY : Intent.NONE}
+                        />
+                        <Button
+                            text='Stacked'
+                            icon={IconNames.LAYOUT_TWO_ROWS}
+                            active={isStackedView}
+                            onClick={() => setIsStackedView(true)}
+                            intent={isStackedView ? Intent.PRIMARY : Intent.NONE}
+                        />
+                    </ButtonGroup>
+
                     <Switch
                         label='Matmul optimization analysis'
                         onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
                         checked={provideMatmulAdvice}
+                        className='option-switch'
+                        disabled={isStackedView}
                     />
 
                     <Switch
                         label='Highlight high dispatch ops'
                         onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
                         checked={hiliteHighDispatch}
+                        className='option-switch'
+                        disabled={isStackedView}
                     />
 
                     <Tooltip
@@ -259,9 +290,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                     >
                         <Switch
                             label='Normalise data'
-                            disabled={!activeComparisonReportList}
+                            disabled={!activeComparisonReportList || isStackedView}
                             onChange={() => setUseNormalisedData(!useNormalisedData)}
                             checked={useNormalisedData}
+                            className='option-switch'
                         />
                     </Tooltip>
 
@@ -273,8 +305,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                             <Switch
                                 label='Highlight row differences'
                                 onChange={() => setHighlightRows(!highlightRows)}
-                                disabled={!activeComparisonReportList || !useNormalisedData}
+                                disabled={!activeComparisonReportList || !useNormalisedData || isStackedView}
                                 checked={highlightRows}
+                                className='option-switch'
                             />
                         </Tooltip>
                     )}
@@ -293,19 +326,27 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                         icon={IconNames.TH_LIST}
                         className='tab-panel'
                         panel={
-                            <PerfTable
-                                data={useNormalisedData ? normalisedData.data[0] : filteredRows}
-                                comparisonData={
-                                    useNormalisedData && normalisedComparisonData.length > 0
-                                        ? normalisedComparisonData
-                                        : []
-                                }
-                                filters={filters}
-                                mathFidelityFilter={activeFilters}
-                                provideMatmulAdvice={provideMatmulAdvice}
-                                hiliteHighDispatch={hiliteHighDispatch}
-                                shouldHighlightRows={highlightRows && useNormalisedData}
-                            />
+                            isStackedView ? (
+                                <StackedPerformanceTable
+                                    data={useNormalisedData ? normalisedData.data[0] : filteredRows}
+                                    stackedData={processedStackedRows}
+                                    filters={filters}
+                                />
+                            ) : (
+                                <PerfTable
+                                    data={useNormalisedData ? normalisedData.data[0] : filteredRows}
+                                    comparisonData={
+                                        useNormalisedData && normalisedComparisonData.length > 0
+                                            ? normalisedComparisonData
+                                            : []
+                                    }
+                                    filters={filters}
+                                    mathFidelityFilter={activeFilters}
+                                    provideMatmulAdvice={provideMatmulAdvice}
+                                    hiliteHighDispatch={hiliteHighDispatch}
+                                    shouldHighlightRows={highlightRows && useNormalisedData}
+                                />
+                            )
                         }
                     />
 
@@ -329,24 +370,32 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                                 )
                             }
                             panel={
-                                <PerfTable
-                                    data={
-                                        useNormalisedData && normalisedComparisonData.length > 0
-                                            ? normalisedComparisonData[comparisonIndex]
-                                            : filteredComparisonRows
-                                    }
-                                    comparisonData={
-                                        useNormalisedData && normalisedData.data.length > 1
-                                            ? normalisedData.data.filter((_, i) => i !== comparisonIndex + 1)
-                                            : []
-                                    }
-                                    filters={filters}
-                                    mathFidelityFilter={activeFilters}
-                                    provideMatmulAdvice={provideMatmulAdvice}
-                                    hiliteHighDispatch={hiliteHighDispatch}
-                                    shouldHighlightRows={highlightRows && useNormalisedData}
-                                    reportName={report}
-                                />
+                                isStackedView ? (
+                                    <StackedPerformanceTable
+                                        data={useNormalisedData ? normalisedData.data[0] : filteredRows}
+                                        stackedData={processedComparisonStackedRows[comparisonIndex]}
+                                        filters={filters}
+                                    />
+                                ) : (
+                                    <PerfTable
+                                        data={
+                                            useNormalisedData && normalisedComparisonData.length > 0
+                                                ? normalisedComparisonData[comparisonIndex]
+                                                : filteredComparisonRows
+                                        }
+                                        comparisonData={
+                                            useNormalisedData && normalisedData.data.length > 1
+                                                ? normalisedData.data.filter((_, i) => i !== comparisonIndex + 1)
+                                                : []
+                                        }
+                                        filters={filters}
+                                        mathFidelityFilter={activeFilters}
+                                        provideMatmulAdvice={provideMatmulAdvice}
+                                        hiliteHighDispatch={hiliteHighDispatch}
+                                        shouldHighlightRows={highlightRows && useNormalisedData}
+                                        reportName={report}
+                                    />
+                                )
                             }
                         />
                     ))}
@@ -384,6 +433,18 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
         };
     });
 };
+
+const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
+    rows.map((row) => ({
+        ...row,
+        percent: parseFloat(row.percent),
+        device_time_sum_us: parseFloat(row.device_time_sum_us),
+        ops_count: parseFloat(row.ops_count),
+        flops_min: row.flops_min ? parseFloat(row.flops_min) : null,
+        flops_max: row.flops_max ? parseFloat(row.flops_max) : null,
+        flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
+        flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
+    }));
 
 const getTotalDataLength = (
     useNormalisedData: boolean,

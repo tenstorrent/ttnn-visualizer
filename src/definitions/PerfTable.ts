@@ -48,6 +48,32 @@ export interface PerfTableRow {
     missing?: boolean;
 }
 
+export interface TypedPerfTableRow
+    extends Omit<
+        PerfTableRow,
+        | 'id'
+        | 'global_call_count'
+        | 'total_percent'
+        | 'device_time'
+        | 'op_to_op_gap'
+        | 'cores'
+        | 'dram'
+        | 'dram_percent'
+        | 'flops'
+        | 'flops_percent'
+    > {
+    id: number | null;
+    global_call_count: number | null;
+    total_percent: number | null;
+    device_time: number | null;
+    op_to_op_gap: number | null;
+    cores: number | null;
+    dram: number | null;
+    dram_percent: number | null;
+    flops: number | null;
+    flops_percent: number | null;
+}
+
 export type MathFidelity = 'HiFi4' | 'HiFi2' | 'LoFi';
 
 export const MARKER_COLOURS = [
@@ -80,3 +106,54 @@ export interface Marker {
     opCode: string;
     colour: (typeof MARKER_COLOURS)[number];
 }
+
+export enum ColumnHeaders {
+    id = 'id',
+    total_percent = 'total_percent',
+    bound = 'bound',
+    op_code = 'op_code',
+    device_time = 'device_time',
+    op_to_op_gap = 'op_to_op_gap',
+    cores = 'cores',
+    dram = 'dram',
+    dram_percent = 'dram_percent',
+    flops = 'flops',
+    flops_percent = 'flops_percent',
+    math_fidelity = 'math_fidelity',
+    OP = 'op',
+    high_dispatch = 'high_dispatch',
+    global_call_count = 'global_call_count',
+}
+
+export const TableHeaders: TableHeader[] = [
+    { label: 'ID', key: ColumnHeaders.id, sortable: true },
+    { label: 'Total %', key: ColumnHeaders.total_percent, unit: '%', decimals: 1, sortable: true },
+    { label: 'Bound', key: ColumnHeaders.bound, colour: 'yellow' },
+    { label: 'OP Code', key: ColumnHeaders.op_code, colour: 'blue', sortable: true, filterable: true },
+    { label: 'Device Time', key: ColumnHeaders.device_time, unit: 'µs', decimals: 0, sortable: true },
+    { label: 'Op-to-Op Gap', key: ColumnHeaders.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
+    { label: 'Cores', key: ColumnHeaders.cores, colour: 'green', sortable: true },
+    { label: 'DRAM', key: ColumnHeaders.dram, colour: 'yellow', unit: 'GB/s', sortable: true },
+    { label: 'DRAM %', key: ColumnHeaders.dram_percent, colour: 'yellow', unit: '%', sortable: true },
+    { label: 'FLOPs', key: ColumnHeaders.flops, unit: 'TFLOPs', sortable: true },
+    { label: 'FLOPs %', key: ColumnHeaders.flops_percent, unit: '%', sortable: true },
+    { label: 'Math Fidelity', key: ColumnHeaders.math_fidelity, colour: 'cyan' },
+];
+
+export const FilterableColumnKeys = TableHeaders.filter((column) => column.filterable).map((column) => column.key);
+
+export const ComparisonKeys: TableKeys[] = [
+    ColumnHeaders.op_code,
+    ColumnHeaders.bound,
+    ColumnHeaders.total_percent,
+    ColumnHeaders.device_time,
+    ColumnHeaders.op_to_op_gap,
+    ColumnHeaders.cores,
+    ColumnHeaders.dram,
+    ColumnHeaders.dram_percent,
+    ColumnHeaders.flops,
+    ColumnHeaders.flops_percent,
+    ColumnHeaders.math_fidelity,
+    ColumnHeaders.high_dispatch,
+    ColumnHeaders.global_call_count,
+];

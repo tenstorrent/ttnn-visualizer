@@ -11,7 +11,6 @@ export interface RemoteConnection {
     port: number;
     profilerPath: string;
     performancePath?: string;
-    sqliteBinaryPath?: string;
 }
 
 export interface RemoteFolder {
