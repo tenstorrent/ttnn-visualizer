@@ -257,14 +257,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             icon={IconNames.LIST}
                             active={!isStackedView}
                             onClick={() => setIsStackedView(false)}
-                            intent={Intent.PRIMARY}
+                            intent={!isStackedView ? Intent.PRIMARY : Intent.NONE}
                         />
                         <Button
                             text='Stacked'
                             icon={IconNames.LAYOUT_TWO_ROWS}
                             active={isStackedView}
                             onClick={() => setIsStackedView(true)}
-                            intent={Intent.PRIMARY}
+                            intent={isStackedView ? Intent.PRIMARY : Intent.NONE}
                         />
                     </ButtonGroup>
 
