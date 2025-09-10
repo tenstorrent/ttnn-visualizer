@@ -22,12 +22,10 @@ export const formatStackedCell = (
         return '';
     }
 
-    if (typeof value === 'number' && PERCENTAGE_KEYS.includes(key)) {
-        formatted = formatPercentage(value, decimals ?? 0);
-    }
-
     if (typeof value === 'number') {
-        formatted = formatSize(Number(value.toFixed(decimals ?? 0)));
+        formatted = PERCENTAGE_KEYS.includes(key)
+            ? formatPercentage(value, decimals ?? 0)
+            : formatSize(Number(value.toFixed(decimals ?? 0)));
     } else {
         formatted = value.toString();
     }
