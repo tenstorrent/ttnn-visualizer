@@ -10,7 +10,7 @@ import { Button, ButtonGroup, ButtonVariant, Intent, Size, Slider, Switch } from
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
-import { NPEData, NPE_COORDINATES, NPE_LINK, NoCTransfer, NoCType } from '../../model/NPEModel';
+import { NPEData, NPE_COORDINATES, NPE_LINK, NoCFlowBase, NoCTransfer, NoCType } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import { NODE_SIZE, calculateLinkCongestionColor, getLines, getLinkPoints, resetRouteColors } from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
@@ -218,16 +218,23 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
 
     // DEBUG CODE, keeping for now
     // useEffect(() => {
-    //     console.log('------------ selected transfers -------------');
-    //     console.log(selectedTransferList);
+    //     // console.log('------------ selected transfers -------------');
+    //     // console.log(selectedTransferList);
     //     selectedTransferList
     //         .find((transfer) => {
     //             return transfer.id === 50;
     //         })
     //         ?.route.forEach((r) => console.log(r));
     // }, [selectedTransferList]);
+    // useEffect(() => {
+    //     // console.log('route', highlightedRoute);
+    //     // console.log('transfer', highlightedTransfer);
+    // }, [highlightedRoute, highlightedTransfer]);
 
-    const getOriginOpacity = (transfer: NoCTransfer): number => {
+    const getOriginOpacity = (transfer: NoCFlowBase): number => {
+        if (transfer.id === null || transfer.id === undefined) {
+            return 1;
+        }
         if (isShowingAllTransfers) {
             return 0;
         }
@@ -425,6 +432,17 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             getOriginOpacity={getOriginOpacity}
                                         />
                                     ))}
+                                    {highlightedTransfer !== null &&
+                                        highlightedRoute !== null &&
+                                        highlightedTransfer.route[highlightedRoute].device_id === clusterChip.id && (
+                                            <RouteOriginsRenderer
+                                                key={`${highlightedTransfer.id}-${highlightedRoute}-'route'`}
+                                                transfer={highlightedTransfer.route[highlightedRoute]}
+                                                clusterChip={clusterChip}
+                                                index={highlightedRoute}
+                                                getOriginOpacity={getOriginOpacity}
+                                            />
+                                        )}
 
                                     {links?.link_demand.map((linkUtilization, index) => {
                                         const fabricCondition = fabricEventsOnlyFilter

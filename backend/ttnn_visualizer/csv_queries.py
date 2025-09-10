@@ -100,7 +100,6 @@ class NPEQueries:
 
     @staticmethod
     def get_npe_manifest(instance: Instance):
-
         file_path = Path(
             instance.performance_path,
             NPEQueries.NPE_FOLDER,
@@ -417,6 +416,17 @@ class OpsPerformanceReportQueries:
         "raw_op_code",
     ]
 
+    STACKED_REPORT_COLUMNS = [
+        "percent",
+        "op_code",
+        "device_time_sum_us",
+        "ops_count",
+        "flops_min",
+        "flops_max",
+        "flops_mean",
+        "flops_std",
+    ]
+
     PASSTHROUGH_COLUMNS = {
         "pm_ideal_ns": "PM IDEAL [ns]",
     }
@@ -433,6 +443,9 @@ class OpsPerformanceReportQueries:
         raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
         csv_file = StringIO(raw_csv)
         csv_output_file = tempfile.mktemp(suffix=".csv")
+        csv_stacked_output_file = tempfile.mktemp(suffix=".csv")
+        # perf_report currently generates a PNG alongside the CSV using the same temp name - we'll just delete it afterwards
+        stacked_png_file = os.path.splitext(csv_output_file)[0] + ".png"
 
         try:
             perf_report.generate_perf_report(
@@ -446,9 +459,9 @@ class OpsPerformanceReportQueries:
                 cls.DEFAULT_TRACING_MODE,
                 True,
                 True,
-                True,
-                True,
                 False,
+                True,  # no_stack_by_in0 - need to ask what this is
+                csv_stacked_output_file,
             )
         except Exception as e:
             raise DataFormatError(f"Error generating performance report: {e}") from e
@@ -489,4 +502,26 @@ class OpsPerformanceReportQueries:
         finally:
             os.unlink(csv_output_file)
 
-        return report
+        stacked_report = []
+
+        try:
+            with open(csv_stacked_output_file, newline="") as csvfile:
+                reader = csv.reader(csvfile, delimiter=",")
+                next(reader, None)
+
+                for row in reader:
+                    processed_row = {
+                        column: row[index]
+                        for index, column in enumerate(cls.STACKED_REPORT_COLUMNS)
+                        if index < len(row)
+                    }
+
+                    stacked_report.append(processed_row)
+        except csv.Error as e:
+            raise DataFormatError() from e
+        finally:
+            os.unlink(csv_stacked_output_file)
+            if os.path.exists(stacked_png_file):
+                os.unlink(stacked_png_file)
+
+        return {"report": report, "stacked_report": stacked_report}
