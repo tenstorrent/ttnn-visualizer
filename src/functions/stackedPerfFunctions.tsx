@@ -84,8 +84,10 @@ export const getCellMarkup = (text: string, colour?: CellColour, highlight?: str
 };
 
 export const getCellColour = (row: TypedStackedPerfRow, key: StackedTableKeys): CellColour => {
-    if (PERCENTAGE_KEYS.includes(key)) {
-        return typeof row[key] === 'number' && row[key]! > 0 ? DEFAULT_COLOUR : FALLBACK_COLOUR;
+    const value = row[key];
+
+    if (PERCENTAGE_KEYS.includes(key) && typeof value === 'number') {
+        return value > 0 ? DEFAULT_COLOUR : FALLBACK_COLOUR;
     }
 
     if (key === 'op_code') {

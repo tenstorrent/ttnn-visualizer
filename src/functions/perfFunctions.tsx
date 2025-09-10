@@ -225,7 +225,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
     return FALLBACK_COLOUR;
 };
 
-export const getCoreColour = (value: string | string[] | boolean | number): CellColour | '' => {
+export const getCoreColour = (value: string | string[] | boolean | number): CellColour => {
     const cores = (typeof value === 'string' ? parseInt(value, 10) : value) as number;
 
     if (cores != null) {
@@ -236,8 +236,6 @@ export const getCoreColour = (value: string | string[] | boolean | number): Cell
         if (cores === 64) {
             return CellColour.Green;
         }
-    } else {
-        return '';
     }
 
     return DEFAULT_COLOUR;
