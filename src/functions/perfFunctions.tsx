@@ -12,22 +12,33 @@ import { formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
 
-type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'orange' | 'grey';
+export enum CellColour {
+    White = 'white',
+    Green = 'green',
+    Red = 'red',
+    Blue = 'blue',
+    Magenta = 'magenta',
+    Cyan = 'cyan',
+    Yellow = 'yellow',
+    Orange = 'orange',
+    Grey = 'grey',
+}
+
+const OPERATION_COLOURS: { [key: string]: CellColour } = {
+    '(torch)': CellColour.Red,
+    Matmul: CellColour.Magenta,
+    LayerNorm: CellColour.Cyan,
+    AllGather: CellColour.Cyan,
+    AllReduce: CellColour.Cyan,
+    ScaledDotProductAttentionDecode: CellColour.Blue,
+    ScaledDotProductAttentionGQADecode: CellColour.Blue,
+    NlpCreateHeadsDeviceOperation: CellColour.Blue,
+    NLPConcatHeadsDecodeDeviceOperation: CellColour.Blue,
+    UpdateCache: CellColour.Blue,
+    OptimizedConvNew: CellColour.Orange,
+};
 
 const MIN_PERCENTAGE = 0.5;
-const OPERATION_COLOURS: { [key: string]: CellColour } = {
-    '(torch)': 'red',
-    Matmul: 'magenta',
-    LayerNorm: 'cyan',
-    AllGather: 'cyan',
-    AllReduce: 'cyan',
-    ScaledDotProductAttentionDecode: 'blue',
-    ScaledDotProductAttentionGQADecode: 'blue',
-    NlpCreateHeadsDeviceOperation: 'blue',
-    NLPConcatHeadsDecodeDeviceOperation: 'blue',
-    UpdateCache: 'blue',
-    OptimizedConvNew: 'orange',
-};
 
 const NUMBER_KEYS_TO_PARSE = [
     'device_time',
@@ -128,24 +139,24 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
     const percentage = row.total_percent;
 
     if (percentage != null && percentage < MIN_PERCENTAGE) {
-        return 'grey';
+        return CellColour.Grey;
     }
 
     if (key === 'id' || key === 'total_percent' || key === 'device_time') {
-        return 'white';
+        return CellColour.White;
     }
 
     if (key === 'bound') {
         if (keyValue === 'DRAM') {
-            return 'green';
+            return CellColour.Green;
         }
 
         if (keyValue === 'FLOP') {
-            return 'green';
+            return CellColour.Green;
         }
 
         if (keyValue === 'SLOW') {
-            return 'yellow';
+            return CellColour.Yellow;
         }
     }
 
@@ -156,18 +167,18 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         if (dramP != null && flopsP != null) {
             if (dramP > flopsP) {
                 if (key === 'dram' || key === 'dram_percent') {
-                    return 'yellow';
+                    return CellColour.Yellow;
                 }
             } else if (key === 'flops' || key === 'flops_percent') {
-                return 'yellow';
+                return CellColour.Yellow;
             }
         }
 
         if (keyValue === 'HOST') {
-            return 'red';
+            return CellColour.Red;
         }
 
-        return 'white';
+        return CellColour.White;
     }
 
     if (key === 'cores' && keyValue != null) {
@@ -177,7 +188,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
     if (key === 'op_code') {
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.raw_op_code.includes(opCodeKey));
 
-        return match ? OPERATION_COLOURS[match] : 'white';
+        return match ? OPERATION_COLOURS[match] : CellColour.White;
     }
 
     if (key === 'math_fidelity' && typeof keyValue === 'string') {
@@ -189,18 +200,18 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         const [fidelityEval] = evaluateFidelity(input0Datatype, input1Datatype, outputDatatype, mathFidelity);
 
         if (fidelityEval === 'sufficient') {
-            return 'green';
+            return CellColour.Green;
         }
 
         if (fidelityEval === 'too_high') {
-            return 'red';
+            return CellColour.Red;
         }
 
         if (fidelityEval === 'too_low') {
-            return 'cyan';
+            return CellColour.Cyan;
         }
 
-        return 'white';
+        return CellColour.White;
     }
 
     if (key === 'op_to_op_gap' && typeof keyValue === 'string') {
@@ -208,7 +219,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
     }
 
     // Shouldn't get to this point but need to return something
-    return 'grey';
+    return CellColour.Grey;
 };
 
 export const getCoreColour = (value: string | string[] | boolean | number): CellColour | '' => {
@@ -216,23 +227,23 @@ export const getCoreColour = (value: string | string[] | boolean | number): Cell
 
     if (cores != null) {
         if (cores < 10) {
-            return 'red';
+            return CellColour.Red;
         }
 
         if (cores === 64) {
-            return 'green';
+            return CellColour.Green;
         }
     } else {
         return '';
     }
 
-    return 'white';
+    return CellColour.White;
 };
 
-export const getOpToOpGapColour = (value: string): CellColour | '' => {
+export const getOpToOpGapColour = (value: string): CellColour => {
     const parsedValue = parseFloat(value) || 0;
 
-    return parsedValue > 6.5 ? 'red' : '';
+    return parsedValue > 6.5 ? CellColour.Red : CellColour.Grey;
 };
 
 export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {

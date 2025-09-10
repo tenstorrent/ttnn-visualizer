@@ -7,21 +7,31 @@ import HighlightedText from '../components/HighlightedText';
 import { formatPercentage, formatSize } from './math';
 import { StackedTableHeader, StackedTableKeys, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
-type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'orange' | 'grey';
+export enum CellColour {
+    White = 'white',
+    Green = 'green',
+    Red = 'red',
+    Blue = 'blue',
+    Magenta = 'magenta',
+    Cyan = 'cyan',
+    Yellow = 'yellow',
+    Orange = 'orange',
+    Grey = 'grey',
+}
 
 const PERCENTAGE_KEYS = ['percent', 'flops_min', 'flops_max', 'flops_mean', 'flops_std'];
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
-    '(torch)': 'red',
-    Matmul: 'magenta',
-    LayerNorm: 'cyan',
-    AllGather: 'cyan',
-    AllReduce: 'cyan',
-    ScaledDotProductAttentionDecode: 'blue',
-    ScaledDotProductAttentionGQADecode: 'blue',
-    NlpCreateHeadsDeviceOperation: 'blue',
-    NLPConcatHeadsDecodeDeviceOperation: 'blue',
-    UpdateCache: 'blue',
-    OptimizedConvNew: 'orange',
+    '(torch)': CellColour.Red,
+    Matmul: CellColour.Magenta,
+    LayerNorm: CellColour.Cyan,
+    AllGather: CellColour.Cyan,
+    AllReduce: CellColour.Cyan,
+    ScaledDotProductAttentionDecode: CellColour.Blue,
+    ScaledDotProductAttentionGQADecode: CellColour.Blue,
+    NlpCreateHeadsDeviceOperation: CellColour.Blue,
+    NLPConcatHeadsDecodeDeviceOperation: CellColour.Blue,
+    UpdateCache: CellColour.Blue,
+    OptimizedConvNew: CellColour.Orange,
 };
 
 export const formatStackedCell = (
@@ -72,19 +82,19 @@ export const getCellMarkup = (text: string, colour?: CellColour, highlight?: str
 
 export const getCellColour = (row: TypedStackedPerfRow, key: StackedTableKeys): CellColour => {
     if (PERCENTAGE_KEYS.includes(key)) {
-        return typeof row[key] === 'number' && row[key]! > 0 ? 'white' : 'grey';
+        return typeof row[key] === 'number' && row[key]! > 0 ? CellColour.White : CellColour.Grey;
     }
 
     if (key === 'op_code') {
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.op_code.includes(opCodeKey));
 
-        return match ? OPERATION_COLOURS[match] : 'grey';
+        return match ? OPERATION_COLOURS[match] : CellColour.Grey;
     }
 
     if (key === 'ops_count' || key === 'device_time_sum_us') {
-        return 'white';
+        return CellColour.White;
     }
 
     // Shouldn't get to this point but need to return something
-    return 'grey';
+    return CellColour.Grey;
 };
