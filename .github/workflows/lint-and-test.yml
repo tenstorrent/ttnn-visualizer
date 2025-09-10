@@ -40,10 +40,6 @@ jobs:
             CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }} | grep -E '\.(ts|tsx)$' | tr '\n' ' ' | xargs)
             echo "changed=$CHANGED_FILES" >> $GITHUB_OUTPUT
 
-      - name: Print changed files
-        run: |
-          echo "Changed files: ${{ steps.pr_changes.outputs.changed }}"
-
       - name: Lint and test
         run: |
             if [ -n "${{ steps.pr_changes.outputs.changed }}" ]; then
