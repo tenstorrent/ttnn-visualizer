@@ -32,10 +32,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Get changed files in PR
+        id: pr_changes
+        run: |
+            git fetch origin ${{ github.base_ref }} --depth=1
+            # Get changed files, filter for .ts and .tsx, output as space-separated string
+            CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }} | grep -E '\.(ts|tsx)$' | tr '\n' ' ' | xargs)
+            echo "changed=$CHANGED_FILES" >> $GITHUB_OUTPUT
+
       - name: Lint and test
         run: |
-          pnpm lint
-          pnpm test
+            if [ -n "${{ steps.pr_changes.outputs.changed }}" ]; then
+                pnpm lint ${{ steps.pr_changes.outputs.changed }} --report-unused-disable-directives --max-warnings 0
+            else
+                echo "No .ts or .tsx files changed. Skipping lint."
+            fi
+            pnpm test
 
   backend-lint-and-test:
     name: Lint and Test (Backend)
