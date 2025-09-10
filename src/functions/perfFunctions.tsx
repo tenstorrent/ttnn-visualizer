@@ -38,6 +38,9 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
     OptimizedConvNew: CellColour.Orange,
 };
 
+const DEFAULT_COLOUR = CellColour.White;
+const FALLBACK_COLOUR = CellColour.Grey;
+
 const MIN_PERCENTAGE = 0.5;
 
 const NUMBER_KEYS_TO_PARSE = [
@@ -139,11 +142,11 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
     const percentage = row.total_percent;
 
     if (percentage != null && percentage < MIN_PERCENTAGE) {
-        return CellColour.Grey;
+        return FALLBACK_COLOUR;
     }
 
     if (key === 'id' || key === 'total_percent' || key === 'device_time') {
-        return CellColour.White;
+        return DEFAULT_COLOUR;
     }
 
     if (key === 'bound') {
@@ -178,7 +181,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
             return CellColour.Red;
         }
 
-        return CellColour.White;
+        return DEFAULT_COLOUR;
     }
 
     if (key === 'cores' && keyValue != null) {
@@ -188,7 +191,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
     if (key === 'op_code') {
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.raw_op_code.includes(opCodeKey));
 
-        return match ? OPERATION_COLOURS[match] : CellColour.White;
+        return match ? OPERATION_COLOURS[match] : DEFAULT_COLOUR;
     }
 
     if (key === 'math_fidelity' && typeof keyValue === 'string') {
@@ -211,7 +214,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
             return CellColour.Cyan;
         }
 
-        return CellColour.White;
+        return DEFAULT_COLOUR;
     }
 
     if (key === 'op_to_op_gap' && typeof keyValue === 'string') {
@@ -219,7 +222,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
     }
 
     // Shouldn't get to this point but need to return something
-    return CellColour.Grey;
+    return FALLBACK_COLOUR;
 };
 
 export const getCoreColour = (value: string | string[] | boolean | number): CellColour | '' => {
@@ -237,13 +240,13 @@ export const getCoreColour = (value: string | string[] | boolean | number): Cell
         return '';
     }
 
-    return CellColour.White;
+    return DEFAULT_COLOUR;
 };
 
 export const getOpToOpGapColour = (value: string): CellColour => {
     const parsedValue = parseFloat(value) || 0;
 
-    return parsedValue > 6.5 ? CellColour.Red : CellColour.Grey;
+    return parsedValue > 6.5 ? CellColour.Red : FALLBACK_COLOUR;
 };
 
 export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
