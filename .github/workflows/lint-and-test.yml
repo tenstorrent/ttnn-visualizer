@@ -43,7 +43,7 @@ jobs:
       - name: Lint and test
         run: |
             if [ -n "${{ steps.pr_changes.outputs.changed }}" ]; then
-                pnpm lint ${{ steps.pr_changes.outputs.changed }}
+                pnpm lint ${{ steps.pr_changes.outputs.changed }} --report-unused-disable-directives --max-warnings 0
             else
                 echo "No .ts or .tsx files changed. Skipping lint."
             fi
