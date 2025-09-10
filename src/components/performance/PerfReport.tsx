@@ -248,7 +248,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data, comparisonData })
                     />
 
                     <Switch
-                        label='Highlight high dispatch ops'
+                        label='Highlight high dispatch opsss'
                         onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
                         checked={hiliteHighDispatch}
                     />

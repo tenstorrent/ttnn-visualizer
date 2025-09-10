@@ -32,6 +32,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Get changed files on push
+        id: push_changes
+        run: |
+          git fetch origin ${{ github.ref_name }}
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
+          echo "changed=$CHANGED_FILES" >> $GITHUB_OUTPUT
+
+      - name: Print changed files
+        run: |
+          echo "Changed files: ${{ steps.push_changes.outputs.changed }}"
+
       - name: Lint and test
         run: |
           pnpm lint
