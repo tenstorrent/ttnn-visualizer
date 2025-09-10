@@ -101,7 +101,7 @@ export const formatCell = (
     return getCellMarkup(formatted, getCellColour(row, key), highlight);
 };
 
-export const getCellMarkup = (text: string, colour?: string, highlight?: string | null) => {
+export const getCellMarkup = (text: string, colour?: CellColour, highlight?: string | null) => {
     if (!text) {
         return '';
     }
@@ -123,7 +123,7 @@ export const getCellMarkup = (text: string, colour?: string, highlight?: string 
     return <span>{text}</span>;
 };
 
-export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColour | '' => {
+export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColour => {
     const keyValue = row[key];
     const percentage = row.total_percent;
 

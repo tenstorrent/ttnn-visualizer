@@ -5,9 +5,24 @@
 import React from 'react';
 import HighlightedText from '../components/HighlightedText';
 import { formatPercentage, formatSize } from './math';
-import { StackedTableHeader, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
+import { StackedTableHeader, StackedTableKeys, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
+
+type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'orange' | 'grey';
 
 const PERCENTAGE_KEYS = ['percent', 'flops_min', 'flops_max', 'flops_mean', 'flops_std'];
+const OPERATION_COLOURS: { [key: string]: CellColour } = {
+    '(torch)': 'red',
+    Matmul: 'magenta',
+    LayerNorm: 'cyan',
+    AllGather: 'cyan',
+    AllReduce: 'cyan',
+    ScaledDotProductAttentionDecode: 'blue',
+    ScaledDotProductAttentionGQADecode: 'blue',
+    NlpCreateHeadsDeviceOperation: 'blue',
+    NLPConcatHeadsDecodeDeviceOperation: 'blue',
+    UpdateCache: 'blue',
+    OptimizedConvNew: 'orange',
+};
 
 export const formatStackedCell = (
     row: TypedStackedPerfRow,
@@ -34,10 +49,10 @@ export const formatStackedCell = (
         formatted += ` ${unit}`;
     }
 
-    return getCellMarkup(formatted, highlight);
+    return getCellMarkup(formatted, getCellColour(row, key), highlight);
 };
 
-export const getCellMarkup = (text: string, highlight?: string | null) => {
+export const getCellMarkup = (text: string, colour?: CellColour, highlight?: string | null) => {
     if (!text) {
         return '';
     }
@@ -45,11 +60,31 @@ export const getCellMarkup = (text: string, highlight?: string | null) => {
     if (highlight) {
         return (
             <HighlightedText
+                className={colour}
                 text={text}
                 filter={highlight || ''}
             />
         );
     }
 
-    return <span>{text}</span>;
+    return <span className={colour}>{text}</span>;
+};
+
+export const getCellColour = (row: TypedStackedPerfRow, key: StackedTableKeys): CellColour => {
+    if (PERCENTAGE_KEYS.includes(key)) {
+        return typeof row[key] === 'number' && row[key]! > 0 ? 'white' : 'grey';
+    }
+
+    if (key === 'op_code') {
+        const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.op_code.includes(opCodeKey));
+
+        return match ? OPERATION_COLOURS[match] : 'grey';
+    }
+
+    if (key === 'ops_count' || key === 'device_time_sum_us') {
+        return 'white';
+    }
+
+    // Shouldn't get to this point but need to return something
+    return 'grey';
 };

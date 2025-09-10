@@ -253,7 +253,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         size={Size.SMALL}
                     >
                         <Button
-                            text='All'
+                            text='Standard'
                             icon={IconNames.LIST}
                             active={!isStackedView}
                             onClick={() => setIsStackedView(false)}
@@ -273,6 +273,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
                         checked={provideMatmulAdvice}
                         className='option-switch'
+                        disabled={isStackedView}
                     />
 
                     <Switch
@@ -280,6 +281,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
                         checked={hiliteHighDispatch}
                         className='option-switch'
+                        disabled={isStackedView}
                     />
 
                     <Tooltip
