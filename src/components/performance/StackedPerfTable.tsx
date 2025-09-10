@@ -114,8 +114,8 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
                                                     )}
                                                     icon={
                                                         sortDirection === SortingDirection.ASC
-                                                            ? IconNames.CARET_DOWN
-                                                            : IconNames.CARET_UP
+                                                            ? IconNames.CARET_UP
+                                                            : IconNames.CARET_DOWN
                                                     }
                                                 />
                                             ) : (
