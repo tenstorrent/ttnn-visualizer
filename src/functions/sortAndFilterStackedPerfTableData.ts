@@ -4,7 +4,7 @@
 
 import { StackedTableFilter, StackedTableKeys, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
-const areFiltersActive = (filters: Record<StackedTableKeys, string> | null) =>
+const isFiltersActive = (filters: Record<StackedTableKeys, string> | null) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
 
 const getCellText = (buffer: TypedStackedPerfRow, key: StackedTableKeys) => {
@@ -24,7 +24,7 @@ const sortAndFilterStackedPerfTableData = (
 
     let filteredRows = data || [];
 
-    if (areFiltersActive(filters) && filterableColumnKeys) {
+    if (isFiltersActive(filters) && filterableColumnKeys) {
         filteredRows = filteredRows.filter((row) => {
             const isFilteredOut =
                 filters &&

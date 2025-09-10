@@ -4,7 +4,7 @@
 
 import { TableFilter, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 
-const areFiltersActive = (filters: Record<TableKeys, string> | null) =>
+const isFiltersActive = (filters: Record<TableKeys, string> | null) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
 
 const getCellText = (buffer: TypedPerfTableRow, key: TableKeys) => {
@@ -25,7 +25,7 @@ const sortAndFilterPerfTableData = (
 
     let filteredRows = data || [];
 
-    if (areFiltersActive(filters) && filterableColumnKeys) {
+    if (isFiltersActive(filters) && filterableColumnKeys) {
         filteredRows = filteredRows.filter((row) => {
             const isFilteredOut =
                 filters &&
