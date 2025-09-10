@@ -3,8 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import { PerfTableRow } from '../definitions/PerfTable';
-import { TypedPerfTableRow } from './sortAndFilterPerfTableData';
+import { PerfTableRow, TypedPerfTableRow } from '../definitions/PerfTable';
 
 const CORE_COUNT = {
     grayskull: 108,
