@@ -255,7 +255,14 @@ export const useGetL1SmallMarker = (): number => {
         const addresses = buffers?.map((buffer) => {
             return buffer.address;
         }) || [0];
-        return Math.min(...addresses);
+
+        let min = Infinity;
+        for (let i = 0; i < addresses.length; i++) {
+            if (addresses[i] < min) {
+                min = addresses[i];
+            }
+        }
+        return min === Infinity ? 0 : min;
     }, [buffers]);
 };
 
