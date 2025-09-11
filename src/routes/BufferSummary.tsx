@@ -4,9 +4,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { AnchorButton, ButtonGroup, Intent, Tab, Tabs } from '@blueprintjs/core';
+import { AnchorButton, ButtonGroup, Callout, Intent, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
+import { HttpStatusCode } from 'axios';
 import { BuffersByOperationData, useBuffers, useOperationsList } from '../hooks/useAPI';
 import useBufferFocus from '../hooks/useBufferFocus';
 import { BufferType } from '../model/BufferType';
@@ -17,20 +18,24 @@ import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
 import LoadingSpinner from '../components/LoadingSpinner';
 import 'styles/components/BufferSummary.scss';
 import { SECTION_IDS, TAB_IDS } from '../definitions/BufferSummary';
-import { selectedBufferSummaryTabAtom } from '../store/app';
+import { activeProfilerReportAtom, selectedBufferSummaryTabAtom } from '../store/app';
 
 function BufferSummary() {
     const plotRef = useRef<HTMLHeadingElement>(null);
     const tableRef = useRef<HTMLHeadingElement>(null);
     const [activeSection, setActiveSection] = useState<SECTION_IDS>(SECTION_IDS.PLOT);
     const [selectedTabId, setSelectedTabId] = useAtom(selectedBufferSummaryTabAtom);
-    const { data: buffersByOperation } = useBuffers(BufferType.L1, true);
-    const { data: dramBuffersByOperation } = useBuffers(BufferType.DRAM, true);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const { data: buffersByOperation, error: L1Error } = useBuffers(BufferType.L1, true);
+    const { data: dramBuffersByOperation, error: dramError } = useBuffers(BufferType.DRAM, true);
     const { data: operationsList } = useOperationsList();
 
     const { activeToast, resetToasts } = useBufferFocus();
 
     const isDramActive = selectedTabId === TAB_IDS.DRAM;
+    const hasLoadingErrors =
+        L1Error?.status === HttpStatusCode.InternalServerError ||
+        dramError?.status === HttpStatusCode.InternalServerError;
 
     useEffect(() => {
         const scrollRefs = [plotRef, tableRef];
@@ -94,6 +99,8 @@ function BufferSummary() {
                 />
             )}
 
+            {`hasLoadingErrors: ${hasLoadingErrors.toString()}`}
+
             <Tabs
                 id='performance-tabs'
                 selectedTabId={selectedTabId}
@@ -106,6 +113,7 @@ function BufferSummary() {
                     title='L1'
                     icon={IconNames.PAGE_LAYOUT}
                     panel={
+                        // eslint-disable-next-line no-nested-ternary
                         buffersByOperation && operationsList && tensorListByOperation ? (
                             <BufferSummaryTab
                                 plotRef={plotRef}
@@ -113,6 +121,14 @@ function BufferSummary() {
                                 buffersByOperation={buffersByOperation}
                                 tensorListByOperation={tensorListByOperation}
                             />
+                        ) : hasLoadingErrors ? (
+                            <Callout
+                                intent={Intent.WARNING}
+                                title='Error loading buffer data'
+                                compact
+                            >
+                                <p>{`We've been unable to load the buffer data for ${activeProfilerReport}.`}</p>
+                            </Callout>
                         ) : (
                             <LoadingSpinner />
                         )
@@ -124,6 +140,7 @@ function BufferSummary() {
                     title='DRAM'
                     icon={IconNames.PAGE_LAYOUT}
                     panel={
+                        // eslint-disable-next-line no-nested-ternary
                         dramBuffersByOperation && operationsList && tensorListByOperation ? (
                             <BufferSummaryTab
                                 plotRef={plotRef}
@@ -132,6 +149,14 @@ function BufferSummary() {
                                 tensorListByOperation={tensorListByOperation}
                                 isDram
                             />
+                        ) : hasLoadingErrors ? (
+                            <Callout
+                                intent={Intent.WARNING}
+                                title='Error loading buffer data'
+                                compact
+                            >
+                                <p>{`We've been unable to load the buffer data for ${activeProfilerReport}.`}</p>
+                            </Callout>
                         ) : (
                             <LoadingSpinner />
                         )
