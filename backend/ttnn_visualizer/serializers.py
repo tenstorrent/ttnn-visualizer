@@ -190,14 +190,25 @@ def serialize_operation(
 
 
 def serialize_operation_buffers(operation: Operation, operation_buffers):
-    buffer_data = [b.to_dict() for b in operation_buffers]
-    for b in buffer_data:
-        b.pop("operation_id")
-        b.update({"size": b.pop("max_size_per_bank")})
+    buffer_data = []
+    for b in operation_buffers:
+        buffer_dict = {
+            "device_id": b.device_id,
+            "address": b.address,
+            "buffer_type": (
+                b.buffer_type.value
+                if hasattr(b.buffer_type, "value")
+                else b.buffer_type
+            ),
+            "buffer_layout": b.buffer_layout,
+            "size": b.max_size_per_bank,
+        }
+        buffer_data.append(buffer_dict)
+
     return {
         "id": operation.operation_id,
         "name": operation.name,
-        "buffers": list(buffer_data),
+        "buffers": buffer_data,
     }
 
 
@@ -206,14 +217,43 @@ def serialize_devices(devices):
 
 
 def serialize_operations_buffers(operations, buffers):
-    buffer_dict = defaultdict(list)
-    for b in buffers:
-        buffer_dict[b.operation_id].append(b)
+    from time import time
 
+    start_time = time()
+
+    # Pre-serialize all buffers once using optimized method with defaultdict
+    serialized_buffers = defaultdict(list)
+    for b in buffers:
+        buffer_dict = {
+            "device_id": b.device_id,
+            "address": b.address,
+            "buffer_type": (
+                b.buffer_type.value
+                if hasattr(b.buffer_type, "value")
+                else b.buffer_type
+            ),
+            "buffer_layout": b.buffer_layout,
+            "size": b.max_size_per_bank,  # Renamed to match expected format
+        }
+        serialized_buffers[b.operation_id].append(buffer_dict)
+
+    print(f"pre-serialized all buffers {time() - start_time}s")
+
+    # Build results efficiently - no per-operation timing to reduce overhead
     results = []
     for operation in operations:
-        operation_buffers = buffer_dict.get(operation.operation_id, [])
-        results.append(serialize_operation_buffers(operation, operation_buffers))
+        operation_buffers = serialized_buffers[
+            operation.operation_id
+        ]  # defaultdict returns empty list if not found
+        results.append(
+            {
+                "id": operation.operation_id,
+                "name": operation.name,
+                "buffers": operation_buffers,
+            }
+        )
+
+    print(f"completed serialization {time() - start_time}s")
     return results
 
 
