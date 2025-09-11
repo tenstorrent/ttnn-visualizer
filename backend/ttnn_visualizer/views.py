@@ -1026,10 +1026,7 @@ def get_cluster_descriptor(instance: Instance):
         try:
             with open(local_path) as cluster_desc_file:
                 yaml_data = yaml.safe_load(cluster_desc_file)
-                return Response(
-                    orjson.dumps(yaml_data),
-                    mimetype="application/json",
-                )
+                return jsonify(yaml_data)  # yaml_data is not compatible with orjson
         except yaml.YAMLError as e:
             return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
 
