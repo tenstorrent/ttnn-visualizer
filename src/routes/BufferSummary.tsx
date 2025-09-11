@@ -99,8 +99,6 @@ function BufferSummary() {
                 />
             )}
 
-            {`hasLoadingErrors: ${hasLoadingErrors.toString()}`}
-
             <Tabs
                 id='performance-tabs'
                 selectedTabId={selectedTabId}
@@ -127,7 +125,7 @@ function BufferSummary() {
                                 title='Error loading buffer data'
                                 compact
                             >
-                                <p>{`We've been unable to load the buffer data for ${activeProfilerReport}.`}</p>
+                                <p>{`We've been unable to load the buffer data for /${activeProfilerReport}.`}</p>
                             </Callout>
                         ) : (
                             <LoadingSpinner />
@@ -155,7 +153,7 @@ function BufferSummary() {
                                 title='Error loading buffer data'
                                 compact
                             >
-                                <p>{`We've been unable to load the buffer data for ${activeProfilerReport}.`}</p>
+                                <p>{`We've been unable to load the buffer data for /${activeProfilerReport}.`}</p>
                             </Callout>
                         ) : (
                             <LoadingSpinner />
