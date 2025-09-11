@@ -210,11 +210,31 @@
             &.src {
                 border: 2px solid variables.$npe-highlight-src;
                 inset: 2px;
+
+                &.route-origin {
+                    background-image: repeating-linear-gradient(
+                        45deg,
+                        variables.$npe-highlight-src,
+                        variables.$npe-highlight-src 2px,
+                        transparent 2px,
+                        transparent 15px
+                    );
+                }
             }
 
             &.dst {
                 border: 2px solid variables.$npe-highlight-dst;
                 inset: 2px;
+
+                &.route-origin {
+                    background-image: repeating-linear-gradient(
+                        45deg,
+                        variables.$npe-highlight-dst,
+                        variables.$npe-highlight-dst 2px,
+                        transparent 2px,
+                        transparent 15px
+                    );
+                }
             }
 
             &.both {

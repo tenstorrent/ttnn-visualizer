@@ -227,7 +227,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
             filteredTableFields = listOfBuffers.filter((buffer) => buffer.tensor_id === selectedTensor);
         }
 
-        if (areFiltersActive(filters) && filterableColumnKeys) {
+        if (isFiltersActive(filters) && filterableColumnKeys) {
             filteredTableFields = filteredTableFields.filter((buffer) => {
                 const isFilteredOut = Object.entries(filters)
                     .filter(([_key, filterValue]) => String(filterValue).length)
@@ -393,7 +393,7 @@ const getCellContent = (
     );
 };
 
-function areFiltersActive(filters: Record<COLUMN_KEYS, string>) {
+function isFiltersActive(filters: Record<COLUMN_KEYS, string>) {
     return Object.values(filters).some((filter) => filter.length > 0);
 }
 

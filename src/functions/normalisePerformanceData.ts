@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { TypedPerfTableRow } from './sortAndFilterPerfTableData';
+import { TypedPerfTableRow } from '../definitions/PerfTable';
 
 const MISSING_OP_STRING = 'MISSING';
 const PLACEHOLDER: TypedPerfTableRow = {

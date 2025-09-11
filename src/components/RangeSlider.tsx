@@ -217,7 +217,7 @@ function Range() {
                                 labelStepSize={getStepSize(perfMax)}
                                 disabled={!isPerformanceRoute || !!comparisonReportList}
                                 labelRenderer={(id, options) =>
-                                    getPerformanceLabel(id, perfData, options?.isHandleTooltip)
+                                    getPerformanceLabel(id, perfData?.report, options?.isHandleTooltip)
                                 }
                                 handleHtmlProps={{
                                     start: { 'aria-label': 'Performance min range handle' },
