@@ -7,7 +7,6 @@ import { Helmet } from 'react-helmet-async';
 import { AnchorButton, ButtonGroup, Callout, Intent, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
-import { HttpStatusCode } from 'axios';
 import { BuffersByOperationData, useBuffers, useOperationsList } from '../hooks/useAPI';
 import useBufferFocus from '../hooks/useBufferFocus';
 import { BufferType } from '../model/BufferType';
@@ -26,16 +25,12 @@ function BufferSummary() {
     const [activeSection, setActiveSection] = useState<SECTION_IDS>(SECTION_IDS.PLOT);
     const [selectedTabId, setSelectedTabId] = useAtom(selectedBufferSummaryTabAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
-    const { data: buffersByOperation, error: L1Error } = useBuffers(BufferType.L1, true);
-    const { data: dramBuffersByOperation, error: dramError } = useBuffers(BufferType.DRAM, true);
+    const { data: buffersByOperation, error: buffersError } = useBuffers(
+        selectedTabId === TAB_IDS.L1 ? BufferType.L1 : BufferType.DRAM,
+        true,
+    );
     const { data: operationsList } = useOperationsList();
-
     const { activeToast, resetToasts } = useBufferFocus();
-
-    const isDramActive = selectedTabId === TAB_IDS.DRAM;
-    const hasLoadingErrors =
-        L1Error?.status === HttpStatusCode.InternalServerError ||
-        dramError?.status === HttpStatusCode.InternalServerError;
 
     useEffect(() => {
         const scrollRefs = [plotRef, tableRef];
@@ -60,10 +55,7 @@ function BufferSummary() {
         return () => window.removeEventListener('scroll', navHighlighter);
     }, []);
 
-    const tensorListByOperation = createTensorsByOperationByIdList(
-        operationsList,
-        isDramActive ? dramBuffersByOperation : buffersByOperation,
-    );
+    const tensorListByOperation = createTensorsByOperationByIdList(operationsList, buffersByOperation);
 
     return (
         <div className='buffer-summary data-padding'>
@@ -119,13 +111,13 @@ function BufferSummary() {
                                 buffersByOperation={buffersByOperation}
                                 tensorListByOperation={tensorListByOperation}
                             />
-                        ) : hasLoadingErrors ? (
+                        ) : buffersError ? (
                             <Callout
                                 intent={Intent.WARNING}
                                 title='Error loading buffer data'
                                 compact
                             >
-                                <p>{`We've been unable to load the buffer data for /${activeProfilerReport}.`}</p>
+                                <p>{`We've been unable to load the L1 buffer data for /${activeProfilerReport}.`}</p>
                             </Callout>
                         ) : (
                             <LoadingSpinner />
@@ -139,21 +131,21 @@ function BufferSummary() {
                     icon={IconNames.PAGE_LAYOUT}
                     panel={
                         // eslint-disable-next-line no-nested-ternary
-                        dramBuffersByOperation && operationsList && tensorListByOperation ? (
+                        buffersByOperation && operationsList && tensorListByOperation ? (
                             <BufferSummaryTab
                                 plotRef={plotRef}
                                 tableRef={tableRef}
-                                buffersByOperation={dramBuffersByOperation}
+                                buffersByOperation={buffersByOperation}
                                 tensorListByOperation={tensorListByOperation}
                                 isDram
                             />
-                        ) : hasLoadingErrors ? (
+                        ) : buffersError ? (
                             <Callout
                                 intent={Intent.WARNING}
                                 title='Error loading buffer data'
                                 compact
                             >
-                                <p>{`We've been unable to load the buffer data for /${activeProfilerReport}.`}</p>
+                                <p>{`We've been unable to load the DRAM buffer data for /${activeProfilerReport}.`}</p>
                             </Callout>
                         ) : (
                             <LoadingSpinner />
