@@ -148,12 +148,6 @@ class DatabaseQueries:
         for row in rows:
             yield Buffer(*row[:6])
 
-    def query_buffers_optimized(
-        self, filters: Optional[Dict[str, Any]] = None
-    ) -> List[Buffer]:
-        rows = self._query_table("buffers", filters)
-        return [Buffer(*row[:6]) for row in rows]
-
     def query_stack_traces(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[StackTrace, None, None]:

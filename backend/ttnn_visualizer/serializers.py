@@ -217,10 +217,6 @@ def serialize_devices(devices):
 
 
 def serialize_operations_buffers(operations, buffers):
-    from time import time
-
-    start_time = time()
-
     # Pre-serialize all buffers once using optimized method with defaultdict
     serialized_buffers = defaultdict(list)
     for b in buffers:
@@ -233,18 +229,13 @@ def serialize_operations_buffers(operations, buffers):
                 else b.buffer_type
             ),
             "buffer_layout": b.buffer_layout,
-            "size": b.max_size_per_bank,  # Renamed to match expected format
+            "size": b.max_size_per_bank,
         }
         serialized_buffers[b.operation_id].append(buffer_dict)
 
-    print(f"pre-serialized all buffers {time() - start_time}s")
-
-    # Build results efficiently - no per-operation timing to reduce overhead
     results = []
     for operation in operations:
-        operation_buffers = serialized_buffers[
-            operation.operation_id
-        ]  # defaultdict returns empty list if not found
+        operation_buffers = serialized_buffers[operation.operation_id]
         results.append(
             {
                 "id": operation.operation_id,
@@ -253,7 +244,6 @@ def serialize_operations_buffers(operations, buffers):
             }
         )
 
-    print(f"completed serialization {time() - start_time}s")
     return results
 
 
