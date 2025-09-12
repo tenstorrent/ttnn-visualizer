@@ -81,8 +81,8 @@ const connectionFailedStatus: ConnectionStatus = {
 
 const LocalFolderOptions: FC = () => {
     const queryClient = useQueryClient();
-    const setProfilerReportLocation = useSetAtom(profilerReportLocationAtom);
-    const setPerformanceReportLocation = useSetAtom(performanceReportLocationAtom);
+    const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
+    const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
@@ -257,7 +257,8 @@ const LocalFolderOptions: FC = () => {
                 <LocalFolderPicker
                     items={reportFolderList}
                     value={
-                        reportFolderList?.map((folder: ReportFolder) => folder.path).includes(activeProfilerReport)
+                        reportFolderList?.map((folder: ReportFolder) => folder.path).includes(activeProfilerReport) &&
+                        profilerReportLocation === ReportLocation.LOCAL
                             ? activeProfilerReport
                             : null
                     }
@@ -310,7 +311,10 @@ const LocalFolderOptions: FC = () => {
                     items={perfFolderList}
                     value={
                         perfFolderList
-                            ?.map((folder: ReportFolder) => folder.reportName)
+                            ?.map(
+                                (folder: ReportFolder) =>
+                                    folder.reportName && performanceReportLocation === ReportLocation.LOCAL,
+                            )
                             .includes(activePerformanceReport)
                             ? activePerformanceReport
                             : null
