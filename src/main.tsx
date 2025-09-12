@@ -5,7 +5,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { createBrowserRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from 'react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FocusStyleManager, OverlaysProvider } from '@blueprintjs/core';
 import './index.scss';
 import { HelmetProvider } from 'react-helmet-async';
