@@ -346,6 +346,7 @@ def get_all_buffers(instance: Instance):
 def get_operations_buffers(instance: Instance):
     buffer_type = request.args.get("buffer_type", "")
     device_id = request.args.get("device_id", None)
+
     if buffer_type and str.isdigit(buffer_type):
         buffer_type = int(buffer_type)
     else:

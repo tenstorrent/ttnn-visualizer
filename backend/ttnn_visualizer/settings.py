@@ -68,6 +68,7 @@ class DefaultConfig(object):
     # Gunicorn settings
     GUNICORN_WORKER_CLASS = os.getenv("GUNICORN_WORKER_CLASS", "gevent")
     GUNICORN_WORKERS = os.getenv("GUNICORN_WORKERS", "1")
+    GUNICORN_TIMEOUT = os.getenv("GUNICORN_TIMEOUT", "60")
     PORT = os.getenv("PORT", "8000")
     HOST = os.getenv("HOST", "localhost")
     DEV_SERVER_PORT = "5173"
