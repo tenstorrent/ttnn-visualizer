@@ -801,8 +801,9 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     const response = useQuery<BuffersByOperationData[], AxiosError>({
-        queryFn: () => fetchBuffersByOperation(bufferType),
+        queryFn: () => (activeProfilerReport !== null ? fetchBuffersByOperation(bufferType) : Promise.resolve([])),
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
+        enabled: activeProfilerReport !== null,
         retry: false,
         staleTime: Infinity,
     });
