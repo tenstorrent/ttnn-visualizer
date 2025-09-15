@@ -20,7 +20,7 @@ import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import getCoreCount from '../../functions/getCoreCount';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
-import { formatStackedCell } from '../../functions/stackedPerfFunctions';
+import { formatStackedCell, isStackedHostOp } from '../../functions/stackedPerfFunctions';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 
 interface StackedPerformanceTableProps {
@@ -42,7 +42,11 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
         const parsedRows = stackedData
-            ? sortAndFilterStackedPerfTableData(stackedData, filters, FilterableColumnKeys)
+            ? sortAndFilterStackedPerfTableData(
+                  stackedData.filter((row) => !isStackedHostOp(row)),
+                  filters,
+                  FilterableColumnKeys,
+              )
             : [];
 
         // Still some awkward casting here

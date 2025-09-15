@@ -17,7 +17,7 @@ import {
 } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
 import { useDeviceLog, useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
-import { formatCell } from '../../functions/perfFunctions';
+import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import { OperationDescription } from '../../model/APIData';
@@ -71,7 +71,12 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     // TODO: Refactor so that sortAndFilterPerfTableData is not used here and PerfReport.
     // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
     const tableFields = useMemo<TypedPerfTableRow[]>(() => {
-        const parsedRows = sortAndFilterPerfTableData(data, filters, filterableColumnKeys, mathFidelityFilter);
+        const parsedRows = sortAndFilterPerfTableData(
+            data?.filter((row) => !isHostOp(row)),
+            filters,
+            filterableColumnKeys,
+            mathFidelityFilter,
+        );
 
         // Still some awkward casting here
         return [...sortTableFields(parsedRows as [])];
@@ -81,7 +86,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         () =>
             comparisonData?.map((dataset) => {
                 const parsedRows = sortAndFilterPerfTableData(
-                    dataset,
+                    dataset.filter((row) => !isHostOp(row)),
                     filters,
                     filterableColumnKeys,
                     mathFidelityFilter,

@@ -322,7 +322,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 >
                     <Tab
                         id={INITIAL_TAB_ID}
-                        title={activePerformanceReport}
+                        title={activePerformanceReport || 'Loading...'}
                         icon={IconNames.TH_LIST}
                         className='tab-panel'
                         panel={

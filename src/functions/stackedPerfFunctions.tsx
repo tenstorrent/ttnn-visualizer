@@ -103,3 +103,5 @@ export const getCellColour = (row: TypedStackedPerfRow, key: StackedTableKeys): 
     // Shouldn't get to this point but need to return something
     return FALLBACK_COLOUR;
 };
+
+export const isStackedHostOp = (row: TypedStackedPerfRow) => row.op_code.includes('(torch)');

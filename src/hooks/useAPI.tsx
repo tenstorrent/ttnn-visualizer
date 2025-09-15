@@ -836,18 +836,11 @@ export const usePerformanceReport = (name: string | null) => {
         retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
     });
 
-    return useMemo(() => {
-        if (response.data) {
-            const df: PerfTableRow[] = response.data.report
-                .slice()
-                .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
-
-            response.data.report = df;
-        }
-
-        return response;
+    return useMemo(
+        () => response,
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.data, response.error]);
+        [response.data, response.error],
+    );
 };
 
 export const usePerformanceComparisonReport = () => {

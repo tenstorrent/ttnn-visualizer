@@ -40,6 +40,7 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
 
 const DEFAULT_COLOUR = CellColour.White;
 const FALLBACK_COLOUR = CellColour.Grey;
+const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
 
@@ -68,7 +69,7 @@ export const formatCell = (
         return (
             <Tooltip content='Op with > 6µs dispatch latency'>
                 <Icon
-                    color='#ff0'
+                    className={WARNING_COLOUR}
                     icon={IconNames.WARNING_SIGN}
                     title='Op with > 6µs dispatch latency'
                 />
@@ -379,3 +380,5 @@ export function getAxisUpperRange(arrays: Array<unknown[]>): number {
     // Adds + 1 to avoid cutting off the last plotted element in some cases and to create some space on the right side of the chart data
     return Math.max(...arrays.map((arr) => arr.length), 0) + 1;
 }
+
+export const isHostOp = (row: TypedPerfTableRow) => row.raw_op_code.includes('(torch)');
