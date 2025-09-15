@@ -245,15 +245,15 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return 0;
         }
         if (selectedTransferList.length === 0) {
-            return 0; // 0.45;
+            return 0;
         }
         const isSelected = selectedTransferList.some((t) => t.id === transfer.id);
 
         if (selectedTransferList.length !== 0 && !isSelected) {
-            return 0.15;
+            return 0;
         }
 
-        return 0.1;
+        return 0.5;
     };
 
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
