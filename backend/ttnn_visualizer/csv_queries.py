@@ -437,6 +437,10 @@ class OpsPerformanceReportQueries:
     DEFAULT_ID_RANGE = None
     DEFAULT_NO_ADVICE = False
     DEFAULT_TRACING_MODE = False
+    DEFAULT_RAW_OP_CODES = True
+    DEFAULT_NO_HOST_OPS = False
+    DEFAULT_NO_STACKED_REPORT = False
+    DEFAULT_NO_STACK_BY_IN0 = True
 
     @classmethod
     def generate_report(cls, instance):
@@ -457,10 +461,10 @@ class OpsPerformanceReportQueries:
                 csv_output_file,
                 cls.DEFAULT_NO_ADVICE,
                 cls.DEFAULT_TRACING_MODE,
-                True,
-                True,
-                False,
-                True,  # no_stack_by_in0 - need to ask what this is
+                cls.DEFAULT_RAW_OP_CODES,
+                cls.DEFAULT_NO_HOST_OPS,
+                cls.DEFAULT_NO_STACKED_REPORT,
+                cls.DEFAULT_NO_STACK_BY_IN0,
                 csv_stacked_output_file,
             )
         except Exception as e:
