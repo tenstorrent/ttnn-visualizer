@@ -245,7 +245,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return 0;
         }
         if (selectedTransferList.length === 0) {
-            return 0; // 0.45;
+            return 0;
         }
         const isSelected = selectedTransferList.some((t) => t.id === transfer.id);
 
