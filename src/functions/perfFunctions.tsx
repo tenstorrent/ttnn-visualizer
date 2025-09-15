@@ -8,7 +8,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
 import { MathFidelity, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
-import { formatSize, toSecondsPretty } from './math';
+import { formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
 
@@ -104,7 +104,7 @@ export const formatCell = (
         // there was a logic here to do something clever with Matmul size, removing it for now
         formatted = `${value}`;
     } else if (typeof value === 'number') {
-        formatted = formatSize(Number(value.toFixed(decimals ?? 0)));
+        formatted = formatSize(value, decimals);
     } else {
         formatted = value.toString();
     }
@@ -287,8 +287,8 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
         <div>
             <p>
                 Marked ops have &gt; 6µs dispatch latency. Running with tracing could save{' '}
-                {formatSize(Number(maxDispatchOverhead.toFixed(0)))} µs {toSecondsPretty(maxDispatchOverhead)} (
-                {percentageSaved.toFixed(1)}% of overall time).
+                {formatSize(maxDispatchOverhead, 0)} µs {toSecondsPretty(maxDispatchOverhead)} (
+                {formatPercentage(percentageSaved, 1)} of overall time).
             </p>
             <p>Alternatively, try moving runtime args in the kernels to compile-time args.</p>
         </div>

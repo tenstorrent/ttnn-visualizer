@@ -340,7 +340,10 @@ const getTotalsForHeader = (header: TableHeader, data: TypedPerfTableRow[]): str
     }
 
     if (header.key === ColumnHeaders.device_time) {
-        return `${formatSize(Number(data?.reduce((acc, curr) => acc + (curr.device_time || 0), 0).toFixed(2)))} µs`;
+        return `${formatSize(
+            data?.reduce((acc, curr) => acc + (curr.device_time || 0), 0),
+            2,
+        )} µs`;
     }
 
     if (header.key === ColumnHeaders.op_code) {
@@ -351,7 +354,10 @@ const getTotalsForHeader = (header: TableHeader, data: TypedPerfTableRow[]): str
     }
 
     if (header.key === ColumnHeaders.op_to_op_gap) {
-        return `${formatSize(Number(data?.reduce((acc, curr) => acc + (curr.op_to_op_gap || 0), 0).toFixed(2)))} µs`;
+        return `${formatSize(
+            data?.reduce((acc, curr) => acc + (curr.op_to_op_gap || 0), 0),
+            2,
+        )} µs`;
     }
 
     return '';

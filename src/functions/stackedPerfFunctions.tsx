@@ -4,7 +4,7 @@
 
 import React from 'react';
 import HighlightedText from '../components/HighlightedText';
-import { formatPercentage, formatSize } from './math';
+import { formatSize } from './math';
 import { StackedTableHeader, StackedTableKeys, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
 export enum CellColour {
@@ -50,10 +50,8 @@ export const formatStackedCell = (
         return '';
     }
 
-    if (typeof value === 'number') {
-        formatted = PERCENTAGE_KEYS.includes(key)
-            ? formatPercentage(value, decimals ?? 0)
-            : formatSize(Number(value.toFixed(decimals ?? 0)));
+    if (typeof value === 'number' && PERCENTAGE_KEYS.includes(key)) {
+        formatted = formatSize(value, decimals ?? 0);
     } else {
         formatted = value.toString();
     }
