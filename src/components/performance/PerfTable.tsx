@@ -26,6 +26,7 @@ import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import getCoreCount from '../../functions/getCoreCount';
 import LoadingSpinner from '../LoadingSpinner';
 import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
+import { formatSize } from '../../functions/math';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -176,7 +177,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             </div>
 
             <table className='perf-table monospace'>
-                <thead>
+                <thead className='table-header'>
                     <tr>
                         {visibleHeaders.map((h) => {
                             const targetSortDirection =
@@ -256,6 +257,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                         key={h.key}
                                         className={classNames('cell', {
                                             'align-right': h.key === ColumnHeaders.math_fidelity,
+                                            'break-word': h.key === ColumnHeaders.op_code,
                                         })}
                                     >
                                         {cellFormattingProxy(row, h, operations, filters?.[h.key])}
@@ -281,6 +283,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 key={h.key}
                                                 className={classNames('cell', {
                                                     'align-right': h.key === ColumnHeaders.math_fidelity,
+                                                    'break-word': h.key === ColumnHeaders.op_code,
                                                 })}
                                             >
                                                 {ComparisonKeys.includes(h.key) &&
@@ -307,9 +310,51 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                         </Fragment>
                     ))}
                 </tbody>
+
+                <tfoot className='table-footer'>
+                    <tr>
+                        {visibleHeaders.length > 0 &&
+                            data?.length > 0 &&
+                            visibleHeaders.map((header) => (
+                                <td
+                                    key={header.key}
+                                    className={classNames({
+                                        'no-wrap':
+                                            header.key === ColumnHeaders.op_code ||
+                                            header.key === ColumnHeaders.op_to_op_gap,
+                                    })}
+                                >
+                                    {getTotalsForHeader(header, data)}
+                                </td>
+                            ))}
+                    </tr>
+                </tfoot>
             </table>
         </>
     );
+};
+
+const getTotalsForHeader = (header: TableHeader, data: TypedPerfTableRow[]): string => {
+    if (header.key === ColumnHeaders.total_percent) {
+        return `100 %`;
+    }
+
+    if (header.key === ColumnHeaders.device_time) {
+        return `${formatSize(Number(data?.reduce((acc, curr) => acc + (curr.device_time || 0), 0).toFixed(2)))} µs`;
+    }
+
+    if (header.key === ColumnHeaders.op_code) {
+        const hostOpsCount = data.filter(isHostOp).length;
+        const deviceOpsCount = data.length - hostOpsCount;
+
+        return `${deviceOpsCount} device ops, ${hostOpsCount} host ops`;
+    }
+
+    if (header.key === ColumnHeaders.op_to_op_gap) {
+        return `${formatSize(Number(data?.reduce((acc, curr) => acc + (curr.op_to_op_gap || 0), 0).toFixed(2)))} µs`;
+    }
+
+    return '';
 };
 
 export default PerformanceTable;
