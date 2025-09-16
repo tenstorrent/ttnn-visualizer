@@ -906,7 +906,11 @@ def create_npe_files():
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
     for file in files:
-        if not file.filename.endswith(".json") and not file.filename.endswith(".zst"):
+        if (
+            not file.filename.endswith(".json")
+            and not file.filename.endswith(".zst")
+            and not file.filename.endswith(".npeviz")
+        ):
             return StatusMessage(
                 status=ConnectionTestStates.FAILED,
                 message="NPE requires a valid .json or .zst file",
@@ -1277,7 +1281,7 @@ def get_npe_data(instance: Instance):
     if instance.npe_path.endswith(".zst"):
         compressed_path = Path(instance.npe_path)
         uncompressed_path = None
-    elif instance.npe_path.endswith(".json"):
+    elif instance.npe_path.endswith(".json") or instance.npe_path.endswith(".npeviz"):
         compressed_path = None
         uncompressed_path = Path(instance.npe_path)
     else:
