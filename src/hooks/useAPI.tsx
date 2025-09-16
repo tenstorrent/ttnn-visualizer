@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import axios, { AxiosError } from 'axios';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import Papa, { ParseResult } from 'papaparse';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -158,6 +158,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
                   }
                 : argument,
         );
+
         return {
             ...operation,
             operationFileIdentifier: parseFileOperationIdentifier(operation.stack_trace),
@@ -481,7 +482,9 @@ export const useOperationDetails = (operationId: number | null) => {
     // Memoized function for fetching operation details
     const fetchDetails = useCallback(() => fetchOperationDetails(operationId), [operationId]);
 
-    const operationDetails = useQuery<OperationDetailsData>(['get-operation-detail', operationId], fetchDetails, {
+    const operationDetails = useQuery<OperationDetailsData>({
+        queryFn: () => fetchDetails(),
+        queryKey: ['get-operation-detail', operationId],
         retry: 2,
         retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
         staleTime: Infinity,
@@ -705,15 +708,18 @@ export const usePerformanceRange = (): NumberRange | null => {
 export const useReportMeta = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery<ReportMetaData, AxiosError>(['get-report-config', activeProfilerReport], fetchReportMeta);
+    return useQuery<ReportMetaData, AxiosError>({
+        queryKey: ['get-report-config', activeProfilerReport],
+        queryFn: () => fetchReportMeta(),
+    });
 };
 
 export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
-    return useQuery<BufferPage[], AxiosError>(
-        ['get-buffer-pages', operationId, address, bufferType],
-        () => fetchBufferPages(operationId, address, bufferType),
-        { staleTime: Infinity },
-    );
+    return useQuery<BufferPage[], AxiosError>({
+        queryKey: ['get-buffer-pages', operationId, address, bufferType],
+        queryFn: () => fetchBufferPages(operationId, address, bufferType),
+        staleTime: Infinity,
+    });
 };
 
 export const fetchTensors = async (): Promise<Tensor[]> => {
@@ -789,7 +795,8 @@ export const fetchNextUseOfBuffer = async (address: number | null, consumers: nu
 };
 
 export const useNextBuffer = (address: number | null, consumers: number[], queryKey: string) => {
-    return useQuery<BufferData, AxiosError>(queryKey, {
+    return useQuery<BufferData, AxiosError>({
+        queryKey: [queryKey],
         queryFn: () => fetchNextUseOfBuffer(address, consumers),
         retry: false,
         staleTime: Infinity,
@@ -836,18 +843,11 @@ export const usePerformanceReport = (name: string | null) => {
         retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
     });
 
-    return useMemo(() => {
-        if (response.data) {
-            const df: PerfTableRow[] = response.data.report
-                .slice()
-                .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
-
-            response.data.report = df;
-        }
-
-        return response;
+    return useMemo(
+        () => response,
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.data, response.error]);
+        [response.data, response.error],
+    );
 };
 
 export const usePerformanceComparisonReport = () => {

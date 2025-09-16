@@ -8,7 +8,7 @@ import { Button, FormGroup, Tooltip } from '@blueprintjs/core';
 
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useSetAtom } from 'jotai';
-import { useQueryClient } from 'react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 import getFolderNameFromPath from '../../definitions/getFolderNameFromPath';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
