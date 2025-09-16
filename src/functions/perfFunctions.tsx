@@ -67,11 +67,11 @@ export const formatCell = (
 
     if (key === 'high_dispatch') {
         return (
-            <Tooltip content='Op with > 6µs dispatch latency'>
+            <Tooltip content='Op with > 6 µs dispatch latency'>
                 <Icon
                     className={WARNING_COLOUR}
                     icon={IconNames.WARNING_SIGN}
-                    title='Op with > 6µs dispatch latency'
+                    title='Op with > 6 µs dispatch latency'
                 />
             </Tooltip>
         );
@@ -286,7 +286,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     return (
         <div>
             <p>
-                Marked ops have &gt; 6µs dispatch latency. Running with tracing could save{' '}
+                Marked ops have &gt; 6 µs dispatch latency. Running with tracing could save{' '}
                 {formatSize(maxDispatchOverhead, 0)} µs {toSecondsPretty(maxDispatchOverhead)} (
                 {formatPercentage(percentageSaved, 1)} of overall time).
             </p>
@@ -381,4 +381,4 @@ export function getAxisUpperRange(arrays: Array<unknown[]>): number {
     return Math.max(...arrays.map((arr) => arr.length), 0) + 1;
 }
 
-export const isHostOp = (row: TypedPerfTableRow) => row.raw_op_code.includes('(torch)');
+export const isHostOp = (op: string) => op.includes('(torch)');

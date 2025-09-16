@@ -73,7 +73,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
     const tableFields = useMemo<TypedPerfTableRow[]>(() => {
         const parsedRows = sortAndFilterPerfTableData(
-            data?.filter((row) => !isHostOp(row)),
+            data?.filter((row) => !isHostOp(row.raw_op_code)),
             filters,
             filterableColumnKeys,
             mathFidelityFilter,
@@ -87,7 +87,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         () =>
             comparisonData?.map((dataset) => {
                 const parsedRows = sortAndFilterPerfTableData(
-                    dataset.filter((row) => !isHostOp(row)),
+                    dataset.filter((row) => !isHostOp(row.raw_op_code)),
                     filters,
                     filterableColumnKeys,
                     mathFidelityFilter,
@@ -347,7 +347,7 @@ const getTotalsForHeader = (header: TableHeader, data: TypedPerfTableRow[]): str
     }
 
     if (header.key === ColumnHeaders.op_code) {
-        const hostOpsCount = data.filter(isHostOp).length;
+        const hostOpsCount = data.filter((row) => isHostOp(row.raw_op_code)).length;
         const deviceOpsCount = data.length - hostOpsCount;
 
         return `${deviceOpsCount} device ops, ${hostOpsCount} host ops`;
