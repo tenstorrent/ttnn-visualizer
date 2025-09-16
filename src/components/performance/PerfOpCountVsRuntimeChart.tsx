@@ -45,16 +45,16 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
         [datasets, opCodes, selectedOpCodes, perfReport, comparisonReportList],
     );
 
-    const opRuntimeData = useMemo(
+    const opDeviceTimeData = useMemo(
         () =>
             datasets.map((data, dataIndex) =>
                 opCodes.map(
                     (opCode) =>
                         ({
-                            x: [`Runtime % ${datasets.length > 1 ? `(${dataIndex + 1})` : ''}`],
+                            x: [`Device Time ${datasets.length > 1 ? `(${dataIndex + 1})` : ''}`],
                             y: [
-                                data.filter((row) => row.raw_op_code === opCode).reduce(getRuntimeLength, 0) /
-                                    data.reduce(getRuntimeLength, 0),
+                                data.filter((row) => row.raw_op_code === opCode).reduce(getDeviceTimePercentage, 0) /
+                                    data.reduce(getDeviceTimePercentage, 0),
                             ],
                             type: 'bar',
                             name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
@@ -84,14 +84,14 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
 
     return (
         <PerfChart
-            title='Operation Count vs Runtime Contribution'
-            chartData={[...opCountData.flat(), ...opRuntimeData.flat()]}
+            title='Operation Count vs Device Time'
+            chartData={[...opCountData.flat(), ...opDeviceTimeData.flat()]}
             configuration={configuration}
         />
     );
 }
 
-const getRuntimeLength = (sum: number, row: PerfTableRow) =>
+const getDeviceTimePercentage = (sum: number, row: PerfTableRow) =>
     sum + (row.device_time ? parseInt(row.device_time, 10) : 0);
 
 export default PerfOpCountVsRuntimeChart;
