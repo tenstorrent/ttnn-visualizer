@@ -197,7 +197,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             /> */}
 
             <div className='perf-report'>
-                <div className='table-header'>
+                <div className='report-header'>
                     <h3 className='title'>Performance report</h3>
 
                     <div className='header-aside'>
@@ -322,7 +322,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 >
                     <Tab
                         id={INITIAL_TAB_ID}
-                        title={activePerformanceReport}
+                        title={activePerformanceReport || 'Loading...'}
                         icon={IconNames.TH_LIST}
                         className='tab-panel'
                         panel={

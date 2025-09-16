@@ -7,6 +7,7 @@ import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import {
+    ColumnHeaders,
     FilterableColumnKeys,
     StackedTableHeader,
     TableHeaders,
@@ -22,6 +23,8 @@ import getCoreCount from '../../functions/getCoreCount';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 import { formatStackedCell } from '../../functions/stackedPerfFunctions';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
+import { formatSize } from '../../functions/math';
+import { isHostOp } from '../../functions/perfFunctions';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -42,7 +45,11 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
         const parsedRows = stackedData
-            ? sortAndFilterStackedPerfTableData(stackedData, filters, FilterableColumnKeys)
+            ? sortAndFilterStackedPerfTableData(
+                  stackedData.filter((row) => !isHostOp(row.op_code)),
+                  filters,
+                  FilterableColumnKeys,
+              )
             : [];
 
         // Still some awkward casting here
@@ -128,19 +135,6 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
                                     ) : (
                                         <span className='header-label no-button'>{h.label}</span>
                                     )}
-
-                                    {/* TODO: May want this in the near future */}
-                                    {/* {h?.filterable && (
-                                            <div className='column-filter'>
-                                                <InputGroup
-                                                    asyncControl
-                                                    size='small'
-                                                    onValueChange={(value) => updateColumnFilter(h.key, value)}
-                                                    placeholder='Filter...'
-                                                    value={filters?.[h.key]}
-                                                />
-                                            </div>
-                                        )} */}
                                 </th>
                             );
                         })}
@@ -161,9 +155,49 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
                         </tr>
                     ))}
                 </tbody>
+
+                <tfoot className='table-footer'>
+                    <tr>
+                        {stackedData &&
+                            stackedData?.length > 0 &&
+                            TableHeaders.map((header) => (
+                                <td
+                                    key={header.key}
+                                    className={classNames({
+                                        'no-wrap': header.key === ColumnHeaders.OpCodeJoined,
+                                    })}
+                                >
+                                    {getTotalsForHeader(header, stackedData)}
+                                </td>
+                            ))}
+                    </tr>
+                </tfoot>
             </table>
         </>
     );
+};
+
+const getTotalsForHeader = (header: StackedTableHeader, data: TypedStackedPerfRow[]): string => {
+    if (header.key === ColumnHeaders.Percent) {
+        return `100 %`;
+    }
+
+    if (header.key === ColumnHeaders.DeviceTimeSumUs) {
+        return `${formatSize(
+            data?.reduce((acc, curr) => acc + (curr.device_time_sum_us || 0), 0),
+            2,
+        )} µs`;
+    }
+
+    if (header.key === ColumnHeaders.OpCodeJoined) {
+        return `${data.filter((row) => !isHostOp(row.op_code)).length} device op types`;
+    }
+
+    if (header.key === ColumnHeaders.OpsCount) {
+        return `${data?.reduce((acc, curr) => acc + (curr.ops_count || 0), 0)}`;
+    }
+
+    return '';
 };
 
 export default StackedPerformanceTable;

@@ -17,7 +17,7 @@ import {
 } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
 import { useDeviceLog, useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
-import { formatCell } from '../../functions/perfFunctions';
+import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import { OperationDescription } from '../../model/APIData';
@@ -26,6 +26,7 @@ import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import getCoreCount from '../../functions/getCoreCount';
 import LoadingSpinner from '../LoadingSpinner';
 import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
+import { formatSize } from '../../functions/math';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -71,7 +72,12 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     // TODO: Refactor so that sortAndFilterPerfTableData is not used here and PerfReport.
     // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
     const tableFields = useMemo<TypedPerfTableRow[]>(() => {
-        const parsedRows = sortAndFilterPerfTableData(data, filters, filterableColumnKeys, mathFidelityFilter);
+        const parsedRows = sortAndFilterPerfTableData(
+            data?.filter((row) => !isHostOp(row.raw_op_code)),
+            filters,
+            filterableColumnKeys,
+            mathFidelityFilter,
+        );
 
         // Still some awkward casting here
         return [...sortTableFields(parsedRows as [])];
@@ -81,7 +87,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         () =>
             comparisonData?.map((dataset) => {
                 const parsedRows = sortAndFilterPerfTableData(
-                    dataset,
+                    dataset.filter((row) => !isHostOp(row.raw_op_code)),
                     filters,
                     filterableColumnKeys,
                     mathFidelityFilter,
@@ -171,7 +177,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
             </div>
 
             <table className='perf-table monospace'>
-                <thead>
+                <thead className='table-header'>
                     <tr>
                         {visibleHeaders.map((h) => {
                             const targetSortDirection =
@@ -251,6 +257,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                         key={h.key}
                                         className={classNames('cell', {
                                             'align-right': h.key === ColumnHeaders.math_fidelity,
+                                            'break-word': h.key === ColumnHeaders.op_code,
                                         })}
                                     >
                                         {cellFormattingProxy(row, h, operations, filters?.[h.key])}
@@ -276,6 +283,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 key={h.key}
                                                 className={classNames('cell', {
                                                     'align-right': h.key === ColumnHeaders.math_fidelity,
+                                                    'break-word': h.key === ColumnHeaders.op_code,
                                                 })}
                                             >
                                                 {ComparisonKeys.includes(h.key) &&
@@ -302,9 +310,57 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                         </Fragment>
                     ))}
                 </tbody>
+
+                <tfoot className='table-footer'>
+                    <tr>
+                        {visibleHeaders.length > 0 &&
+                            data?.length > 0 &&
+                            visibleHeaders.map((header) => (
+                                <td
+                                    key={header.key}
+                                    className={classNames({
+                                        'no-wrap':
+                                            header.key === ColumnHeaders.op_code ||
+                                            header.key === ColumnHeaders.op_to_op_gap,
+                                    })}
+                                >
+                                    {getTotalsForHeader(header, data)}
+                                </td>
+                            ))}
+                    </tr>
+                </tfoot>
             </table>
         </>
     );
+};
+
+const getTotalsForHeader = (header: TableHeader, data: TypedPerfTableRow[]): string => {
+    if (header.key === ColumnHeaders.total_percent) {
+        return `100 %`;
+    }
+
+    if (header.key === ColumnHeaders.device_time) {
+        return `${formatSize(
+            data?.reduce((acc, curr) => acc + (curr.device_time || 0), 0),
+            2,
+        )} µs`;
+    }
+
+    if (header.key === ColumnHeaders.op_code) {
+        const hostOpsCount = data.filter((row) => isHostOp(row.raw_op_code)).length;
+        const deviceOpsCount = data.length - hostOpsCount;
+
+        return `${deviceOpsCount} device ops, ${hostOpsCount} host ops`;
+    }
+
+    if (header.key === ColumnHeaders.op_to_op_gap) {
+        return `${formatSize(
+            data?.reduce((acc, curr) => acc + (curr.op_to_op_gap || 0), 0),
+            2,
+        )} µs`;
+    }
+
+    return '';
 };
 
 export default PerformanceTable;
