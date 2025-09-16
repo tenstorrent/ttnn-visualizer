@@ -197,7 +197,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             /> */}
 
             <div className='perf-report'>
-                <div className='title-header'>
+                <div className='report-header'>
                     <h3 className='title'>Performance report</h3>
 
                     <div className='header-aside'>
