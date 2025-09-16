@@ -6,7 +6,7 @@ import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core'
 import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
-import { useQueryClient } from 'react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAtom, useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
 import {
@@ -213,7 +213,7 @@ const LocalFolderOptions: FC = () => {
 
     const handleDeleteProfiler = async (folder: ReportFolder) => {
         await deleteProfiler(folder.path);
-        await queryClient.invalidateQueries([PROFILER_FOLDER_QUERY_KEY]);
+        await queryClient.invalidateQueries({ queryKey: [PROFILER_FOLDER_QUERY_KEY] });
 
         createToastNotification('Memory report deleted', folder.reportName);
 
@@ -234,7 +234,7 @@ const LocalFolderOptions: FC = () => {
 
     const handleDeletePerformance = async (folder: ReportFolder) => {
         await deletePerformance(folder.path);
-        await queryClient.invalidateQueries([PERFORMANCE_FOLDER_QUERY_KEY]);
+        await queryClient.invalidateQueries({ queryKey: [PERFORMANCE_FOLDER_QUERY_KEY] });
 
         createToastNotification(`Performance report deleted`, folder.reportName);
 
