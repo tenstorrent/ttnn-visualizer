@@ -58,6 +58,7 @@ export const useShowActiveTransfers = ({
                                 (link) =>
                                     link[NPE_LINK.Y] === linkUtilizationData[NPE_LINK.Y] &&
                                     link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X] &&
+                                    link[NPE_LINK.CHIP_ID] === linkUtilizationData[NPE_LINK.CHIP_ID] &&
                                     (nocFilter === null || link[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0),
                             )
                                 ? r
