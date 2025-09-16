@@ -311,11 +311,8 @@ const LocalFolderOptions: FC = () => {
                     items={perfFolderList}
                     value={
                         perfFolderList
-                            ?.map(
-                                (folder: ReportFolder) =>
-                                    folder.reportName && performanceReportLocation === ReportLocation.LOCAL,
-                            )
-                            .includes(activePerformanceReport)
+                            ?.map((folder: ReportFolder) => folder.reportName)
+                            .includes(activePerformanceReport) && performanceReportLocation === ReportLocation.LOCAL
                             ? activePerformanceReport
                             : null
                     }
