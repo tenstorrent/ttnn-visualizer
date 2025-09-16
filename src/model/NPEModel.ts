@@ -94,6 +94,12 @@ export enum NoCType {
     NOC1 = 'NOC1',
 }
 
+export enum EVENT_TYPE_FILTER {
+    ALL_EVENTS,
+    FABRIC_EVENTS,
+    LOCAL_EVENTS,
+}
+
 export enum NoCID {
     NOC1_NORTH = 'NOC1_NORTH',
     NOC0_SOUTH = 'NOC0_SOUTH',
