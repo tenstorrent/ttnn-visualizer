@@ -265,6 +265,8 @@ def main():
 
     gunicorn_args = [
         "gunicorn",
+        "-t",
+        config.GUNICORN_TIMEOUT,
         "-k",
         config.GUNICORN_WORKER_CLASS,
         "-w",

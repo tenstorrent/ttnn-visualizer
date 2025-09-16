@@ -255,7 +255,14 @@ export const useGetL1SmallMarker = (): number => {
         const addresses = buffers?.map((buffer) => {
             return buffer.address;
         }) || [0];
-        return Math.min(...addresses);
+
+        let min = Infinity;
+        for (let i = 0; i < addresses.length; i++) {
+            if (addresses[i] < min) {
+                min = addresses[i];
+            }
+        }
+        return min === Infinity ? 0 : min;
     }, [buffers]);
 };
 
@@ -793,9 +800,11 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     const range = useAtomValue(selectedOperationRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    const response = useQuery({
-        queryFn: () => fetchBuffersByOperation(bufferType),
+    const response = useQuery<BuffersByOperationData[], AxiosError>({
+        queryFn: () => (activeProfilerReport !== null ? fetchBuffersByOperation(bufferType) : Promise.resolve([])),
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
+        enabled: activeProfilerReport !== null,
+        retry: false,
         staleTime: Infinity,
     });
 
@@ -805,8 +814,7 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
         }
 
         return response;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [range, response.data, useRange]);
+    }, [range, response, useRange]);
 };
 
 export const useDeviceLog = (name?: string | null) => {

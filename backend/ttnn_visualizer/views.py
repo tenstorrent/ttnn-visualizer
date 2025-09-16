@@ -346,6 +346,7 @@ def get_all_buffers(instance: Instance):
 def get_operations_buffers(instance: Instance):
     buffer_type = request.args.get("buffer_type", "")
     device_id = request.args.get("device_id", None)
+
     if buffer_type and str.isdigit(buffer_type):
         buffer_type = int(buffer_type)
     else:
@@ -1026,10 +1027,7 @@ def get_cluster_descriptor(instance: Instance):
         try:
             with open(local_path) as cluster_desc_file:
                 yaml_data = yaml.safe_load(cluster_desc_file)
-                return Response(
-                    orjson.dumps(yaml_data),
-                    mimetype="application/json",
-                )
+                return jsonify(yaml_data)  # yaml_data is not compatible with orjson
         except yaml.YAMLError as e:
             return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
 
