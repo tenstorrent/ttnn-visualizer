@@ -31,7 +31,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                 opCodes.map(
                     (opCode) =>
                         ({
-                            x: [`Op Count ${datasets.length > 1 ? `(${dataIndex + 1})` : ''}`],
+                            x: [`Op Count % ${datasets.length > 1 ? `(${dataIndex + 1})` : ''}`],
                             y: [data.filter((row) => row.raw_op_code === opCode).length / data.length],
                             type: 'bar',
                             name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
@@ -51,7 +51,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                 opCodes.map(
                     (opCode) =>
                         ({
-                            x: [`Device Time ${datasets.length > 1 ? `(${dataIndex + 1})` : ''}`],
+                            x: [`Device Time % ${datasets.length > 1 ? `(${dataIndex + 1})` : ''}`],
                             y: [
                                 data.filter((row) => row.raw_op_code === opCode).reduce(getDeviceTimePercentage, 0) /
                                     data.reduce(getDeviceTimePercentage, 0),
