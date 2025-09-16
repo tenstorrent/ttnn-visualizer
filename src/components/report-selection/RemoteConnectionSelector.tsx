@@ -86,8 +86,13 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                         setIsEditDialogOpen(false);
                         onEditConnection(updatedConnection, connection);
                     }}
-                    onClose={() => {
+                    onClose={(updatedConnection) => {
                         setIsEditDialogOpen(false);
+
+                        if (updatedConnection && !isEqual(updatedConnection, connection)) {
+                            onEditConnection(updatedConnection, connection);
+                            onSyncRemoteFolderList(updatedConnection);
+                        }
                     }}
                     title='Edit remote connection'
                     buttonLabel='Save connection'

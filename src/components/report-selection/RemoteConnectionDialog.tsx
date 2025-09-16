@@ -15,7 +15,7 @@ interface RemoteConnectionDialogProps {
     title?: string;
     buttonLabel?: string;
     open: boolean;
-    onClose: () => void;
+    onClose: (connection: RemoteConnection) => void;
     onAddConnection: (connection: RemoteConnection) => void;
     remoteConnection?: RemoteConnection;
 }
@@ -48,8 +48,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     buttonLabel = 'Add connection',
     remoteConnection,
 }) => {
-    const connectionToTest = remoteConnection ?? DEFAULT_CONNECTION;
-    const [connection, setConnection] = useState<Partial<RemoteConnection>>(connectionToTest);
+    const [connection, setConnection] = useState<Partial<RemoteConnection>>(remoteConnection ?? DEFAULT_CONNECTION);
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const [hasChangedConnection, setHasChangedConnection] = useState(false);
     const { testConnection } = useRemoteConnection();
@@ -93,9 +92,8 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
     };
 
     const closeDialog = () => {
-        setConnection(connectionToTest);
         setConnectionTests([]);
-        onClose();
+        onClose(connection as RemoteConnection);
     };
 
     useEffect(() => {
