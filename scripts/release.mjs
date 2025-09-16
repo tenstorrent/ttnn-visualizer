@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+/* eslint-disable no-console */
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 import fs from 'fs';
 import { execSync } from 'child_process';
 
@@ -10,8 +15,12 @@ if (!['-patch', '-minor', '-major'].includes(bumpType)) {
 
 function bumpVersion(version, type) {
     const [major, minor, patch] = version.split('.').map(Number);
-    if (type === '-major') return `${major + 1}.0.0`;
-    if (type === '-minor') return `${major}.${minor + 1}.0`;
+    if (type === '-major') {
+        return `${major + 1}.0.0`;
+    }
+    if (type === '-minor') {
+        return `${major}.${minor + 1}.0`;
+    }
     return `${major}.${minor}.${patch + 1}`;
 }
 
@@ -20,7 +29,7 @@ const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 const oldVersion = pkg.version;
 const newVersion = bumpVersion(oldVersion, bumpType);
 pkg.version = newVersion;
-fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 console.log(`Updated package.json to version ${newVersion}`);
 
 const pyPath = './pyproject.toml';

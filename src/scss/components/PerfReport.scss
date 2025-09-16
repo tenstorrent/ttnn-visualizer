@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/variables' as *;
+@use '../definitions/colours' as colours;
 @use '../mixins/perfReportColours' as perf;
 
-.perf-report {
-    background: #222;
-    color: #fff;
-    padding: 1rem;
-    min-width: 1240px;
+$row-pattern-0: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
+$row-pattern-1: linear-gradient(0deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
+$row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
+$header-footer-border: 2px solid colours.$tt-grey-5;
 
-    .table-header {
+.perf-report {
+    color: #fff;
+    min-width: 1240px;
+    overflow: auto;
+
+    .report-header {
         display: flex;
         width: 100%;
         justify-content: space-between;
@@ -24,10 +29,6 @@
     .perf-table {
         border-collapse: collapse;
         width: 100%;
-    }
-
-    .title {
-        margin-top: 0;
     }
 
     .header-aside {
@@ -48,6 +49,28 @@
         margin-bottom: 15px;
     }
 
+    .data-options {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 10px;
+        align-items: center;
+
+        .option-switch {
+            margin-bottom: 0;
+        }
+    }
+
+    .tab-panel {
+        margin-top: 10px;
+    }
+
+    .meta-data {
+        display: flex;
+        flex-direction: column;
+        height: 46px;
+        margin-bottom: 20px;
+    }
+
     .cell-header {
         text-align: left;
         vertical-align: initial;
@@ -63,14 +86,14 @@
             }
         }
 
-        .bp5-button {
+        .bp6-button {
             background-color: transparent;
             width: 100%;
             padding-left: 2px;
             padding-right: 2px;
         }
 
-        .bp5-button-text {
+        .bp6-button-text {
             display: flex;
             flex-grow: 1;
             justify-content: space-between;
@@ -85,6 +108,43 @@
         }
     }
 
+    tbody {
+        tr {
+            &:hover {
+                background-color: rgb(255 255 255 / 5%);
+            }
+
+            &.comparison-row {
+                border-bottom: 2px solid colours.$tt-sand-shade;
+                background-size: 5px 5px;
+
+                &.pattern-0 {
+                    background-image: $row-pattern-0;
+                }
+
+                &.pattern-1 {
+                    background-image: $row-pattern-1;
+                }
+
+                &.pattern-2 {
+                    background-image: $row-pattern-2;
+                }
+            }
+
+            &:last-child {
+                border-bottom: none;
+
+                > td {
+                    border-bottom: none;
+                }
+            }
+        }
+    }
+
+    .missing-data {
+        background-color: colours.$tt-red-shade;
+    }
+
     .cell {
         border-bottom: 1px solid #333;
         padding: 0.25rem;
@@ -96,6 +156,34 @@
         &.advice {
             border-bottom: none;
         }
+    }
+
+    .table-header {
+        border-bottom: $header-footer-border;
+    }
+
+    .table-footer {
+        border-top: $header-footer-border;
+        font-style: italic;
+
+        td {
+            padding: 1rem 0.25rem;
+
+            &.no-wrap {
+                white-space: nowrap;
+            }
+
+            &.break-word {
+                word-break: break-word;
+            }
+        }
+    }
+
+    .error-message {
+        display: inline-flex;
+        justify-content: center;
+        gap: 5px;
+        color: colours.$tt-yellow;
     }
 
     @include perf.perf-report-colours;

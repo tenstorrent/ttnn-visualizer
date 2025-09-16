@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 import React, { useState } from 'react';
 import { useAtom } from 'jotai';
 import { FileInput, Icon, IconName, Intent } from '@blueprintjs/core';
@@ -47,7 +51,7 @@ const NPEFileLoader: React.FC = () => {
             setErrorMessage(response?.data?.message);
         } else {
             const fileName = file.name;
-            setActiveNpe(fileName);
+            setActiveNpe(sanitiseFileName(fileName));
             createToastNotification('Active NPE', fileName);
             setUploadStatus(ConnectionTestStates.OK);
             setErrorMessage(`${fileName} uploaded successfully`);
@@ -57,7 +61,7 @@ const NPEFileLoader: React.FC = () => {
     return (
         <div className='npe-file-loader'>
             <FileInput
-                text={npeFileName ?? 'Choose file...'}
+                text={npeFileName ?? 'Upload an NPE report file for analysis...'}
                 onInputChange={handleFileChange}
             />
 
@@ -79,5 +83,8 @@ const NPEFileLoader: React.FC = () => {
         </div>
     );
 };
+
+// Remove file extension from the file name
+const sanitiseFileName = (fileName: string) => fileName.replace(/\.[^/.]+$/, '');
 
 export default NPEFileLoader;

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 import Home from '../routes/Home';
 import Operations from '../routes/Operations';
 import OperationDetails from '../routes/OperationDetails';
@@ -9,45 +13,73 @@ import Performance from '../routes/Performance';
 import NPE from '../routes/NPE';
 import ROUTES from './Routes';
 
+// Allows us to keep absolute paths in ROUTES while using relative paths in route objects
+const stripFirstSlash = (path: string) => {
+    return path.startsWith('/') ? path.slice(1) : path;
+};
+
 export const routeObjectList = [
     {
         index: true,
         element: <Home />,
     },
     {
-        path: ROUTES.OPERATIONS,
+        path: stripFirstSlash(ROUTES.OPERATIONS),
         element: <Operations />,
     },
     {
-        path: `${ROUTES.OPERATIONS}/:operationId`,
+        path: stripFirstSlash(`${ROUTES.OPERATIONS}/:operationId`),
         element: <OperationDetails />,
     },
     {
-        path: ROUTES.TENSORS,
+        path: stripFirstSlash(ROUTES.TENSORS),
         element: <Tensors />,
     },
     {
-        path: ROUTES.BUFFERS,
+        path: stripFirstSlash(ROUTES.BUFFERS),
         element: <BufferSummary />,
     },
     {
-        path: ROUTES.STYLEGUIDE,
+        path: stripFirstSlash(ROUTES.STYLEGUIDE),
         element: <Styleguide />,
     },
     {
-        path: `${ROUTES.GRAPHTREE}/:operationId?`,
+        path: stripFirstSlash(`${ROUTES.GRAPHTREE}/:operationId?`),
         element: <GraphView />,
     },
     {
-        path: ROUTES.PERFORMANCE,
+        path: stripFirstSlash(ROUTES.PERFORMANCE),
         element: <Performance />,
     },
     {
-        path: ROUTES.NPE,
+        path: stripFirstSlash(`${ROUTES.NPE}/:filepath?`),
         element: <NPE />,
     },
     {
-        path: ROUTES.CLUSTER,
+        path: stripFirstSlash(ROUTES.CLUSTER),
         element: null,
     },
 ];
+
+interface RouteRequirements {
+    needsProfilerReport?: boolean;
+    needsPerformanceReport?: boolean;
+}
+
+export const RouteRequirements: Record<string, RouteRequirements> = {
+    [ROUTES.OPERATIONS]: {
+        needsProfilerReport: true,
+    },
+    [ROUTES.TENSORS]: {
+        needsProfilerReport: true,
+    },
+    [ROUTES.BUFFERS]: {
+        needsProfilerReport: true,
+    },
+    [ROUTES.GRAPHTREE]: {
+        needsProfilerReport: true,
+    },
+    [ROUTES.PERFORMANCE]: {
+        needsPerformanceReport: true,
+    },
+};

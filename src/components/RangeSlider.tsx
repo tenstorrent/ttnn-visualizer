@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Button, InputGroup, RangeSlider, Tooltip } from '@blueprintjs/core';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
@@ -9,7 +9,8 @@ import { useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
 import {
     activePerformanceReportAtom,
-    comparisonPerformanceReportAtom,
+    comparisonPerformanceReportListAtom,
+    hasClusterDescriptionAtom,
     operationRangeAtom,
     performanceRangeAtom,
     selectedOperationRangeAtom,
@@ -18,16 +19,18 @@ import {
 import ROUTES from '../definitions/Routes';
 import 'styles/components/RangeSlider.scss';
 import {
+    useGetClusterDescription,
     useGetDeviceOperationListPerf,
+    useOpToPerfIdFiltered,
     useOperationListRange,
     useOperationsList,
-    useOptoPerfIdFiltered,
     usePerformanceRange,
     usePerformanceReport,
 } from '../hooks/useAPI';
 import { OperationDescription } from '../model/APIData';
 import { PerfTableRow } from '../definitions/PerfTable';
 import LoadingSpinner from './LoadingSpinner';
+import createToastNotification from '../functions/createToastNotification';
 
 const RANGE_STEP = 25;
 
@@ -37,16 +40,18 @@ function Range() {
     const [selectedOperationRange, setSelectedOperationRange] = useAtom(selectedOperationRangeAtom);
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
     const [selectedPerformanceRange, setSelectedPerformanceRange] = useAtom(selectedPerformanceRangeAtom);
-    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const [isUserOpChange, setIsUserOpChange] = useState(false);
     const [isUserPerfChange, setIsUserPerfChange] = useState(false);
+    const setHasClusterDescription = useSetAtom(hasClusterDescriptionAtom);
 
     const { data: operations } = useOperationsList();
-    const { data: perfData } = usePerformanceReport(activePerformanceReport);
+    const { data: perfData, error: perfDataError } = usePerformanceReport(activePerformanceReport);
+    const { data: clusterData } = useGetClusterDescription();
     const location = useLocation();
     const listPerf = useGetDeviceOperationListPerf();
     const isInSync = listPerf?.length > 0;
-    const opIdsMap = useOptoPerfIdFiltered();
+    const opIdsMap = useOpToPerfIdFiltered();
     const operationRange = useOperationListRange();
     const perfRange = usePerformanceRange();
 
@@ -119,16 +124,16 @@ function Range() {
             const matchMin =
                 opIdsMap.find((op) => selectedPerformanceRange[0] === Number(op.perfId))?.opId ??
                 opIdsMap.reduce((prev, curr) =>
-                    Math.abs((Number(curr.perfId) ?? 0) - selectedPerformanceRange[0]) <
-                    Math.abs((Number(prev.perfId) ?? 0) - selectedPerformanceRange[0])
+                    Math.abs(Number(curr.perfId) - selectedPerformanceRange[0]) <
+                    Math.abs(Number(prev.perfId) - selectedPerformanceRange[0])
                         ? curr
                         : prev,
                 ).opId;
             const matchMax =
                 opIdsMap.find((op) => selectedPerformanceRange[1] === Number(op.perfId))?.opId ??
                 opIdsMap.reduce((prev, curr) =>
-                    Math.abs((Number(curr.perfId) ?? 0) - selectedPerformanceRange[1]) <
-                    Math.abs((Number(prev.perfId) ?? 0) - selectedPerformanceRange[1])
+                    Math.abs(Number(curr.perfId) - selectedPerformanceRange[1]) <
+                    Math.abs(Number(prev.perfId) - selectedPerformanceRange[1])
                         ? curr
                         : prev,
                 ).opId;
@@ -148,6 +153,20 @@ function Range() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isInSync, selectedPerformanceRange]);
 
+    useEffect(() => {
+        setHasClusterDescription(!!clusterData);
+    }, [clusterData, setHasClusterDescription]);
+
+    useEffect(() => {
+        if (perfDataError && activePerformanceReport) {
+            createToastNotification(
+                'Performance data format is not supported, use TT-NN Visualizer v0.49.0',
+                activePerformanceReport,
+                true,
+            );
+        }
+    }, [perfDataError, activePerformanceReport]);
+
     return selectedOperationRange || selectedPerformanceRange ? (
         <div className='range-slider'>
             {selectedPerformanceRange && (
@@ -166,6 +185,7 @@ function Range() {
                                 fill={false}
                                 disabled={!isPerformanceRoute}
                                 size='small'
+                                aria-label='Performance min value'
                             />
                             <InputGroup
                                 value={selectedPerformanceRange[1].toString()}
@@ -179,6 +199,7 @@ function Range() {
                                 fill={false}
                                 disabled={!isPerformanceRoute}
                                 size='small'
+                                aria-label='Performance max value'
                             />
                         </div>
                     </div>
@@ -194,10 +215,14 @@ function Range() {
                                 min={perfMin}
                                 max={perfMax}
                                 labelStepSize={getStepSize(perfMax)}
-                                disabled={!isPerformanceRoute || !!comparisonReport}
+                                disabled={!isPerformanceRoute || !!comparisonReportList}
                                 labelRenderer={(id, options) =>
-                                    getPerformanceLabel(id, perfData, options?.isHandleTooltip)
+                                    getPerformanceLabel(id, perfData?.report, options?.isHandleTooltip)
                                 }
+                                handleHtmlProps={{
+                                    start: { 'aria-label': 'Performance min range handle' },
+                                    end: { 'aria-label': 'Performance max range handle' },
+                                }}
                             />
                             <p>Performance</p>
                         </div>
@@ -211,6 +236,7 @@ function Range() {
                                     onClick={() => (isInSync ? resetSliders() : setSelectedPerformanceRange(perfRange))}
                                     disabled={!isPerformanceRoute}
                                     size='small'
+                                    aria-label='Reset performance range'
                                 />
                             </Tooltip>
                         )}
@@ -234,6 +260,7 @@ function Range() {
                                 fill={false}
                                 disabled={shouldDisableOpRange}
                                 size='small'
+                                aria-label='Operation min value'
                             />
                             <InputGroup
                                 value={selectedOperationRange[1].toString()}
@@ -247,6 +274,7 @@ function Range() {
                                 fill={false}
                                 disabled={shouldDisableOpRange}
                                 size='small'
+                                aria-label='Operation max value'
                             />
                         </div>
                     </div>
@@ -265,6 +293,10 @@ function Range() {
                             labelStepSize={getStepSize(opMax)}
                             disabled={shouldDisableOpRange}
                             labelRenderer={(id, options) => getOperationLabel(id, operations, options?.isHandleTooltip)}
+                            handleHtmlProps={{
+                                start: { 'aria-label': 'Operation min range handle' },
+                                end: { 'aria-label': 'Operation max range handle' },
+                            }}
                         />
                         <p>Operations</p>
                     </div>
@@ -277,6 +309,7 @@ function Range() {
                             onClick={() => (isInSync ? resetSliders() : setSelectedOperationRange(operationRange))}
                             disabled={shouldDisableOpRange}
                             size='small'
+                            aria-label='Reset operation range'
                         />
                     </Tooltip>
                 )}

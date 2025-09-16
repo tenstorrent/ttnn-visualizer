@@ -1,19 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 import csv
+import json
 import os
 import tempfile
 from io import StringIO
 from pathlib import Path
-from typing import List, Dict, Union, Optional
+from typing import Dict, List, Optional, Union
 
 import pandas as pd
+import zstd
 from tt_perf_report import perf_report
-
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
-from ttnn_visualizer.ssh_client import get_client
 
 
 class LocalCSVQueryRunner:
@@ -93,170 +94,40 @@ class LocalCSVQueryRunner:
         return sanitized_df.values.tolist()
 
 
-class RemoteCSVQueryRunner:
-    def __init__(
-        self, file_path: str, remote_connection, sep: str = ",", offset: int = 0
-    ):
-        """
-        Initialize the RemoteCSVQueryRunner.
+class NPEQueries:
+    NPE_FOLDER = "npe_viz"
+    MANIFEST_FILE = "manifest.json"
 
-        :param file_path: Path to the remote file.
-        :param remote_connection: RemoteConnection object for SSH access.
-        :param sep: Separator used in the CSV file.
-        :param offset: Number of lines to skip before treating the first valid line as headers.
-        """
-        self.file_path = file_path
-        self.remote_connection = remote_connection
-        self.sep = sep
-        self.offset = offset
-        self.ssh_client = get_client(remote_connection)
-
-    def execute_query(
-        self,
-        filters: Optional[Dict[str, str]] = None,  # Allow unsanitized filter keys
-        as_dict: bool = False,  # Convert rows to dictionaries if True
-        limit: int = None,
-        columns=None,
-    ) -> Union[List[List[str]], List[Dict[str, str]]]:
-        """
-        Fetch rows with optional filtering and limit, returning either raw rows or dictionaries.
-        :param filters: Dictionary of unsanitized column filters (e.g., {"zone name": "BRISC-FW"}).
-        :param as_dict: Whether to return results as a list of dictionaries.
-        :param limit: Maximum number of rows to return.
-        :return: List of rows as lists or dictionaries.
-        """
-        # Fetch header row, accounting for the offset
-        header_cmd = f"head -n {self.offset + 1} {self.file_path} | tail -n 1"
-        stdin, stdout, stderr = self.ssh_client.exec_command(header_cmd)
-        raw_header = stdout.read().decode("utf-8").strip()
-        error = stderr.read().decode("utf-8").strip()
-
-        if error:
-            raise RuntimeError(f"Error fetching header row: {error}")
-
-        # Sanitize headers
-        headers = [
-            col.strip().replace(" ", "_").lower() for col in raw_header.split(self.sep)
-        ]
-
-        # Build the AWK command for filtering
-        awk_filter = ""
-        if filters:
-            filter_conditions = []
-            for unsanitized_col, value in filters.items():
-                # Sanitize the filter key
-                sanitized_col = unsanitized_col.strip().replace(" ", "_").lower()
-                if sanitized_col in headers:
-                    col_idx = headers.index(sanitized_col) + 1
-                    filter_conditions.append(f'${col_idx} == "{value}"')
-                else:
-                    print(
-                        f"WARNING: Column '{unsanitized_col}' (sanitized: '{sanitized_col}') not found in headers."
-                    )
-            awk_filter = " && ".join(filter_conditions)
-
-        # Build AWK command
-        limit_clause = f"| head -n {limit}" if limit else ""
-        awk_cmd = f"awk -F'{self.sep}' 'NR > {self.offset + 1} {f'&& {awk_filter}' if awk_filter else ''} {{print}}' {self.file_path} {limit_clause}"
-
-        stdin, stdout, stderr = self.ssh_client.exec_command(awk_cmd)
-        output = stdout.read().decode("utf-8").strip()
-        error = stderr.read().decode("utf-8").strip()
-
-        if error:
-            raise RuntimeError(f"Error executing AWK command: {error}")
-
-        # Split rows into lists of strings
-        rows = [
-            [field.strip().strip('"') for field in line.split(self.sep)]
-            for line in output.splitlines()
-        ]
-        if as_dict:
-            # Convert rows to dictionaries
-            result = [dict(zip(headers, row)) for row in rows]
-
-            if columns:
-                sanitized_columns = [
-                    col.strip().replace(" ", "_").lower() for col in columns
-                ]
-                result = [
-                    {
-                        key: value
-                        for key, value in row.items()
-                        if key in sanitized_columns
-                    }
-                    for row in result
-                ]
-                print(f"DEBUG: Filtered columns: {sanitized_columns}")
-            return result
-        return rows
-
-    def execute_query_raw(self, limit: int = None) -> List[str]:
-        """
-        Fetch raw lines from the remote CSV file, accounting for the offset.
-
-        :param limit: Maximum number of rows to fetch (including offset rows).
-        :return: List of raw rows as strings.
-        """
-        total_lines = self.offset + limit if limit else ""
-        cmd = (
-            f"head -n {total_lines} {self.file_path}"
-            if total_lines
-            else f"cat {self.file_path}"
+    @staticmethod
+    def get_npe_manifest(instance: Instance):
+        file_path = Path(
+            instance.performance_path,
+            NPEQueries.NPE_FOLDER,
+            NPEQueries.MANIFEST_FILE,
         )
-        stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
-        output = stdout.read().decode("utf-8").strip()
-        error = stderr.read().decode("utf-8").strip()
+        with open(file_path, "r") as f:
+            return json.load(f)
 
-        if error:
-            raise RuntimeError(f"Error fetching raw rows: {error}")
+    @staticmethod
+    def get_npe_timeline(instance: Instance, filename: str):
+        if not filename:
+            raise ValueError(
+                "filename parameter is required and cannot be None or empty"
+            )
 
-        return output.splitlines()[self.offset :]
+        if not instance.performance_path:
+            raise ValueError("instance.performance_path is None")
 
-    def get_csv_header(self) -> Dict[str, int]:
-        """
-        Retrieve the CSV headers as a dictionary mapping column names to their indices (1-based).
-        :return: Dictionary of headers.
-        """
-        header_cmd = f"head -n {self.offset + 1} {self.file_path} | tail -n 1"
-        stdin, stdout, stderr = self.ssh_client.exec_command(header_cmd)
-        header = stdout.read().decode("utf-8").strip()
-        error = stderr.read().decode("utf-8").strip()
+        file_path = Path(instance.performance_path, NPEQueries.NPE_FOLDER, filename)
 
-        if error:
-            raise RuntimeError(f"Error reading CSV header: {error}")
-
-        # Trim spaces in header names
-        column_names = [name.strip() for name in header.split(self.sep)]
-        return {name: idx + 1 for idx, name in enumerate(column_names)}
-
-    def build_awk_filter(
-        self, column_indices: Dict[str, int], filters: Dict[str, str]
-    ) -> str:
-        if not filters:
-            return ""
-        conditions = [
-            f'${column_indices[col]} == "{val}"' for col, val in filters.items()
-        ]
-        return " && ".join(conditions)
-
-    def build_awk_columns(
-        self, column_indices: Dict[str, int], columns: List[str]
-    ) -> str:
-        return ", ".join([f"${column_indices[col]}" for col in columns])
-
-    def __enter__(self):
-        """
-        Enable usage with context management.
-        """
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """
-        Clean up the SSH connection when exiting context.
-        """
-        if self.ssh_client:
-            self.ssh_client.close()
+        if filename.endswith(".zst"):
+            with open(file_path, "rb") as file:
+                compressed_data = file.read()
+                uncompressed_data = zstd.uncompress(compressed_data)
+                return json.loads(uncompressed_data)
+        else:
+            with open(file_path, "r") as f:
+                return json.load(f)
 
 
 class DeviceLogProfilerQueries:
@@ -277,48 +148,29 @@ class DeviceLogProfilerQueries:
         "source file",
     ]
 
-    def __init__(self, session: Instance):
+    def __init__(self, instance: Instance):
         """
-        Initialize the profiler with a session object.
-        The session determines whether to use a local or remote runner.
+        Initialize the profiler with a instance object.
+        The instance determines whether to use a local or remote runner.
         """
-        self.session = session
+        self.instance = instance
         self.runner = None
 
     def __enter__(self):
         """
-        Determine the appropriate query runner based on the session's remote connection.
+        Determine the appropriate query runner based on the instance's remote connection.
         """
-
-        is_remote = self.session.remote_connection
-        use_remote_querying = False
-
-        # Disabled until we resolve the issue with sqlite versions
-        # if is_remote:
-        #     use_remote_querying = self.session.remote_connection.useRemoteQuerying
-
-        # Determine if this is a local or remote operation
-        if is_remote and use_remote_querying:
-            remote_profiler_folder = self.session.remote_profile_folder
-            file_path = f"{remote_profiler_folder.remotePath}/{self.DEVICE_LOG_FILE}"
-            self.runner = RemoteCSVQueryRunner(
-                file_path=file_path,
-                remote_connection=self.session.remote_connection,
-                offset=1,  # Skip the first line for device log files
-            )
-        else:
-            self.runner = LocalCSVQueryRunner(
-                file_path=Path(self.session.performance_path).joinpath(
-                    self.DEVICE_LOG_FILE
-                ),
-                offset=1,  # Skip the first line for device log files
-            )
+        self.runner = LocalCSVQueryRunner(
+            file_path=Path(self.instance.performance_path).joinpath(
+                self.DEVICE_LOG_FILE
+            ),
+            offset=1,  # Skip the first line for device log files
+        )
 
         self.runner.__enter__()
 
-        if not is_remote or (is_remote and not use_remote_querying):
-            self.runner.df.columns = self.DEVICE_LOG_COLUMNS
-            self.runner.df.columns = self.runner.df.columns.str.strip()
+        self.runner.df.columns = self.DEVICE_LOG_COLUMNS
+        self.runner.df.columns = self.runner.df.columns.str.strip()
 
         return self
 
@@ -365,25 +217,12 @@ class DeviceLogProfilerQueries:
         )
 
     @staticmethod
-    def get_raw_csv(session: Instance):
-        from ttnn_visualizer.sftp_operations import read_remote_file
-
-        if (
-            not session.remote_connection
-            or session.remote_connection
-            and not session.remote_connection.useRemoteQuerying
-        ):
-            file_path = Path(
-                session.performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE
-            )
-            with open(file_path, "r") as f:
-                return f.read()
-        else:
-            profiler_folder = session.remote_profile_folder
-            return read_remote_file(
-                session.remote_connection,
-                f"{profiler_folder.remotePath}/{DeviceLogProfilerQueries.DEVICE_LOG_FILE}",
-            )
+    def get_raw_csv(instance: Instance):
+        file_path = Path(
+            instance.performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE
+        )
+        with open(file_path, "r") as f:
+            return f.read()
 
 
 class OpsPerformanceQueries:
@@ -454,11 +293,11 @@ class OpsPerformanceQueries:
         "HWCommandQueue_write_buffer_TT_HOST_FUNC [ns]",
     ]
 
-    def __init__(self, session: Instance):
+    def __init__(self, instance: Instance):
         """
-        Initialize the performance profiler with a session object.
+        Initialize the performance profiler with a instance object.
         """
-        self.session = session
+        self.instance = instance
         self.runner = None
 
     def __enter__(self):
@@ -466,7 +305,7 @@ class OpsPerformanceQueries:
 
         :return:
         """
-        file_path = OpsPerformanceQueries.get_local_ops_perf_file_path(self.session)
+        file_path = OpsPerformanceQueries.get_local_ops_perf_file_path(self.instance)
         self.runner = LocalCSVQueryRunner(file_path=file_path, offset=1)
         self.runner.__enter__()
 
@@ -477,8 +316,8 @@ class OpsPerformanceQueries:
         return self
 
     @staticmethod
-    def get_local_ops_perf_file_path(session):
-        performance_path = Path(session.performance_path)
+    def get_local_ops_perf_file_path(instance):
+        performance_path = Path(instance.performance_path)
 
         # Find the latest file with the correct prefix
         perf_files = list(
@@ -494,29 +333,19 @@ class OpsPerformanceQueries:
         return str(latest_file)
 
     @staticmethod
-    def get_remote_ops_perf_file_path(session):
+    def get_remote_ops_perf_file_path(instance):
         from ttnn_visualizer.sftp_operations import resolve_file_path
 
-        remote_profile_folder = session.remote_profile_folder.remotePath
+        remote_profile_folder = instance.remote_profile_folder.remotePath
         return resolve_file_path(
-            session.remote_connection,
+            instance.remote_connection,
             f"{remote_profile_folder}/{OpsPerformanceQueries.PERF_RESULTS_PREFIX}*",
         )
 
     @staticmethod
-    def get_raw_csv(session):
-        from ttnn_visualizer.sftp_operations import read_remote_file
-
-        if (
-            not session.remote_connection
-            or session.remote_connection
-            and not session.remote_connection.useRemoteQuerying
-        ):
-            with open(OpsPerformanceQueries.get_local_ops_perf_file_path(session)) as f:
-                return f.read()
-        else:
-            path = OpsPerformanceQueries.get_remote_ops_perf_file_path(session)
-            return read_remote_file(session.remote_connection, path)
+    def get_raw_csv(instance):
+        with open(OpsPerformanceQueries.get_local_ops_perf_file_path(instance)) as f:
+            return f.read()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
@@ -554,9 +383,7 @@ class OpsPerformanceQueries:
         """
         try:
             return [
-                folder.name
-                for folder in Path(directory).iterdir()
-                if folder.is_dir()
+                folder.name for folder in Path(directory).iterdir() if folder.is_dir()
             ]
         except Exception as e:
             raise RuntimeError(f"Error accessing directory: {e}")
@@ -584,8 +411,20 @@ class OpsPerformanceReportQueries:
         "inner_dim_block_size",
         "output_subblock_h",
         "output_subblock_w",
+        "global_call_count",
         "advice",
-        "raw_op_code"
+        "raw_op_code",
+    ]
+
+    STACKED_REPORT_COLUMNS = [
+        "percent",
+        "op_code",
+        "device_time_sum_us",
+        "ops_count",
+        "flops_min",
+        "flops_max",
+        "flops_mean",
+        "flops_std",
     ]
 
     PASSTHROUGH_COLUMNS = {
@@ -598,24 +437,38 @@ class OpsPerformanceReportQueries:
     DEFAULT_ID_RANGE = None
     DEFAULT_NO_ADVICE = False
     DEFAULT_TRACING_MODE = False
+    DEFAULT_RAW_OP_CODES = True
+    DEFAULT_NO_HOST_OPS = False
+    DEFAULT_NO_STACKED_REPORT = False
+    DEFAULT_NO_STACK_BY_IN0 = True
 
     @classmethod
-    def generate_report(cls, session):
-        raw_csv = OpsPerformanceQueries.get_raw_csv(session)
+    def generate_report(cls, instance):
+        raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
         csv_file = StringIO(raw_csv)
         csv_output_file = tempfile.mktemp(suffix=".csv")
-        perf_report.generate_perf_report(
-            csv_file,
-            cls.DEFAULT_SIGNPOST,
-            cls.DEFAULT_IGNORE_SIGNPOSTS,
-            cls.DEFAULT_MIN_PERCENTAGE,
-            cls.DEFAULT_ID_RANGE,
-            csv_output_file,
-            cls.DEFAULT_NO_ADVICE,
-            cls.DEFAULT_TRACING_MODE,
-            True,
-            True,
-        )
+        csv_stacked_output_file = tempfile.mktemp(suffix=".csv")
+        # perf_report currently generates a PNG alongside the CSV using the same temp name - we'll just delete it afterwards
+        stacked_png_file = os.path.splitext(csv_output_file)[0] + ".png"
+
+        try:
+            perf_report.generate_perf_report(
+                csv_file,
+                cls.DEFAULT_SIGNPOST,
+                cls.DEFAULT_IGNORE_SIGNPOSTS,
+                cls.DEFAULT_MIN_PERCENTAGE,
+                cls.DEFAULT_ID_RANGE,
+                csv_output_file,
+                cls.DEFAULT_NO_ADVICE,
+                cls.DEFAULT_TRACING_MODE,
+                cls.DEFAULT_RAW_OP_CODES,
+                cls.DEFAULT_NO_HOST_OPS,
+                cls.DEFAULT_NO_STACKED_REPORT,
+                cls.DEFAULT_NO_STACK_BY_IN0,
+                csv_stacked_output_file,
+            )
+        except Exception as e:
+            raise DataFormatError(f"Error generating performance report: {e}") from e
 
         ops_perf_results = []
         ops_perf_results_reader = csv.DictReader(StringIO(raw_csv))
@@ -631,7 +484,9 @@ class OpsPerformanceReportQueries:
                 next(reader, None)
                 for row in reader:
                     processed_row = {
-                        column: row[index] for index, column in enumerate(cls.REPORT_COLUMNS) if index < len(row)
+                        column: row[index]
+                        for index, column in enumerate(cls.REPORT_COLUMNS)
+                        if index < len(row)
                     }
                     if "advice" in processed_row and processed_row["advice"]:
                         processed_row["advice"] = processed_row["advice"].split(" • ")
@@ -640,7 +495,9 @@ class OpsPerformanceReportQueries:
 
                     for key, value in cls.PASSTHROUGH_COLUMNS.items():
                         op_id = int(row[0])
-                        idx = op_id - 2 # IDs in result column one correspond to row numbers in ops perf results csv
+                        idx = (
+                            op_id - 2
+                        )  # IDs in result column one correspond to row numbers in ops perf results csv
                         processed_row[key] = ops_perf_results[idx][value]
 
                     report.append(processed_row)
@@ -649,4 +506,26 @@ class OpsPerformanceReportQueries:
         finally:
             os.unlink(csv_output_file)
 
-        return report
+        stacked_report = []
+
+        try:
+            with open(csv_stacked_output_file, newline="") as csvfile:
+                reader = csv.reader(csvfile, delimiter=",")
+                next(reader, None)
+
+                for row in reader:
+                    processed_row = {
+                        column: row[index]
+                        for index, column in enumerate(cls.STACKED_REPORT_COLUMNS)
+                        if index < len(row)
+                    }
+
+                    stacked_report.append(processed_row)
+        except csv.Error as e:
+            raise DataFormatError() from e
+        finally:
+            os.unlink(csv_stacked_output_file)
+            if os.path.exists(stacked_png_file):
+                os.unlink(stacked_png_file)
+
+        return {"report": report, "stacked_report": stacked_report}

@@ -1,0 +1,6 @@
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - canvas
+  - es5-ext
+  - esbuild
+  - unrs-resolver

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import threading
 import time
@@ -9,16 +9,15 @@ from datetime import datetime
 from enum import Enum
 from logging import getLogger
 
-from flask_socketio import join_room, disconnect, leave_room
-
+from flask_socketio import disconnect, join_room, leave_room
 from ttnn_visualizer.utils import SerializeableDataclass
-
 
 logger = getLogger(__name__)
 
 
 class Messages(object):
     FILE_TRANSFER_PROGRESS = "fileTransferProgress"
+    REPORT_GENERATED = "reportGenerated"
 
 
 class FileStatus(Enum):
@@ -27,6 +26,12 @@ class FileStatus(Enum):
     COMPRESSING = "COMPRESSING"
     FINISHED = "FINISHED"
     STARTED = "STARTED"
+
+
+class ExitStatus(Enum):
+    PASS = "PASS"
+    FAIL = "FAIL"
+    ERROR = "ERROR"
 
 
 @dataclass
@@ -40,6 +45,16 @@ class FileProgress(SerializeableDataclass):
 
     def __post_init__(self):
         self.percent_of_current = round(self.percent_of_current, 2)
+
+
+@dataclass
+class ReportGenerated(SerializeableDataclass):
+    report_name: str
+    profiler_path: str | None = None
+    performance_path: str | None = None
+    exit_status: ExitStatus | None = None
+    message_type: str = "report_generated"
+    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
 # For tracking connected clients subscriber ID
@@ -79,6 +94,20 @@ def emit_file_status(progress: FileProgress, instance_id=None):
         debounce_timer.start()
 
 
+def emit_report_generated(report_generated: ReportGenerated):
+    """Emit a report update notification to all connected clients."""
+    try:
+        if socketio is not None and hasattr(socketio, "emit"):
+            data = report_generated.to_dict()
+            socketio.emit(Messages.REPORT_GENERATED, data)
+            logger.info(
+                f"Report update notification sent: {report_generated.report_name}"
+            )
+    except NameError:
+        logger.warning("SocketIO not available - skipping report update notification")
+        pass  # Can silently pass since we know the NameError is from sockets being disabled
+
+
 def register_handlers(socketio_instance):
     global socketio
     socketio = socketio_instance
@@ -90,11 +119,15 @@ def register_handlers(socketio_instance):
         sid = getattr(request, "sid", "")
 
         instance_id = request.args.get("instanceId")
-        print(f"Received instanceId: {instance_id}, socket ID: {sid}")  # Log for debugging
+        print(
+            f"Received instanceId: {instance_id}, socket ID: {sid}"
+        )  # Log for debugging
 
         if instance_id:
             join_room(instance_id)  # Join the room identified by the instanceId
-            tab_clients[instance_id] = sid  # Store the socket ID associated with this instanceId
+            tab_clients[instance_id] = (
+                sid  # Store the socket ID associated with this instanceId
+            )
             print(f"Joined room: {instance_id}")
         else:
             print("No instanceId provided, disconnecting client.")
@@ -115,4 +148,6 @@ def register_handlers(socketio_instance):
         if instance_id:
             leave_room(instance_id)
             del tab_clients[instance_id]
-            print(f"Client disconnected from instanceId: {instance_id}, Socket ID: {sid}")
+            print(
+                f"Client disconnected from instanceId: {instance_id}, Socket ID: {sid}"
+            )

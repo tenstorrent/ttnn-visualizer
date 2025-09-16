@@ -1,29 +1,39 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { createBrowserRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from 'react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FocusStyleManager, OverlaysProvider } from '@blueprintjs/core';
 import './index.scss';
 import { HelmetProvider } from 'react-helmet-async';
 import { RouterProvider } from 'react-router';
 import ErrorPage from './error-page';
 import Layout from './components/Layout';
-import ROUTES from './definitions/Routes';
+import getServerConfig from './functions/getServerConfig';
 import { SocketProvider } from './libs/SocketProvider';
 import { routeObjectList } from './definitions/RouteObjectList';
+import ProtectedRoute from './components/ProtectedRoute';
 
-const router = createBrowserRouter([
+const router = createBrowserRouter(
+    [
+        {
+            path: '*',
+            element: (
+                <ProtectedRoute>
+                    <Layout />
+                </ProtectedRoute>
+            ),
+            errorElement: <ErrorPage />,
+            children: routeObjectList,
+        },
+    ],
     {
-        path: ROUTES.HOME,
-        element: <Layout />,
-        errorElement: <ErrorPage />,
-        children: routeObjectList,
+        basename: getServerConfig().BASE_PATH,
     },
-]);
+);
 
 FocusStyleManager.onlyShowFocusOnTabs();
 

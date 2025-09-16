@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import hljs from 'highlight.js/lib/core';
 import python from 'highlight.js/lib/languages/python';
@@ -10,7 +10,7 @@ import { Button, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useAtom, useAtomValue } from 'jotai';
-import { isFullStackTraceAtom, reportLocationAtom } from '../../store/app';
+import { ReportLocation, isFullStackTraceAtom, profilerReportLocationAtom } from '../../store/app';
 import useRemoteConnection from '../../hooks/useRemote';
 import Overlay from '../Overlay';
 import 'styles/components/StackTrace.scss';
@@ -40,10 +40,8 @@ function StackTrace({ stackTrace }: StackTraceProps) {
     const [isViewingFile, setIsViewingFile] = useState(false);
     const toggleViewingFile = useCallback(() => setIsViewingFile((open) => !open), [setIsViewingFile]);
     const { readRemoteFile, persistentState } = useRemoteConnection();
-    const connectionType = useAtomValue(reportLocationAtom);
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
-
-    const isRemote = connectionType === 'remote';
+    const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
 
     const stackTraceWithHighlights = useMemo(() => {
         const filePathMatches = FILE_PATH_REGEX.exec(stackTrace);

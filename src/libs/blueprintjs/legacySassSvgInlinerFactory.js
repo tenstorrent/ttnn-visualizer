@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 // This is a workaround for an outstanding issue in Blueprint as of 5/8/23.
 // Issue is here: https://github.com/palantir/blueprint/issues/6051
 //
@@ -15,7 +19,7 @@
 // Note: we had issues with this approach using svgo v2.x, so for now we stick with v1.x
 // With v2.x, some shapes within the icon SVGs would not get converted to paths correctly,
 // resulting in invalid d="..." attributes rendered by the <Icon> component.
-import SVGO from 'svgo';
+import { optimize } from 'svgo';
 
 // Taken from https://github.com/palantir/blueprint/blob/develop/packages/node-build-scripts/src/sass/sassSvgInliner.mjs
 /*
@@ -38,7 +42,7 @@ import { resolve } from 'node:path';
 import * as sass from 'sass';
 import { OrderedMap } from 'immutable';
 
-const svgOptimizer = new SVGO({ plugins: [{ convertShapeToPath: { convertArcs: true } }] });
+const svgOptimizerOptions = { plugins: [{ convertShapeToPath: { convertArcs: true } }] };
 
 /**
  * @param {sass.LegacyValue} value
@@ -110,13 +114,8 @@ function legacyToSass(value) {
 export function legacySassSvgInlinerFactory(base, opts) {
     const { optimize = false, encodingFormat = 'base64' } = opts;
 
-    /**
-     * @param {sass.types.String} path
-     * @param {sass.types.Map} selectors
-     * @returns {sass.SassString}
-     */
     return function (path, selectors) {
-        const resolvedPath = resolve(base, path.getValue());
+        const resolvedPath = resolve(base, path[0].text);
         try {
             let svgContents = readFileSync(resolvedPath, { encoding: 'utf8' });
 
@@ -167,7 +166,7 @@ export function sassSvgInlinerFactory(base, opts) {
             }
 
             if (optimize) {
-                svgContents = (await svgOptimizer.optimize(svgContents, { path: resolvedPath })).data;
+                svgContents = optimize(svgContents, { path: resolvedPath, ...svgOptimizerOptions }).data;
             }
 
             return encode(svgContents, { encodingFormat });

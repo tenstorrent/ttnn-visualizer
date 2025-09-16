@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use 'styles/definitions/colours' as *;
 
@@ -20,13 +20,13 @@
     }
 
     &.operation-icon {
-        .bp5-icon:not([class*='bp5-intent-']).styled-icon {
+        .bp6-icon:not([class*='bp6-intent-']).styled-icon {
             color: $tt-operations;
         }
     }
 
     &.tensor-icon {
-        .bp5-icon:not([class*='bp5-intent-']).styled-icon {
+        .bp6-icon:not([class*='bp6-intent-']).styled-icon {
             color: $tt-tensors;
         }
     }

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use 'styles/definitions/colours' as *;
 
 .tensor-visualisation-overlay {
-    .bp5-overlay {
+    .bp6-overlay {
         display: flex;
         align-items: center;
         justify-content: center;
@@ -30,11 +30,6 @@
         }
 
         .tensix-grid {
-            &.empty {
-                position: absolute;
-                z-index: -1;
-            }
-
             display: grid;
             gap: 10px;
 
@@ -43,6 +38,7 @@
                 flex-direction: column;
                 border: 1px solid $tt-black;
                 background-color: $tt-grey-2;
+                max-width: 120px;
 
                 &:hover {
                     transition: border-color 100ms linear;

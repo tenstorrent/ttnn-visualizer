@@ -1,9 +1,14 @@
-import { RouteObject, useLocation, useRoutes } from 'react-router-dom';
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-export function ModalAwareOutlet({ routes }: { routes: RouteObject[] }) {
+import { useLocation, useRoutes } from 'react-router-dom';
+import { routeObjectList } from '../definitions/RouteObjectList';
+
+export function ModalAwareOutlet() {
     const location = useLocation();
     const state = location.state as { background?: Location };
     const backgroundLocation = state?.background;
 
-    return useRoutes(routes, backgroundLocation || location);
+    return useRoutes(routeObjectList, backgroundLocation || location);
 }

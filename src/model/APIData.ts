@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
-import { MemoryConfig } from '../functions/parseMemoryConfig';
+import { BufferMemoryLayout, MemoryConfig } from '../functions/parseMemoryConfig';
 import { BufferType } from './BufferType';
 
 export interface Operation {
@@ -64,6 +64,7 @@ export interface Buffer {
     buffer_type: number;
     device_id: number;
     size: number;
+    buffer_layout?: BufferMemoryLayout | null;
 }
 
 export interface OperationDetailsData extends Operation {
@@ -73,10 +74,11 @@ export interface OperationDetailsData extends Operation {
     l1_sizes: number[];
 }
 
-export interface TabSession {
+export interface Instance {
     active_report?: { performance_name?: string; profiler_name?: string; npe_name?: string };
     remote_connection?: RemoteConnection;
     remote_profiler_folder?: RemoteFolder;
+    remote_performance_folder?: RemoteFolder;
 }
 
 export enum FileStatus {

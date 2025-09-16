@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
 
 .container {
     margin-bottom: 20px;
+}
+
+.table {
+    border-spacing: 5px;
 }
 
 .flex {
@@ -79,4 +83,14 @@
             }
         }
     }
+}
+
+.countdown {
+    font-size: 2rem;
+    text-align: center;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 9999;
 }

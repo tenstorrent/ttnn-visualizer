@@ -17,10 +17,14 @@ jobs:
             - run: git config --global user.email "support@tenstorrent.com"
             - run: git config --global user.name "CI Job"
 
-            - name: Use Node.js
+            - name: Read .nvmrc
+              id: nvm
+              run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
+
+            - name: Setup Node.js
               uses: actions/setup-node@v4
               with:
-                  node-version: v22.1.0
+                  node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
 
             - name: Bump version for Node.js (package.json)
               run: |

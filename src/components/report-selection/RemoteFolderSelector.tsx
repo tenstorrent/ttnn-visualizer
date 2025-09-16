@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Button, Icon, MenuItem, Spinner, Tooltip } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
@@ -9,6 +9,7 @@ import { FC, type PropsWithChildren } from 'react';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemoteConnection from '../../hooks/useRemote';
+import 'styles/components/RemoteFolderSelector.scss';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
@@ -27,8 +28,7 @@ const formatRemoteFolderName = (
     }
 
     const paths = {
-        // report: selectedConnection.reportPath, // Deprecated - use profiler and profilerPath
-        profiler: selectedConnection.profilerPath || selectedConnection.reportPath,
+        profiler: selectedConnection.profilerPath,
         performance: selectedConnection.performancePath,
     };
 
@@ -51,15 +51,12 @@ const remoteFolderRenderer =
         connection?: RemoteConnection,
     ): ItemRenderer<RemoteFolder> =>
     (folder, { handleClick, modifiers }) => {
-        const { persistentState } = useRemoteConnection();
-        const isUsingRemoteQuerying = persistentState.selectedConnection?.useRemoteQuerying;
-
         if (!modifiers.matchesPredicate) {
             return null;
         }
 
-        const { lastSynced, lastModified, testName } = folder;
-        const lastSyncedDate = lastSynced ? formatter.format(new Date(lastSynced)) : 'Never';
+        const { lastSynced, lastModified, reportName } = folder;
+        const lastSyncedDate = lastSynced ? formatter.format(getUTC(lastSynced)) : 'Never';
 
         let statusIcon = (
             <Tooltip content={`Fetching folder status, last sync: ${lastSyncedDate}`}>
@@ -89,18 +86,22 @@ const remoteFolderRenderer =
             }
         }
 
-        const getLabelElement = () => !isUsingRemoteQuerying && statusIcon;
+        const getLabelElement = () => (
+            <>
+                <span>{reportName}</span>
+                <span className='status-icon'>{statusIcon}</span>
+            </>
+        );
 
         return (
             <MenuItem
                 className='remote-folder-item'
-                active={selectedFolder?.testName === testName}
+                active={selectedFolder?.reportName === reportName}
                 disabled={modifiers.disabled}
                 key={`${formatRemoteFolderName(folder, type, connection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
                 text={formatRemoteFolderName(folder, type, connection)}
-                textClassName='folder-path'
-                icon={IconNames.FOLDER_CLOSE}
+                icon={selectedFolder?.reportName === reportName ? IconNames.SAVED : IconNames.DOCUMENT}
                 labelElement={getLabelElement()}
                 labelClassName='remote-folder-status-icon'
             />
@@ -111,6 +112,7 @@ interface RemoteFolderSelectorProps {
     remoteFolder?: RemoteFolder;
     remoteFolderList?: RemoteFolder[];
     loading?: boolean;
+    disabled?: boolean;
     updatingFolderList?: boolean;
     fallbackLabel?: string;
     icon?: string;
@@ -122,20 +124,23 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
     remoteFolder,
     remoteFolderList = [],
     loading = false,
+    disabled = false,
     updatingFolderList = false,
     onSelectFolder,
     children,
     fallbackLabel = '(No selection)',
-    icon = IconNames.FOLDER_OPEN,
+    icon = IconNames.DOCUMENT_OPEN,
     type,
 }) => {
     const { persistentState } = useRemoteConnection();
     const remoteConnection = persistentState.selectedConnection;
 
+    const isDisabled = loading || remoteFolderList?.length === 0 || disabled;
+
     return (
-        <div className='buttons-container'>
+        <div className='form-container'>
             <Select
-                className='remote-folder-select'
+                className='remote-select'
                 items={remoteFolderList ?? []}
                 itemRenderer={remoteFolderRenderer(updatingFolderList, type, remoteFolder, remoteConnection)}
                 filterable
@@ -147,13 +152,13 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
                         roleStructure='listoption'
                     />
                 }
-                disabled={loading || remoteFolderList?.length === 0}
+                disabled={isDisabled}
                 onItemSelect={onSelectFolder}
             >
                 <Button
                     icon={icon as IconName}
                     endIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
-                    disabled={loading || remoteFolderList?.length === 0}
+                    disabled={isDisabled}
                     text={remoteFolder ? formatRemoteFolderName(remoteFolder, type, remoteConnection) : fallbackLabel}
                 />
             </Select>
@@ -161,6 +166,13 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
             {children}
         </div>
     );
+};
+
+const getUTC = (epoch: number): Date => {
+    const date = new Date(0);
+    date.setUTCSeconds(epoch);
+
+    return date;
 };
 
 export default RemoteFolderSelector;

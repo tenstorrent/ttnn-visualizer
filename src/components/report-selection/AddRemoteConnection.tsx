@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { FC, useState } from 'react';
 
@@ -19,7 +19,7 @@ const AddRemoteConnection: FC<AddRemoteConnectionProps> = ({ disabled, onAddConn
     const [isAddConnectionDialogOpen, setIsAddConnectionDialogOpen] = useState(false);
 
     return (
-        <div className='buttons-container'>
+        <div className='form-container'>
             <Button
                 icon={IconNames.PLUS}
                 text='Add new connection'

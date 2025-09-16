@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { AnchorButton, ButtonGroup, Intent, Tab, Tabs } from '@blueprintjs/core';
+import { AnchorButton, ButtonGroup, Callout, Intent, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { BuffersByOperationData, useBuffers, useOperationsList } from '../hooks/useAPI';
 import useBufferFocus from '../hooks/useBufferFocus';
 import { BufferType } from '../model/BufferType';
@@ -17,20 +17,20 @@ import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
 import LoadingSpinner from '../components/LoadingSpinner';
 import 'styles/components/BufferSummary.scss';
 import { SECTION_IDS, TAB_IDS } from '../definitions/BufferSummary';
-import { selectedBufferSummaryTabAtom } from '../store/app';
+import { activeProfilerReportAtom, selectedBufferSummaryTabAtom } from '../store/app';
 
 function BufferSummary() {
     const plotRef = useRef<HTMLHeadingElement>(null);
     const tableRef = useRef<HTMLHeadingElement>(null);
     const [activeSection, setActiveSection] = useState<SECTION_IDS>(SECTION_IDS.PLOT);
     const [selectedTabId, setSelectedTabId] = useAtom(selectedBufferSummaryTabAtom);
-    const { data: buffersByOperation } = useBuffers(BufferType.L1, true);
-    const { data: dramBuffersByOperation } = useBuffers(BufferType.DRAM, true);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const { data: buffersByOperation, error: buffersError } = useBuffers(
+        selectedTabId === TAB_IDS.L1 ? BufferType.L1 : BufferType.DRAM,
+        true,
+    );
     const { data: operationsList } = useOperationsList();
-
     const { activeToast, resetToasts } = useBufferFocus();
-
-    const isDramActive = selectedTabId === TAB_IDS.DRAM;
 
     useEffect(() => {
         const scrollRefs = [plotRef, tableRef];
@@ -55,10 +55,7 @@ function BufferSummary() {
         return () => window.removeEventListener('scroll', navHighlighter);
     }, []);
 
-    const tensorListByOperation = createTensorsByOperationByIdList(
-        operationsList,
-        isDramActive ? dramBuffersByOperation : buffersByOperation,
-    );
+    const tensorListByOperation = createTensorsByOperationByIdList(operationsList, buffersByOperation);
 
     return (
         <div className='buffer-summary data-padding'>
@@ -106,6 +103,7 @@ function BufferSummary() {
                     title='L1'
                     icon={IconNames.PAGE_LAYOUT}
                     panel={
+                        // eslint-disable-next-line no-nested-ternary
                         buffersByOperation && operationsList && tensorListByOperation ? (
                             <BufferSummaryTab
                                 plotRef={plotRef}
@@ -113,6 +111,14 @@ function BufferSummary() {
                                 buffersByOperation={buffersByOperation}
                                 tensorListByOperation={tensorListByOperation}
                             />
+                        ) : buffersError ? (
+                            <Callout
+                                intent={Intent.WARNING}
+                                title='Error loading buffer data'
+                                compact
+                            >
+                                <p>{`We've been unable to load the L1 buffer data for /${activeProfilerReport}.`}</p>
+                            </Callout>
                         ) : (
                             <LoadingSpinner />
                         )
@@ -124,14 +130,23 @@ function BufferSummary() {
                     title='DRAM'
                     icon={IconNames.PAGE_LAYOUT}
                     panel={
-                        dramBuffersByOperation && operationsList && tensorListByOperation ? (
+                        // eslint-disable-next-line no-nested-ternary
+                        buffersByOperation && operationsList && tensorListByOperation ? (
                             <BufferSummaryTab
                                 plotRef={plotRef}
                                 tableRef={tableRef}
-                                buffersByOperation={dramBuffersByOperation}
+                                buffersByOperation={buffersByOperation}
                                 tensorListByOperation={tensorListByOperation}
                                 isDram
                             />
+                        ) : buffersError ? (
+                            <Callout
+                                intent={Intent.WARNING}
+                                title='Error loading buffer data'
+                                compact
+                            >
+                                <p>{`We've been unable to load the DRAM buffer data for /${activeProfilerReport}.`}</p>
+                            </Callout>
                         ) : (
                             <LoadingSpinner />
                         )

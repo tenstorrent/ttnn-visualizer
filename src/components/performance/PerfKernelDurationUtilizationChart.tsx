@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
@@ -10,7 +10,7 @@ import getCoreUtilization from '../../functions/getCoreUtilization';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
 import getPlotLabel from '../../functions/getPlotLabel';
-import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfKernelDurationUtilizationChartProps {
@@ -20,7 +20,7 @@ interface PerfKernelDurationUtilizationChartProps {
 
 function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDurationUtilizationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const chartData = useMemo(
         () =>
@@ -29,14 +29,14 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDu
                 y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
                 mode: 'markers',
                 type: 'scatter',
-                name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 marker: {
                     size: 10,
                     color: getPrimaryDataColours(dataIndex),
                 },
                 hovertemplate: `Duration: %{x} ns<br />Utilization: %{y}`,
             })) as Partial<PlotData>[],
-        [datasets, maxCores, perfReport, comparisonReport],
+        [datasets, maxCores, perfReport, comparisonReportList],
     );
 
     const configuration: PlotConfiguration = {

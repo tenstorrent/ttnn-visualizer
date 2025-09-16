@@ -1,166 +1,131 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, Fragment, useMemo, useState } from 'react';
-import classNames from 'classnames';
-import { Button, ButtonVariant, Icon, MenuItem, Size, Switch } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
+import { FC, useEffect, useMemo, useState } from 'react';
+import { useAtomValue } from 'jotai';
+import {
+    Button,
+    ButtonGroup,
+    ButtonVariant,
+    Intent,
+    MenuItem,
+    PopoverPosition,
+    Position,
+    Size,
+    Switch,
+    Tab,
+    TabId,
+    Tabs,
+    Tooltip,
+} from '@blueprintjs/core';
 import { MultiSelect } from '@blueprintjs/select';
-import { PerfTableRow, TableHeader, TableKeys } from '../../definitions/PerfTable';
-import 'styles/components/PerfReport.scss';
-import { useOperationsList, useOptoPerfIdFiltered } from '../../hooks/useAPI';
-import { calcHighDispatchOps, formatCell } from '../../functions/perfFunctions';
-import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
+import { IconNames } from '@blueprintjs/icons';
+import {
+    FilterableColumnKeys,
+    PerfTableRow,
+    TableFilter,
+    TableHeaders,
+    TableKeys,
+    TypedPerfTableRow,
+} from '../../definitions/PerfTable';
+import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
+import { calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
+import PerfTable from './PerfTable';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
+import alignByOpCode from '../../functions/normalisePerformanceData';
+import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
+import 'styles/components/PerfReport.scss';
+import StackedPerformanceTable from './StackedPerfTable';
+import { StackedPerfRow, TypedStackedPerfRow } from '../../definitions/StackedPerfTable';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
+    comparisonData?: PerfTableRow[][];
+    stackedData?: StackedPerfRow[];
+    comparisonStackedData?: StackedPerfRow[][];
 }
 
-interface TypedPerfTableRow
-    extends Omit<
-        PerfTableRow,
-        | 'id'
-        | 'total_percent'
-        | 'device_time'
-        | 'op_to_op_gap'
-        | 'cores'
-        | 'dram'
-        | 'dram_percent'
-        | 'flops'
-        | 'flops_percent'
-    > {
-    id: number;
-    total_percent: number;
-    device_time: number;
-    op_to_op_gap: number | null;
-    cores: number;
-    dram: number;
-    dram_percent: number;
-    flops: number;
-    flops_percent: number;
-}
+const INITIAL_TAB_ID = 'perf-table-0';
 
-enum COLUMN_HEADERS {
-    id = 'id',
-    total_percent = 'total_percent',
-    bound = 'bound',
-    op_code = 'op_code',
-    device_time = 'device_time',
-    op_to_op_gap = 'op_to_op_gap',
-    cores = 'cores',
-    dram = 'dram',
-    dram_percent = 'dram_percent',
-    flops = 'flops',
-    flops_percent = 'flops_percent',
-    math_fidelity = 'math_fidelity',
-    OP = 'op',
-    HIGH_DISPATCH = 'high_dispatch',
-}
-
-const TABLE_HEADERS: TableHeader[] = [
-    { label: 'ID', key: COLUMN_HEADERS.id, sortable: true },
-    { label: 'Total %', key: COLUMN_HEADERS.total_percent, unit: '%', decimals: 1, sortable: true },
-    { label: 'Bound', key: COLUMN_HEADERS.bound, colour: 'yellow' },
-    { label: 'OP Code', key: COLUMN_HEADERS.op_code, colour: 'blue', sortable: true, filterable: true },
-    { label: 'Device Time', key: COLUMN_HEADERS.device_time, unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Op-to-Op Gap', key: COLUMN_HEADERS.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Cores', key: COLUMN_HEADERS.cores, colour: 'green', sortable: true },
-    { label: 'DRAM', key: COLUMN_HEADERS.dram, colour: 'yellow', unit: 'GB/s', sortable: true },
-    { label: 'DRAM %', key: COLUMN_HEADERS.dram_percent, colour: 'yellow', unit: '%', sortable: true },
-    { label: 'FLOPs', key: COLUMN_HEADERS.flops, unit: 'TFLOPs', sortable: true },
-    { label: 'FLOPs %', key: COLUMN_HEADERS.flops_percent, unit: '%', sortable: true },
-    { label: 'Math Fidelity', key: COLUMN_HEADERS.math_fidelity, colour: 'cyan' },
-];
-
-const OP_ID_INSERTION_POINT = 1;
-const HIGH_DISPATCH_INSERTION_POINT = 5;
-
-const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
+const PerformanceReport: FC<PerformanceReportProps> = ({
+    data,
+    comparisonData,
+    stackedData,
+    comparisonStackedData,
+}) => {
     const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
-    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
-    const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
+    const opIdsMap = useOpToPerfIdFiltered();
+
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
+
+    // TODO: Reimplement merge/expand device data toggle
+    // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
+    // const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
+    const [isStackedView, setIsStackedView] = useState<boolean>(false);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
-    const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
-    const opIdsMap = useOptoPerfIdFiltered();
-    const { data: operations } = useOperationsList();
-
-    const filterableColumnKeys = useMemo(
-        () => TABLE_HEADERS.filter((column) => column.filterable).map((column) => column.key),
-        [],
-    );
-    const [filters, setFilters] = useState<Record<TableKeys, string> | null>(
-        Object.fromEntries(filterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
+    const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
+    const [useNormalisedData, setUseNormalisedData] = useState(true);
+    const [highlightRows, setHighlightRows] = useState<boolean>(true);
+    const [filters, setFilters] = useState<TableFilter>(
+        Object.fromEntries(FilterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
             string
         >,
     );
 
-    const processedRows: PerfTableRow[] = useMemo(() => {
-        return (
-            data?.map((opData) => {
-                const val = parseInt(opData.op_to_op_gap, 10);
-                const op = opIdsMap.find((opMap) => opMap.perfId === opData.id)?.opId;
-                return {
-                    ...opData,
-                    high_dispatch: !!val && val > 6.5,
-                    op,
-                };
-            }) || []
-        );
+    const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
+
+    const processedRows: TypedPerfTableRow[] = useMemo(() => {
+        return data ? enrichRowData(data, opIdsMap) : [];
     }, [data, opIdsMap]);
 
-    const tableFields: PerfTableRow[] = useMemo(() => {
-        let filteredRows = processedRows;
+    const processedComparisonRows: TypedPerfTableRow[][] = useMemo(() => {
+        return comparisonData?.map((dataset) => enrichRowData(dataset, opIdsMap)) || [];
+    }, [comparisonData, opIdsMap]);
 
-        if (areFiltersActive(filters) && filterableColumnKeys) {
-            filteredRows = filteredRows.filter((row) => {
-                const isFilteredOut =
-                    filters &&
-                    Object.entries(filters)
-                        .filter(([_key, filterValue]) => String(filterValue).length)
-                        .some(([key, filterValue]) => {
-                            const bufferValue = getCellText(row, key as TableKeys);
+    const processedStackedRows: TypedStackedPerfRow[] = useMemo(() => {
+        return stackedData ? enrichStackedRowData(stackedData) : [];
+    }, [stackedData]);
 
-                            return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
-                        });
+    const processedComparisonStackedRows: TypedStackedPerfRow[][] = useMemo(() => {
+        return comparisonStackedData?.map(enrichStackedRowData) || [];
+    }, [comparisonStackedData]);
 
-                return !isFilteredOut;
-            });
-        }
+    const normalisedData = useMemo(
+        () =>
+            processedRows?.length > 0 && processedComparisonRows?.length > 0
+                ? alignByOpCode(processedRows, processedComparisonRows)
+                : { data: [], missingRows: [] },
+        [processedRows, processedComparisonRows],
+    );
+    const normalisedComparisonData = normalisedData.data.slice(1);
 
-        if (activeFilters?.length > 0) {
-            filteredRows = filteredRows.filter(
-                (tensor) => tensor?.math_fidelity !== null && activeFilters.includes(tensor.math_fidelity),
-            );
-        }
+    const filteredRows = useMemo(
+        () =>
+            sortAndFilterPerfTableData(
+                useNormalisedData ? normalisedData.data[0] : processedRows,
+                filters,
+                FilterableColumnKeys,
+                activeFilters,
+            ),
+        [processedRows, filters, activeFilters, useNormalisedData, normalisedData.data],
+    );
 
-        const parsedRows = filteredRows.map((row) => ({
-            ...row,
-            id: parseInt(row.id, 10),
-            total_percent: parseFloat(row.total_percent),
-            device_time: parseFloat(row.device_time),
-            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
-            cores: parseInt(row.cores, 10),
-            dram: row.dram ? parseFloat(row.dram) : null,
-            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
-            flops: row.flops ? parseFloat(row.flops) : null,
-            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
-        })) as TypedPerfTableRow[];
-
-        return sortTableFields(parsedRows);
-    }, [processedRows, sortTableFields, filters, filterableColumnKeys, activeFilters]);
-
-    const visibleHeaders = [
-        ...TABLE_HEADERS.slice(0, OP_ID_INSERTION_POINT),
-        ...(opIdsMap.length > 0 ? [{ label: 'OP', key: COLUMN_HEADERS.OP, sortable: true }] : []),
-        ...TABLE_HEADERS.slice(OP_ID_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
-        ...(hiliteHighDispatch ? [{ label: 'Slow', key: COLUMN_HEADERS.HIGH_DISPATCH }] : []),
-        ...TABLE_HEADERS.slice(HIGH_DISPATCH_INSERTION_POINT),
-    ] as TableHeader[];
+    const filteredComparisonRows = useMemo(
+        () =>
+            sortAndFilterPerfTableData(
+                useNormalisedData ? normalisedData.data[comparisonIndex] : processedComparisonRows[comparisonIndex],
+                filters,
+                FilterableColumnKeys,
+                activeFilters,
+            ),
+        [comparisonIndex, processedComparisonRows, filters, activeFilters, useNormalisedData, normalisedData.data],
+    );
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
         setFilters({
@@ -169,49 +134,91 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
         } as Record<TableKeys, string>);
     };
 
+    const totalDataLength = getTotalDataLength(
+        useNormalisedData,
+        normalisedData,
+        selectedTabId,
+        data,
+        comparisonData?.[comparisonIndex],
+    );
+    const filteredDataLength = getFilteredDataLength(selectedTabId, filteredRows, filteredComparisonRows);
+    const rowDelta = useMemo(() => {
+        if (!useNormalisedData) {
+            return 0;
+        }
+
+        if (selectedTabId === INITIAL_TAB_ID) {
+            return processedRows.length - (normalisedData.data?.[0]?.length || 0);
+        }
+
+        if (processedComparisonRows?.[comparisonIndex] && normalisedData.data?.[comparisonIndex + 1]) {
+            return processedComparisonRows[comparisonIndex].length - normalisedData.data[comparisonIndex + 1].length;
+        }
+
+        return 0;
+    }, [
+        useNormalisedData,
+        selectedTabId,
+        processedRows,
+        normalisedData.data,
+        comparisonIndex,
+        processedComparisonRows,
+    ]);
+
+    // Resets various state if we remove all comparison reports
+    useEffect(() => {
+        if (!activeComparisonReportList?.includes(selectedTabId as string) && selectedTabId !== INITIAL_TAB_ID) {
+            setSelectedTabId(INITIAL_TAB_ID);
+        }
+
+        if (!activeComparisonReportList) {
+            setUseNormalisedData(false);
+        }
+    }, [activeComparisonReportList, selectedTabId]);
+
+    // If currently selected tab is disabled, reset to initial tab
+    useEffect(() => {
+        const isSelectedTabDisabled =
+            useNormalisedData && normalisedData?.data?.slice(1)?.[comparisonIndex]?.length === 0;
+
+        if (isSelectedTabDisabled) {
+            setSelectedTabId(INITIAL_TAB_ID);
+        }
+    }, [selectedTabId, useNormalisedData, normalisedData, comparisonIndex]);
+
     return (
         <>
-            <Switch
-                className='expand-button'
+            {/* See note above by the useState declarations */}
+            {/* <Switch
                 label={!mergeDeviceData ? 'Expanded device data' : 'Merged device data'}
                 onChange={() => setMergeDeviceData(!mergeDeviceData)}
                 checked={mergeDeviceData && isMultiDevice}
                 disabled={!isMultiDevice}
-            />
-
-            <Switch
-                className='expand-button'
-                label={provideMatmulAdvice ? 'Hide Matmul optimization analysis' : 'Show Matmul optimization analysis'}
-                onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
-                checked={provideMatmulAdvice}
-            />
-
-            <Switch
-                className='expand-button'
-                label='Highlight high dispatch ops'
-                onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
-                checked={hiliteHighDispatch}
-            />
+            /> */}
 
             <div className='perf-report'>
-                <div className='table-header'>
+                <div className='report-header'>
                     <h3 className='title'>Performance report</h3>
 
                     <div className='header-aside'>
                         <p className='result-count'>
-                            {tableFields.length !== data?.length
-                                ? `Showing ${tableFields.length} of ${data?.length} rows`
-                                : `Showing ${tableFields.length} rows`}
+                            {filteredDataLength !== totalDataLength
+                                ? `Showing ${filteredDataLength} of ${totalDataLength} rows`
+                                : `Showing ${filteredDataLength} rows`}
+
+                            {useNormalisedData && rowDelta
+                                ? ` (${rowDelta > 0 ? `${rowDelta} ops removed` : `${rowDelta * -1} ops added`})`
+                                : null}
                         </p>
                     </div>
                 </div>
 
                 <div className='filters'>
-                    {filterableColumnKeys.map((key) => (
+                    {FilterableColumnKeys.map((key) => (
                         <SearchField
                             key={key}
                             onQueryChanged={(value) => updateColumnFilter(key, value)}
-                            placeholder={`Filter ${TABLE_HEADERS.find((header) => header.key === key)?.label}`}
+                            placeholder={`Filter ${TableHeaders.find((header) => header.key === key)?.label}`}
                             searchQuery={filters?.[key] || ''}
                         />
                     ))}
@@ -228,6 +235,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                         itemPredicate={(query, mathFidelity) =>
                             !query || String(mathFidelity).toLowerCase().includes(query.toLowerCase())
                         }
+                        disabled={isStackedView}
                         noResults={
                             <MenuItem
                                 disabled
@@ -237,130 +245,229 @@ const PerformanceReport: FC<PerformanceReportProps> = ({ data }) => {
                         }
                         resetOnSelect
                     />
-
-                    <Button
-                        onClick={() => changeSorting(null)(null)}
-                        variant={ButtonVariant.OUTLINED}
-                        disabled={sortingColumn === null}
-                    >
-                        Reset sort
-                    </Button>
                 </div>
 
-                <table className='perf-table monospace'>
-                    <thead>
-                        <tr>
-                            {visibleHeaders.map((h) => {
-                                const targetSortDirection =
-                                    // eslint-disable-next-line no-nested-ternary
-                                    sortingColumn === h.key
-                                        ? sortDirection === SortingDirection.ASC
-                                            ? SortingDirection.DESC
-                                            : SortingDirection.ASC
-                                        : sortDirection;
+                <div className='data-options'>
+                    <ButtonGroup
+                        variant={ButtonVariant.OUTLINED}
+                        size={Size.SMALL}
+                    >
+                        <Button
+                            text='Standard'
+                            icon={IconNames.LIST}
+                            active={!isStackedView}
+                            onClick={() => setIsStackedView(false)}
+                            intent={!isStackedView ? Intent.PRIMARY : Intent.NONE}
+                        />
+                        <Button
+                            text='Stacked'
+                            icon={IconNames.LAYOUT_TWO_ROWS}
+                            active={isStackedView}
+                            onClick={() => setIsStackedView(true)}
+                            intent={isStackedView ? Intent.PRIMARY : Intent.NONE}
+                        />
+                    </ButtonGroup>
 
-                                return (
-                                    <th
-                                        key={h.key}
-                                        className='cell-header'
+                    <Switch
+                        label='Matmul optimization analysis'
+                        onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                        checked={provideMatmulAdvice}
+                        className='option-switch'
+                        disabled={isStackedView}
+                    />
+
+                    <Switch
+                        label='Highlight high dispatch ops'
+                        onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                        checked={hiliteHighDispatch}
+                        className='option-switch'
+                        disabled={isStackedView}
+                    />
+
+                    <Tooltip
+                        content='Tries to match up operations between the performance reports'
+                        position={Position.TOP}
+                    >
+                        <Switch
+                            label='Normalise data'
+                            disabled={!activeComparisonReportList || isStackedView}
+                            onChange={() => setUseNormalisedData(!useNormalisedData)}
+                            checked={useNormalisedData}
+                            className='option-switch'
+                        />
+                    </Tooltip>
+
+                    {activeComparisonReportList && useNormalisedData && (
+                        <Tooltip
+                            content='Highlights rows where ops have been added or are missing after normalising the data'
+                            position={Position.TOP}
+                        >
+                            <Switch
+                                label='Highlight row differences'
+                                onChange={() => setHighlightRows(!highlightRows)}
+                                disabled={!activeComparisonReportList || !useNormalisedData || isStackedView}
+                                checked={highlightRows}
+                                className='option-switch'
+                            />
+                        </Tooltip>
+                    )}
+                </div>
+
+                <Tabs
+                    selectedTabId={selectedTabId}
+                    onChange={setSelectedTabId}
+                    renderActiveTabPanelOnly
+                    size={Size.LARGE}
+                    id='performance-tabs'
+                >
+                    <Tab
+                        id={INITIAL_TAB_ID}
+                        title={activePerformanceReport || 'Loading...'}
+                        icon={IconNames.TH_LIST}
+                        className='tab-panel'
+                        panel={
+                            isStackedView ? (
+                                <StackedPerformanceTable
+                                    data={useNormalisedData ? normalisedData.data[0] : filteredRows}
+                                    stackedData={processedStackedRows}
+                                    filters={filters}
+                                />
+                            ) : (
+                                <PerfTable
+                                    data={useNormalisedData ? normalisedData.data[0] : filteredRows}
+                                    comparisonData={
+                                        useNormalisedData && normalisedComparisonData.length > 0
+                                            ? normalisedComparisonData
+                                            : []
+                                    }
+                                    filters={filters}
+                                    mathFidelityFilter={activeFilters}
+                                    provideMatmulAdvice={provideMatmulAdvice}
+                                    hiliteHighDispatch={hiliteHighDispatch}
+                                    shouldHighlightRows={highlightRows && useNormalisedData}
+                                />
+                            )
+                        }
+                    />
+
+                    {activeComparisonReportList?.map((report, index) => (
+                        <Tab
+                            id={report}
+                            key={index}
+                            icon={IconNames.TH_LIST}
+                            className='tab-panel'
+                            disabled={useNormalisedData && normalisedComparisonData?.[index]?.length === 0}
+                            title={
+                                normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
+                                    <Tooltip
+                                        content='Report has too many differences to be normalised'
+                                        position={PopoverPosition.TOP}
                                     >
-                                        {h.sortable ? (
-                                            <Button
-                                                onClick={() => changeSorting(h.key)(targetSortDirection)}
-                                                variant={ButtonVariant.MINIMAL}
-                                                size={Size.SMALL}
-                                            >
-                                                <span className='header-label'>{h.label}</span>
-
-                                                {sortingColumn === h.key ? (
-                                                    <Icon
-                                                        className={classNames(
-                                                            {
-                                                                'is-active': sortingColumn === h.key,
-                                                            },
-                                                            'sort-icon',
-                                                        )}
-                                                        icon={
-                                                            sortDirection === SortingDirection.ASC
-                                                                ? IconNames.CARET_DOWN
-                                                                : IconNames.CARET_UP
-                                                        }
-                                                    />
-                                                ) : (
-                                                    <Icon
-                                                        className={classNames('sort-icon')}
-                                                        icon={IconNames.CARET_DOWN}
-                                                    />
-                                                )}
-                                            </Button>
-                                        ) : (
-                                            <span className='header-label no-button'>{h.label}</span>
-                                        )}
-
-                                        {/* TODO: May want this in the near future */}
-                                        {/* {h?.filterable && (
-                                            <div className='column-filter'>
-                                                <InputGroup
-                                                    asyncControl
-                                                    size='small'
-                                                    onValueChange={(value) => updateColumnFilter(h.key, value)}
-                                                    placeholder='Filter...'
-                                                    value={filters?.[h.key]}
-                                                />
-                                            </div>
-                                        )} */}
-                                    </th>
-                                );
-                            })}
-                        </tr>
-                    </thead>
-
-                    <tbody>
-                        {tableFields.map((row, i) => (
-                            <Fragment key={i}>
-                                <tr>
-                                    {visibleHeaders.map((h) => (
-                                        <td
-                                            key={h.key}
-                                            className={classNames('cell', {
-                                                'align-right': h.key === COLUMN_HEADERS.math_fidelity,
-                                            })}
-                                        >
-                                            {formatCell(row, h, operations, filters?.[h.key])}
-                                        </td>
-                                    ))}
-                                </tr>
-                                {provideMatmulAdvice && row.op_code.includes('Matmul') && (
-                                    <tr>
-                                        <td
-                                            colSpan={visibleHeaders.length}
-                                            className='cell advice'
-                                        >
-                                            <ul>
-                                                {row?.advice.map((advice, j) => <li key={`advice-${j}`}>{advice}</li>)}
-                                            </ul>
-                                        </td>
-                                    </tr>
-                                )}
-                            </Fragment>
-                        ))}
-                    </tbody>
-                </table>
+                                        {report}
+                                    </Tooltip>
+                                ) : (
+                                    report
+                                )
+                            }
+                            panel={
+                                isStackedView ? (
+                                    <StackedPerformanceTable
+                                        data={useNormalisedData ? normalisedData.data[0] : filteredRows}
+                                        stackedData={processedComparisonStackedRows[comparisonIndex]}
+                                        filters={filters}
+                                    />
+                                ) : (
+                                    <PerfTable
+                                        data={
+                                            useNormalisedData && normalisedComparisonData.length > 0
+                                                ? normalisedComparisonData[comparisonIndex]
+                                                : filteredComparisonRows
+                                        }
+                                        comparisonData={
+                                            useNormalisedData && normalisedData.data.length > 1
+                                                ? normalisedData.data.filter((_, i) => i !== comparisonIndex + 1)
+                                                : []
+                                        }
+                                        filters={filters}
+                                        mathFidelityFilter={activeFilters}
+                                        provideMatmulAdvice={provideMatmulAdvice}
+                                        hiliteHighDispatch={hiliteHighDispatch}
+                                        shouldHighlightRows={highlightRows && useNormalisedData}
+                                        reportName={report}
+                                    />
+                                )
+                            }
+                        />
+                    ))}
+                </Tabs>
             </div>
+
             <hr />
+
             {hiliteHighDispatch && calcHighDispatchOps(processedRows)}
         </>
     );
 };
 
-function areFiltersActive(filters: Record<TableKeys, string> | null) {
-    return filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
-}
+const HIGH_DISPATCH_THRESHOLD = 6.5;
 
-const getCellText = (buffer: PerfTableRow, key: TableKeys) => {
-    const textValue = buffer[key]?.toString() || '';
+const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: number }[]): TypedPerfTableRow[] => {
+    return rows.map((row) => {
+        const val = parseInt(row.op_to_op_gap, 10);
+        const opStr = opIdsMap.find((opMap) => opMap.perfId === row.id)?.opId;
+        const op = opStr !== undefined ? Number(opStr) : undefined;
 
-    return textValue;
+        return {
+            ...row,
+            op,
+            high_dispatch: !!val && val > HIGH_DISPATCH_THRESHOLD,
+            id: parseInt(row.id, 10),
+            total_percent: parseFloat(row.total_percent),
+            device_time: parseFloat(row.device_time),
+            op_to_op_gap: row.op_to_op_gap ? parseFloat(row.op_to_op_gap) : null,
+            cores: parseInt(row.cores, 10),
+            dram: row.dram ? parseFloat(row.dram) : null,
+            dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
+            flops: row.flops ? parseFloat(row.flops) : null,
+            flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
+        };
+    });
 };
+
+const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
+    rows.map((row) => ({
+        ...row,
+        percent: parseFloat(row.percent),
+        device_time_sum_us: parseFloat(row.device_time_sum_us),
+        ops_count: parseFloat(row.ops_count),
+        flops_min: row.flops_min ? parseFloat(row.flops_min) : null,
+        flops_max: row.flops_max ? parseFloat(row.flops_max) : null,
+        flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
+        flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
+    }));
+
+const getTotalDataLength = (
+    useNormalisedData: boolean,
+    normalisedData: { data: TypedPerfTableRow[][] },
+    selectedTabId: TabId,
+    data?: PerfTableRow[],
+    comparisonData?: PerfTableRow[],
+) => {
+    if (useNormalisedData) {
+        return normalisedData.data[0]?.length || 0;
+    }
+
+    if (selectedTabId === INITIAL_TAB_ID) {
+        return data?.length || 0;
+    }
+
+    return comparisonData?.length || 0;
+};
+
+const getFilteredDataLength = (
+    selectedTabId: TabId,
+    filteredRows: TypedPerfTableRow[],
+    filteredComparisonRows: TypedPerfTableRow[],
+) => (selectedTabId === INITIAL_TAB_ID ? filteredRows?.length : filteredComparisonRows?.length || 0);
 
 export default PerformanceReport;

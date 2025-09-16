@@ -1,4 +1,4 @@
-name: Lint and Test Workflow
+name: Lint and Test
 
 on:
   pull_request:
@@ -7,23 +7,65 @@ on:
 
 jobs:
   lint-and-test:
-    name: Lint and Test
+    name: Lint and Test (Frontend)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
         with:
-            node-version: v20.11.1
+          version: 10
+          run_install: false
+
+      -   name: Read .nvmrc
+          id: nvm
+          run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
+
+      -   name: Setup Node.js
+          uses: actions/setup-node@v4
+          with:
+              node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
+              cache: 'pnpm'
 
       - name: Install dependencies
+        run: pnpm install
+
+      - name: Get changed files in PR
+        id: pr_changes
         run: |
-          npm install -g pnpm@latest-10
-          pnpm install
+            git fetch origin ${{ github.base_ref }} --depth=1
+            # Get changed files, filter for .ts and .tsx, output as space-separated string
+            CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }} | grep -E '\.(ts|tsx)$' | tr '\n' ' ' | xargs)
+            echo "changed=$CHANGED_FILES" >> $GITHUB_OUTPUT
 
       - name: Lint and test
         run: |
-          pnpm run lint
-          pnpm run test
+            if [ -n "${{ steps.pr_changes.outputs.changed }}" ]; then
+                pnpm lint ${{ steps.pr_changes.outputs.changed }} --report-unused-disable-directives --max-warnings 0
+            else
+                echo "No .ts or .tsx files changed. Skipping lint."
+            fi
+            pnpm test
+
+  backend-lint-and-test:
+    name: Lint and Test (Backend)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10.16'
+
+      - name: Install dependencies
+        run: pip install .[dev]
+
+      - name: Run Black
+        run: black --check backend/ttnn_visualizer
+
+      - name: Run Backend Tests
+        run: pytest backend/ttnn_visualizer

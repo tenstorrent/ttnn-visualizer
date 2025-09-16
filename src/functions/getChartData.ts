@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { getBufferColor, getTensorColor } from './colorGenerator';
 import { formatSize, toHex, toReadableShape, toReadableType } from './math';
@@ -57,6 +57,15 @@ export default function getChartData(
             if (tensorMemoryLayout === TensorMemoryLayout.HEIGHT_SHARDED) {
                 pattern = {
                     shape: '|',
+                    fillmode: 'overlay',
+                    size: 6,
+                    fgcolor: '#000000',
+                    fgopacity: 0.2,
+                };
+            }
+            if (tensorMemoryLayout === TensorMemoryLayout.WIDTH_SHARDED) {
+                pattern = {
+                    shape: '-',
                     fillmode: 'overlay',
                     size: 6,
                     fgcolor: '#000000',

@@ -1,28 +1,33 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import argparse
+import json
 import logging
 import os
 import subprocess
+import sys
 import threading
 import webbrowser
 from os import environ
 from pathlib import Path
-import sys
 from typing import cast
 
 import flask
 from dotenv import load_dotenv
-from flask import Flask, jsonify
+from flask import Flask, abort, jsonify
 from flask_cors import CORS
+from ttnn_visualizer.exceptions import (
+    DatabaseFileNotFoundException,
+    InvalidProfilerPath,
+    InvalidReportPath,
+)
+from ttnn_visualizer.instances import create_instance_from_local_paths
+from ttnn_visualizer.settings import Config, DefaultConfig
+from ttnn_visualizer.utils import create_path_resolver
 from werkzeug.debug import DebuggedApplication
 from werkzeug.middleware.proxy_fix import ProxyFix
-
-from ttnn_visualizer.exceptions import DatabaseFileNotFoundException, InvalidProfilerPath, InvalidReportPath
-from ttnn_visualizer.sessions import create_instance_from_local_paths
-from ttnn_visualizer.settings import Config, DefaultConfig
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +50,11 @@ def create_app(settings_override=None):
 
     config = cast(DefaultConfig, Config())
 
-    app = Flask(__name__, static_folder=config.STATIC_ASSETS_DIR, static_url_path="/")
+    app = Flask(
+        __name__,
+        static_folder=config.STATIC_ASSETS_DIR,
+        static_url_path=f"{config.BASE_PATH}static",
+    )
     logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
 
     app.config.from_object(config)
@@ -55,22 +64,49 @@ def create_app(settings_override=None):
 
     middleware(app)
 
-    app.register_blueprint(api)
+    app.register_blueprint(api, url_prefix=f"{app.config['BASE_PATH']}api")
 
     extensions(app)
 
     if flask_env == "production":
 
-        @app.route("/", defaults={"path": ""})
-        @app.route("/<path:path>")
+        @app.route(f"{app.config['BASE_PATH']}", defaults={"path": ""})
+        @app.route(f"{app.config['BASE_PATH']}<path:path>")
         def catch_all(path):
-            return app.send_static_file("index.html")
+            if path.startswith("static/"):
+                abort(404)  # Pass control to Flask's static view
+
+            js_config = {
+                "SERVER_MODE": app.config["SERVER_MODE"],
+                "BASE_PATH": app.config["BASE_PATH"],
+                "TT_METAL_HOME": app.config["TT_METAL_HOME"],
+                "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
+            }
+            js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(js_config)};"
+
+            with open(os.path.join(app.static_folder, "index.html")) as f:
+                html = f.read()
+
+                html_with_config = html.replace(
+                    "/* SERVER_CONFIG */",
+                    js,
+                )
+
+            return flask.Response(
+                html_with_config,
+                mimetype="text/html",
+                headers={
+                    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                },
+            )
 
     return app
 
 
 def extensions(app: flask.Flask):
-    from ttnn_visualizer.extensions import flask_static_digest, db, socketio
+    from ttnn_visualizer.extensions import db, flask_static_digest, socketio
     from ttnn_visualizer.sockets import register_handlers
 
     """
@@ -84,9 +120,6 @@ def extensions(app: flask.Flask):
     if app.config["USE_WEBSOCKETS"]:
         socketio.init_app(app)
     db.init_app(app)
-
-    app.config["SESSION_TYPE"] = "sqlalchemy"
-    app.config["SESSION_SQLALCHEMY"] = db
 
     if app.config["USE_WEBSOCKETS"]:
         register_handlers(socketio)
@@ -127,7 +160,7 @@ def middleware(app: flask.Flask):
         app.wsgi_app = ProxyFix(app.wsgi_app)
 
     # CORS configuration
-    origins = ["http://localhost:5173", "http://localhost:8000"]
+    origins = app.config["ALLOWED_ORIGINS"]
 
     CORS(
         app,
@@ -153,9 +186,18 @@ def open_browser(host, port, instance_id=None):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="A tool for visualizing the Tenstorrent Neural Network model (TT-NN)")
-    parser.add_argument("--profiler-path", type=str, help="Specify a profiler path", default=None)
-    parser.add_argument("--performance-path", help="Specify a performance path", default=None)
+    parser = argparse.ArgumentParser(
+        description="A tool for visualizing the Tenstorrent Neural Network model (TT-NN)"
+    )
+    parser.add_argument(
+        "--profiler-path", type=str, help="Specify a profiler path", default=None
+    )
+    parser.add_argument(
+        "--performance-path", help="Specify a performance path", default=None
+    )
+    parser.add_argument(
+        "--tt-metal-home", help="Specify a TT-Metal home path", default=None
+    )
     return parser.parse_args()
 
 
@@ -184,15 +226,47 @@ def main():
 
         instance_id = session.instance_id
 
+    if args.tt_metal_home:
+        config.TT_METAL_HOME = args.tt_metal_home
+
+    # Display mode information
+    app = create_app()
+    with app.app_context():
+        resolver = create_path_resolver(app)
+        mode_info = resolver.get_mode_info()
+
+        if mode_info["mode"] == "tt_metal":
+            print(
+                "🚀 TT-METAL MODE: Working directly with tt-metal generated directory"
+            )
+            print(f"   TT_METAL_HOME: {mode_info['tt_metal_home']}")
+            print(f"   Profiler reports: {mode_info['profiler_base']}")
+            print(f"   Performance reports: {mode_info['performance_base']}")
+
+            # Validate setup
+            is_valid, message = resolver.validate_tt_metal_setup()
+            if is_valid:
+                print(f"   ✓ {message}")
+            else:
+                print(f"   ⚠️  Warning: {message}")
+        else:
+            print(
+                "📁 UPLOAD/SYNC MODE: Using local data directory for uploaded/synced reports"
+            )
+            print(f"   Local directory: {mode_info['local_dir']}")
+            print(f"   Remote directory: {mode_info['remote_dir']}")
+
     # Check if DEBUG environment variable is set
     debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
     if config.PRINT_ENV:
-        print("ENVIRONMENT:")
+        print("\nENVIRONMENT:")
         for key, value in config.to_dict().items():
             print(f"{key}={value}")
 
     gunicorn_args = [
         "gunicorn",
+        "-t",
+        config.GUNICORN_TIMEOUT,
         "-k",
         config.GUNICORN_WORKER_CLASS,
         "-w",

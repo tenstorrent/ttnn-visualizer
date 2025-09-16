@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Edge, Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
-import { Button, Intent, Label, PopoverPosition, Slider, Tooltip } from '@blueprintjs/core';
+import { Button, Intent, Label, PopoverPosition, Slider, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { OperationDescription, Tensor } from '../model/APIData';
@@ -16,8 +16,10 @@ import MemoryConfigRow from './MemoryConfigRow';
 import { ShardSpec } from '../functions/parseMemoryConfig';
 import { BufferType } from '../model/BufferType';
 import { toReadableShape, toReadableType } from '../functions/math';
+import SearchField from './SearchField';
 
 type OperationList = OperationDescription[];
+const DEALLOCATE_OP_NAME = 'ttnn.deallocate';
 
 const OperationGraph: React.FC<{
     operationList: OperationList;
@@ -32,6 +34,12 @@ const OperationGraph: React.FC<{
     const focusNodeId = operationId !== undefined ? operationId : (operationList[0].id ?? 0);
     const [currentOperationId, setCurrentOperationId] = useState<number | null>(operationId ?? 0);
     const currentOpIdRef = useRef<number>(currentOperationId);
+
+    const [nodeNameFilter, setNodeNameFilter] = useState<string>('');
+    const [filteredNodeIdList, setFilteredNodeIdList] = useState<number[]>([]);
+    const [currentFilteredIndex, setCurrentFilteredIndex] = useState<number | null>(null);
+
+    const [filterDeallocate, setFilterDeallocate] = useState<boolean>(false);
 
     const edges = useMemo(
         () =>
@@ -64,13 +72,32 @@ const OperationGraph: React.FC<{
         return new DataSet(
             operationList
                 .filter((op) => connectedNodeIds.has(op.id))
+                .filter((op) => !filterDeallocate || !op.name.toLowerCase().includes(DEALLOCATE_OP_NAME))
                 .map((op) => ({
                     id: op.id,
                     label: `${op.id} ${op.name} \n ${op.operationFileIdentifier}`,
                     shape: 'box',
+                    filterString: `${op.name}`,
                 })),
         );
-    }, [operationList, connectedNodeIds]);
+    }, [operationList, connectedNodeIds, filterDeallocate]);
+
+    const focusOnNode = useCallback(
+        (nodeId: number | null) => {
+            if (networkRef.current && nodeId !== null) {
+                networkRef.current.focus(nodeId, {
+                    scale,
+                    animation: { duration: 500, easingFunction: 'easeInOutCubic' },
+                });
+                networkRef.current.selectNodes([nodeId], true);
+                setCurrentOperationId(nodeId);
+                // @ts-expect-error this is normal
+                currentOpIdRef.current = nodeId;
+            }
+        },
+        [networkRef, scale],
+    );
+
     const updateScale = useCallback(
         (newScale: number) => {
             const limitedScale = Math.min(newScale, 3);
@@ -79,6 +106,62 @@ const OperationGraph: React.FC<{
         },
         [networkRef],
     );
+
+    const nextFilteredIndex = useMemo(() => {
+        if (currentFilteredIndex === null || filteredNodeIdList.length === 0) {
+            return 0;
+        }
+        return (currentFilteredIndex + 1) % filteredNodeIdList.length;
+    }, [currentFilteredIndex, filteredNodeIdList.length]);
+    const previousFilteredIndex = useMemo(() => {
+        if (currentFilteredIndex === null || filteredNodeIdList.length === 0) {
+            return 0;
+        }
+        return (currentFilteredIndex - 1 + filteredNodeIdList.length) % filteredNodeIdList.length;
+    }, [currentFilteredIndex, filteredNodeIdList.length]);
+
+    const navigateFilteredNodes = useCallback(
+        (index: number, firstNode?: number | null) => {
+            if (networkRef.current && !isLoading) {
+                if (firstNode !== undefined && firstNode !== null) {
+                    focusOnNode(firstNode);
+                } else if (filteredNodeIdList.length > index) {
+                    focusOnNode(filteredNodeIdList[index]);
+                    networkRef.current.selectNodes(filteredNodeIdList, false);
+                }
+            }
+            setCurrentFilteredIndex(index);
+        },
+
+        [isLoading, filteredNodeIdList, focusOnNode],
+    );
+
+    const clearFilteredNodes = () => {
+        setFilteredNodeIdList([]);
+        setCurrentFilteredIndex(null);
+        setNodeNameFilter('');
+        if (networkRef.current) {
+            networkRef.current.selectNodes([], true);
+            networkRef.current.focus(focusNodeId, {
+                scale,
+                animation: { duration: 500, easingFunction: 'easeInOutQuad' },
+            });
+            setCurrentOperationId(focusNodeId);
+        }
+    };
+    const filterNodes = (query: string) => {
+        if (!query) {
+            setFilteredNodeIdList([]);
+            return null;
+        }
+        const filteredNodes = nodes.get({
+            filter: (node) => node.filterString?.toLowerCase().includes(query.toLowerCase()),
+        });
+        const nodeIdList = filteredNodes.map((node) => node.id);
+        networkRef?.current?.selectNodes(nodeIdList, false);
+        setFilteredNodeIdList(nodeIdList);
+        return nodeIdList[0] || null;
+    };
     useEffect(() => {
         setIsLoading(true);
 
@@ -167,39 +250,6 @@ const OperationGraph: React.FC<{
                         }
                     });
 
-                    // keeping this for now in case we resurrect this soon
-                    // networkRef.current.on('dragEnd', () => {
-                    //     if (networkRef.current) {
-                    //         const centerPosition = networkRef.current.getViewPosition();
-                    //         const nodePositions = networkRef.current.getPositions();
-                    //
-                    //         const closestNodeId = Object.keys(nodePositions).reduce(
-                    //             (closestId, nodeId) => {
-                    //                 const pos = nodePositions[nodeId];
-                    //                 const distance = Math.sqrt(
-                    //                     (centerPosition.x - pos.x) ** 2 + (centerPosition.y - pos.y) ** 2,
-                    //                 );
-                    //                 if (
-                    //                     closestId === null ||
-                    //                     distance <
-                    //                         Math.sqrt(
-                    //                             (centerPosition.x - nodePositions[closestId].x) ** 2 +
-                    //                                 (centerPosition.y - nodePositions[closestId].y) ** 2,
-                    //                         )
-                    //                 ) {
-                    //                     return nodeId;
-                    //                 }
-                    //                 return closestId;
-                    //             },
-                    //             null as string | null,
-                    //         );
-                    //         if (closestNodeId) {
-                    //             networkRef.current.selectNodes([closestNodeId], true);
-                    //             setCurrentOperationId(parseInt(closestNodeId, 10));
-                    //             currentOpIdRef.current = parseInt(closestNodeId, 10);
-                    //         }
-                    //     }
-                    // });
                     networkRef.current.on('zoom', (params) => {
                         if (params.scale <= 3) {
                             setScale(params.scale);
@@ -220,7 +270,7 @@ const OperationGraph: React.FC<{
             networkRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [edges]);
+    }, [edges, nodes]);
 
     const getNextOperationId = (currentId: number | null) => {
         if (nodes === null || currentId === null) {
@@ -240,26 +290,10 @@ const OperationGraph: React.FC<{
         return currentIndex > 0 ? (nodeIds[currentIndex - 1] as number) : null;
     };
 
-    const focusOnNode = useCallback(
-        (nodeId: number | null) => {
-            if (nodeId === null) {
-                return;
-            }
-            if (networkRef.current) {
-                networkRef.current.focus(nodeId, {
-                    scale,
-                    animation: { duration: 500, easingFunction: 'easeInOutCubic' },
-                });
-                networkRef.current.selectNodes([nodeId], true);
-                setCurrentOperationId(nodeId);
-                // @ts-expect-error this is normal
-                currentOpIdRef.current = nodeId;
-            }
-        },
-        [networkRef, scale],
-    );
-
     const focusedNode = currentOperationId ?? operationList[0].id;
+
+    const previousOperation = getPreviousOperationId(currentOperationId);
+    const nextOperation = getNextOperationId(currentOperationId);
 
     return (
         <div className='operation-graph-component'>
@@ -267,14 +301,23 @@ const OperationGraph: React.FC<{
                 <div className='operation-graph-nav'>
                     <Tooltip
                         placement={PopoverPosition.TOP}
-                        content={`Go to previous operation ${getPreviousOperationId(currentOperationId)}`}
+                        content={
+                            previousOperation
+                                ? `Go to previous operation ${previousOperation}`
+                                : 'No previous operation'
+                        }
                         disabled={isLoading}
                     >
                         <Button
                             icon={IconNames.ArrowLeft}
-                            onClick={() => focusOnNode(getPreviousOperationId(currentOperationId) || 0)}
-                            disabled={!getPreviousOperationId(currentOperationId) || isLoading}
+                            onClick={() => focusOnNode(previousOperation || 0)}
+                            disabled={!previousOperation || isLoading}
                             variant='outlined'
+                            aria-label={
+                                previousOperation
+                                    ? `Go to previous operation ${previousOperation}`
+                                    : 'No previous operation'
+                            }
                         />
                     </Tooltip>
                     <Tooltip
@@ -286,26 +329,71 @@ const OperationGraph: React.FC<{
                             variant='outlined'
                             onClick={() => focusOnNode(focusedNode)}
                             disabled={isLoading}
+                            aria-label={`Center on operation ${focusedNode}`}
                         >
                             {focusedNode}
                         </Button>
                     </Tooltip>
                     <Tooltip
                         placement={PopoverPosition.TOP}
-                        content={`Go to next operation ${getNextOperationId(currentOperationId)}`}
+                        content={nextOperation ? `Go to next operation ${nextOperation}` : 'No next operation'}
                         disabled={isLoading}
                     >
                         <Button
                             icon={IconNames.ArrowRight}
-                            onClick={() => focusOnNode(getNextOperationId(currentOperationId) || 0)}
-                            disabled={!getNextOperationId(currentOperationId) || isLoading}
+                            onClick={() => focusOnNode(nextOperation || 0)}
+                            disabled={!nextOperation || isLoading}
                             variant='outlined'
+                            aria-label={nextOperation ? `Go to next operation ${nextOperation}` : 'No next operation'}
                         />
                     </Tooltip>
+                    <SearchField
+                        searchQuery={nodeNameFilter}
+                        onQueryChanged={(query) => {
+                            if (!query) {
+                                clearFilteredNodes();
+                            } else {
+                                setNodeNameFilter(query);
+                                const firstNode = filterNodes(query);
+                                navigateFilteredNodes(0, firstNode);
+                            }
+                        }}
+                        placeholder='Filter by operation name'
+                        disabled={isLoading}
+                    />
+                    <Button
+                        icon={IconNames.ArrowLeft}
+                        onClick={() => {
+                            navigateFilteredNodes(previousFilteredIndex);
+                        }}
+                        disabled={isLoading || filteredNodeIdList.length === 0}
+                        variant='outlined'
+                        aria-label='Previous result'
+                    />
+                    {currentFilteredIndex !== null && filteredNodeIdList.length > 0 ? currentFilteredIndex + 1 : 0}/
+                    {filteredNodeIdList.length}
+                    <Button
+                        icon={IconNames.ArrowRight}
+                        onClick={() => {
+                            navigateFilteredNodes(nextFilteredIndex);
+                        }}
+                        disabled={isLoading || filteredNodeIdList.length === 0}
+                        variant='outlined'
+                        aria-label='Next result'
+                    />
+                    <Switch
+                        checked={filterDeallocate}
+                        onChange={() => setFilterDeallocate(!filterDeallocate)}
+                        label='Hide deallocate ops'
+                        disabled={isLoading}
+                    />
                 </div>
                 <div className='slider-wrapper'>
                     <Label disabled={isLoading}>Scale</Label>
                     <Slider
+                        handleHtmlProps={{
+                            'aria-label': 'Scale slider',
+                        }}
                         min={0.1}
                         max={3}
                         labelRenderer={(value) => `${value.toFixed(2)}`}

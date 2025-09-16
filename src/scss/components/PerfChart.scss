@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
 
 .chart-container {
     margin-bottom: 60px;
-    height: 500px; // TEMP: Stops charts from collapsing on occasion
+    height: 500px; // Stops charts from collapsing on occasion
 
     .chart {
         width: 100%;

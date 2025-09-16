@@ -1,11 +1,12 @@
 /* eslint-disable react/jsx-props-no-spreading */
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import {
     Button,
     ButtonGroup,
+    ButtonVariant,
     FormGroup,
     InputGroup,
     Intent,
@@ -16,6 +17,8 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
+import { useState } from 'react';
+import { useAtom } from 'jotai';
 import ConnectionTestMessage from '../components/report-selection/ConnectionTestMessage';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import ProgressBar from '../components/ProgressBar';
@@ -25,21 +28,53 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import MemoryTag from '../components/MemoryTag';
+import FileStatusOverlay from '../components/FileStatusOverlay';
+import { fileTransferProgressAtom } from '../store/app';
+import { FileStatus } from '../model/APIData';
+import NPEProcessingStatus from '../components/NPEProcessingStatus';
 
 const FORM_GROUP = {
     label: 'Form label',
     subLabel: 'Sub label here',
 };
 
-// const FILE_DOWNLOAD_STATUS = {
-//     currentFileName: 'foo.tar.gz',
-//     numberOfFiles: 12,
-//     percentOfCurrent: 49,
-//     finishedFiles: 6,
-// };
+const FILE_DOWNLOAD_IN_PROGRESS = {
+    currentFileName: 'example_test_file_1.txt',
+    numberOfFiles: 3,
+    percentOfCurrent: 25,
+    finishedFiles: 1,
+    status: FileStatus.DOWNLOADING,
+};
+
+const FILE_DOWNLOAD_INACTIVE = {
+    currentFileName: '',
+    numberOfFiles: 0,
+    percentOfCurrent: 0,
+    finishedFiles: 0,
+    status: FileStatus.INACTIVE,
+};
+
+const TIME_REMAINING_INTERVAL = 100;
 
 export default function Styleguide() {
-    // const [showProgressOverlay, setShowProgressOverlay] = useState(false);
+    const [updateFileTransferProgress, setUpdateFileTransferProgress] = useAtom(fileTransferProgressAtom);
+    const [autoCloseTime, setAutoCloseTime] = useState(1000);
+    const [timeRemaining, setTimeRemaining] = useState(autoCloseTime);
+
+    const handleUpdateFileTransferProgress = () => {
+        setUpdateFileTransferProgress(FILE_DOWNLOAD_IN_PROGRESS);
+        setTimeRemaining(autoCloseTime);
+
+        const calculateRemainingTime = setInterval(() => {
+            setTimeRemaining((prev) => prev - TIME_REMAINING_INTERVAL);
+        }, TIME_REMAINING_INTERVAL);
+
+        setTimeout(() => {
+            setUpdateFileTransferProgress(FILE_DOWNLOAD_INACTIVE);
+            clearInterval(calculateRemainingTime);
+            setTimeRemaining(autoCloseTime);
+        }, autoCloseTime);
+    };
 
     useClearSelectedBuffer();
 
@@ -174,125 +209,153 @@ export default function Styleguide() {
 
             <h2>Buttons</h2>
 
-            <div className='container flex'>
-                <div className='flex flex-column'>
-                    <p>Default</p>
+            <table className='container table'>
+                <thead>
+                    <tr>
+                        <th />
+                        <th>Default</th>
+                        <th>Primary</th>
+                        <th>Success</th>
+                        <th>Warning</th>
+                        <th>Danger</th>
+                    </tr>
+                </thead>
 
-                    <Button icon={IconNames.ADD}>Your text here</Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        variant='outlined'
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        variant='minimal'
-                    >
-                        Your text here
-                    </Button>
-                </div>
-
-                <div className='flex flex-column'>
-                    <p>Primary</p>
-
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.PRIMARY}
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.PRIMARY}
-                        variant='outlined'
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.PRIMARY}
-                        variant='minimal'
-                    >
-                        Your text here
-                    </Button>
-                </div>
-
-                <div className='flex flex-column'>
-                    <p>Success</p>
-
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.SUCCESS}
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.SUCCESS}
-                        variant='outlined'
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.SUCCESS}
-                        variant='minimal'
-                    >
-                        Your text here
-                    </Button>
-                </div>
-
-                <div className='flex flex-column'>
-                    <p>Warning</p>
-
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.WARNING}
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.WARNING}
-                        variant='outlined'
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.WARNING}
-                        variant='minimal'
-                    >
-                        Your text here
-                    </Button>
-                </div>
-
-                <div className='flex flex-column'>
-                    <p>Danger</p>
-
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.DANGER}
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.DANGER}
-                        variant='outlined'
-                    >
-                        Your text here
-                    </Button>
-                    <Button
-                        icon={IconNames.ADD}
-                        intent={Intent.DANGER}
-                        variant='minimal'
-                    >
-                        Your text here
-                    </Button>
-                </div>
-            </div>
+                <tbody>
+                    <tr>
+                        <th>Default</th>
+                        <td>
+                            <Button icon={IconNames.ADD}>Your text here</Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.PRIMARY}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.SUCCESS}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.WARNING}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.DANGER}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Outlined</th>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                variant={ButtonVariant.OUTLINED}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.PRIMARY}
+                                variant={ButtonVariant.OUTLINED}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.SUCCESS}
+                                variant={ButtonVariant.OUTLINED}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.WARNING}
+                                variant={ButtonVariant.OUTLINED}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.DANGER}
+                                variant={ButtonVariant.OUTLINED}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Minimal</th>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                variant={ButtonVariant.MINIMAL}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.PRIMARY}
+                                variant={ButtonVariant.MINIMAL}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.SUCCESS}
+                                variant={ButtonVariant.MINIMAL}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.WARNING}
+                                variant={ButtonVariant.MINIMAL}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                        <td>
+                            <Button
+                                icon={IconNames.ADD}
+                                intent={Intent.DANGER}
+                                variant={ButtonVariant.MINIMAL}
+                            >
+                                Your text here
+                            </Button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
 
             <div className='container'>
                 <h3>Icons</h3>
@@ -300,21 +363,21 @@ export default function Styleguide() {
                 <ButtonGroup>
                     <Button
                         icon={IconNames.ArrowLeft}
-                        variant='outlined'
+                        variant={ButtonVariant.OUTLINED}
                     />
 
                     <Button
                         icon={IconNames.LIST}
-                        variant='outlined'
+                        variant={ButtonVariant.OUTLINED}
                     />
 
                     <Button
                         endIcon={IconNames.ArrowRight}
-                        variant='outlined'
+                        variant={ButtonVariant.OUTLINED}
                     />
                 </ButtonGroup>
 
-                <ButtonGroup variant='minimal'>
+                <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
                         content='Expand all'
                         placement={PopoverPosition.TOP}
@@ -359,7 +422,7 @@ export default function Styleguide() {
                 className='short-width'
             >
                 <InputGroup
-                    className='bp5-light'
+                    className='bp6-light'
                     onChange={() => {}}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
@@ -367,28 +430,28 @@ export default function Styleguide() {
 
             <div className='container flex'>
                 <InputGroup
-                    className='bp5-light'
+                    className='bp6-light'
                     onChange={() => {}}
                     intent={Intent.PRIMARY}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
 
                 <InputGroup
-                    className='bp5-light'
+                    className='bp6-light'
                     onChange={() => {}}
                     intent={Intent.WARNING}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
 
                 <InputGroup
-                    className='bp5-light'
+                    className='bp6-light'
                     onChange={() => {}}
                     intent={Intent.SUCCESS}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
 
                 <InputGroup
-                    className='bp5-light'
+                    className='bp6-light'
                     onChange={() => {}}
                     intent={Intent.DANGER}
                     leftIcon={IconNames.FOLDER_NEW}
@@ -407,7 +470,7 @@ export default function Styleguide() {
 
             <FormGroup>
                 <label
-                    className='bp5-file-input'
+                    className='bp6-file-input'
                     htmlFor='local-upload'
                 >
                     <input
@@ -415,7 +478,7 @@ export default function Styleguide() {
                         type='file'
                         multiple
                     />
-                    <span className='bp5-file-upload-input'>Select files...</span>
+                    <span className='bp6-file-upload-input'>Select files...</span>
                 </label>
             </FormGroup>
 
@@ -503,21 +566,28 @@ export default function Styleguide() {
                 />
             </div>
 
-            {/* TODO: Get these working again */}
-            {/* <div className='container'>
-                <Button
-                    onClick={() => setShowProgressOverlay(true)}
-                    intent={Intent.PRIMARY}
-                >
-                    File status overlay
-                </Button>
+            <div className='container flex'>
+                <FormGroup label='File Status Overlay auto close time (ms)'>
+                    <InputGroup
+                        type='number'
+                        value={autoCloseTime.toString()}
+                        onChange={(e) => setAutoCloseTime(Number(e.target.value))}
+                    />
 
-                <FileStatusOverlay
-                    open={showProgressOverlay}
-                    progress={FILE_DOWNLOAD_STATUS}
-                    canEscapeKeyClose
-                />
-            </div> */}
+                    <Button
+                        onClick={handleUpdateFileTransferProgress}
+                        intent={Intent.PRIMARY}
+                        disabled={updateFileTransferProgress.status !== FileStatus.INACTIVE}
+                    >
+                        Open file status overlay
+                    </Button>
+                </FormGroup>
+
+                {updateFileTransferProgress.status !== FileStatus.INACTIVE && (
+                    <p className='countdown'>{timeRemaining}ms</p>
+                )}
+                <FileStatusOverlay />
+            </div>
 
             <div className='container flex flex-column'>
                 <h3>Connection message</h3>
@@ -544,6 +614,46 @@ export default function Styleguide() {
                 <h3>Loading spinner</h3>
 
                 <LoadingSpinner />
+            </div>
+
+            <div className='container'>
+                <h3>NPE Processing Status</h3>
+                <NPEProcessingStatus dataVersion={null} />
+
+                <br />
+                <br />
+
+                <NPEProcessingStatus
+                    dataVersion={null}
+                    hasUploadedFile
+                />
+
+                <br />
+                <br />
+
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion='1.0.0'
+                    isInvalidData
+                />
+
+                <br />
+                <br />
+
+                <NPEProcessingStatus
+                    fetchErrorCode={422}
+                    hasUploadedFile
+                    dataVersion='1.0.0'
+                />
+
+                <br />
+                <br />
+
+                <NPEProcessingStatus
+                    hasUploadedFile
+                    dataVersion='1.0.0'
+                    fetchErrorCode={500}
+                />
             </div>
         </>
     );

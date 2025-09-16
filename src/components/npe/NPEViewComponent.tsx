@@ -1,16 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 // @eslint-disable jsx-a11y/mouse-events-have-key-events
 
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, ButtonGroup, Intent, Slider, Switch } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
-import { LinkUtilization, NPEData, NPE_COORDINATES, NPE_LINK, NoCID, NoCTransfer } from '../../model/NPEModel';
+import {
+    EVENT_TYPE_FILTER,
+    NPEData,
+    NPE_COORDINATES,
+    NPE_LINK,
+    NoCFlowBase,
+    NoCTransfer,
+    NoCType,
+} from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
 import { NODE_SIZE, calculateLinkCongestionColor, getLines, getLinkPoints, resetRouteColors } from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
@@ -21,6 +29,7 @@ import { CLUSTER_COORDS } from '../../model/ClusterModel';
 import NPEMetadata from './NPEMetadata';
 import { EmptyChipRenderer } from './EmptyChipRenderer';
 import { RouteOriginsRenderer } from './RouteOriginsRenderer';
+import { useSelectedTransferGrouping, useShowActiveTransfers } from './useNPEHandlers';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -33,11 +42,13 @@ const SVG_SIZE = TENSIX_SIZE;
 const PLAYBACK_SPEED = 1;
 const PLAYBACK_SPEED_2X = 2;
 
+const LABEL_STEP_COUNT_TIMESTEPSCALE = 20;
+const LABEL_STEP_COUNT_CYCLESCALE = 10;
+
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
+    const [highlightedRoute, setHighlightedRoute] = useState<number | null>(null);
     const [selectedTimestep, setSelectedTimestep] = useState<number>(0);
-    const links = npeData.timestep_data[selectedTimestep];
-    const transfers = npeData.noc_transfers.filter((tr) => links?.active_transfers.includes(tr.id));
     const [animationInterval, setAnimationInterval] = useState<number | null>(null);
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
@@ -53,6 +64,71 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     });
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
+    const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
+    const [fabricEventsFilter, setFabricEventsFilter] = useState<EVENT_TYPE_FILTER>(EVENT_TYPE_FILTER.ALL_EVENTS);
+    const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
+
+    const isFabricTransfersFilteringEnabled = useMemo(() => {
+        return npeData.noc_transfers.some((tr) => tr.fabric_event_type);
+    }, [npeData]);
+
+    useEffect(() => {
+        if (!isFabricTransfersFilteringEnabled && fabricEventsFilter !== EVENT_TYPE_FILTER.ALL_EVENTS) {
+            setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
+        }
+    }, [fabricEventsFilter, isFabricTransfersFilteringEnabled]);
+
+    const links = useMemo(() => {
+        const timestepData = npeData.timestep_data[selectedTimestep];
+        timestepData.active_transfers.forEach((id) => {
+            const transfer = npeData.noc_transfers.find((tr) => tr.id === id);
+            // TODO: this functionality should MAYBE move to BE. https://github.com/orgs/tenstorrent/projects/178/views/1?pane=issue&itemId=124188622&issue=tenstorrent%7Cttnn-visualizer%7C745
+            if (transfer && fabricEventsFilter !== EVENT_TYPE_FILTER.ALL_EVENTS) {
+                transfer.route.forEach((route) => {
+                    route.links.forEach((link) => {
+                        timestepData.link_demand.forEach((linkDemand) => {
+                            if (
+                                linkDemand[NPE_LINK.CHIP_ID] === link[NPE_LINK.CHIP_ID] &&
+                                linkDemand[NPE_LINK.NOC_ID] === link[NPE_LINK.NOC_ID] &&
+                                linkDemand[NPE_LINK.Y] === link[NPE_LINK.Y] &&
+                                linkDemand[NPE_LINK.X] === link[NPE_LINK.X]
+                            ) {
+                                linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] = transfer.fabric_event_type || false;
+                            }
+                        });
+                    });
+                });
+            }
+        });
+        return timestepData;
+    }, [npeData.noc_transfers, npeData.timestep_data, selectedTimestep, fabricEventsFilter]);
+
+    const transfers = useMemo(() => {
+        return npeData.noc_transfers
+            .filter((tr) => links?.active_transfers.includes(tr.id))
+            .filter((tr) => {
+                if (fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS) {
+                    return true;
+                }
+                if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
+                    return tr.fabric_event_type === true;
+                }
+                if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
+                    return tr.fabric_event_type !== true;
+                }
+                return true;
+            });
+    }, [npeData.noc_transfers, links?.active_transfers, fabricEventsFilter]);
+
+    const showNOCType = (value: NoCType) => {
+        if (nocFilter === null) {
+            setNocFilter(value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0);
+        } else if (nocFilter !== value) {
+            setNocFilter(null);
+        } else {
+            setNocFilter(value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0);
+        }
+    };
 
     const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
     useEffect(() => {
@@ -60,8 +136,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
-    // const width = npeData.common_info.num_cols;
-    // const height = npeData.common_info.num_rows;
 
     const { architecture, cores, dram, eth, pcie } = useNodeType(npeData.common_info.arch as DeviceArchitecture);
     const width = architecture.grid?.x_size || 10;
@@ -81,57 +155,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedNode(null);
         setSelectedTransferList([]);
         setHighlightedTransfer(null);
+        setHighlightedRoute(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [npeData]);
 
-    const transferListSelectionRendering = useMemo(() => {
-        const selectedNoCByDevice: Map<number, Array<Array<Array<{ transfer: number; nocId: NoCID }>>>> = new Map<
-            number,
-            Array<Array<Array<{ transfer: number; nocId: NoCID }>>>
-        >();
-        selectedTransferList.forEach((transfer) => {
-            transfer.route.forEach((route) => {
-                route.links.forEach((link) => {
-                    const [deviceId, row, col] = link;
-                    const list = selectedNoCByDevice.get(deviceId) || [];
-
-                    list[row] = list[row] || [];
-                    list[row][col] = list[row][col] || [];
-                    list[row][col].push({
-                        transfer: transfer.id,
-                        nocId: link[NPE_LINK.NOC_ID],
-                    });
-                    selectedNoCByDevice.set(deviceId, list);
-                });
-            });
-        });
-        return selectedNoCByDevice;
-    }, [selectedTransferList]);
-
-    const groupedTransfersByNoCID = useMemo<Record<NoCID, NoCTransfer[]>>(() => {
-        if (!selectedNode?.coords) {
-            return {} as Record<NoCID, NoCTransfer[]>;
-        }
-
-        const [targetDeviceID, targetRow, targetCol] = selectedNode.coords;
-        const groups: Record<NoCID, NoCTransfer[]> = {} as Record<NoCID, NoCTransfer[]>;
-
-        selectedTransferList.forEach((transfer) => {
-            transfer.route.forEach((route) => {
-                route.links.forEach((link) => {
-                    const [deviceId, row, col] = link;
-                    if (targetRow === row && targetCol === col && targetDeviceID === deviceId) {
-                        const nocId = link[NPE_LINK.NOC_ID];
-                        if (!groups[nocId]) {
-                            groups[nocId] = [];
-                        }
-                        groups[nocId].push(transfer);
-                    }
-                });
-            });
-        });
-        return groups;
-    }, [selectedTransferList, selectedNode]);
+    const { transferListSelectionRendering, groupedTransfersByNoCID } = useSelectedTransferGrouping(
+        selectedTransferList,
+        selectedNode,
+    );
 
     const startAnimation = (speed: number = PLAYBACK_SPEED) => {
         setPlaybackSpeed(speed);
@@ -143,7 +174,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 return prev < range - 1 ? prev + 1 : 0;
             });
         }, 100 / speed);
-        setAnimationInterval(interval as unknown as number);
+        setAnimationInterval(Number(interval));
     };
     const stopAnimation = () => {
         setPlaybackSpeed(0);
@@ -183,64 +214,20 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedNode(null);
         setSelectedTransferList([]);
     };
-    const showActiveTransfers = (linkUtilizationData: LinkUtilization | null, index?: number) => {
-        hideAllTransfers();
-        if (linkUtilizationData === null) {
-            setSelectedTransferList([]);
-            setSelectedNode(null);
-            return;
-        }
-        if (selectedNode?.index === index) {
-            setSelectedNode(null);
-            setSelectedTransferList([]);
-            return;
-        }
-        if (index !== undefined) {
-            setSelectedNode({
-                index,
-                coords: [
-                    linkUtilizationData[NPE_LINK.CHIP_ID],
-                    linkUtilizationData[NPE_LINK.Y],
-                    linkUtilizationData[NPE_LINK.X],
-                ],
-            });
-        }
-
-        onPause();
-
-        const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
-            .map((transferId) => {
-                const transfer = npeData.noc_transfers.find((tr) => tr.id === transferId);
-
-                const routes = transfer?.route
-                    ?.map((r) => {
-                        if (
-                            r.links.some(
-                                (link) =>
-                                    link[NPE_LINK.Y] === linkUtilizationData[NPE_LINK.Y] &&
-                                    link[NPE_LINK.X] === linkUtilizationData[NPE_LINK.X],
-                            )
-                        ) {
-                            return r;
-                        }
-                        return null;
-                    })
-                    .filter((r) => r !== null);
-
-                if (routes && routes.length > 0) {
-                    return transfer;
-                }
-                return undefined;
-            })
-            .filter((tr) => tr !== undefined);
-
-        setSelectedTransferList(activeTransfers as NoCTransfer[]);
-    };
-
     const hideAllTransfers = () => {
         setIsShowingAllTransfers(false);
         setSelectedTransferList([]);
     };
+    const showActiveTransfers = useShowActiveTransfers({
+        npeData,
+        selectedNode,
+        selectedTimestep,
+        nocFilter,
+        onPause,
+        hideAllTransfers,
+        setSelectedNode,
+        setSelectedTransferList,
+    });
 
     const showAllTransfers = () => {
         setIsShowingAllTransfers(true);
@@ -252,7 +239,25 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedTransferList(activeTransfers as NoCTransfer[]);
     };
 
-    const getOriginOpacity = (transfer: NoCTransfer): number => {
+    // DEBUG CODE, keeping for now
+    // useEffect(() => {
+    //     // console.log('------------ selected transfers -------------');
+    //     // console.log(selectedTransferList);
+    //     selectedTransferList
+    //         .find((transfer) => {
+    //             return transfer.id === 50;
+    //         })
+    //         ?.route.forEach((r) => console.log(r));
+    // }, [selectedTransferList]);
+    // useEffect(() => {
+    //     // console.log('route', highlightedRoute);
+    //     // console.log('transfer', highlightedTransfer);
+    // }, [highlightedRoute, highlightedTransfer]);
+
+    const getOriginOpacity = (transfer: NoCFlowBase): number => {
+        if (transfer.id === null || transfer.id === undefined) {
+            return 1;
+        }
         if (isShowingAllTransfers) {
             return 0;
         }
@@ -260,21 +265,22 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return 1;
         }
         if (highlightedTransfer !== null) {
-            return 0.15;
+            return 0;
         }
         if (selectedTransferList.length === 0) {
-            return 0; // 0.45;
+            return 0;
         }
         const isSelected = selectedTransferList.some((t) => t.id === transfer.id);
 
         if (selectedTransferList.length !== 0 && !isSelected) {
-            return 0.15;
+            return 0;
         }
 
         return 0.5;
     };
 
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
+
     return (
         <div className='npe'>
             <NPEMetadata
@@ -283,73 +289,148 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             />
             <div className='header'>
                 <ButtonGroup className='npe-controls'>
-                    <Button
-                        icon={IconNames.StepBackward}
-                        onClick={onBackward}
-                    />
-                    <Button
-                        icon={IconNames.Play}
-                        intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
-                        onClick={onPlay}
-                    />
-                    <Button
-                        icon={IconNames.FastForward}
-                        onClick={onPlay2x}
-                        intent={playbackSpeed === PLAYBACK_SPEED_2X ? Intent.PRIMARY : Intent.NONE}
-                    />
-                    <Button
-                        icon={IconNames.STOP}
-                        onClick={onPause}
-                    />
-                    <Button
-                        icon={IconNames.StepForward}
-                        onClick={onForward}
-                    />
-                    |
-                    <Switch
-                        label='Show all active transfers'
-                        checked={isShowingAllTransfers}
-                        onChange={() => (isShowingAllTransfers ? hideAllTransfers() : showAllTransfers())}
-                    />
-                    <Switch
-                        label='Annotate cores'
-                        checked={isAnnotatingCores}
-                        onChange={() => setIsAnnotatingCores(!isAnnotatingCores)}
-                    />
-                    |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-                    <label>
-                        Zoom
-                        <Slider
-                            aria-label='zoom'
-                            min={0.1}
-                            max={2}
-                            stepSize={0.1}
-                            labelStepSize={1}
-                            value={zoom}
-                            onChange={(value: number) => setZoom(value)}
-                            labelRenderer={(value) => `${value.toFixed(1)}`}
+                    <div className='npe-controls-line'>
+                        <Button
+                            icon={IconNames.StepBackward}
+                            onClick={onBackward}
                         />
-                    </label>
+                        <Button
+                            icon={IconNames.Play}
+                            intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
+                            onClick={onPlay}
+                        />
+                        <Button
+                            icon={IconNames.FastForward}
+                            onClick={onPlay2x}
+                            intent={playbackSpeed === PLAYBACK_SPEED_2X ? Intent.PRIMARY : Intent.NONE}
+                        />
+                        <Button
+                            icon={IconNames.STOP}
+                            onClick={onPause}
+                        />
+                        <Button
+                            icon={IconNames.StepForward}
+                            onClick={onForward}
+                        />
+                        |
+                        <Switch
+                            label='Show all active transfers'
+                            checked={isShowingAllTransfers}
+                            onChange={() => (isShowingAllTransfers ? hideAllTransfers() : showAllTransfers())}
+                        />
+                        <Switch
+                            label='Annotate cores'
+                            checked={isAnnotatingCores}
+                            onChange={() => setIsAnnotatingCores(!isAnnotatingCores)}
+                        />
+                        <ButtonGroup
+                            variant={ButtonVariant.OUTLINED}
+                            size={Size.SMALL}
+                        >
+                            <Button
+                                text='Timesteps'
+                                icon={timestepsScale ? IconNames.ENDORSED : IconNames.CIRCLE}
+                                active={timestepsScale}
+                                onClick={() => setTimestepsScale(true)}
+                            />
+                            <Button
+                                text='Cycles'
+                                icon={!timestepsScale ? IconNames.ENDORSED : IconNames.CIRCLE}
+                                active={!timestepsScale}
+                                onClick={() => setTimestepsScale(false)}
+                            />
+                        </ButtonGroup>
+                    </div>
+                    <div className='npe-controls-line'>
+                        <Switch
+                            label='NOC0'
+                            checked={nocFilter === NoCType.NOC0 || nocFilter === null}
+                            onChange={() => showNOCType(NoCType.NOC0)}
+                        />
+                        <Switch
+                            label='NOC1'
+                            checked={nocFilter === NoCType.NOC1 || nocFilter === null}
+                            onChange={() => showNOCType(NoCType.NOC1)}
+                        />
+                        <Switch
+                            label='Fabric events'
+                            checked={
+                                fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS ||
+                                fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS
+                            }
+                            disabled={!isFabricTransfersFilteringEnabled}
+                            onChange={() => {
+                                if (fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS) {
+                                    setFabricEventsFilter(EVENT_TYPE_FILTER.LOCAL_EVENTS);
+                                } else if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
+                                    setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
+                                } else if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
+                                    setFabricEventsFilter(EVENT_TYPE_FILTER.LOCAL_EVENTS);
+                                }
+                            }}
+                        />
+                        <Switch
+                            label='Local events'
+                            checked={
+                                fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS ||
+                                fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS
+                            }
+                            disabled={!isFabricTransfersFilteringEnabled}
+                            onChange={() => {
+                                if (fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS) {
+                                    setFabricEventsFilter(EVENT_TYPE_FILTER.FABRIC_EVENTS);
+                                } else if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
+                                    setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
+                                } else if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
+                                    setFabricEventsFilter(EVENT_TYPE_FILTER.FABRIC_EVENTS);
+                                }
+                            }}
+                        />
+                        |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                        <label>
+                            Zoom
+                            <Slider
+                                aria-label='zoom'
+                                min={0.1}
+                                max={2}
+                                stepSize={0.1}
+                                labelStepSize={1}
+                                value={zoom}
+                                onChange={(value: number) => setZoom(value)}
+                                labelRenderer={(value) => `${value.toFixed(1)}`}
+                            />
+                        </label>
+                    </div>
                 </ButtonGroup>
                 <div style={{ position: 'relative', width: `${switchwidth}px` }}>
                     <Slider
+                        handleHtmlProps={{ 'aria-label': 'Timeline scrubber' }}
                         min={0}
                         max={npeData.timestep_data.length - 1}
                         stepSize={1}
                         labelStepSize={
-                            npeData.timestep_data.length > LABEL_STEP_THRESHOLD ? npeData.timestep_data.length / 20 : 1
+                            npeData.timestep_data.length > LABEL_STEP_THRESHOLD
+                                ? npeData.timestep_data.length /
+                                  (timestepsScale ? LABEL_STEP_COUNT_TIMESTEPSCALE : LABEL_STEP_COUNT_CYCLESCALE)
+                                : 1
+                        }
+                        labelRenderer={(value: number) =>
+                            timestepsScale
+                                ? value.toFixed(0)
+                                : ((npeData.common_info.cycles_per_timestep ?? 1) * value).toFixed(0)
                         }
                         value={selectedTimestep}
                         onChange={(value: number) => handleScrubberChange(value)}
                     />
                     <div
-                        className='bp5-slider-progress duplicate'
+                        className='bp6-slider-progress duplicate'
                         style={{ width: `${canvasWidth - RIGHT_MARGIN_OFFSET_PX}px` }}
                     />
                 </div>
                 <NPECongestionHeatMap
                     timestepList={npeData.timestep_data}
                     canvasWidth={canvasWidth}
+                    nocType={nocFilter}
                 />
             </div>
             <div className='split-grid'>
@@ -366,6 +447,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         return (
                             <div
                                 className='chip'
+                                key={`chip-${clusterChip.id}`}
                                 style={{
                                     gridColumn: clusterChip.coords[CLUSTER_COORDS.X] + 1,
                                     gridRow: clusterChip.coords[CLUSTER_COORDS.Y] + 1,
@@ -382,6 +464,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     showActiveTransfers={showActiveTransfers}
                                     isAnnotatingCores={isAnnotatingCores}
                                     TENSIX_SIZE={TENSIX_SIZE}
+                                    renderChipId={chips.length > 1}
                                 />
                                 <div
                                     className='tensix-grid congestion'
@@ -400,9 +483,31 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             getOriginOpacity={getOriginOpacity}
                                         />
                                     ))}
+                                    {highlightedTransfer !== null &&
+                                        highlightedRoute !== null &&
+                                        highlightedTransfer.route[highlightedRoute].device_id === clusterChip.id && (
+                                            <RouteOriginsRenderer
+                                                key={`${highlightedTransfer.id}-${highlightedRoute}-'route'`}
+                                                transfer={highlightedTransfer.route[highlightedRoute]}
+                                                clusterChip={clusterChip}
+                                                index={highlightedRoute}
+                                                getOriginOpacity={getOriginOpacity}
+                                            />
+                                        )}
 
                                     {links?.link_demand.map((linkUtilization, index) => {
-                                        if (linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id) {
+                                        let fabricCondition = true;
+                                        if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
+                                            fabricCondition = linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE] === true;
+                                        } else if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
+                                            fabricCondition = linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE] !== true;
+                                        }
+                                        if (
+                                            linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id &&
+                                            (nocFilter === null ||
+                                                linkUtilization[NPE_LINK.NOC_ID].indexOf(nocFilter) === 0) &&
+                                            fabricCondition
+                                        ) {
                                             return (
                                                 <button
                                                     type='button'
@@ -461,6 +566,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                         <div
                                                             key={`selected-transfer-${rowIndex}-${colIndex}`}
                                                             className={
+                                                                selectedNode?.coords[NPE_LINK.CHIP_ID] ===
+                                                                    clusterChip.id &&
                                                                 selectedNode?.coords[NPE_LINK.Y] === rowIndex &&
                                                                 selectedNode?.coords[NPE_LINK.X] === colIndex
                                                                     ? 'selected tensix no-click'
@@ -500,9 +607,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                             gridTemplateRows: `repeat(${height || 0}, ${TENSIX_SIZE}px)`,
                                         }}
                                     >
-                                        {highlightedTransfer?.route.map((route) =>
+                                        {highlightedTransfer?.route.map((route, index) =>
                                             route.links.map((link) => {
-                                                if (link[NPE_LINK.CHIP_ID] === clusterChip.id) {
+                                                if (
+                                                    link[NPE_LINK.CHIP_ID] === clusterChip.id &&
+                                                    (highlightedRoute === null || highlightedRoute === index)
+                                                ) {
                                                     return (
                                                         <div
                                                             key={`${link[NPE_LINK.Y]}-${link[NPE_LINK.X]}-${link[NPE_LINK.NOC_ID]}`}
@@ -539,6 +649,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         );
                     })}
                 </div>
+
                 <ActiveTransferDetails
                     groupedTransfersByNoCID={groupedTransfersByNoCID}
                     selectedNode={selectedNode}
@@ -550,6 +661,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     showActiveTransfers={showActiveTransfers}
                     highlightedTransfer={highlightedTransfer}
                     setHighlightedTransfer={setHighlightedTransfer}
+                    highlightedRoute={highlightedRoute}
+                    setHighlightedRoute={setHighlightedRoute}
+                    nocType={nocFilter}
                 />
             </div>
         </div>

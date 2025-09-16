@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 import { NoCID } from '../../model/NPEModel';
 
 export const NODE_SIZE = 50;
@@ -57,11 +61,15 @@ function* colorGenerator(): IterableIterator<string> {
 
 const getNextColor = colorGenerator();
 const routeColorMap = new Map<number, string>();
-export const getRouteColor = (transferId: number): string => {
+export const getRouteColor = (transferId: number | null): string => {
+    const DEFAULT_COLOR = '#ffffff';
+    if (transferId === null) {
+        return DEFAULT_COLOR;
+    }
     if (!routeColorMap.has(transferId)) {
         routeColorMap.set(transferId, getNextColor.next().value);
     }
-    return routeColorMap.get(transferId) || '#ffffff';
+    return routeColorMap.get(transferId) || DEFAULT_COLOR;
 };
 export const resetRouteColors = (): void => {
     routeColorMap.clear();
@@ -232,7 +240,7 @@ export const calculateLinkCongestionColor = (value: number, min: number = 0, isH
     return `rgb(${intensity}, ${255 - intensity}, 0)`;
 };
 
-export const getLines = (nocs: Array<{ transfer: number; nocId: NoCID }>) => {
+export const getLines = (nocs: Array<{ transfer: number | null; nocId: NoCID }>) => {
     return nocs.map((noc) => {
         return getLinkPoints(noc.nocId, getRouteColor(noc.transfer));
     });

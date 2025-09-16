@@ -1,32 +1,32 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import unittest
 
 from ttnn_visualizer.models import (
+    Buffer,
+    BufferPage,
+    BufferType,
+    Device,
+    DeviceOperation,
+    InputTensor,
     Operation,
     OperationArgument,
-    Tensor,
-    Device,
-    InputTensor,
     OutputTensor,
     ProducersConsumers,
     StackTrace,
-    DeviceOperation,
-    Buffer,
-    BufferType,
-    BufferPage,
+    Tensor,
 )
 from ttnn_visualizer.serializers import (
-    serialize_operations,
+    serialize_buffer_pages,
+    serialize_devices,
     serialize_inputs_outputs,
     serialize_operation,
-    serialize_tensors,
-    serialize_buffer_pages,
     serialize_operation_buffers,
+    serialize_operations,
     serialize_operations_buffers,
-    serialize_devices,
+    serialize_tensors,
 )
 
 
@@ -161,12 +161,14 @@ class TestSerializers(unittest.TestCase):
                         "device_id": 1,
                         "address": 1000,
                         "buffer_type": 0,
+                        "buffer_layout": None,
                         "size": 256,
                     },
                     {
                         "device_id": 2,
                         "address": 2000,
                         "buffer_type": 1,
+                        "buffer_layout": None,
                         "size": 512,
                     },
                 ],
@@ -179,6 +181,7 @@ class TestSerializers(unittest.TestCase):
                         "device_id": 3,
                         "address": 3000,
                         "buffer_type": 1,
+                        "buffer_layout": None,
                         "size": 1024,
                     },
                 ],
@@ -260,12 +263,14 @@ class TestSerializers(unittest.TestCase):
                     "device_id": 1,
                     "address": 1000,
                     "buffer_type": 0,
+                    "buffer_layout": None,
                     "size": 256,
                 },
                 {
                     "device_id": 2,
                     "address": 2000,
                     "buffer_type": 1,
+                    "buffer_layout": None,
                     "size": 512,
                 },
             ],
@@ -361,7 +366,7 @@ class TestSerializers(unittest.TestCase):
                 1,
                 1000,
                 BufferType.DRAM,
-                [200, 300]
+                [200, 300],
             )
         ]
         devices = [
@@ -389,6 +394,7 @@ class TestSerializers(unittest.TestCase):
             "buffers": [
                 {
                     "address": 1000,
+                    "buffer_layout": None,
                     "buffer_type": 0,
                     "device_id": 1,
                     "max_size_per_bank": 256,
@@ -415,7 +421,7 @@ class TestSerializers(unittest.TestCase):
                     "operation_id": 1,
                     "producers": [2],
                     "shape": "shape1",
-                    "device_addresses": [200, 300]
+                    "device_addresses": [200, 300],
                 }
             ],
             "l1_sizes": [256],

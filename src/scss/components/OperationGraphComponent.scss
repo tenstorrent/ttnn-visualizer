@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-@use '../definitions/colours' as *;
+@use 'styles/definitions/colours' as *;
+@use 'styles/definitions/variables' as variables;
 
 .operation-graph-component {
     .operation-graph-container {
@@ -26,13 +27,20 @@
         place-content: center space-between;
         gap: 10px;
         align-items: center;
+        flex-wrap: wrap;
+        max-width: calc(100vw - 350px);
+        justify-content: flex-start;
+
+        .bp6-control {
+            margin-bottom: 0;
+        }
     }
 
     .slider-wrapper {
         width: 250px;
         padding-left: 5px;
 
-        .bp5-label {
+        .bp6-label {
             margin-bottom: 5px;
         }
     }
@@ -85,6 +93,22 @@
 
                 > div {
                     margin-left: 15px;
+                }
+            }
+        }
+
+        @media screen and (width <= #{variables.$bp-large}) {
+            width: 350px;
+
+            .tensors {
+                .tensor-details {
+                    > table {
+                        tr {
+                            display: flex;
+                            flex-direction: column;
+                            align-items: flex-start;
+                        }
+                    }
                 }
             }
         }

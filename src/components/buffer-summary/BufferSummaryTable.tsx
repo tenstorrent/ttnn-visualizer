@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -220,14 +220,14 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         );
     };
 
-    const tableFields = useMemo(() => {
+    const tableFields = useMemo<SummaryTableBuffer[]>(() => {
         let filteredTableFields = listOfBuffers;
 
         if (showOnlySelected) {
             filteredTableFields = listOfBuffers.filter((buffer) => buffer.tensor_id === selectedTensor);
         }
 
-        if (areFiltersActive(filters) && filterableColumnKeys) {
+        if (isFiltersActive(filters) && filterableColumnKeys) {
             filteredTableFields = filteredTableFields.filter((buffer) => {
                 const isFilteredOut = Object.entries(filters)
                     .filter(([_key, filterValue]) => String(filterValue).length)
@@ -241,7 +241,8 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
             });
         }
 
-        return [...sortTableFields(filteredTableFields as [])] as SummaryTableBuffer[];
+        // Still some awkward casting here
+        return [...sortTableFields(filteredTableFields as [])];
     }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters, selectedTensor, showOnlySelected]);
 
     useEffect(() => {
@@ -392,7 +393,7 @@ const getCellContent = (
     );
 };
 
-function areFiltersActive(filters: Record<COLUMN_KEYS, string>) {
+function isFiltersActive(filters: Record<COLUMN_KEYS, string>) {
     return Object.values(filters).some((filter) => filter.length > 0);
 }
 

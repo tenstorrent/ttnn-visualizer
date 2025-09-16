@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useCallback, useEffect } from 'react';
-import { Button, ButtonGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
@@ -57,7 +57,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                 <Button
                     icon={IconNames.Graph}
                     onClick={() => navigate(`${ROUTES.GRAPHTREE}/${operationId}`)}
-                    variant='outlined'
+                    variant={ButtonVariant.OUTLINED}
                     className='graph-button'
                     text='View in graph'
                 />
@@ -71,7 +71,12 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                         icon={IconNames.ArrowLeft}
                         disabled={!previousOperation}
                         onClick={navigateToPreviousOperation}
-                        variant='outlined'
+                        variant={ButtonVariant.OUTLINED}
+                        aria-label={
+                            previousOperation
+                                ? `Go to previous operation ${previousOperation?.id} ${previousOperation?.name}`
+                                : 'No previous operation'
+                        }
                     />
                 </Tooltip>
 
@@ -88,7 +93,8 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                                 },
                             })
                         }
-                        variant='outlined'
+                        variant={ButtonVariant.OUTLINED}
+                        aria-label='View operations list'
                     />
                 </Tooltip>
 
@@ -101,7 +107,12 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                         endIcon={IconNames.ArrowRight}
                         disabled={!nextOperation}
                         onClick={navigateToNextOperation}
-                        variant='outlined'
+                        variant={ButtonVariant.OUTLINED}
+                        aria-label={
+                            nextOperation
+                                ? `Go to next operation ${nextOperation?.id} ${nextOperation?.name}`
+                                : 'No next operation'
+                        }
                     />
                 </Tooltip>
 

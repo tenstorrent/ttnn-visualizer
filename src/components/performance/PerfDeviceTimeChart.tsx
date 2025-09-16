@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
@@ -8,7 +8,7 @@ import { useAtomValue } from 'jotai';
 import { PerfTableRow } from '../../definitions/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import PerfChart from './PerfChart';
-import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
@@ -19,7 +19,7 @@ interface PerfDeviceTimeChartProps {
 
 function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const deviceTimes = useMemo(
         () =>
@@ -28,13 +28,13 @@ function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
                 y: data?.map((row) => parseFloat(row.device_time) * 1000), // Convert microseconds to nanoseconds
                 type: 'bar',
                 hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Device time: %{y} ns<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getPrimaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, perfReport, comparisonReport],
+        [datasets, perfReport, comparisonReportList],
     );
 
     const idealTimes = useMemo(
@@ -43,13 +43,13 @@ function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
                 x: data?.map((_row, index) => index + 1),
                 y: data?.map((row) => row.pm_ideal_ns),
                 hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Ideal time: %{y} ns<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReport),
+                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
                 legendgroup: `group${dataIndex}`,
                 marker: {
                     color: getSecondaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, perfReport, comparisonReport],
+        [datasets, perfReport, comparisonReportList],
     );
 
     const maxDeviceTime = Math.max(

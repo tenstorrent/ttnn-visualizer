@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+const LOCALE = 'en-US';
 
 export const toHex = (num: number): string => {
     // eslint-disable-next-line no-bitwise
@@ -8,8 +10,23 @@ export const toHex = (num: number): string => {
 };
 
 export const formatSize = (number: number, decimals?: number): string => {
-    return new Intl.NumberFormat('en-US', { maximumFractionDigits: decimals }).format(number);
+    return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: decimals }).format(number);
 };
+
+export const formatUnit = (value: number, unit: string): string => {
+    return new Intl.NumberFormat(LOCALE, {
+        style: 'unit',
+        unit,
+        unitDisplay: 'long',
+    }).format(value);
+};
+
+export const formatPercentage = (number: number, decimals: number = 2): string =>
+    new Intl.NumberFormat(LOCALE, {
+        style: 'percent',
+        unitDisplay: 'narrow',
+        maximumFractionDigits: decimals,
+    }).format(number / 100);
 
 /**
  * Convert microseconds to seconds and format it to 3 decimal places

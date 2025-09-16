@@ -1,106 +1,108 @@
 /* eslint-disable no-nested-ternary */
-// Temporary solution for now
-import React from 'react';
-import { Helmet } from 'react-helmet-async';
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { FC, useEffect, useMemo, useState } from 'react';
+import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
+import { useParams } from 'react-router';
 import NPEFileLoader from '../components/npe/NPEFileLoader';
 import NPEView from '../components/npe/NPEViewComponent';
-import { useNpe } from '../hooks/useAPI';
+import { useNPETimelineFile, useNpe } from '../hooks/useAPI';
 import { activeNpeOpTraceAtom } from '../store/app';
 import { NPEData } from '../model/NPEModel';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { semverParse } from '../functions/semverParse';
+import getServerConfig from '../functions/getServerConfig';
+import NPEProcessingStatus from '../components/NPEProcessingStatus';
+import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
+import { NPE_DATA_VERSION } from '../definitions/NPEData';
 
-const NPE_DATA_VERSION = '1.0.0';
-
-const NPE_REPO_URL = (
-    <a
-        target='_blank'
-        href='https://github.com/tenstorrent/tt-npe'
-        rel='noreferrer'
-    >
-        tt-npe
-    </a>
-);
-
-const NPE: React.FC = () => {
+const NPE: FC = () => {
+    const { filepath } = useParams<{ filepath?: string }>();
     const npeFileName = useAtomValue(activeNpeOpTraceAtom);
-    const { data: npeData, isLoading } = useNpe(npeFileName);
+    const { data: loadedData, isLoading: isLoadingNPE, error: processingError } = useNpe(npeFileName);
+    const { data: loadedTimeline, isLoading: isLoadingTimeline } = useNPETimelineFile(filepath);
+    const [demoData, setDemoData] = useState<NPEData | null>(null);
+    const [selectedDemo, setSelectedDemo] = useState<NPEDemoData | null>(null);
+
+    // Determine the current NPE data source
+    const npeData = useMemo(() => demoData || loadedData || loadedTimeline, [demoData, loadedData, loadedTimeline]);
+    const isDemoEnabled = getServerConfig()?.SERVER_MODE;
+    const isLoading = isLoadingNPE || isLoadingTimeline;
+    const hasUploadedFile = !!npeFileName || !!filepath;
+    const dataVersion = npeData?.common_info?.version || null;
+
+    useEffect(() => {
+        if (loadedData || loadedTimeline) {
+            setSelectedDemo(null);
+            setDemoData(null);
+        }
+    }, [loadedData, loadedTimeline]);
 
     return (
         <>
-            <Helmet title='NPE' />
+            <Helmet>
+                <title>NPE</title>
+                <meta
+                    name='description'
+                    content='NPE performance estimator'
+                />
+            </Helmet>
 
             <h1 className='page-title'>NOC performance estimator</h1>
+            <div className='npe-inline-loaders'>
+                {!filepath && <NPEFileLoader />}
 
-            <NPEFileLoader />
+                {isDemoEnabled && (
+                    <>
+                        <NPEDemoSelect
+                            selectedDemo={selectedDemo}
+                            setSelectedDemo={setSelectedDemo}
+                            setDemoData={setDemoData}
+                        />
+                        <br />
+                    </>
+                )}
+            </div>
 
-            {isLoading ? (
-                <LoadingSpinner />
+            {isLoading || isLoadingTimeline ? (
+                <div>
+                    <LoadingSpinner />
+                </div>
             ) : npeData ? (
                 isValidNpeData(npeData) ? (
                     <NPEView npeData={npeData} />
                 ) : (
-                    <>
-                        <p>
-                            Invalid NPE data or version. Current supported version is {NPE_DATA_VERSION} got&nbsp;
-                            {npeData.common_info.version || 'null'};
-                        </p>
-                        <p>
-                            Use {NPE_REPO_URL} to generate new NPE dataset
-                            {matchNpeDataVersion(npeData.common_info.version) ? (
-                                <>
-                                    {' '}
-                                    or install an older version of the visualizer{' '}
-                                    <pre>
-                                        pip install ttnn-visualizer=={matchNpeDataVersion(npeData.common_info.version)}
-                                    </pre>
-                                </>
-                            ) : null}
-                        </p>
-                    </>
+                    <NPEProcessingStatus
+                        dataVersion={dataVersion}
+                        hasUploadedFile={hasUploadedFile}
+                        isInvalidData
+                    />
                 )
             ) : (
-                <>
-                    <p>Please upload a NPE file for analysis.</p>
-                    <p>See {NPE_REPO_URL} for details on how to generate NPE files.</p>
-                </>
+                <NPEProcessingStatus
+                    dataVersion={dataVersion}
+                    hasUploadedFile={hasUploadedFile}
+                    fetchErrorCode={processingError?.status}
+                />
             )}
         </>
     );
 };
 
-// This should be done server side
 const isValidNpeData = (data: NPEData): boolean => {
     const requiredKeys: (keyof NPEData)[] = ['common_info', 'noc_transfers', 'timestep_data'];
     const hasAllKeys = requiredKeys.every((key) => key in data);
-
-    if (!hasAllKeys) {
-        return false;
-    }
     const version = semverParse(data.common_info.version);
-    if (!version) {
-        return false;
-    }
     const expectedVersion = semverParse(NPE_DATA_VERSION);
 
-    if (version?.major !== expectedVersion?.major) {
+    if (!hasAllKeys || version?.major !== expectedVersion?.major) {
         return false;
     }
 
     return true;
-};
-
-const matchNpeDataVersion = (version: string) => {
-    const parsedVersion = semverParse(version);
-    switch (parsedVersion) {
-        case null:
-        case undefined:
-            return '0.32.3';
-        default:
-            return '';
-    }
 };
 
 export default NPE;

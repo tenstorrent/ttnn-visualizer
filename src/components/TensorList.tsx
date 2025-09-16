@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -30,6 +30,7 @@ import useTableFilter from '../hooks/useTableFilter';
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
+const HIGH_CONSUMER_INTENT = Intent.DANGER;
 
 const TensorList = () => {
     const location = useLocation();
@@ -67,7 +68,7 @@ const TensorList = () => {
         tensorsWithRange || [],
     );
 
-    // TODO: Figure out an initial scroll position based on last used tensor
+    // TODO: Figure out an initial scroll position based on last used tensor - https://github.com/tenstorrent/ttnn-visualizer/issues/737
     const virtualizer = useVirtualizer({
         count: filteredTensorList?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => scrollElementRef.current,
@@ -142,7 +143,6 @@ const TensorList = () => {
             });
 
             // Navigating to the same page replaces the entry in the browser history
-            // TODO: Revisit this code later to make sure it's not causing any weird side effects
             navigate(ROUTES.OPERATIONS, { replace: true });
         }
     }, [virtualizer, fetchedTensors, location, navigate]);
@@ -175,8 +175,9 @@ const TensorList = () => {
                             onClick={() => setShowHighConsumerTensors(!showHighConsumerTensors)}
                             endIcon={IconNames.ISSUE}
                             disabled={!tensorsWithRange?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
-                            intent={Intent.DANGER}
+                            intent={HIGH_CONSUMER_INTENT}
                             variant={showHighConsumerTensors ? 'outlined' : undefined}
+                            aria-label='Toggle high consumer tensors'
                         >
                             {filteredTensorList?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS).length}
                         </Button>
@@ -189,6 +190,7 @@ const TensorList = () => {
                         <Button
                             onClick={() => handleExpandAllToggle()}
                             endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
+                            aria-label={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
                         />
                     </Tooltip>
 
@@ -201,6 +203,7 @@ const TensorList = () => {
                                 virtualizer.scrollToIndex(0);
                             }}
                             icon={IconNames.DOUBLE_CHEVRON_UP}
+                            aria-label='Scroll to top'
                         />
                     </Tooltip>
 
@@ -213,6 +216,7 @@ const TensorList = () => {
                                 virtualizer.scrollToIndex(numberOfTensors - 1);
                             }}
                             icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                            aria-label='Scroll to bottom'
                         />
                     </Tooltip>
 
@@ -314,7 +318,8 @@ const TensorList = () => {
                                                         >
                                                             <Icon
                                                                 icon={IconNames.ISSUE}
-                                                                intent={Intent.DANGER}
+                                                                intent={HIGH_CONSUMER_INTENT}
+                                                                title='Unusually high number of consumers'
                                                             />
                                                         </Tooltip>
                                                     ) : null}

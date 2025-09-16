@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+:root {
+    --toastify-toast-bottom: max(
+        25px,
+        env(safe-area-inset-bottom)
+    ); // Changing default position stops toast-container from interferring with the Range toggle
+}
+
+/* stylelint-disable-next-line selector-class-pattern */
+.Toastify__toast {
+    --toastify-toast-bd-radius: 2px; // Makes the toast borders less round
+}

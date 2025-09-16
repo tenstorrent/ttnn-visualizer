@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
@@ -54,7 +54,7 @@ const OperationList = () => {
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
-    // TODO: Figure out an initial scroll position based on last used operation
+    // TODO: Figure out an initial scroll position based on last used operation - https://github.com/tenstorrent/ttnn-visualizer/issues/737
     const virtualizer = useVirtualizer({
         count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => scrollElementRef.current,
@@ -197,6 +197,7 @@ const OperationList = () => {
                         <Button
                             onClick={() => handleExpandAllToggle()}
                             endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
+                            aria-label={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
                         />
                     </Tooltip>
 
@@ -216,6 +217,11 @@ const OperationList = () => {
                                     : IconNames.SortAlphabetical
                             }
                             variant={isSortingModeActive(shouldSortByID) ? 'outlined' : undefined}
+                            aria-label={
+                                shouldSortByID === SortingOptions.DESCENDING
+                                    ? 'Sort by id descending'
+                                    : 'Sort by id ascending'
+                            }
                         />
                     </Tooltip>
 
@@ -235,6 +241,11 @@ const OperationList = () => {
                                     : IconNames.SortNumerical
                             }
                             variant={isSortingModeActive(shouldSortDuration) ? 'outlined' : undefined}
+                            aria-label={
+                                shouldSortDuration === SortingOptions.DESCENDING
+                                    ? 'Sort by duration descending'
+                                    : 'Sort by duration ascending'
+                            }
                         />
                     </Tooltip>
 
@@ -247,6 +258,7 @@ const OperationList = () => {
                                 virtualizer.scrollToIndex(0);
                             }}
                             icon={IconNames.DOUBLE_CHEVRON_UP}
+                            aria-label='Scroll to top'
                         />
                     </Tooltip>
 
@@ -259,6 +271,7 @@ const OperationList = () => {
                                 virtualizer.scrollToIndex(numberOfOperations - 1);
                             }}
                             icon={IconNames.DOUBLE_CHEVRON_DOWN}
+                            aria-label='Scroll to bottom'
                         />
                     </Tooltip>
                 </ButtonGroup>

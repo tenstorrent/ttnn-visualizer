@@ -1,33 +1,48 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React from 'react';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
-import { MathFidelity, PerfTableRow, TableHeader, TableKeys } from '../definitions/PerfTable';
+import { MathFidelity, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
-import { formatSize, toSecondsPretty } from './math';
+import { formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
 
-type CellColour = 'white' | 'green' | 'red' | 'blue' | 'magenta' | 'cyan' | 'yellow' | 'orange' | 'grey';
+export enum CellColour {
+    White = 'white',
+    Green = 'green',
+    Red = 'red',
+    Blue = 'blue',
+    Magenta = 'magenta',
+    Cyan = 'cyan',
+    Yellow = 'yellow',
+    Orange = 'orange',
+    Grey = 'grey',
+}
+
+const OPERATION_COLOURS: { [key: string]: CellColour } = {
+    '(torch)': CellColour.Red,
+    Matmul: CellColour.Magenta,
+    LayerNorm: CellColour.Cyan,
+    AllGather: CellColour.Cyan,
+    AllReduce: CellColour.Cyan,
+    ScaledDotProductAttentionDecode: CellColour.Blue,
+    ScaledDotProductAttentionGQADecode: CellColour.Blue,
+    NlpCreateHeadsDeviceOperation: CellColour.Blue,
+    NLPConcatHeadsDecodeDeviceOperation: CellColour.Blue,
+    UpdateCache: CellColour.Blue,
+    OptimizedConvNew: CellColour.Orange,
+};
+
+const DEFAULT_COLOUR = CellColour.White;
+const FALLBACK_COLOUR = CellColour.Grey;
+const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
-const OPERATION_COLOURS: { [key: string]: CellColour } = {
-    '(torch)': 'red',
-    Matmul: 'magenta',
-    LayerNorm: 'cyan',
-    AllGather: 'cyan',
-    AllReduce: 'cyan',
-    ScaledDotProductAttentionDecode: 'blue',
-    ScaledDotProductAttentionGQADecode: 'blue',
-    NlpCreateHeadsDeviceOperation: 'blue',
-    NLPConcatHeadsDecodeDeviceOperation: 'blue',
-    UpdateCache: 'blue',
-    OptimizedConvNew: 'orange',
-};
 
 const NUMBER_KEYS_TO_PARSE = [
     'device_time',
@@ -41,7 +56,7 @@ const NUMBER_KEYS_TO_PARSE = [
 ];
 
 export const formatCell = (
-    row: PerfTableRow,
+    row: TypedPerfTableRow,
     header: TableHeader,
     operations?: OperationDescription[],
     highlight?: string | null,
@@ -52,10 +67,11 @@ export const formatCell = (
 
     if (key === 'high_dispatch') {
         return (
-            <Tooltip content='Op with > 6µs dispatch latency'>
+            <Tooltip content='Op with > 6 µs dispatch latency'>
                 <Icon
-                    color='#ff0'
+                    className={WARNING_COLOUR}
                     icon={IconNames.WARNING_SIGN}
+                    title='Op with > 6 µs dispatch latency'
                 />
             </Tooltip>
         );
@@ -88,7 +104,7 @@ export const formatCell = (
         // there was a logic here to do something clever with Matmul size, removing it for now
         formatted = `${value}`;
     } else if (typeof value === 'number') {
-        formatted = formatSize(Number(value.toFixed(decimals ?? 0)));
+        formatted = formatSize(value, decimals);
     } else {
         formatted = value.toString();
     }
@@ -100,7 +116,7 @@ export const formatCell = (
     return getCellMarkup(formatted, getCellColour(row, key), highlight);
 };
 
-export const getCellMarkup = (text: string, colour?: string, highlight?: string | null) => {
+export const getCellMarkup = (text: string, colour?: CellColour, highlight?: string | null) => {
     if (!text) {
         return '';
     }
@@ -122,29 +138,29 @@ export const getCellMarkup = (text: string, colour?: string, highlight?: string 
     return <span>{text}</span>;
 };
 
-export const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '' => {
+export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColour => {
     const keyValue = row[key];
-    const percentage = parseFloat(row.total_percent);
+    const percentage = row.total_percent;
 
     if (percentage != null && percentage < MIN_PERCENTAGE) {
-        return 'grey';
+        return FALLBACK_COLOUR;
     }
 
     if (key === 'id' || key === 'total_percent' || key === 'device_time') {
-        return 'white';
+        return DEFAULT_COLOUR;
     }
 
     if (key === 'bound') {
         if (keyValue === 'DRAM') {
-            return 'green';
+            return CellColour.Green;
         }
 
         if (keyValue === 'FLOP') {
-            return 'green';
+            return CellColour.Green;
         }
 
         if (keyValue === 'SLOW') {
-            return 'yellow';
+            return CellColour.Yellow;
         }
     }
 
@@ -155,18 +171,18 @@ export const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '
         if (dramP != null && flopsP != null) {
             if (dramP > flopsP) {
                 if (key === 'dram' || key === 'dram_percent') {
-                    return 'yellow';
+                    return CellColour.Yellow;
                 }
             } else if (key === 'flops' || key === 'flops_percent') {
-                return 'yellow';
+                return CellColour.Yellow;
             }
         }
 
         if (keyValue === 'HOST') {
-            return 'red';
+            return CellColour.Red;
         }
 
-        return 'white';
+        return DEFAULT_COLOUR;
     }
 
     if (key === 'cores' && keyValue != null) {
@@ -176,7 +192,7 @@ export const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '
     if (key === 'op_code') {
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.raw_op_code.includes(opCodeKey));
 
-        return match ? OPERATION_COLOURS[match] : 'white';
+        return match ? OPERATION_COLOURS[match] : DEFAULT_COLOUR;
     }
 
     if (key === 'math_fidelity' && typeof keyValue === 'string') {
@@ -188,18 +204,18 @@ export const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '
         const [fidelityEval] = evaluateFidelity(input0Datatype, input1Datatype, outputDatatype, mathFidelity);
 
         if (fidelityEval === 'sufficient') {
-            return 'green';
+            return CellColour.Green;
         }
 
         if (fidelityEval === 'too_high') {
-            return 'red';
+            return CellColour.Red;
         }
 
         if (fidelityEval === 'too_low') {
-            return 'cyan';
+            return CellColour.Cyan;
         }
 
-        return 'white';
+        return DEFAULT_COLOUR;
     }
 
     if (key === 'op_to_op_gap' && typeof keyValue === 'string') {
@@ -207,36 +223,34 @@ export const getCellColour = (row: PerfTableRow, key: TableKeys): CellColour | '
     }
 
     // Shouldn't get to this point but need to return something
-    return 'grey';
+    return FALLBACK_COLOUR;
 };
 
-export const getCoreColour = (value: string | string[] | boolean | number): CellColour | '' => {
+export const getCoreColour = (value: string | string[] | boolean | number): CellColour => {
     const cores = (typeof value === 'string' ? parseInt(value, 10) : value) as number;
 
     if (cores != null) {
         if (cores < 10) {
-            return 'red';
+            return CellColour.Red;
         }
 
         if (cores === 64) {
-            return 'green';
+            return CellColour.Green;
         }
-    } else {
-        return '';
     }
 
-    return 'white';
+    return DEFAULT_COLOUR;
 };
 
-export const getOpToOpGapColour = (value: string): CellColour | '' => {
+export const getOpToOpGapColour = (value: string): CellColour => {
     const parsedValue = parseFloat(value) || 0;
 
-    return parsedValue > 6.5 ? 'red' : '';
+    return parsedValue > 6.5 ? CellColour.Red : FALLBACK_COLOUR;
 };
 
-export const calcHighDispatchOps = (rows: PerfTableRow[]) => {
+export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     const highDispatchOps = rows
-        .map((opData: PerfTableRow, index: number): [number, PerfTableRow] => [index + 1, opData])
+        .map((opData: TypedPerfTableRow, index: number): [number, TypedPerfTableRow] => [index + 1, opData])
         .filter(([_, opData]) => {
             const val = opData.op_to_op_gap;
             return val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
@@ -248,14 +262,14 @@ export const calcHighDispatchOps = (rows: PerfTableRow[]) => {
 
     // Compute the max dispatch overhead
     const maxDispatchOverhead = highDispatchOps.reduce((acc, [_, opData]) => {
-        const val = parseInt(opData.op_to_op_gap, 10);
+        const val = opData.op_to_op_gap || 0;
 
         return acc + (val - 6);
     }, 0);
 
     // Compute total_duration as sum of device times + Op-to-Op Gaps
     const totalDeviceTime = rows.reduce((acc, r) => {
-        const val = parseInt(r.device_time, 10);
+        const val = r.device_time || 0;
 
         return acc + (typeof val === 'number' ? val : 0);
     }, 0);
@@ -272,9 +286,9 @@ export const calcHighDispatchOps = (rows: PerfTableRow[]) => {
     return (
         <div>
             <p>
-                Marked ops have &gt; 6µs dispatch latency. Running with tracing could save{' '}
-                {formatSize(Number(maxDispatchOverhead.toFixed(0)))} µs {toSecondsPretty(maxDispatchOverhead)} (
-                {percentageSaved.toFixed(1)}% of overall time).
+                Marked ops have &gt; 6 µs dispatch latency. Running with tracing could save{' '}
+                {formatSize(maxDispatchOverhead, 0)} µs {toSecondsPretty(maxDispatchOverhead)} (
+                {formatPercentage(percentageSaved, 1)} of overall time).
             </p>
             <p>Alternatively, try moving runtime args in the kernels to compile-time args.</p>
         </div>
@@ -366,3 +380,5 @@ export function getAxisUpperRange(arrays: Array<unknown[]>): number {
     // Adds + 1 to avoid cutting off the last plotted element in some cases and to create some space on the right side of the chart data
     return Math.max(...arrays.map((arr) => arr.length), 0) + 1;
 }
+
+export const isHostOp = (op: string) => op.includes('(torch)');

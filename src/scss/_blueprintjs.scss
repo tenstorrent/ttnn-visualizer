@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use 'sass:color';
 @use './definitions/colours' as *;
+@use './definitions/variables' as variables;
 @use '@blueprintjs/colors/lib/scss/colors' as *;
 
 $dark-button-background-base: $tt-grey-2;
@@ -13,11 +14,18 @@ $dark-warning-background-base: $tt-yellow;
 $dark-danger-background-base: $tt-red-accent;
 $dark-success-intent-color: $green4; // from BlueprintJS
 
+$pt-intent-text-colors: (
+    'primary': $dark-primary-intent-color,
+    'success': $dark-success-intent-color,
+    'warning': $dark-warning-background-base,
+    'danger': $dark-danger-background-base,
+);
+
 @use '@blueprintjs/core/src/blueprint.scss' with (
     $dark-button-background-color: $dark-button-background-base,
     $dark-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: -5%),
     $dark-minimal-button-background-color: $dark-button-background-base,
-    $dark-minimal-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: 5%),
+    $dark-minimal-button-background-color-hover: variables.$tt-dark-minimal-button-background-color-hover,
     $pt-dark-link-color: $tt-teal-accent,
     $control-checked-background-color: $tt-teal-accent,
     $control-checked-background-color-hover: color.adjust($tt-teal-accent, $lightness: -3%),
@@ -93,33 +101,33 @@ $dark-success-intent-color: $green4; // from BlueprintJS
 );
 
 // Overrides for BlueprintJS which cannot be done via SASS variables
-.bp5-dark {
-    .bp5-navbar {
+.bp6-dark {
+    .bp6-navbar {
         box-shadow: none;
     }
 
-    .bp5-button {
-        &.bp5-minimal {
-            &.bp5-intent-primary {
+    .bp6-button {
+        &.bp6-minimal {
+            &.bp6-intent-primary {
                 &:hover,
                 &:active {
                     color: $tt-purple-tint-2;
                 }
 
-                &.bp5-active {
+                &.bp6-active {
                     color: $tt-purple-tint-2;
                 }
             }
         }
 
-        &.bp5-outlined {
-            &.bp5-intent-primary {
+        &.bp6-outlined {
+            &.bp6-intent-primary {
                 &:hover,
                 &:active {
                     color: $dark-primary-intent-color;
                 }
 
-                &.bp5-active {
+                &.bp6-active {
                     color: $dark-primary-intent-color;
                 }
             }

@@ -1,46 +1,42 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import LocalFolderSelector from '../components/report-selection/LocalFolderSelector';
 import RemoteSyncConfigurator from '../components/report-selection/RemoteSyncConfigurator';
 import 'styles/routes/Home.scss';
 import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
+import getServerConfig from '../functions/getServerConfig';
+import InitialMessage from '../components/InitialMessage';
+import FolderFieldset from '../components/report-selection/FolderFieldset';
 
 function Home() {
     useClearSelectedBuffer();
 
+    const isServerMode = !!getServerConfig()?.SERVER_MODE;
+    const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
+
     return (
-        <div className='splash-screen home'>
-            <div className='folder-picker-options'>
-                <fieldset>
-                    <legend>Local folder</legend>
+        <div className='home'>
+            <div className='fieldset-container'>
+                <FolderFieldset
+                    title='Local folder'
+                    icon={IconNames.FOLDER_OPEN}
+                >
+                    <LocalFolderSelector />
+                </FolderFieldset>
 
-                    <Icon
-                        icon={IconNames.FOLDER_OPEN}
-                        size={150}
-                    />
-
-                    <div className='folder-picker-wrapper'>
-                        <LocalFolderSelector />
-                    </div>
-                </fieldset>
-
-                <fieldset>
-                    <legend>Remote Sync</legend>
-
-                    <Icon
-                        icon={IconNames.CLOUD}
-                        size={150}
-                    />
-
-                    <div className='folder-picker-wrapper'>
-                        <RemoteSyncConfigurator />
-                    </div>
-                </fieldset>
+                <FolderFieldset
+                    title='Remote sync'
+                    icon={IconNames.CLOUD}
+                    isFeatureDisabled={isServerMode || isDirectReportMode}
+                >
+                    <RemoteSyncConfigurator />
+                </FolderFieldset>
             </div>
+
+            {isServerMode && <InitialMessage />}
         </div>
     );
 }

@@ -1,28 +1,27 @@
 [project]
 name = "ttnn_visualizer"
 authors = []
-version = "0.34.0"
+version = "0.52.1"
 description = "TT-NN Visualizer"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "Flask==3.1.0",
-    "Flask-Cors==4.0.1",
+    "build",
+    "Flask-Cors==6.0.0",
+    "flask-socketio==5.4.1",
+    "flask-sqlalchemy==3.1.1",
     "Flask-Static-Digest==0.4.1",
-    "Flask-SocketIO==5.4.1",
-    "Flask-SQLAlchemy==3.1.1",
+    "Flask==3.1.1",
+    "gevent==24.10.2",
+    "gunicorn~=23.0.0",
+    "orjson>=3.9.0",
     "pandas==2.2.3",
-    "gunicorn~=22.0.0",
-    "paramiko~=3.4.0",
-    "pydantic==2.7.3",
-    "pydantic_core==2.18.4",
-    "setuptools==65.5.0",
-    "gevent===24.10.2",
+    "pydantic_core==2.27.1",
+    "pydantic==2.10.3",
     "python-dotenv==1.0.1",
-    "sqlalchemy==2.0.34",
     "PyYAML==6.0.2",
-    "python-dotenv==1.0.1",
-    "tt-perf-report==1.0.6",
+    "tt-perf-report==1.1.1",
+    "uvicorn==0.30.1",
     "zstd==1.5.7.0"
 ]
 
@@ -32,6 +31,14 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "black==25.1.0",
+    "isort==6.0.1",
+    "mypy",
+    "playwright==1.48.0",
+    "pytest==8.4.1",
+]
 
 [tool.setuptools]
 package-dir = { "" = "backend" }
@@ -40,7 +47,7 @@ package-dir = { "" = "backend" }
 where = ["backend"]
 
 [build-system]
-requires = ["setuptools==69.5.1", "setuptools-scm==7.1.0", "wheel"]
+requires = ["setuptools==78.1.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project.scripts]
@@ -48,8 +55,7 @@ ttnn-visualizer = "ttnn_visualizer.app:main"
 
 [tool.black]
 line-length = 88
-target-version = ['py37']
-include = 'backend/\.pyi?$'
+target-version = ['py310']
 exclude = '''
 /(
     \.git
@@ -68,3 +74,6 @@ exclude = '''
 )/
 '''
 
+[tool.isort]
+profile = "black"
+line_length = 88

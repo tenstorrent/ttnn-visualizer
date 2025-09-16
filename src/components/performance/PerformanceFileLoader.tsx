@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 import React, { useState } from 'react';
 
 interface PerformanceFileLoaderProps {
@@ -24,6 +28,7 @@ const PerformanceFileLoader: React.FC<PerformanceFileLoaderProps> = ({ onFileLoa
                 const parsedData = JSON.parse(result);
                 setError(null);
                 onFileLoad(parsedData);
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
             } catch (err) {
                 setError('Invalid JSON file. Please upload a valid JSON.');
             }

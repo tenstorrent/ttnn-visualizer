@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use 'styles/definitions/colours' as *;
+@use 'styles/definitions/variables' as variables;
 
 @mixin button-styles($color, $colorActive, $icon) {
     color: $color;
 
-    .bp5-icon.bp5-icon-#{$icon} {
+    .bp6-icon.bp6-icon-#{$icon} {
         color: $color;
     }
 
-    &.bp5-outlined:not([disabled]) {
+    &.bp6-outlined:not([disabled]) {
         border-color: $color;
 
         &:hover {
@@ -19,17 +20,17 @@
         }
     }
 
-    &.bp5-minimal:not([disabled]) {
+    &.bp6-minimal:not([disabled]) {
         &:hover {
             background-color: rgba($color, 0.2);
             color: $color;
         }
 
-        &.bp5-active {
+        &.bp6-active {
             color: $colorActive;
             background-color: rgba($color, 0.3);
 
-            .bp5-icon.bp5-icon-#{$icon} {
+            .bp6-icon.bp6-icon-#{$icon} {
                 color: $colorActive;
             }
         }
@@ -40,12 +41,13 @@
     width: auto;
     padding-left: 0;
     padding-right: 0;
+    flex-grow: 1;
 
-    .bp5-navbar-group {
+    .bp6-navbar-group {
         gap: 3px; // avoids focus ring overlap
     }
 
-    .bp5-button {
+    .bp6-button {
         position: relative;
 
         &.reports-button {
@@ -81,7 +83,7 @@
         }
 
         &.modal {
-            &.bp5-active {
+            &.bp6-active {
                 cursor: default;
                 pointer-events: none;
             }
@@ -96,6 +98,46 @@
             background-color: $tt-grey-2;
             right: 0;
             top: 0;
+        }
+    }
+
+    .server-mode-banner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        height: 25px;
+        color: $tt-white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 300ms ease-out 50ms;
+        gap: 7px;
+    }
+
+    @media screen and (width <= #{variables.$bp-large}) {
+        .bp6-button-text {
+            font-size: 13px;
+        }
+
+        .bp6-button {
+            padding-left: 10px;
+            padding-right: 10px;
+        }
+
+        .bp6-icon {
+            margin-right: 8px;
+        }
+    }
+
+    @media screen and (width <= #{variables.$bp-medium}) {
+        .bp6-button-text {
+            display: none;
+        }
+
+        .bp6-icon {
+            margin-right: 0;
         }
     }
 }

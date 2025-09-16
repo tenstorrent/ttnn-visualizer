@@ -1,24 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
 
-$tt-pending: $tt-yellow;
-
-.bp5-dialog.remote-connection-dialog {
+.bp6-dialog.remote-connection-dialog {
     background-color: $tt-grey-3;
 
-    .bp5-dialog-header {
+    .bp6-dialog-header {
         background-color: $tt-grey-2;
 
-        .bp5-icon,
-        .bp5-heading {
+        .bp6-icon,
+        .bp6-heading {
             color: $tt-grey-7;
         }
     }
 
-    .bp5-form-group-sub-label {
+    .bp6-form-group-sub-label {
         color: $tt-grey-7;
     }
 
@@ -34,6 +32,8 @@ $tt-pending: $tt-yellow;
 .verify-connection-item {
     display: inline-flex;
     gap: 2px;
+    align-items: flex-start;
+    flex-basis: 100%;
 
     &:last-of-type {
         margin-bottom: 10px;
@@ -41,6 +41,25 @@ $tt-pending: $tt-yellow;
 
     .connection-status-icon {
         animation: 0.7s steps(2) infinite alternate both;
+        margin-top: 2px; // Align with text baseline
+    }
+
+    .connection-status-content {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .connection-status-text {
+        line-height: 1.4;
+    }
+
+    .connection-status-detail {
+        font-size: 12px;
+        color: $tt-grey-6;
+        background-color: $tt-grey-2;
+        border-radius: 4px;
+        padding: 8px;
     }
 
     &.status-idle .connection-status-icon {

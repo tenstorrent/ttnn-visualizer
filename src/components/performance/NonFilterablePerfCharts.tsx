@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { FC, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -11,26 +11,31 @@ import SkeletalChart from './SkeletalChart';
 import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';
 import PerfKernelDurationUtilizationChart from './PerfKernelDurationUtilizationChart';
 import 'styles/components/PerfCharts.scss';
-import { activePerformanceReportAtom, comparisonPerformanceReportAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import PerfDeviceTimeChart from './PerfDeviceTimeChart';
+import getCoreCount from '../../functions/getCoreCount';
+import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
+import { useDeviceLog } from '../../hooks/useAPI';
 
 interface NonFilterablePerfChartsProps {
     chartData: PerfTableRow[];
     secondaryData?: PerfTableRow[][];
-    maxCores: number;
     opCodeOptions: Marker[];
 }
 
 const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
     chartData,
     secondaryData = [],
-    maxCores,
     opCodeOptions,
 }) => {
+    const { data: deviceLog } = useDeviceLog();
+
     const performanceReport = useAtomValue(activePerformanceReportAtom);
-    const comparisonReport = useAtomValue(comparisonPerformanceReportAtom);
+    const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const datasets = [chartData, ...(secondaryData || [])].filter((set) => set.length > 0);
+    const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
+    const maxCores = getCoreCount(architecture, datasets[0] ?? []);
 
     const matmulData = useMemo(
         () => datasets.map((set) => set.filter((row) => row.raw_op_code.toLowerCase().includes('matmul'))),
@@ -99,20 +104,21 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                 {performanceReport && (
                     <PerfOperationTypesChart
                         className='flex-chart'
-                        reportTitle={comparisonReport ? performanceReport : ''}
+                        reportTitle={comparisonReportList ? performanceReport : ''}
                         data={chartData}
                         opCodes={opCodeOptions}
                     />
                 )}
 
-                {comparisonReport && (
+                {comparisonReportList?.map((report, index) => (
                     <PerfOperationTypesChart
+                        key={`${report}-${index}`}
                         className='flex-chart'
-                        reportTitle={performanceReport ? comparisonReport : ''}
-                        data={secondaryData[0]}
+                        reportTitle={performanceReport ? report : ''}
+                        data={secondaryData[index]}
                         opCodes={opCodeOptions}
                     />
-                )}
+                ))}
             </div>
         </div>
     );

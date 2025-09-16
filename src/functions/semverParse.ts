@@ -1,4 +1,8 @@
-export interface SemVer {
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+interface SemVer {
     major: number;
     minor: number;
     patch: number;
@@ -9,6 +13,7 @@ export const semverParse = (version: string | undefined): SemVer | null => {
     if (!version) {
         return null;
     }
+
     const regex = /^(\d+)\.(\d+)\.(\d+)(?:-([\w.-]+))?$/;
     const match = version.match(regex);
 

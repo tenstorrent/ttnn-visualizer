@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Switch } from '@blueprintjs/core';
 import { useState } from 'react';
@@ -51,9 +51,8 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
     }
 
     return (
-        <div className='expandable-argument'>
+        <div className='tensor-argument'>
             <Switch
-                className='expand-button'
                 label={isExpanded ? 'Hide full tensor' : 'Show full tensor'}
                 onChange={() => handleExpandToggle()}
                 checked={isExpanded}
@@ -61,13 +60,10 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
 
             {isExpanded ? (
                 <>
-                    {typeof argument.value === 'string' && (
-                        <pre className='full-tensor'>{argument.value as string}</pre>
-                    )}
+                    {typeof argument.value === 'string' && <pre>{argument.value as string}</pre>}
 
                     {onCollapse && (
                         <Switch
-                            className='expand-button'
                             label='Hide full tensor'
                             onChange={() => handleExpandToggle()}
                             checked={isExpanded}
@@ -77,9 +73,9 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
             ) : (
                 Array.isArray(splitArgument) && (
                     <>
-                        <p className='collapsed-tensor monospace'>{splitArgument[0]}</p>
-                        <p className='collapsed-tensor monospace'>.........</p>
-                        <p className='collapsed-tensor monospace'>{splitArgument[splitArgument.length - 1]}</p>
+                        <p className='monospace'>{splitArgument[0]}</p>
+                        <p className='monospace'>.........</p>
+                        <p className='monospace'>{splitArgument[splitArgument.length - 1]}</p>
                     </>
                 )
             )}

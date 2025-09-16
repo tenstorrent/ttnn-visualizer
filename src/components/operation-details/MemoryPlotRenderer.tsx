@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { CSSProperties, useMemo, useState } from 'react';
 import Plot from 'react-plotly.js';
@@ -76,7 +76,7 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
         height: configuration.height,
         xaxis: {
             autorange: false,
-            title: configuration.title || '',
+            title: { text: configuration.title || '' },
             range,
             showgrid: true,
             fixedrange: true,

@@ -1,47 +1,59 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Helmet } from 'react-helmet-async';
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ButtonVariant, FormGroup, Size, Tab, TabId, Tabs } from '@blueprintjs/core';
+import { Size, Tab, TabId, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
+import { HttpStatusCode } from 'axios';
 import {
-    useDeviceLog,
     usePerfFolderList,
     usePerformanceComparisonReport,
     usePerformanceRange,
     usePerformanceReport,
 } from '../hooks/useAPI';
-import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceReport from '../components/performance/PerfReport';
-import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import getCoreCount from '../functions/getCoreCount';
-import LocalFolderPicker from '../components/report-selection/LocalFolderPicker';
 import {
     activePerformanceReportAtom,
-    comparisonPerformanceReportAtom,
+    comparisonPerformanceReportListAtom,
     selectedPerformanceRangeAtom,
 } from '../store/app';
 import PerfCharts from '../components/performance/PerfCharts';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
 import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
 import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
+import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
+import 'styles/routes/Performance.scss';
+import getServerConfig from '../functions/getServerConfig';
+
+const INITIAL_TAB_ID = 'tab-1';
 
 export default function Performance() {
-    const [comparisonReport, setComparisonReport] = useAtom(comparisonPerformanceReportAtom);
+    const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
 
-    const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog();
-    const { data: perfData, isLoading: isLoadingPerformance } = usePerformanceReport(activePerformanceReport);
-    const { data: comparisonData } = usePerformanceComparisonReport(comparisonReport);
+    const {
+        data,
+        isLoading: isLoadingPerformance,
+        error: perfDataError,
+    } = usePerformanceReport(activePerformanceReport);
+    const { data: comparisonData } = usePerformanceComparisonReport();
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
 
-    useClearSelectedBuffer();
+    const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
+
+    const perfData = data?.report;
+    const stackedData = data?.stacked_report;
+
+    const comparisonPerfData = useMemo(() => comparisonData?.map((d) => d.report) || [], [comparisonData]);
+    const comparisonStackedData = useMemo(() => comparisonData?.map((d) => d.stacked_report) || [], [comparisonData]);
+
+    // useClearSelectedBuffer();
 
     const opCodeOptions = useMemo(() => {
         const opCodes = Array.from(
@@ -49,9 +61,13 @@ export default function Performance() {
                 ...(perfData
                     ?.map((row) => row.raw_op_code)
                     .filter((opCode): opCode is string => opCode !== undefined) || []),
-                ...(comparisonData
-                    ?.map((row) => row.raw_op_code)
-                    .filter((opCode): opCode is string => opCode !== undefined) || []),
+                ...(comparisonPerfData
+                    ? comparisonPerfData.flatMap((report) =>
+                          report
+                              .map((row) => row.raw_op_code)
+                              .filter((opCode): opCode is string => opCode !== undefined),
+                      )
+                    : []),
             ]),
         );
 
@@ -59,36 +75,40 @@ export default function Performance() {
             opCode,
             colour: MARKER_COLOURS[index],
         }));
-    }, [perfData, comparisonData]);
+    }, [perfData, comparisonPerfData]);
 
-    const [selectedTabId, setSelectedTabId] = useState<TabId>('tab-1');
+    const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
-    const [filteredComparisonData, setFilteredComparisonData] = useState<PerfTableRow[]>([]);
+    const [filteredComparisonData, setFilteredComparisonData] = useState<PerfTableRow[][]>([]);
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>(opCodeOptions);
 
     // Clear comparison report if users switches active perf report to the comparison report
     useEffect(() => {
-        if (comparisonReport === activePerformanceReport) {
-            setComparisonReport(null);
+        if (activePerformanceReport && comparisonReportList?.includes(activePerformanceReport)) {
+            const filteredReports = comparisonReportList.filter((report) => report !== activePerformanceReport);
+
+            setComparisonReportList(filteredReports.length === 0 ? null : filteredReports);
         }
-    }, [comparisonReport, activePerformanceReport, setComparisonReport]);
+    }, [comparisonReportList, activePerformanceReport, setComparisonReportList]);
 
     // If a comparison report is selected, clear the selected range as we don't currently support ranges for comparison
     useEffect(() => {
-        if (comparisonReport && perfRange) {
+        if (comparisonReportList && perfRange) {
             setSelectedRange([perfRange[0], perfRange[1]]);
         }
-    }, [comparisonReport, setSelectedRange, perfRange]);
+    }, [comparisonReportList, setSelectedRange, perfRange]);
 
     useEffect(() => {
         setFilteredComparisonData(
-            comparisonData?.filter((row) =>
-                selectedOpCodes.length
-                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
-                    : false,
+            comparisonPerfData?.map((dataset) =>
+                dataset.filter((row) =>
+                    selectedOpCodes.length
+                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
+                        : false,
+                ),
             ) || [],
         );
-    }, [selectedOpCodes, comparisonData]);
+    }, [selectedOpCodes, comparisonPerfData]);
 
     useEffect(() => {
         setFilteredPerfData(
@@ -106,21 +126,37 @@ export default function Performance() {
 
     const rangedData = useMemo(
         () =>
-            !comparisonReport && selectedRange && filteredPerfData.length > 0
+            !comparisonReportList && selectedRange && filteredPerfData.length > 0
                 ? filteredPerfData.filter((row) => {
                       const rowId = parseInt(row?.id, 10);
                       return rowId >= selectedRange[0] && rowId <= selectedRange[1];
                   })
                 : filteredPerfData,
-        [selectedRange, filteredPerfData, comparisonReport],
+        [selectedRange, filteredPerfData, comparisonReportList],
     );
 
-    if (isLoadingPerformance || isLoadingDeviceLog) {
+    if (isLoadingPerformance && !perfDataError) {
         return <LoadingSpinner />;
     }
 
-    const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
-    const maxCores = perfData ? getCoreCount(architecture, perfData) : 0;
+    if (perfDataError?.status === HttpStatusCode.UnprocessableEntity) {
+        return (
+            <>
+                <h2>Unable to process performance data</h2>
+                <p>
+                    Data format is not supported, try using{' '}
+                    <a href='https://github.com/tenstorrent/ttnn-visualizer/releases/tag/v0.49.0'>
+                        TT-NN Visualizer v0.49.0
+                    </a>{' '}
+                    or earlier, or regenerate performance report using a newer version of{' '}
+                    <a href='https://github.com/tenstorrent/tt-metal/'>TT-Metal</a>.
+                </p>
+            </>
+        );
+    }
+
+    const reportSelectors =
+        comparisonReportList && comparisonReportList?.length > 0 ? [...comparisonReportList, null] : [null];
 
     return (
         <div className='performance data-padding'>
@@ -128,30 +164,24 @@ export default function Performance() {
 
             <h1 className='page-title'>Performance analysis</h1>
 
-            {folderList ? (
-                <FormGroup
-                    className='form-group'
-                    label={<h3 className='label'>Compare</h3>}
-                    subLabel='Select a performance report to compare'
-                >
-                    <div className='folder-selection'>
-                        <LocalFolderPicker
-                            items={folderList.filter((folder: string) => folder !== activePerformanceReport)}
-                            value={comparisonReport}
-                            handleSelect={(value) => setComparisonReport(value)}
-                        />
-
-                        <Button
-                            className='clear-selection'
-                            variant={ButtonVariant.OUTLINED}
-                            icon={IconNames.CROSS}
-                            onClick={() => setComparisonReport(null)}
-                        />
+            {!shouldDisableComparison &&
+                (folderList ? (
+                    <div className='comparison-selectors'>
+                        {folderList &&
+                            reportSelectors?.map((_, index) => (
+                                <ComparisonReportSelector
+                                    className='report-selector'
+                                    key={`${index}-comparison-report-selector`}
+                                    folderList={folderList}
+                                    reportIndex={index}
+                                    label={index === 0 ? <h2 className='label'>Compare</h2> : null}
+                                    subLabel={index === 0 ? 'Select from performance reports to compare' : ''}
+                                />
+                            ))}
                     </div>
-                </FormGroup>
-            ) : (
-                <LoadingSpinner />
-            )}
+                ) : (
+                    <LoadingSpinner />
+                ))}
 
             <Tabs
                 id='performance-tabs'
@@ -161,10 +191,17 @@ export default function Performance() {
                 size={Size.LARGE}
             >
                 <Tab
-                    id='tab-1'
+                    id={INITIAL_TAB_ID}
                     title='Table'
                     icon={IconNames.TH}
-                    panel={<PerformanceReport data={rangedData} />}
+                    panel={
+                        <PerformanceReport
+                            data={rangedData}
+                            comparisonData={filteredComparisonData}
+                            stackedData={stackedData}
+                            comparisonStackedData={comparisonStackedData}
+                        />
+                    }
                 />
 
                 <Tab
@@ -173,12 +210,7 @@ export default function Performance() {
                     icon={IconNames.TIMELINE_AREA_CHART}
                     panel={
                         <div className='chart-tab'>
-                            <p>
-                                <strong>Arch:</strong> {architecture}
-                            </p>
-                            <p>
-                                <strong>Cores:</strong> {maxCores}
-                            </p>
+                            <h3 className='title'>Performance charts</h3>
 
                             {perfData ? (
                                 <>
@@ -191,8 +223,7 @@ export default function Performance() {
 
                                         <PerfCharts
                                             filteredPerfData={rangedData}
-                                            comparisonData={[filteredComparisonData]}
-                                            maxCores={maxCores}
+                                            comparisonData={filteredComparisonData}
                                             selectedOpCodes={selectedOpCodes}
                                         />
                                     </div>
@@ -203,8 +234,7 @@ export default function Performance() {
                                         <div>
                                             <NonFilterablePerfCharts
                                                 chartData={rangedData}
-                                                secondaryData={[comparisonData || []]}
-                                                maxCores={maxCores}
+                                                secondaryData={comparisonPerfData || []}
                                                 opCodeOptions={opCodeOptions}
                                             />
                                         </div>

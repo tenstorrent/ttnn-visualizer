@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { FC, useState } from 'react';
-import { AnchorButton, Button, MenuItem, Tooltip } from '@blueprintjs/core';
+import { Button, MenuItem, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRendererProps, Select } from '@blueprintjs/select';
 import RemoteConnectionDialog from './RemoteConnectionDialog';
@@ -37,59 +37,64 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
     const selectedConnection = connection ?? connectionList[0];
 
     return (
-        <div className='buttons-container'>
-            <Select
-                className='remote-connection-select'
-                items={connectionList}
-                itemRenderer={(item, itemProps) => renderRemoteConnection(item, itemProps, selectedConnection)}
-                disabled={disabled}
-                filterable
-                itemPredicate={filterRemoteConnections}
-                noResults={
-                    <MenuItem
-                        disabled
-                        text='No results'
-                        roleStructure='listoption'
-                    />
-                }
-                onItemSelect={onSelectConnection}
-            >
-                <Button
-                    icon={offline ? IconNames.BAN_CIRCLE : IconNames.CLOUD}
-                    endIcon={IconNames.CARET_DOWN}
+        <>
+            <div className='form-container'>
+                <Select
+                    className='remote-select'
+                    items={connectionList}
+                    itemRenderer={(item, itemProps) => renderRemoteConnection(item, itemProps, selectedConnection)}
                     disabled={disabled}
-                    text={formatConnectionString(selectedConnection)}
-                />
-            </Select>
-            <Tooltip content='Edit selected connection'>
-                <AnchorButton
-                    icon={IconNames.EDIT}
-                    disabled={disabled || !selectedConnection}
-                    onClick={() => setIsEditDialogOpen(true)}
-                />
-            </Tooltip>
-            <Tooltip content='Remove selected connection'>
-                <AnchorButton
-                    icon={IconNames.TRASH}
-                    disabled={disabled || !selectedConnection}
-                    onClick={() => onRemoveConnection(selectedConnection)}
-                />
-            </Tooltip>
+                    filterable
+                    itemPredicate={filterRemoteConnections}
+                    noResults={
+                        <MenuItem
+                            disabled
+                            text='No results'
+                            roleStructure='listoption'
+                        />
+                    }
+                    onItemSelect={onSelectConnection}
+                >
+                    <Button
+                        icon={offline ? IconNames.BAN_CIRCLE : IconNames.CLOUD}
+                        endIcon={IconNames.CARET_DOWN}
+                        disabled={disabled}
+                        text={formatConnectionString(selectedConnection)}
+                    />
+                </Select>
+                <Tooltip content='Edit selected connection'>
+                    <Button
+                        aria-label='Edit selected connection'
+                        icon={IconNames.EDIT}
+                        disabled={disabled || !selectedConnection}
+                        onClick={() => setIsEditDialogOpen(true)}
+                    />
+                </Tooltip>
+                <Tooltip content='Remove selected connection'>
+                    <Button
+                        aria-label='Remove selected connection'
+                        icon={IconNames.TRASH}
+                        disabled={disabled || !selectedConnection}
+                        onClick={() => onRemoveConnection(selectedConnection)}
+                    />
+                </Tooltip>
 
-            <RemoteConnectionDialog
-                key={`${selectedConnection?.name}${selectedConnection?.host}${selectedConnection?.port}${selectedConnection?.profilerPath}`}
-                open={isEditdialogOpen}
-                onAddConnection={(updatedConnection) => {
-                    setIsEditDialogOpen(false);
-                    onEditConnection(updatedConnection, connection);
-                }}
-                onClose={() => {
-                    setIsEditDialogOpen(false);
-                }}
-                title='Edit remote connection'
-                buttonLabel='Save connection'
-                remoteConnection={selectedConnection}
-            />
+                <RemoteConnectionDialog
+                    key={`${selectedConnection?.name}${selectedConnection?.host}${selectedConnection?.port}${selectedConnection?.profilerPath}`}
+                    open={isEditdialogOpen}
+                    onAddConnection={(updatedConnection) => {
+                        onEditConnection(updatedConnection, connection);
+                    }}
+                    onClose={() => setIsEditDialogOpen(false)}
+                    onSave={(updatedConnection) => {
+                        onEditConnection(updatedConnection, connection);
+                        onSyncRemoteFolderList(updatedConnection);
+                    }}
+                    title='Edit remote connection'
+                    buttonLabel='Save connection'
+                    remoteConnection={selectedConnection}
+                />
+            </div>
 
             <Button
                 icon={IconNames.LOCATE}
@@ -98,7 +103,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                 text='Fetch remote folders list'
                 onClick={() => onSyncRemoteFolderList(selectedConnection)}
             />
-        </div>
+        </>
     );
 };
 

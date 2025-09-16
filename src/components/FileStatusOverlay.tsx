@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React from 'react';
 import { useAtom } from 'jotai';
@@ -10,9 +10,7 @@ import 'styles/components/FileStatusOverlay.scss';
 import { fileTransferProgressAtom } from '../store/app';
 import { FileStatus } from '../model/APIData';
 
-interface FileTransferOverlayProps {}
-
-const FileStatusOverlay: React.FC<FileTransferOverlayProps> = () => {
+const FileStatusOverlay: React.FC = () => {
     const formatPercentage = (percentage: number) => percentage.toFixed(2).padStart(5, '0');
     const [progress] = useAtom(fileTransferProgressAtom);
     const { currentFileName, finishedFiles, numberOfFiles, percentOfCurrent, status } = progress;
@@ -37,7 +35,10 @@ const FileStatusOverlay: React.FC<FileTransferOverlayProps> = () => {
                 {status && <p>Status: {status.valueOf()}</p>}
             </div>
 
-            <ProgressBar progress={percentOfCurrent / 100} />
+            <ProgressBar
+                progress={percentOfCurrent / 100}
+                ariaLabel='File transfer progress'
+            />
         </Overlay>
     );
 };

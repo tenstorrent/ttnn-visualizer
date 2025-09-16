@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 import { ClusterCoordinates } from './ClusterModel';
 
 export interface CommonInfo {
@@ -82,8 +86,19 @@ export const NPE_KPI_METADATA = {
 type row = number;
 type col = number;
 type device_id = number;
+
 type NoCTransferId = number;
-export type NoCType = 'NOC0' | 'NOC1';
+
+export enum NoCType {
+    NOC0 = 'NOC0',
+    NOC1 = 'NOC1',
+}
+
+export enum EVENT_TYPE_FILTER {
+    ALL_EVENTS,
+    FABRIC_EVENTS,
+    LOCAL_EVENTS,
+}
 
 export enum NoCID {
     NOC1_NORTH = 'NOC1_NORTH',
@@ -96,14 +111,25 @@ export enum NoCID {
     NOC1_OUT = 'NOC1_OUT',
 }
 
-export type LinkUtilization = [device_id: number, row: number, col: number, noc_id: NoCID, demand: number];
+export type LinkUtilization = [
+    device_id: number,
+    row: number,
+    col: number,
+    noc_id: NoCID,
+    demand: number, // percentage - it can exceed 100% if there is congestion
+    fabric_event_type: boolean,
+];
 export type NoCLink = [device_id: number, row: number, col: number, noc_id: NoCID];
 export type NPE_COORDINATES = [device_id: number, row: number, col: number];
 
-export interface NoCRoute {
-    device_id: number;
+export interface NoCFlowBase {
+    id: NoCTransferId | null;
     src: [device_id, row, col];
     dst: [[device_id, row, col]];
+}
+
+export interface NoCRoute extends NoCFlowBase {
+    device_id: number;
     total_bytes: number;
     noc_event_type: '';
     noc_type: NoCType;
@@ -113,12 +139,11 @@ export interface NoCRoute {
     links: NoCLink[];
 }
 
-export interface NoCTransfer {
+export interface NoCTransfer extends NoCFlowBase {
     id: NoCTransferId;
-    src: [device_id, row, col];
-    dst: [[device_id, row, col]];
     total_bytes: number;
     noc_event_type: '';
+    fabric_event_type: boolean;
     start_cycle: number;
     end_cycle: number;
     route: NoCRoute[];
@@ -129,8 +154,14 @@ export interface TimestepData {
     end_cycle: number;
     active_transfers: NoCTransferId[];
     link_demand: LinkUtilization[];
-    avg_link_demand: number;
-    avg_link_util: number;
+    avg_link_demand: number; // percentage
+    avg_link_util: number; // percentage
+    noc: {
+        [K in NoCType]: {
+            avg_link_demand: number; //  percentage
+            avg_link_util: number; // percentage
+        };
+    };
 }
 
 export interface NPEData {
@@ -143,9 +174,15 @@ export interface NPEData {
 }
 
 export enum NPE_LINK {
-    CHIP_ID, // future iteration
+    CHIP_ID,
     Y,
     X,
     NOC_ID,
     DEMAND,
+    FABRIC_EVENT_TYPE,
+}
+
+export interface NPEManifestEntry {
+    global_call_count: number;
+    file: string;
 }

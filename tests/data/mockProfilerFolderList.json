@@ -1,0 +1,18 @@
+[
+   {
+      "path":"segformer_decoder_good",
+      "reportName":"segformer_decoder_good"
+   },
+   {
+      "path":"llama-mar-18",
+      "reportName":"llama_test"
+   },
+   {
+      "path":"segformer_encoder",
+      "reportName":"segformer_encoder_good"
+   },
+   {
+      "path":"15703471211371192615",
+      "reportName":"mlp_tg"
+   }
+]
