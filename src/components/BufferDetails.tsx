@@ -23,7 +23,8 @@ interface BufferDetailsProps {
 
 function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
     const { address, dtype, layout, shape } = tensor;
-    const lastOperationId: number = tensor.consumers[tensor.consumers.length - 1];
+    const firstOperationId = tensor.producers[0];
+    const lastOperationId = tensor.consumers[tensor.consumers.length - 1];
     const deallocationOperationId = getDeallocationOperation(tensor, operations)?.id;
     const nextAllocationOperationId = getNextAllocationOperation(tensor, operations)?.id;
 
@@ -37,7 +38,16 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                     </tr>
 
                     <tr>
-                        <th>Last used</th>
+                        <th>Producer</th>
+                        <td>
+                            {isValidNumber(firstOperationId)
+                                ? getFirstOperation(firstOperationId, operations, tensor)
+                                : 'No producer for this tensor'}
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th>Last consumer</th>
                         <td>
                             {isValidNumber(lastOperationId)
                                 ? getLastOperation(lastOperationId, operations, tensor)
@@ -138,16 +148,26 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
     );
 }
 
-function getLastOperation(lastOperationId: number, operations: Operation[], tensor: Tensor) {
-    let lastOperation = operations.find((operation) => operation.id === lastOperationId);
+function getFirstOperation(operationId: number, operations: Operation[]) {
+    const op = operations.find((operation) => operation.id === operationId);
 
-    if (lastOperation?.name.includes('deallocate') && tensor.consumers.length > 1) {
-        lastOperation = operations.find((operation) => operation.id === tensor.consumers[tensor.consumers.length - 2]);
+    return op ? (
+        <Link to={`${ROUTES.OPERATIONS}/${op.id}`}>
+            {op?.id} {op.name} ({op.operationFileIdentifier})
+        </Link>
+    ) : null;
+}
+
+function getLastOperation(operationId: number, operations: Operation[], tensor: Tensor) {
+    let op = operations.find((operation) => operation.id === operationId);
+
+    if (op?.name.includes('deallocate') && tensor.consumers.length > 1) {
+        op = operations.find((operation) => operation.id === tensor.consumers[tensor.consumers.length - 2]);
     }
 
-    return lastOperation ? (
-        <Link to={`${ROUTES.OPERATIONS}/${lastOperation.id}`}>
-            {lastOperation?.id} {lastOperation.name} ({lastOperation.operationFileIdentifier})
+    return op ? (
+        <Link to={`${ROUTES.OPERATIONS}/${op.id}`}>
+            {op?.id} {op.name} ({op.operationFileIdentifier})
         </Link>
     ) : null;
 }
