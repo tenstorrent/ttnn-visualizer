@@ -32,7 +32,7 @@ const OperationGraph: React.FC<{
     const [scale, setScale] = useState(1);
 
     const focusNodeId = operationId !== undefined ? operationId : (operationList[0].id ?? 0);
-    const [currentOperationId, setCurrentOperationId] = useState<number | null>(operationId ?? null);
+    const [currentOperationId, setCurrentOperationId] = useState<number | null>(operationId ?? 0);
     const currentOpIdRef = useRef<number>(currentOperationId);
 
     const [nodeNameFilter, setNodeNameFilter] = useState<string>('');
@@ -68,21 +68,19 @@ const OperationGraph: React.FC<{
         return ids;
     }, [edges]);
 
-    const nodes = useMemo(
-        () =>
-            new DataSet(
-                operationList
-                    .filter((op) => connectedNodeIds.has(op.id))
-                    .filter((op) => !filterDeallocate || !op.name.toLowerCase().includes(DEALLOCATE_OP_NAME))
-                    .map((op) => ({
-                        id: op.id,
-                        label: `${op.id} ${op.name} \n ${op.operationFileIdentifier}`,
-                        shape: 'box',
-                        filterString: `${op.name}`,
-                    })),
-            ),
-        [operationList, connectedNodeIds, filterDeallocate],
-    );
+    const nodes = useMemo(() => {
+        return new DataSet(
+            operationList
+                .filter((op) => connectedNodeIds.has(op.id))
+                .filter((op) => !filterDeallocate || !op.name.toLowerCase().includes(DEALLOCATE_OP_NAME))
+                .map((op) => ({
+                    id: op.id,
+                    label: `${op.id} ${op.name} \n ${op.operationFileIdentifier}`,
+                    shape: 'box',
+                    filterString: `${op.name}`,
+                })),
+        );
+    }, [operationList, connectedNodeIds, filterDeallocate]);
 
     const focusOnNode = useCallback(
         (nodeId: number | null) => {
@@ -222,9 +220,13 @@ const OperationGraph: React.FC<{
                     );
 
                     networkRef.current.once('afterDrawing', () => {
-                        networkRef.current?.moveTo({ scale });
-                        focusOnNode(currentOperationId);
                         setIsLoading(false);
+                        networkRef.current?.focus(focusNodeId, {
+                            scale,
+                            animation: { duration: 500, easingFunction: 'easeInOutQuad' },
+                        });
+                        networkRef.current?.selectNodes([focusNodeId], true);
+                        setCurrentOperationId(focusNodeId);
                         // @ts-expect-error this is normal
                         currentOpIdRef.current = focusNodeId;
                     });
@@ -308,7 +310,7 @@ const OperationGraph: React.FC<{
                     >
                         <Button
                             icon={IconNames.ArrowLeft}
-                            onClick={() => focusOnNode(previousOperation || null)}
+                            onClick={() => focusOnNode(previousOperation || 0)}
                             disabled={!previousOperation || isLoading}
                             variant='outlined'
                             aria-label={
@@ -339,7 +341,7 @@ const OperationGraph: React.FC<{
                     >
                         <Button
                             icon={IconNames.ArrowRight}
-                            onClick={() => focusOnNode(nextOperation || null)}
+                            onClick={() => focusOnNode(nextOperation || 0)}
                             disabled={!nextOperation || isLoading}
                             variant='outlined'
                             aria-label={nextOperation ? `Go to next operation ${nextOperation}` : 'No next operation'}
