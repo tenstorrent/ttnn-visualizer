@@ -91,10 +91,17 @@ const OperationGraph: React.FC<{
                     scale,
                     animation: { duration: 500, easingFunction: 'easeInOutCubic' },
                 });
-                networkRef.current.selectNodes([nodeId], true);
-                setCurrentOperationId(nodeId);
-                // @ts-expect-error this is normal
-                currentOpIdRef.current = nodeId;
+
+                // Node might not exist if it's a decallocate op and we are filtering them out
+                try {
+                    networkRef.current.selectNodes([nodeId], true);
+                    setCurrentOperationId(nodeId);
+                    // @ts-expect-error this is normal
+                    currentOpIdRef.current = nodeId;
+                } catch (e) {
+                    // eslint-disable-next-line no-console
+                    console.error('Error selecting node', e);
+                }
             }
         },
         [networkRef, scale],
