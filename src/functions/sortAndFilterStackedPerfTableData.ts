@@ -15,8 +15,8 @@ const getCellText = (buffer: TypedStackedPerfRow, key: StackedTableKeys) => {
 
 const sortAndFilterStackedPerfTableData = (
     data: TypedStackedPerfRow[],
+    filters: StackedTableFilter,
     filterableColumnKeys: StackedTableKeys[],
-    filters?: StackedTableFilter,
 ): TypedStackedPerfRow[] => {
     if (data?.length === 0) {
         return data;

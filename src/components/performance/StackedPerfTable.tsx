@@ -45,12 +45,12 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
         const parsedRows = stackedData
-            ? sortAndFilterStackedPerfTableData(stackedData, FilterableStackedColumnKeys)
+            ? sortAndFilterStackedPerfTableData(stackedData, filters, FilterableStackedColumnKeys)
             : [];
 
         // Still some awkward casting here
         return [...sortTableFields(parsedRows as [])];
-    }, [stackedData, sortTableFields]);
+    }, [stackedData, filters, sortTableFields]);
 
     return (
         <>

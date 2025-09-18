@@ -44,7 +44,13 @@ import alignByOpCode from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
-import { FilterableStackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../../definitions/StackedPerfTable';
+import {
+    FilterableStackedColumnKeys,
+    StackedPerfRow,
+    StackedTableFilter,
+    StackedTableKeys,
+    TypedStackedPerfRow,
+} from '../../definitions/StackedPerfTable';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 
 interface PerformanceReportProps {
@@ -81,6 +87,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [filters, setFilters] = useState<TableFilter>(
         Object.fromEntries(FilterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
+            string
+        >,
+    );
+    const [stackedFilters, setStackedFilters] = useState<StackedTableFilter>(
+        Object.fromEntries(FilterableStackedColumnKeys.map((key) => [key, ''] as [StackedTableKeys, string])) as Record<
+            StackedTableKeys,
             string
         >,
     );
@@ -135,15 +147,19 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     );
 
     const filteredStackedRows = useMemo(
-        () => sortAndFilterStackedPerfTableData(processedStackedRows, FilterableStackedColumnKeys),
-        [processedStackedRows],
+        () => sortAndFilterStackedPerfTableData(processedStackedRows, stackedFilters, FilterableStackedColumnKeys),
+        [processedStackedRows, stackedFilters],
     );
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
-        setFilters({
+        const updatedFilters = {
             ...filters,
             [key]: value ?? '',
-        } as Record<TableKeys, string>);
+        };
+
+        // TODO: Sort this madness out
+        setStackedFilters(updatedFilters as Record<StackedTableKeys, string>);
+        setFilters(updatedFilters as Record<TableKeys, string>);
     };
 
     const totalDataLength = getTotalDataLength(
