@@ -687,6 +687,8 @@ def get_performance_results_report(instance: Instance):
         )
 
     name = request.args.get("name", None)
+    stackByIn0 = request.args.get("stackByIn0", "false").lower() == "true"
+    ignoreSignposts = request.args.get("ignoreSignposts", "false").lower() == "true"
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -694,6 +696,8 @@ def get_performance_results_report(instance: Instance):
         logger.info(f"************ Performance path set to {instance.performance_path}")
 
     try:
+        OpsPerformanceReportQueries.DEFAULT_NO_STACK_BY_IN0 = stackByIn0
+        OpsPerformanceReportQueries.IGNORE_SIGNPOSTS = ignoreSignposts
         report = OpsPerformanceReportQueries.generate_report(instance)
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
