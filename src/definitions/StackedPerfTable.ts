@@ -63,4 +63,6 @@ export const TableHeaders: StackedTableHeader[] = [
     { label: 'Std FLOPS', key: ColumnHeaders.FlopsStd, unit: '%', decimals: 1, sortable: true },
 ];
 
-export const FilterableColumnKeys = TableHeaders.filter((column) => column.filterable).map((column) => column.key);
+export const FilterableStackedColumnKeys = TableHeaders.filter((column) => column.filterable).map(
+    (column) => column.key,
+);

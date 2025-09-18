@@ -34,17 +34,13 @@ import { calcHighDispatchOps, isHostOp } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
-import {
-    activePerformanceReportAtom,
-    comparisonPerformanceReportListAtom,
-    ignoreSignpostsAtom,
-    stackByIn0Atom,
-} from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, stackByIn0Atom } from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
-import { StackedPerfRow, TypedStackedPerfRow } from '../../definitions/StackedPerfTable';
+import { FilterableStackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../../definitions/StackedPerfTable';
+import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -67,7 +63,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
-    const [ignoreSignposts, setIgnoreSignposts] = useAtom(ignoreSignpostsAtom);
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
@@ -135,8 +130,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     );
 
     const filteredStackedRows = useMemo(
-        () => sortAndFilterPerfTableData(processedStackedRows, filters, FilterableColumnKeys, activeFilters),
-        [processedStackedRows, filters, activeFilters],
+        () => sortAndFilterStackedPerfTableData(processedStackedRows, FilterableStackedColumnKeys),
+        [processedStackedRows],
     );
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
@@ -328,12 +323,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         </Tooltip>
                     )}
 
-                    <Switch
+                    {/* <Switch
                         label='Ignore signposts'
                         onChange={() => setIgnoreSignposts(!ignoreSignposts)}
                         checked={ignoreSignposts}
                         className='option-switch'
-                    />
+                    /> */}
 
                     <Switch
                         label='Stack by input 0'

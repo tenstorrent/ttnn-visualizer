@@ -4,6 +4,7 @@
 
 import csv
 import json
+import logging
 import os
 import tempfile
 from io import StringIO
@@ -15,6 +16,8 @@ import zstd
 from tt_perf_report import perf_report
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
+
+logger = logging.getLogger(__name__)
 
 
 class LocalCSVQueryRunner:
@@ -452,6 +455,8 @@ class OpsPerformanceReportQueries:
         stacked_png_file = os.path.splitext(csv_output_file)[0] + ".png"
 
         try:
+            print("$$$$$$$$$$$$$$$ generating report $$$$$$$$$$$$$$$")
+            print(cls.DEFAULT_SIGNPOST, cls.DEFAULT_IGNORE_SIGNPOSTS)
             perf_report.generate_perf_report(
                 csv_file,
                 cls.DEFAULT_SIGNPOST,
@@ -468,6 +473,7 @@ class OpsPerformanceReportQueries:
                 csv_stacked_output_file,
             )
         except Exception as e:
+            logger.error("DataFormatError:", e)
             raise DataFormatError(f"Error generating performance report: {e}") from e
 
         ops_perf_results = []
