@@ -471,7 +471,7 @@ class OpsPerformanceReportQueries:
                 csv_stacked_output_file,
             )
         except Exception as e:
-            logger.error("DataFormatError:", e)
+            logger.error(f"Error generating performance report: {e}")
             raise DataFormatError(f"Error generating performance report: {e}") from e
 
         ops_perf_results = []
@@ -482,54 +482,59 @@ class OpsPerformanceReportQueries:
 
         report = []
 
-        try:
-            with open(csv_output_file, newline="") as csvfile:
-                reader = csv.reader(csvfile, delimiter=",")
-                next(reader, None)
-                for row in reader:
-                    processed_row = {
-                        column: row[index]
-                        for index, column in enumerate(cls.REPORT_COLUMNS)
-                        if index < len(row)
-                    }
-                    if "advice" in processed_row and processed_row["advice"]:
-                        processed_row["advice"] = processed_row["advice"].split(" • ")
-                    else:
-                        processed_row["advice"] = []
+        if os.path.exists(csv_output_file):
+            try:
+                with open(csv_output_file, newline="") as csvfile:
+                    reader = csv.reader(csvfile, delimiter=",")
+                    next(reader, None)
+                    for row in reader:
+                        processed_row = {
+                            column: row[index]
+                            for index, column in enumerate(cls.REPORT_COLUMNS)
+                            if index < len(row)
+                        }
+                        if "advice" in processed_row and processed_row["advice"]:
+                            processed_row["advice"] = processed_row["advice"].split(
+                                " • "
+                            )
+                        else:
+                            processed_row["advice"] = []
 
-                    for key, value in cls.PASSTHROUGH_COLUMNS.items():
-                        op_id = int(row[0])
-                        idx = (
-                            op_id - 2
-                        )  # IDs in result column one correspond to row numbers in ops perf results csv
-                        processed_row[key] = ops_perf_results[idx][value]
+                        for key, value in cls.PASSTHROUGH_COLUMNS.items():
+                            op_id = int(row[0])
+                            idx = (
+                                op_id - 2
+                            )  # IDs in result column one correspond to row numbers in ops perf results csv
+                            processed_row[key] = ops_perf_results[idx][value]
 
-                    report.append(processed_row)
-        except csv.Error as e:
-            raise DataFormatError() from e
-        finally:
-            os.unlink(csv_output_file)
+                        report.append(processed_row)
+            except csv.Error as e:
+                raise DataFormatError() from e
+            finally:
+                os.unlink(csv_output_file)
 
         stacked_report = []
 
-        try:
-            with open(csv_stacked_output_file, newline="") as csvfile:
-                reader = csv.reader(csvfile, delimiter=",")
-                next(reader, None)
+        if os.path.exists(csv_stacked_output_file):
+            try:
+                with open(csv_stacked_output_file, newline="") as csvfile:
+                    reader = csv.reader(csvfile, delimiter=",")
+                    next(reader, None)
 
-                for row in reader:
-                    processed_row = {
-                        column: row[index]
-                        for index, column in enumerate(cls.STACKED_REPORT_COLUMNS)
-                        if index < len(row)
-                    }
+                    for row in reader:
+                        processed_row = {
+                            column: row[index]
+                            for index, column in enumerate(cls.STACKED_REPORT_COLUMNS)
+                            if index < len(row)
+                        }
 
-                    stacked_report.append(processed_row)
-        except csv.Error as e:
-            raise DataFormatError() from e
-        finally:
-            os.unlink(csv_stacked_output_file)
-            if os.path.exists(stacked_png_file):
-                os.unlink(stacked_png_file)
+                        stacked_report.append(processed_row)
+            except csv.Error as e:
+                raise DataFormatError() from e
+            finally:
+                os.unlink(csv_stacked_output_file)
+
+                if os.path.exists(stacked_png_file):
+                    os.unlink(stacked_png_file)
 
         return {"report": report, "stacked_report": stacked_report}
