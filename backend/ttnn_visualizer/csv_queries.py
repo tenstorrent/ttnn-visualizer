@@ -455,8 +455,6 @@ class OpsPerformanceReportQueries:
         stacked_png_file = os.path.splitext(csv_output_file)[0] + ".png"
 
         try:
-            print("$$$$$$$$$$$$$$$ generating report $$$$$$$$$$$$$$$")
-            print(cls.DEFAULT_SIGNPOST, cls.DEFAULT_IGNORE_SIGNPOSTS)
             perf_report.generate_perf_report(
                 csv_file,
                 cls.DEFAULT_SIGNPOST,
