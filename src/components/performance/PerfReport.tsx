@@ -34,7 +34,12 @@ import { calcHighDispatchOps, isHostOp } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
-import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, stackByIn0Atom } from '../../store/app';
+import {
+    activePerformanceReportAtom,
+    comparisonPerformanceReportListAtom,
+    isStackedViewAtom,
+    stackByIn0Atom,
+} from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import 'styles/components/PerfReport.scss';
@@ -62,12 +67,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
+    const [isStackedView, setIsStackedView] = useAtom(isStackedViewAtom);
     const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     // const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
-    const [isStackedView, setIsStackedView] = useState(false);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);

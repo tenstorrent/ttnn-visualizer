@@ -33,6 +33,7 @@ export const expandedTensorsAtom = atom<number[]>([]);
 export const activeToastAtom = atom<number | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorAtom = atom<number | null>(null);
+export const isStackedViewAtom = atom(false);
 export const stackByIn0Atom = atom(false);
 export const ignoreSignpostsAtom = atom(false);
 
