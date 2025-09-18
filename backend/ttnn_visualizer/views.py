@@ -695,6 +695,7 @@ def get_performance_results_report(instance: Instance):
         logger.info(f"************ Performance path set to {instance.performance_path}")
 
     try:
+        # TODO: Scott to check
         OpsPerformanceReportQueries.DEFAULT_NO_STACK_BY_IN0 = stackByIn0
         report = OpsPerformanceReportQueries.generate_report(instance)
     except DataFormatError:
