@@ -81,6 +81,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
     const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
 
+    const isSignpostsDisabled = !signposts || signposts.length === 0;
+
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     // const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
@@ -362,13 +364,29 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         itemPredicate={filterSignpost}
                         itemRenderer={renderSignpost}
                         onItemSelect={setFilterBySignpost}
+                        noResults={
+                            <MenuItem
+                                text='No signposts found'
+                                roleStructure='listoption'
+                            />
+                        }
                         filterable
+                        disabled={isSignpostsDisabled}
                     >
                         <Button
-                            text={filterBySignpost ?? 'Filter by signpost'}
-                            endIcon={IconNames.DOUBLE_CARET_HORIZONTAL}
+                            text={filterBySignpost ?? `Select signpost... (${signposts?.length})`}
+                            endIcon={IconNames.CARET_DOWN}
+                            disabled={isSignpostsDisabled}
                         />
                     </Select>
+
+                    <Button
+                        variant={ButtonVariant.OUTLINED}
+                        icon={IconNames.CROSS}
+                        onClick={() => setFilterBySignpost(null)}
+                        disabled={isSignpostsDisabled}
+                        aria-label={filterBySignpost ? `Remove signpost` : 'No signpost selected'}
+                    />
                 </div>
 
                 <Tabs
@@ -505,7 +523,8 @@ const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
             flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
             flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
         }))
-        .filter((row) => !isHostOp(row.op_code));
+        .filter((row) => !isHostOp(row.op_code))
+        .filter((row) => !row.is_signpost);
 
 const getTotalDataLength = (
     useNormalisedData: boolean,

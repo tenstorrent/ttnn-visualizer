@@ -696,8 +696,12 @@ def get_performance_results_report(instance: Instance):
         logger.info(f"************ Performance path set to {instance.performance_path}")
 
     try:
+        # TODO: Scott to confirm approach
         OpsPerformanceReportQueries.DEFAULT_NO_STACK_BY_IN0 = stack_by_in0
         OpsPerformanceReportQueries.DEFAULT_SIGNPOST = signpost
+        OpsPerformanceReportQueries.DEFAULT_IGNORE_SIGNPOSTS = (
+            False if signpost else True
+        )
         report = OpsPerformanceReportQueries.generate_report(instance)
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)

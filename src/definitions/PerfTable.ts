@@ -46,6 +46,7 @@ export interface PerfTableRow {
     pm_ideal_ns: string;
     op?: number;
     missing?: boolean;
+    is_signpost?: boolean;
 }
 
 export interface TypedPerfTableRow

@@ -65,6 +65,14 @@ export const formatCell = (
     let formatted: string | boolean | string[];
     let value = row[key];
 
+    if (row.is_signpost) {
+        if (key !== 'id' && key !== 'op_code') {
+            return '';
+        }
+
+        return value !== null ? String(value) : '';
+    }
+
     if (key === 'high_dispatch') {
         return (
             <Tooltip content='Op with > 6 µs dispatch latency'>
@@ -144,6 +152,10 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
 
     if (percentage != null && percentage < MIN_PERCENTAGE) {
         return FALLBACK_COLOUR;
+    }
+
+    if (row.is_signpost) {
+        return DEFAULT_COLOUR;
     }
 
     if (key === 'id' || key === 'total_percent' || key === 'device_time') {

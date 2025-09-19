@@ -481,6 +481,7 @@ class OpsPerformanceReportQueries:
             ops_perf_results.append(row)
 
         # Returns a list of unique signposts in the order they appear
+        # TODO: Signpost names are not unique but tt-perf-report treats them as such
         captured_signposts = set()
         signposts = []
         for row in ops_perf_results:
@@ -510,6 +511,12 @@ class OpsPerformanceReportQueries:
                         else:
                             processed_row["advice"] = []
 
+                        if (
+                            "raw_op_code" in processed_row
+                            and processed_row["raw_op_code"] in signposts
+                        ):
+                            processed_row["is_signpost"] = True
+
                         for key, value in cls.PASSTHROUGH_COLUMNS.items():
                             op_id = int(row[0])
                             idx = (
@@ -537,6 +544,12 @@ class OpsPerformanceReportQueries:
                             for index, column in enumerate(cls.STACKED_REPORT_COLUMNS)
                             if index < len(row)
                         }
+
+                        if "op_code" in processed_row and any(
+                            processed_row["op_code"] in signpost
+                            for signpost in signposts
+                        ):
+                            processed_row["is_signpost"] = True
 
                         stacked_report.append(processed_row)
             except csv.Error as e:

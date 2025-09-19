@@ -161,8 +161,7 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
     }
 
     .signpost-op {
-        // TODO: Use a better colour
-        background-color: colours.$tt-yellow-shade;
+        background-color: rgba(colours.$tt-yellow-shade, 0.2);
     }
 
     .cell {
