@@ -8,7 +8,7 @@ import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import {
     ColumnHeaders,
-    FilterableColumnKeys,
+    FilterableStackedColumnKeys,
     StackedTableHeader,
     TableHeaders,
     TypedStackedPerfRow,
@@ -45,16 +45,12 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
         const parsedRows = stackedData
-            ? sortAndFilterStackedPerfTableData(
-                  stackedData.filter((row) => !isHostOp(row.op_code)),
-                  filters,
-                  FilterableColumnKeys,
-              )
+            ? sortAndFilterStackedPerfTableData(stackedData, filters, FilterableStackedColumnKeys)
             : [];
 
         // Still some awkward casting here
         return [...sortTableFields(parsedRows as [])];
-    }, [stackedData, sortTableFields, filters]);
+    }, [stackedData, filters, sortTableFields]);
 
     return (
         <>
@@ -87,7 +83,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
             </div>
 
             <table className='perf-table monospace'>
-                <thead>
+                <thead className='table-header'>
                     <tr>
                         {TableHeaders.map((h) => {
                             const targetSortDirection =
