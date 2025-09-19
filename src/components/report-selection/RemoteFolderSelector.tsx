@@ -10,6 +10,7 @@ import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnecti
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemoteConnection from '../../hooks/useRemote';
 import 'styles/components/RemoteFolderSelector.scss';
+import HighlightedText from '../HighlightedText';
 
 const formatter = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
@@ -50,7 +51,7 @@ const remoteFolderRenderer =
         selectedFolder?: RemoteFolder,
         connection?: RemoteConnection,
     ): ItemRenderer<RemoteFolder> =>
-    (folder, { handleClick, modifiers }) => {
+    (folder, { handleClick, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
             return null;
         }
@@ -86,9 +87,12 @@ const remoteFolderRenderer =
             }
         }
 
-        const getLabelElement = () => (
+        const getLabelElement = (filterText: string) => (
             <>
-                <span>{reportName}</span>
+                <HighlightedText
+                    text={reportName}
+                    filter={filterText}
+                />
                 <span className='status-icon'>{statusIcon}</span>
             </>
         );
@@ -102,7 +106,7 @@ const remoteFolderRenderer =
                 onClick={handleClick}
                 text={formatRemoteFolderName(folder, type, connection)}
                 icon={selectedFolder?.reportName === reportName ? IconNames.SAVED : IconNames.DOCUMENT}
-                labelElement={getLabelElement()}
+                labelElement={getLabelElement(query)}
                 labelClassName='remote-folder-status-icon'
             />
         );

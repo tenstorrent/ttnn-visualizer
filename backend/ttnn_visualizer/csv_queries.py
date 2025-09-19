@@ -480,6 +480,16 @@ class OpsPerformanceReportQueries:
         for row in ops_perf_results_reader:
             ops_perf_results.append(row)
 
+        # Returns a list of unique signposts in the order they appear
+        captured_signposts = set()
+        signposts = []
+        for row in ops_perf_results:
+            if row.get("OP TYPE") == "signpost":
+                op_code = row["OP CODE"]
+                if op_code not in captured_signposts:
+                    captured_signposts.add(op_code)
+                    signposts.append(op_code)
+
         report = []
 
         if os.path.exists(csv_output_file):
@@ -537,4 +547,8 @@ class OpsPerformanceReportQueries:
                 if os.path.exists(stacked_png_file):
                     os.unlink(stacked_png_file)
 
-        return {"report": report, "stacked_report": stacked_report}
+        return {
+            "report": report,
+            "stacked_report": stacked_report,
+            "signposts": signposts,
+        }

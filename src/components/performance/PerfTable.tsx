@@ -37,6 +37,7 @@ interface PerformanceTableProps {
     hiliteHighDispatch: boolean;
     shouldHighlightRows: boolean;
     reportName?: string;
+    signposts?: string[];
 }
 
 const OP_ID_INSERTION_POINT = 1;
@@ -53,6 +54,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     hiliteHighDispatch,
     shouldHighlightRows,
     reportName = null,
+    signposts,
 }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
@@ -250,6 +252,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                             <tr
                                 className={classNames({
                                     'missing-data': shouldHighlightRows && row.raw_op_code.includes('MISSING'),
+                                    'signpost-op': signposts?.includes(row.raw_op_code),
                                 })}
                             >
                                 {visibleHeaders.map((h) => (

@@ -19,7 +19,7 @@ import {
     Tabs,
     Tooltip,
 } from '@blueprintjs/core';
-import { MultiSelect } from '@blueprintjs/select';
+import { ItemPredicate, ItemRenderer, MultiSelect, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import {
     FilterableColumnKeys,
@@ -37,6 +37,7 @@ import PerfTable from './PerfTable';
 import {
     activePerformanceReportAtom,
     comparisonPerformanceReportListAtom,
+    filterBySignpostAtom,
     isStackedViewAtom,
     stackByIn0Atom,
 } from '../../store/app';
@@ -52,12 +53,14 @@ import {
     TypedStackedPerfRow,
 } from '../../definitions/StackedPerfTable';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
+import HighlightedText from '../HighlightedText';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
     comparisonData?: PerfTableRow[][];
     stackedData?: StackedPerfRow[];
     comparisonStackedData?: StackedPerfRow[][];
+    signposts?: string[];
 }
 
 const INITIAL_TAB_ID = 'perf-table-0';
@@ -67,6 +70,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     comparisonData,
     stackedData,
     comparisonStackedData,
+    signposts,
 }) => {
     const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
     const opIdsMap = useOpToPerfIdFiltered();
@@ -75,6 +79,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const [isStackedView, setIsStackedView] = useAtom(isStackedViewAtom);
     const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
+    const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
@@ -344,13 +349,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         </Tooltip>
                     )}
 
-                    {/* <Switch
-                        label='Ignore signposts'
-                        onChange={() => setIgnoreSignposts(!ignoreSignposts)}
-                        checked={ignoreSignposts}
-                        className='option-switch'
-                    /> */}
-
                     <Switch
                         label='Stack by input 0'
                         onChange={() => setStackByIn0(!stackByIn0)}
@@ -358,6 +356,19 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         className='option-switch'
                         disabled={!isStackedView}
                     />
+
+                    <Select<string>
+                        items={signposts || []}
+                        itemPredicate={filterSignpost}
+                        itemRenderer={renderSignpost}
+                        onItemSelect={setFilterBySignpost}
+                        filterable
+                    >
+                        <Button
+                            text={filterBySignpost ?? 'Filter by signpost'}
+                            endIcon={IconNames.DOUBLE_CARET_HORIZONTAL}
+                        />
+                    </Select>
                 </div>
 
                 <Tabs
@@ -392,6 +403,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
+                                    signposts={signposts}
                                 />
                             )
                         }
@@ -440,6 +452,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         shouldHighlightRows={highlightRows && useNormalisedData}
                                         reportName={report}
+                                        signposts={signposts}
                                     />
                                 )
                             }
@@ -541,6 +554,33 @@ const getRowCount = (
             : null;
 
     return `${rowCountText} ${rowDeltaText ?? ''}`;
+};
+
+const renderSignpost: ItemRenderer<string> = (signpost, { handleClick, handleFocus, modifiers, query }) => {
+    if (!modifiers.matchesPredicate) {
+        return null;
+    }
+
+    return (
+        <MenuItem
+            active={modifiers.active}
+            disabled={modifiers.disabled}
+            key={signpost}
+            onClick={handleClick}
+            onFocus={handleFocus}
+            roleStructure='listoption'
+            text={
+                <HighlightedText
+                    text={signpost}
+                    filter={query}
+                />
+            }
+        />
+    );
+};
+
+const filterSignpost: ItemPredicate<string> = (query, signpost) => {
+    return signpost.toLowerCase().includes(query.toLowerCase());
 };
 
 export default PerformanceReport;

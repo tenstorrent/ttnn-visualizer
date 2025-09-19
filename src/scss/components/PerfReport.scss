@@ -160,6 +160,11 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         background-color: colours.$tt-red-shade;
     }
 
+    .signpost-op {
+        // TODO: Use a better colour
+        background-color: colours.$tt-yellow-shade;
+    }
+
     .cell {
         border-bottom: 1px solid #333;
         padding: 0.25rem;

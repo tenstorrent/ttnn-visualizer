@@ -688,7 +688,6 @@ def get_performance_results_report(instance: Instance):
 
     name = request.args.get("name", None)
     stack_by_in0 = request.args.get("stackByIn0", "true").lower() == "true"
-    ignore_signposts = request.args.get("ignoreSignposts", "true").lower() == "true"
     signpost = request.args.get("signpost", None)
 
     if name and not current_app.config["SERVER_MODE"]:
@@ -698,7 +697,6 @@ def get_performance_results_report(instance: Instance):
 
     try:
         OpsPerformanceReportQueries.DEFAULT_NO_STACK_BY_IN0 = stack_by_in0
-        OpsPerformanceReportQueries.DEFAULT_IGNORE_SIGNPOSTS = ignore_signposts
         OpsPerformanceReportQueries.DEFAULT_SIGNPOST = signpost
         report = OpsPerformanceReportQueries.generate_report(instance)
     except DataFormatError:

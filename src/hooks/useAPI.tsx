@@ -34,7 +34,7 @@ import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
-    ignoreSignpostsAtom,
+    filterBySignpostAtom,
     selectedOperationRangeAtom,
     stackByIn0Atom,
 } from '../store/app';
@@ -331,11 +331,12 @@ const fetchDevices = async (reportName: string) => {
 export interface PerformanceReportResponse {
     report: PerfTableRow[];
     stacked_report: StackedPerfRow[];
+    signposts?: string[];
 }
 
-const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, ignoreSignposts: boolean) => {
+const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, signpost: string | null) => {
     const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
-        params: { name, stackByIn0, ignoreSignposts },
+        params: { name, stackByIn0, signpost },
     });
 
     return data;
@@ -837,19 +838,19 @@ export const useDeviceLog = (name?: string | null) => {
 };
 
 export const usePerformanceReport = (name: string | null) => {
-    const ignoreSignposts = useAtomValue(ignoreSignpostsAtom);
+    const signpost = useAtomValue(filterBySignpostAtom);
     const stackByIn0 = useAtomValue(stackByIn0Atom);
 
     const response = useQuery<PerformanceReportResponse, AxiosError>({
         queryFn: () =>
             name !== null
-                ? fetchPerformanceReport(name, stackByIn0, ignoreSignposts)
+                ? fetchPerformanceReport(name, stackByIn0, signpost)
                 : Promise.resolve({ report: [], stacked_report: [] }),
         queryKey: [
             'get-performance-report',
             name,
             `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `ignoreSignposts:${ignoreSignposts}`,
+            `signpost:${signpost}`,
         ],
         enabled: name !== null,
         retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
@@ -865,7 +866,7 @@ export const usePerformanceReport = (name: string | null) => {
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
     const stackByIn0 = useAtomValue(stackByIn0Atom);
-    const ignoreSignposts = useAtomValue(ignoreSignpostsAtom);
+    const signpost = useAtomValue(filterBySignpostAtom);
 
     const reportNames = useMemo(() => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
@@ -878,7 +879,7 @@ export const usePerformanceComparisonReport = () => {
             }
 
             const results = await Promise.all(
-                reportNames.map((name) => fetchPerformanceReport(name, stackByIn0, ignoreSignposts)),
+                reportNames.map((name) => fetchPerformanceReport(name, stackByIn0, signpost)),
             );
 
             return results;
@@ -887,7 +888,7 @@ export const usePerformanceComparisonReport = () => {
             'get-performance-comparison-report',
             reportNames,
             `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `ignoreSignposts:${ignoreSignposts}`,
+            `signpost:${signpost}`,
         ],
         staleTime: Infinity,
         enabled: !!reportNames,
