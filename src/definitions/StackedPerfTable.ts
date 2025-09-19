@@ -25,6 +25,7 @@ export interface StackedPerfRow {
     flops_max: string;
     flops_mean: string;
     flops_std: string;
+    is_signpost: boolean;
 }
 
 export interface TypedStackedPerfRow
@@ -39,6 +40,7 @@ export interface TypedStackedPerfRow
     flops_max: number | null;
     flops_mean: number | null;
     flops_std: number | null;
+    is_signpost: boolean;
 }
 
 export enum ColumnHeaders {
@@ -63,4 +65,6 @@ export const TableHeaders: StackedTableHeader[] = [
     { label: 'Std FLOPS', key: ColumnHeaders.FlopsStd, unit: '%', decimals: 1, sortable: true },
 ];
 
-export const FilterableColumnKeys = TableHeaders.filter((column) => column.filterable).map((column) => column.key);
+export const FilterableStackedColumnKeys = TableHeaders.filter((column) => column.filterable).map(
+    (column) => column.key,
+);

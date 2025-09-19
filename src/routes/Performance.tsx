@@ -200,6 +200,7 @@ export default function Performance() {
                             comparisonData={filteredComparisonData}
                             stackedData={stackedData}
                             comparisonStackedData={comparisonStackedData}
+                            signposts={data?.signposts}
                         />
                     }
                 />

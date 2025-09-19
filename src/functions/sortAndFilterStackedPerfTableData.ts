@@ -24,7 +24,7 @@ const sortAndFilterStackedPerfTableData = (
 
     let filteredRows = data || [];
 
-    if (isFiltersActive(filters) && filterableColumnKeys) {
+    if (filters && isFiltersActive(filters) && filterableColumnKeys) {
         filteredRows = filteredRows.filter((row) => {
             const isFilteredOut =
                 filters &&

@@ -16,17 +16,14 @@ import {
     TypedPerfTableRow,
 } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
-import { useDeviceLog, useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
+import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import { OperationDescription } from '../../model/APIData';
 import ROUTES from '../../definitions/Routes';
-import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
-import getCoreCount from '../../functions/getCoreCount';
-import LoadingSpinner from '../LoadingSpinner';
-import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
 import { formatSize } from '../../functions/math';
+import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -37,11 +34,11 @@ interface PerformanceTableProps {
     hiliteHighDispatch: boolean;
     shouldHighlightRows: boolean;
     reportName?: string;
+    signposts?: string[];
 }
 
 const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
-const NO_META_DATA = 'n/a';
 const PATTERN_COUNT = 3; // Number of row patterns defined in PerfReport.scss
 
 const PerformanceTable: FC<PerformanceTableProps> = ({
@@ -53,16 +50,13 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     hiliteHighDispatch,
     shouldHighlightRows,
     reportName = null,
+    signposts,
 }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
     const { data: operations } = useOperationsList();
     const { data: npeManifest, error: npeManifestError } = useGetNPEManifest();
     const navigate = useNavigate();
-    const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog(reportName);
-
-    const architecture = deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
-    const maxCores = data ? getCoreCount(architecture, data) : 0;
 
     const filterableColumnKeys = useMemo(
         () => TableHeaders.filter((column) => column.filterable).map((column) => column.key),
@@ -159,22 +153,10 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                 </div>
             )}
 
-            <div className='meta-data'>
-                {isLoadingDeviceLog ? (
-                    <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
-                ) : (
-                    <>
-                        <p>
-                            <strong>Arch: </strong>
-                            {architecture || NO_META_DATA}
-                        </p>
-                        <p>
-                            <strong>Cores: </strong>
-                            {maxCores || NO_META_DATA}
-                        </p>
-                    </>
-                )}
-            </div>
+            <PerfDeviceArchitecture
+                data={data}
+                reportName={reportName || ''}
+            />
 
             <table className='perf-table monospace'>
                 <thead className='table-header'>
@@ -250,6 +232,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                             <tr
                                 className={classNames({
                                     'missing-data': shouldHighlightRows && row.raw_op_code.includes('MISSING'),
+                                    'signpost-op': signposts?.includes(row.raw_op_code),
                                 })}
                             >
                                 {visibleHeaders.map((h) => (

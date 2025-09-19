@@ -10,6 +10,7 @@ import { useInstance } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
+import HighlightedText from '../HighlightedText';
 
 interface LocalFolderPickerProps {
     items: ReportFolder[];
@@ -51,7 +52,7 @@ const LocalFolderPicker = ({
         };
     });
 
-    const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers }) => {
+    const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
             return null;
         }
@@ -71,7 +72,10 @@ const LocalFolderPicker = ({
                             disabled={folder.reportName.length < REPORT_NAME_MAX_LENGTH}
                             position={Position.RIGHT}
                         >
-                            {folder.reportName}
+                            <HighlightedText
+                                text={folder.reportName}
+                                filter={query}
+                            />
                         </Tooltip>
                     }
                     labelClassName='folder-picker-name-label'

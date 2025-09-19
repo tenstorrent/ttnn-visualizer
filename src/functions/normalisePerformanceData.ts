@@ -32,6 +32,7 @@ const PLACEHOLDER: TypedPerfTableRow = {
     output_subblock_h: '',
     output_subblock_w: '',
     pm_ideal_ns: '',
+    is_signpost: false,
 };
 
 function alignByOpCode(
