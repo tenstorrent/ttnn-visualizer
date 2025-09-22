@@ -160,7 +160,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         return FALLBACK_COLOUR;
     }
 
-    if (row.is_signpost) {
+    if (row.op_type === OpType.SIGNPOST) {
         return DEFAULT_COLOUR;
     }
 
