@@ -435,7 +435,8 @@ class OpsPerformanceReportQueries:
     }
 
     DEFAULT_SIGNPOST = None
-    DEFAULT_IGNORE_SIGNPOSTS = None
+    # Need to force this until we support SIGNPOST values
+    DEFAULT_IGNORE_SIGNPOSTS = True
     DEFAULT_MIN_PERCENTAGE = 0.5
     DEFAULT_ID_RANGE = None
     DEFAULT_NO_ADVICE = False
@@ -482,6 +483,18 @@ class OpsPerformanceReportQueries:
 
         report = []
 
+        # Returns a list of unique signposts in the order they appear
+        # TODO: Signpost names are not unique but tt-perf-report treats them as such
+        captured_signposts = set()
+        signposts = []
+        for index, row in enumerate(ops_perf_results):
+            if row.get("OP TYPE") == "signpost":
+                op_code = row["OP CODE"]
+                op_id = index + 2  # Match IDs with row numbers in ops perf results csv
+                if not any(s["op_code"] == op_code for s in signposts):
+                    captured_signposts.add(op_code)
+                    signposts.append({"id": op_id, "op_code": op_code})
+
         try:
             with open(csv_output_file, newline="") as csvfile:
                 reader = csv.reader(csvfile, delimiter=",")
@@ -504,6 +517,16 @@ class OpsPerformanceReportQueries:
                         )  # IDs in result column one correspond to row numbers in ops perf results csv
                         processed_row[key] = ops_perf_results[idx][value]
 
+                        # Get the op type from the raw file for this row as it is not returned from tt-perf-report
+                        op_id = int(row[0])
+                        raw_idx = op_id - 2
+                        if 0 <= raw_idx < len(ops_perf_results):
+                            processed_row["op_type"] = ops_perf_results[raw_idx].get(
+                                "OP TYPE"
+                            )
+                        else:
+                            processed_row["op_type"] = None
+
                     report.append(processed_row)
         except csv.Error as e:
             raise DataFormatError() from e
@@ -512,24 +535,33 @@ class OpsPerformanceReportQueries:
 
         stacked_report = []
 
-        try:
-            with open(csv_stacked_output_file, newline="") as csvfile:
-                reader = csv.reader(csvfile, delimiter=",")
-                next(reader, None)
+        if os.path.exists(csv_stacked_output_file):
+            try:
+                with open(csv_stacked_output_file, newline="") as csvfile:
+                    reader = csv.reader(csvfile, delimiter=",")
+                    next(reader, None)
 
-                for row in reader:
-                    processed_row = {
-                        column: row[index]
-                        for index, column in enumerate(cls.STACKED_REPORT_COLUMNS)
-                        if index < len(row)
-                    }
+                    for row in reader:
+                        processed_row = {
+                            column: row[index]
+                            for index, column in enumerate(cls.STACKED_REPORT_COLUMNS)
+                            if index < len(row)
+                        }
 
-                    stacked_report.append(processed_row)
-        except csv.Error as e:
-            raise DataFormatError() from e
-        finally:
-            os.unlink(csv_stacked_output_file)
-            if os.path.exists(stacked_png_file):
-                os.unlink(stacked_png_file)
+                        if "op_code" in processed_row and any(
+                            processed_row["op_code"] in signpost["op_code"]
+                            for signpost in signposts
+                        ):
+                            processed_row["op_type"] = "signpost"
+                        else:
+                            processed_row["op_type"] = "unknown"
+
+                        stacked_report.append(processed_row)
+            except csv.Error as e:
+                raise DataFormatError() from e
+            finally:
+                os.unlink(csv_stacked_output_file)
+                if os.path.exists(stacked_png_file):
+                    os.unlink(stacked_png_file)
 
         return {"report": report, "stacked_report": stacked_report}
