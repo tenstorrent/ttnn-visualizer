@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { OpType } from './PerfTable';
+
 export type StackedTableKeys = Partial<keyof StackedPerfRow>;
 
 export type StackedTableFilter = Record<StackedTableKeys, string> | null;
@@ -25,7 +27,7 @@ export interface StackedPerfRow {
     flops_max: string;
     flops_mean: string;
     flops_std: string;
-    is_signpost: boolean;
+    op_type: OpType;
 }
 
 export interface TypedStackedPerfRow
@@ -40,7 +42,6 @@ export interface TypedStackedPerfRow
     flops_max: number | null;
     flops_mean: number | null;
     flops_std: number | null;
-    is_signpost: boolean;
 }
 
 export enum ColumnHeaders {

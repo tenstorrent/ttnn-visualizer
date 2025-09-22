@@ -2,6 +2,15 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+// Taken from - https://github.com/tenstorrent/tt-metal/blob/main/ttnn/api/tools/profiler/op_profiler.hpp#L33
+export enum OpType {
+    DEVICE_OP = 'tt_dnn_device', // OP implemented in C++ and running on DEVICE
+    PYTHON_OP = 'python_fallback', //  OP fully implemented in python and running on CPU
+    CPU_OP = 'tt_dnn_cpu', // OP implemented in C++ and running on CPU
+    SIGNPOST = 'signpost',
+    UNKNOWN = 'unknown',
+}
+
 export type TableKeys = Partial<keyof PerfTableRow>;
 
 export type TableFilter = Record<TableKeys, string> | null;
@@ -44,9 +53,9 @@ export interface PerfTableRow {
     output_subblock_w: string;
     high_dispatch?: boolean;
     pm_ideal_ns: string;
+    op_type: OpType;
     op?: number;
     missing?: boolean;
-    is_signpost?: boolean;
 }
 
 export interface TypedPerfTableRow
@@ -166,3 +175,30 @@ export const ComparisonKeys: TableKeys[] = [
     ColumnHeaders.high_dispatch,
     ColumnHeaders.global_call_count,
 ];
+
+export const signpostRowDefaults = {
+    global_call_count: null,
+    total_percent: null,
+    device_time: null,
+    op_to_op_gap: null,
+    cores: null,
+    dram: null,
+    dram_percent: null,
+    flops: null,
+    flops_percent: null,
+    advice: [],
+    bound: '',
+    math_fidelity: '',
+    output_datatype: '',
+    output_0_memory: '',
+    input_0_datatype: '',
+    input_1_datatype: '',
+    dram_sharded: '',
+    input_0_memory: '',
+    input_1_memory: '',
+    inner_dim_block_size: '',
+    output_subblock_h: '',
+    output_subblock_w: '',
+    pm_ideal_ns: '',
+    op_type: OpType.SIGNPOST,
+};

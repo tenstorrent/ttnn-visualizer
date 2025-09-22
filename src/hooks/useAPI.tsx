@@ -46,6 +46,7 @@ import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import createToastNotification from '../functions/createToastNotification';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
+import { Signpost } from '../functions/perfFunctions';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -331,12 +332,12 @@ const fetchDevices = async (reportName: string) => {
 export interface PerformanceReportResponse {
     report: PerfTableRow[];
     stacked_report: StackedPerfRow[];
-    signposts?: string[];
+    signposts?: Signpost[];
 }
 
-const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, signpost: string | null) => {
+const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, signpost: Signpost | null) => {
     const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
-        params: { name, stackByIn0, signpost },
+        params: { name, stackByIn0, signpost: signpost?.op_code },
     });
 
     return data;
@@ -850,7 +851,7 @@ export const usePerformanceReport = (name: string | null) => {
             'get-performance-report',
             name,
             `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `signpost:${signpost}`,
+            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
         ],
         enabled: name !== null,
         retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
@@ -888,7 +889,7 @@ export const usePerformanceComparisonReport = () => {
             'get-performance-comparison-report',
             reportNames,
             `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `signpost:${signpost}`,
+            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
         ],
         staleTime: Infinity,
         enabled: !!reportNames,

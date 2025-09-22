@@ -484,12 +484,13 @@ class OpsPerformanceReportQueries:
         # TODO: Signpost names are not unique but tt-perf-report treats them as such
         captured_signposts = set()
         signposts = []
-        for row in ops_perf_results:
+        for index, row in enumerate(ops_perf_results):
             if row.get("OP TYPE") == "signpost":
                 op_code = row["OP CODE"]
-                if op_code not in captured_signposts:
+                op_id = index + 2  # Match IDs with row numbers in ops perf results csv
+                if not any(s["op_code"] == op_code for s in signposts):
                     captured_signposts.add(op_code)
-                    signposts.append(op_code)
+                    signposts.append({"id": op_id, "op_code": op_code})
 
         report = []
 
@@ -504,18 +505,23 @@ class OpsPerformanceReportQueries:
                             for index, column in enumerate(cls.REPORT_COLUMNS)
                             if index < len(row)
                         }
+
+                        # Get the op type from the raw file for this row as it is not returned from tt-perf-report
+                        op_id = int(row[0])
+                        raw_idx = op_id - 2
+                        if 0 <= raw_idx < len(ops_perf_results):
+                            processed_row["op_type"] = ops_perf_results[raw_idx].get(
+                                "OP TYPE"
+                            )
+                        else:
+                            processed_row["op_type"] = None
+
                         if "advice" in processed_row and processed_row["advice"]:
                             processed_row["advice"] = processed_row["advice"].split(
                                 " • "
                             )
                         else:
                             processed_row["advice"] = []
-
-                        if (
-                            "raw_op_code" in processed_row
-                            and processed_row["raw_op_code"] in signposts
-                        ):
-                            processed_row["is_signpost"] = True
 
                         for key, value in cls.PASSTHROUGH_COLUMNS.items():
                             op_id = int(row[0])
@@ -549,7 +555,9 @@ class OpsPerformanceReportQueries:
                             processed_row["op_code"] in signpost
                             for signpost in signposts
                         ):
-                            processed_row["is_signpost"] = True
+                            processed_row["op_type"] = "signpost"
+                        else:
+                            processed_row["op_type"] = "unknown"
 
                         stacked_report.append(processed_row)
             except csv.Error as e:

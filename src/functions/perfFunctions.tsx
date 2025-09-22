@@ -6,7 +6,7 @@ import React from 'react';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
-import { MathFidelity, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import { MathFidelity, OpType, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
 import { formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
@@ -22,6 +22,11 @@ export enum CellColour {
     Yellow = 'yellow',
     Orange = 'orange',
     Grey = 'grey',
+}
+
+export interface Signpost {
+    id: number;
+    op_code: string;
 }
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
@@ -64,8 +69,9 @@ export const formatCell = (
     const { key, unit, decimals } = header;
     let formatted: string | boolean | string[];
     let value = row[key];
+    const isSignpost = row.op_type === OpType.SIGNPOST;
 
-    if (row.is_signpost) {
+    if (isSignpost) {
         if (key !== 'id' && key !== 'op_code') {
             return '';
         }

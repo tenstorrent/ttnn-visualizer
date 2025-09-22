@@ -23,6 +23,7 @@ import { ItemPredicate, ItemRenderer, MultiSelect, Select } from '@blueprintjs/s
 import { IconNames } from '@blueprintjs/icons';
 import {
     FilterableColumnKeys,
+    OpType,
     PerfTableRow,
     TableFilter,
     TableHeaders,
@@ -30,7 +31,7 @@ import {
     TypedPerfTableRow,
 } from '../../definitions/PerfTable';
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
-import { calcHighDispatchOps, isHostOp } from '../../functions/perfFunctions';
+import { Signpost, calcHighDispatchOps, isHostOp } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
@@ -60,7 +61,7 @@ interface PerformanceReportProps {
     comparisonData?: PerfTableRow[][];
     stackedData?: StackedPerfRow[];
     comparisonStackedData?: StackedPerfRow[][];
-    signposts?: string[];
+    signposts?: Signpost[];
 }
 
 const INITIAL_TAB_ID = 'perf-table-0';
@@ -359,7 +360,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         disabled={!isStackedView}
                     />
 
-                    <Select<string>
+                    <Select<Signpost>
                         items={signposts || []}
                         itemPredicate={filterSignpost}
                         itemRenderer={renderSignpost}
@@ -374,7 +375,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         disabled={isSignpostsDisabled}
                     >
                         <Button
-                            text={filterBySignpost ?? `Select signpost... (${signposts?.length})`}
+                            text={filterBySignpost?.op_code ?? `Select signpost... (${signposts?.length})`}
                             endIcon={IconNames.CARET_DOWN}
                             disabled={isSignpostsDisabled}
                         />
@@ -524,7 +525,7 @@ const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
             flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
         }))
         .filter((row) => !isHostOp(row.op_code))
-        .filter((row) => !row.is_signpost);
+        .filter((row) => row.op_type !== OpType.SIGNPOST);
 
 const getTotalDataLength = (
     useNormalisedData: boolean,
@@ -575,7 +576,7 @@ const getRowCount = (
     return `${rowCountText} ${rowDeltaText ?? ''}`;
 };
 
-const renderSignpost: ItemRenderer<string> = (signpost, { handleClick, handleFocus, modifiers, query }) => {
+const renderSignpost: ItemRenderer<Signpost> = (signpost, { handleClick, handleFocus, modifiers, query }) => {
     if (!modifiers.matchesPredicate) {
         return null;
     }
@@ -584,13 +585,13 @@ const renderSignpost: ItemRenderer<string> = (signpost, { handleClick, handleFoc
         <MenuItem
             active={modifiers.active}
             disabled={modifiers.disabled}
-            key={signpost}
+            key={signpost.id}
             onClick={handleClick}
             onFocus={handleFocus}
             roleStructure='listoption'
             text={
                 <HighlightedText
-                    text={signpost}
+                    text={signpost.op_code}
                     filter={query}
                 />
             }
@@ -598,8 +599,8 @@ const renderSignpost: ItemRenderer<string> = (signpost, { handleClick, handleFoc
     );
 };
 
-const filterSignpost: ItemPredicate<string> = (query, signpost) => {
-    return signpost.toLowerCase().includes(query.toLowerCase());
+const filterSignpost: ItemPredicate<Signpost> = (query, signpost) => {
+    return signpost.op_code.toLowerCase().includes(query.toLowerCase());
 };
 
 export default PerformanceReport;
