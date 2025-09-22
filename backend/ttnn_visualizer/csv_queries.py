@@ -446,7 +446,7 @@ class OpsPerformanceReportQueries:
     DEFAULT_NO_STACK_BY_IN0 = True
 
     @classmethod
-    def generate_report(cls, instance):
+    def generate_report(cls, instance, **kwargs):
         raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
         csv_file = StringIO(raw_csv)
         csv_output_file = tempfile.mktemp(suffix=".csv")
@@ -467,7 +467,7 @@ class OpsPerformanceReportQueries:
                 cls.DEFAULT_RAW_OP_CODES,
                 cls.DEFAULT_NO_HOST_OPS,
                 cls.DEFAULT_NO_STACKED_REPORT,
-                cls.DEFAULT_NO_STACK_BY_IN0,
+                kwargs.get("stackByIn0", cls.DEFAULT_NO_STACK_BY_IN0),
                 csv_stacked_output_file,
             )
         except Exception as e:
