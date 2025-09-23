@@ -9,6 +9,8 @@ const serverConfig = getServerConfig();
 const baseURL = serverConfig?.BASE_PATH;
 
 const axiosInstance = axios.create({
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
     baseURL,
 });
 
