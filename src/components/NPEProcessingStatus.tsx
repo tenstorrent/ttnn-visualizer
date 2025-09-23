@@ -88,6 +88,13 @@ const NPEProcessingStatus = ({
         >
             {(() => {
                 switch (errorType) {
+                    case ErrorCodes.INVALID_NPE_DATA:
+                        return (
+                            <>
+                                <p data-testid='npe-processing-invalid-data'>Unable to validate uploaded NPE data.</p>
+                                <p>Use {NPE_REPO_URL} to generate a new dataset.</p>
+                            </>
+                        );
                     case ErrorCodes.INVALID_NPE_VERSION:
                         return (
                             <>
@@ -112,13 +119,7 @@ const NPEProcessingStatus = ({
                                 <p>Check the file contents or use {NPE_REPO_URL} to generate a new dataset.</p>
                             </>
                         );
-                    case ErrorCodes.INVALID_NPE_DATA:
-                        return (
-                            <>
-                                <p data-testid='npe-processing-invalid-data'>Unable to validate uploaded NPE data.</p>
-                                <p>Use {NPE_REPO_URL} to generate a new dataset.</p>
-                            </>
-                        );
+
                     default:
                         return (
                             <>
@@ -137,16 +138,15 @@ const getErrorType = (
     fetchErrorCode?: HttpStatusCode,
     isInvalidData?: boolean,
 ): ErrorCodes => {
+    if (isInvalidData) {
+        return ErrorCodes.INVALID_NPE_DATA;
+    }
     if (fetchErrorCode === HttpStatusCode.UnprocessableEntity) {
         return ErrorCodes.INVALID_JSON;
     }
 
     if (legacyVersion) {
         return ErrorCodes.INVALID_NPE_VERSION;
-    }
-
-    if (isInvalidData) {
-        return ErrorCodes.INVALID_NPE_DATA;
     }
 
     return ErrorCodes.DEFAULT;

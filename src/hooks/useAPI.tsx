@@ -26,7 +26,7 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
-import { PerfTableRow } from '../definitions/PerfTable';
+import { OpType, PerfTableRow } from '../definitions/PerfTable';
 import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import {
@@ -340,7 +340,11 @@ const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, 
         params: { name, stackByIn0, signpost: signpost?.op_code },
     });
 
-    return data;
+    // Filtering out signposts until proper support is added
+    return {
+        report: data.report.filter((row) => row.op_type !== OpType.SIGNPOST),
+        stacked_report: data.stacked_report.filter((row) => row.op_type !== OpType.SIGNPOST),
+    };
 };
 
 const fetchNPEManifest = async (): Promise<NPEManifestEntry[]> => {

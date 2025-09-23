@@ -2,15 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-// Taken from - https://github.com/tenstorrent/tt-metal/blob/main/ttnn/api/tools/profiler/op_profiler.hpp#L33
-export enum OpType {
-    DEVICE_OP = 'tt_dnn_device', // OP implemented in C++ and running on DEVICE
-    PYTHON_OP = 'python_fallback', //  OP fully implemented in python and running on CPU
-    CPU_OP = 'tt_dnn_cpu', // OP implemented in C++ and running on CPU
-    SIGNPOST = 'signpost',
-    UNKNOWN = 'unknown',
-}
-
 export type TableKeys = Partial<keyof PerfTableRow>;
 
 export type TableFilter = Record<TableKeys, string> | null;
@@ -175,6 +166,15 @@ export const ComparisonKeys: TableKeys[] = [
     ColumnHeaders.high_dispatch,
     ColumnHeaders.global_call_count,
 ];
+
+// Taken from - https://github.com/tenstorrent/tt-metal/blob/main/ttnn/api/tools/profiler/op_profiler.hpp#L33
+export enum OpType {
+    DEVICE_OP = 'tt_dnn_device', // OP implemented in C++ and running on DEVICE
+    PYTHON_OP = 'python_fallback', //  OP fully implemented in python and running on CPU
+    CPU_OP = 'tt_dnn_cpu', // OP implemented in C++ and running on CPU
+    SIGNPOST = 'signpost',
+    UNKNOWN = 'unknown',
+}
 
 export const signpostRowDefaults = {
     global_call_count: null,
