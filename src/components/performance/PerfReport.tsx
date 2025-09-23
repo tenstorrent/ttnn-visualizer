@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { FC, useEffect, useMemo, useState } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import {
     Button,
     ButtonGroup,
@@ -30,16 +30,28 @@ import {
     TypedPerfTableRow,
 } from '../../definitions/PerfTable';
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
-import { calcHighDispatchOps } from '../../functions/perfFunctions';
+import { calcHighDispatchOps, isHostOp } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
-import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
+import {
+    activePerformanceReportAtom,
+    comparisonPerformanceReportListAtom,
+    isStackedViewAtom,
+    stackByIn0Atom,
+} from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
-import { StackedPerfRow, TypedStackedPerfRow } from '../../definitions/StackedPerfTable';
+import {
+    FilterableStackedColumnKeys,
+    StackedPerfRow,
+    StackedTableFilter,
+    StackedTableKeys,
+    TypedStackedPerfRow,
+} from '../../definitions/StackedPerfTable';
+import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -61,19 +73,26 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
+    const [isStackedView, setIsStackedView] = useAtom(isStackedViewAtom);
+    const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
     // const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
-    const [isStackedView, setIsStackedView] = useState<boolean>(false);
-    const [provideMatmulAdvice, setProvideMatmulAdvice] = useState<boolean>(false);
-    const [hiliteHighDispatch, setHiliteHighDispatch] = useState<boolean>(false);
+    const [provideMatmulAdvice, setProvideMatmulAdvice] = useState(false);
+    const [hiliteHighDispatch, setHiliteHighDispatch] = useState(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
-    const [highlightRows, setHighlightRows] = useState<boolean>(true);
+    const [highlightRows, setHighlightRows] = useState(true);
     const [filters, setFilters] = useState<TableFilter>(
         Object.fromEntries(FilterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
             TableKeys,
+            string
+        >,
+    );
+    const [stackedFilters, setStackedFilters] = useState<StackedTableFilter>(
+        Object.fromEntries(FilterableStackedColumnKeys.map((key) => [key, ''] as [StackedTableKeys, string])) as Record<
+            StackedTableKeys,
             string
         >,
     );
@@ -127,11 +146,20 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         [comparisonIndex, processedComparisonRows, filters, activeFilters, useNormalisedData, normalisedData.data],
     );
 
+    const filteredStackedRows = useMemo(
+        () => sortAndFilterStackedPerfTableData(processedStackedRows, stackedFilters, FilterableStackedColumnKeys),
+        [processedStackedRows, stackedFilters],
+    );
+
     const updateColumnFilter = (key: TableKeys, value: string) => {
-        setFilters({
+        const updatedFilters = {
             ...filters,
             [key]: value ?? '',
-        } as Record<TableKeys, string>);
+        };
+
+        // TODO: Sort this madness out
+        setStackedFilters(updatedFilters as Record<StackedTableKeys, string>);
+        setFilters(updatedFilters as Record<TableKeys, string>);
     };
 
     const totalDataLength = getTotalDataLength(
@@ -202,13 +230,15 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
                     <div className='header-aside'>
                         <p className='result-count'>
-                            {filteredDataLength !== totalDataLength
-                                ? `Showing ${filteredDataLength} of ${totalDataLength} rows`
-                                : `Showing ${filteredDataLength} rows`}
-
-                            {useNormalisedData && rowDelta
-                                ? ` (${rowDelta > 0 ? `${rowDelta} ops removed` : `${rowDelta * -1} ops added`})`
-                                : null}
+                            {getRowCount(
+                                filteredDataLength,
+                                totalDataLength,
+                                rowDelta,
+                                useNormalisedData,
+                                isStackedView,
+                                filteredStackedRows.length,
+                                processedStackedRows?.length || 0,
+                            )}
                         </p>
                     </div>
                 </div>
@@ -247,7 +277,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     />
                 </div>
 
-                <div className='data-options'>
+                <div className='view-options'>
                     <ButtonGroup
                         variant={ButtonVariant.OUTLINED}
                         size={Size.SMALL}
@@ -267,7 +297,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             intent={isStackedView ? Intent.PRIMARY : Intent.NONE}
                         />
                     </ButtonGroup>
+                </div>
 
+                <div className='data-options'>
                     <Switch
                         label='Matmul optimization analysis'
                         onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
@@ -311,6 +343,21 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             />
                         </Tooltip>
                     )}
+
+                    {/* <Switch
+                        label='Ignore signposts'
+                        onChange={() => setIgnoreSignposts(!ignoreSignposts)}
+                        checked={ignoreSignposts}
+                        className='option-switch'
+                    /> */}
+
+                    <Switch
+                        label='Stack by input 0'
+                        onChange={() => setStackByIn0(!stackByIn0)}
+                        checked={stackByIn0}
+                        className='option-switch'
+                        disabled={!isStackedView}
+                    />
                 </div>
 
                 <Tabs
@@ -319,12 +366,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     renderActiveTabPanelOnly
                     size={Size.LARGE}
                     id='performance-tabs'
+                    className='report-tabs'
                 >
                     <Tab
                         id={INITIAL_TAB_ID}
                         title={activePerformanceReport || 'Loading...'}
                         icon={IconNames.TH_LIST}
-                        className='tab-panel'
                         panel={
                             isStackedView ? (
                                 <StackedPerformanceTable
@@ -355,7 +402,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             id={report}
                             key={index}
                             icon={IconNames.TH_LIST}
-                            className='tab-panel'
                             disabled={useNormalisedData && normalisedComparisonData?.[index]?.length === 0}
                             title={
                                 normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
@@ -435,16 +481,18 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
 };
 
 const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
-    rows.map((row) => ({
-        ...row,
-        percent: parseFloat(row.percent),
-        device_time_sum_us: parseFloat(row.device_time_sum_us),
-        ops_count: parseFloat(row.ops_count),
-        flops_min: row.flops_min ? parseFloat(row.flops_min) : null,
-        flops_max: row.flops_max ? parseFloat(row.flops_max) : null,
-        flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
-        flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
-    }));
+    rows
+        .map((row) => ({
+            ...row,
+            percent: parseFloat(row.percent),
+            device_time_sum_us: parseFloat(row.device_time_sum_us),
+            ops_count: parseFloat(row.ops_count),
+            flops_min: row.flops_min ? parseFloat(row.flops_min) : null,
+            flops_max: row.flops_max ? parseFloat(row.flops_max) : null,
+            flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
+            flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
+        }))
+        .filter((row) => !isHostOp(row.op_code));
 
 const getTotalDataLength = (
     useNormalisedData: boolean,
@@ -469,5 +517,30 @@ const getFilteredDataLength = (
     filteredRows: TypedPerfTableRow[],
     filteredComparisonRows: TypedPerfTableRow[],
 ) => (selectedTabId === INITIAL_TAB_ID ? filteredRows?.length : filteredComparisonRows?.length || 0);
+
+const getRowCount = (
+    filteredDataLength: number,
+    totalDataLength: number,
+    rowDelta: number,
+    useNormalisedData: boolean,
+    isStackedView: boolean,
+    filteredStackedDataLength: number,
+    stackedDataLength: number,
+): string => {
+    const totalRowCount = isStackedView ? stackedDataLength : totalDataLength;
+    const filteredRowCount = isStackedView ? filteredStackedDataLength : filteredDataLength;
+
+    const rowCountText =
+        filteredRowCount !== totalRowCount
+            ? `Showing ${filteredRowCount} of ${totalRowCount} rows`
+            : `Showing ${totalRowCount} rows`;
+
+    const rowDeltaText =
+        useNormalisedData && rowDelta
+            ? ` (${rowDelta > 0 ? `${rowDelta} ops removed` : `${rowDelta * -1} ops added`})`
+            : null;
+
+    return `${rowCountText} ${rowDeltaText ?? ''}`;
+};
 
 export default PerformanceReport;

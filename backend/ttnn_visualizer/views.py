@@ -68,6 +68,7 @@ from ttnn_visualizer.utils import (
     create_path_resolver,
     get_cluster_descriptor_path,
     read_last_synced_file,
+    str_to_bool,
     timer,
 )
 
@@ -687,6 +688,7 @@ def get_performance_results_report(instance: Instance):
         )
 
     name = request.args.get("name", None)
+    stackByIn0 = str_to_bool(request.args.get("stackByIn0", "true"))
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -694,7 +696,9 @@ def get_performance_results_report(instance: Instance):
         logger.info(f"************ Performance path set to {instance.performance_path}")
 
     try:
-        report = OpsPerformanceReportQueries.generate_report(instance)
+        report = OpsPerformanceReportQueries.generate_report(
+            instance, stackByIn0=stackByIn0
+        )
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
