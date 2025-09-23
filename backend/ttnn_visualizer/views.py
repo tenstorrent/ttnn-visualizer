@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import dataclasses
+import gzip
 import json
 import logging
 import re
@@ -1307,6 +1308,25 @@ def get_npe_data(instance: Instance):
     except Exception as e:
         logger.error(f"Error reading NPE file: {e}")
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+
+    # Check if client accepts gzip compression
+    accept_encoding = request.headers.get("Accept-Encoding", "")
+
+    if "gzip" in accept_encoding:
+        # Ensure npe_data is bytes for gzip compression
+        if isinstance(npe_data, str):
+            npe_data_bytes = npe_data.encode("utf-8")
+        else:
+            npe_data_bytes = npe_data
+
+        # Compress with gzip
+        gzipped_data = gzip.compress(npe_data_bytes)
+
+        return Response(
+            gzipped_data,
+            mimetype="application/json",
+            headers={"Content-Encoding": "gzip"},
+        )
 
     return Response(npe_data, mimetype="application/json")
 
