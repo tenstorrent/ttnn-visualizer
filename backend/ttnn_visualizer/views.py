@@ -1300,16 +1300,15 @@ def get_npe_data(instance: Instance):
         if compressed_path and compressed_path.exists():
             with open(compressed_path, "rb") as file:
                 compressed_data = file.read()
-                uncompressed_data = zstd.uncompress(compressed_data)
-                npe_data = json.loads(uncompressed_data)
+                npe_data = zstd.uncompress(compressed_data)
         else:
             with open(uncompressed_path, "r") as file:
-                npe_data = json.load(file)
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in NPE file: {e}")
+                npe_data = file.read()
+    except Exception as e:
+        logger.error(f"Error reading NPE file: {e}")
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
-    return Response(orjson.dumps(npe_data), mimetype="application/json")
+    return Response(npe_data, mimetype="application/json")
 
 
 @api.route("/notify", methods=["POST"])
