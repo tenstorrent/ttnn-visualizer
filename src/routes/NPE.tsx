@@ -86,6 +86,7 @@ const NPE: FC = () => {
                     dataVersion={dataVersion}
                     hasUploadedFile={hasUploadedFile}
                     fetchErrorCode={processingError?.status}
+                    isInvalidData
                 />
             )}
         </>
@@ -93,6 +94,9 @@ const NPE: FC = () => {
 };
 
 const isValidNpeData = (data: NPEData): boolean => {
+    if (typeof data !== 'object' || data === null || data === undefined) {
+        return false;
+    }
     const requiredKeys: (keyof NPEData)[] = ['common_info', 'noc_transfers', 'timestep_data'];
     const hasAllKeys = requiredKeys.every((key) => key in data);
     const version = semverParse(data.common_info.version);
