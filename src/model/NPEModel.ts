@@ -111,13 +111,25 @@ export enum NoCID {
     NOC1_OUT = 'NOC1_OUT',
 }
 
+export enum FABRIC_EVENT_SCOPE_OPTIONS {
+    BOTH,
+    FABRIC,
+    LOCAL,
+}
+
+export const FabricEventScopeColors: Record<FABRIC_EVENT_SCOPE_OPTIONS, string> = {
+    [FABRIC_EVENT_SCOPE_OPTIONS.BOTH]: 'rgb(225,0,0)',
+    [FABRIC_EVENT_SCOPE_OPTIONS.FABRIC]: 'rgb(255,234,0)',
+    [FABRIC_EVENT_SCOPE_OPTIONS.LOCAL]: 'rgb(204,0,204)',
+};
+
 export type LinkUtilization = [
     device_id: number,
     row: number,
     col: number,
     noc_id: NoCID,
     demand: number, // percentage - it can exceed 100% if there is congestion
-    fabric_event_type: boolean,
+    fabric_event_scope: FABRIC_EVENT_SCOPE_OPTIONS | undefined,
 ];
 export type NoCLink = [device_id: number, row: number, col: number, noc_id: NoCID];
 export type NPE_COORDINATES = [device_id: number, row: number, col: number];
@@ -179,7 +191,7 @@ export enum NPE_LINK {
     X,
     NOC_ID,
     DEMAND,
-    FABRIC_EVENT_TYPE,
+    FABRIC_EVENT_SCOPE,
 }
 
 export interface NPEManifestEntry {

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { NoCID } from '../../model/NPEModel';
+import { FABRIC_EVENT_SCOPE_OPTIONS, FabricEventScopeColors, NoCID } from '../../model/NPEModel';
 
 export const NODE_SIZE = 50;
 
@@ -240,6 +240,9 @@ export const calculateLinkCongestionColor = (value: number, min: number = 0, isH
     return `rgb(${intensity}, ${255 - intensity}, 0)`;
 };
 
+export const calculateFabricColor = (eventType: FABRIC_EVENT_SCOPE_OPTIONS | undefined): string => {
+    return eventType !== undefined ? FabricEventScopeColors[eventType] : 'rgb(255,255,255)';
+};
 export const getLines = (nocs: Array<{ transfer: number | null; nocId: NoCID }>) => {
     return nocs.map((noc) => {
         return getLinkPoints(noc.nocId, getRouteColor(noc.transfer));

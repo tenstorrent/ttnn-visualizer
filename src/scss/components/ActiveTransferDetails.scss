@@ -119,4 +119,12 @@ $outer-padding: 10px;
             cursor: pointer;
         }
     }
+
+    .fabric-tag {
+        .bp6-icon {
+            svg {
+                fill: rgb(255 234 0);
+            }
+        }
+    }
 }
