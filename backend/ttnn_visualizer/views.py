@@ -68,6 +68,7 @@ from ttnn_visualizer.utils import (
     create_path_resolver,
     get_cluster_descriptor_path,
     read_last_synced_file,
+    str_to_bool,
     timer,
 )
 
@@ -687,6 +688,8 @@ def get_performance_results_report(instance: Instance):
         )
 
     name = request.args.get("name", None)
+    signpost = request.args.get("signpost", None)
+    stackByIn0 = str_to_bool(request.args.get("stackByIn0", "true"))
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -694,7 +697,11 @@ def get_performance_results_report(instance: Instance):
         logger.info(f"************ Performance path set to {instance.performance_path}")
 
     try:
-        report = OpsPerformanceReportQueries.generate_report(instance)
+        report = OpsPerformanceReportQueries.generate_report(
+            instance,
+            stackByIn0=stackByIn0,
+            signpost=signpost,
+        )
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
@@ -1300,16 +1307,15 @@ def get_npe_data(instance: Instance):
         if compressed_path and compressed_path.exists():
             with open(compressed_path, "rb") as file:
                 compressed_data = file.read()
-                uncompressed_data = zstd.uncompress(compressed_data)
-                npe_data = json.loads(uncompressed_data)
+                npe_data = zstd.uncompress(compressed_data)
         else:
             with open(uncompressed_path, "r") as file:
-                npe_data = json.load(file)
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in NPE file: {e}")
+                npe_data = file.read()
+    except Exception as e:
+        logger.error(f"Error reading NPE file: {e}")
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
-    return Response(orjson.dumps(npe_data), mimetype="application/json")
+    return Response(npe_data, mimetype="application/json")
 
 
 @api.route("/notify", methods=["POST"])
