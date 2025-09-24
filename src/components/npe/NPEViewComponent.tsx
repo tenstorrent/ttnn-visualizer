@@ -20,7 +20,14 @@ import {
     NoCType,
 } from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
-import { NODE_SIZE, calculateLinkCongestionColor, getLines, getLinkPoints, resetRouteColors } from './drawingApi';
+import {
+    NODE_SIZE,
+    calculateFabricColor,
+    calculateLinkCongestionColor,
+    getLines,
+    getLinkPoints,
+    resetRouteColors,
+} from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
 import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
@@ -45,6 +52,11 @@ const PLAYBACK_SPEED_2X = 2;
 const LABEL_STEP_COUNT_TIMESTEPSCALE = 20;
 const LABEL_STEP_COUNT_CYCLESCALE = 10;
 
+enum VISUALIZATION_MODE {
+    CONGESTION,
+    TRANSFERS,
+}
+
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [highlightedRoute, setHighlightedRoute] = useState<number | null>(null);
@@ -53,6 +65,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
     const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
+    const [visualizationMode, setVisualizationMode] = useState<VISUALIZATION_MODE>(VISUALIZATION_MODE.CONGESTION);
     let totalColsChips = 0;
     const [zoom, setZoom] = useState<number>(0.75);
     const chips = Object.entries(npeData.chips).map(([ClusterChipId, coords]) => {
@@ -83,7 +96,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         timestepData.active_transfers.forEach((id) => {
             const transfer = npeData.noc_transfers.find((tr) => tr.id === id);
             // TODO: this functionality should MAYBE move to BE. https://github.com/orgs/tenstorrent/projects/178/views/1?pane=issue&itemId=124188622&issue=tenstorrent%7Cttnn-visualizer%7C745
-            if (transfer && fabricEventsFilter !== EVENT_TYPE_FILTER.ALL_EVENTS) {
+            if (
+                transfer &&
+                (fabricEventsFilter !== EVENT_TYPE_FILTER.ALL_EVENTS ||
+                    visualizationMode === VISUALIZATION_MODE.TRANSFERS)
+            ) {
                 transfer.route.forEach((route) => {
                     route.links.forEach((link) => {
                         timestepData.link_demand.forEach((linkDemand) => {
@@ -101,7 +118,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             }
         });
         return timestepData;
-    }, [npeData.noc_transfers, npeData.timestep_data, selectedTimestep, fabricEventsFilter]);
+    }, [npeData.timestep_data, npeData.noc_transfers, selectedTimestep, fabricEventsFilter, visualizationMode]);
 
     const transfers = useMemo(() => {
         return npeData.noc_transfers
@@ -342,6 +359,33 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         </ButtonGroup>
                     </div>
                     <div className='npe-controls-line'>
+                        <ButtonGroup
+                            variant={ButtonVariant.OUTLINED}
+                            size={Size.SMALL}
+                        >
+                            <Button
+                                text='Congestion'
+                                icon={
+                                    visualizationMode === VISUALIZATION_MODE.CONGESTION
+                                        ? IconNames.ENDORSED
+                                        : IconNames.CIRCLE
+                                }
+                                active={visualizationMode === VISUALIZATION_MODE.CONGESTION}
+                                onClick={() => setVisualizationMode(VISUALIZATION_MODE.CONGESTION)}
+                            />
+                            <Button
+                                text='Transfers'
+                                icon={
+                                    visualizationMode === VISUALIZATION_MODE.TRANSFERS
+                                        ? IconNames.ENDORSED
+                                        : IconNames.CIRCLE
+                                }
+                                active={visualizationMode === VISUALIZATION_MODE.TRANSFERS}
+                                onClick={() => setVisualizationMode(VISUALIZATION_MODE.TRANSFERS)}
+                            />
+                        </ButtonGroup>
+                    </div>
+                    <div className='npe-controls-line'>
                         <Switch
                             label='NOC0'
                             checked={nocFilter === NoCType.NOC0 || nocFilter === null}
@@ -522,6 +566,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                 >
                                                     {/* // TENSIX CONGESTION */}
                                                     <TensixTransferRenderer
+                                                        key={`${index}-${linkUtilization[NPE_LINK.Y]}-${linkUtilization[NPE_LINK.X]}-${linkUtilization[NPE_LINK.NOC_ID]}-transfers`}
                                                         style={{
                                                             opacity:
                                                                 highlightedTransfer !== null ||
@@ -534,14 +579,25 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                         data={[
                                                             getLinkPoints(
                                                                 linkUtilization[NPE_LINK.NOC_ID],
-                                                                calculateLinkCongestionColor(
-                                                                    linkUtilization[NPE_LINK.DEMAND],
-                                                                ),
+                                                                visualizationMode === VISUALIZATION_MODE.CONGESTION
+                                                                    ? calculateLinkCongestionColor(
+                                                                          linkUtilization[NPE_LINK.DEMAND],
+                                                                      )
+                                                                    : calculateFabricColor(
+                                                                          linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE],
+                                                                      ),
                                                             ),
                                                         ]}
                                                         isMulticolor={false}
                                                     />
-                                                    <div style={{ fontSize: '9px', position: 'absolute', top: 0 }}>
+                                                    <div
+                                                        style={{
+                                                            fontSize: '9px',
+                                                            position: 'absolute',
+                                                            top: 0,
+                                                            opacity: 1,
+                                                        }}
+                                                    >
                                                         {linkUtilization[NPE_LINK.Y]}-{linkUtilization[NPE_LINK.X]}
                                                     </div>
                                                 </button>
