@@ -178,7 +178,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
 
     useEffect(() => {
         stopAnimation();
-        setSelectedTimestep(597);
+        setSelectedTimestep(0);
         setSelectedNode(null);
         setSelectedTransferList([]);
         setHighlightedTransfer(null);
