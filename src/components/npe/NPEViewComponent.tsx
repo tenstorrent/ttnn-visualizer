@@ -12,6 +12,7 @@ import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
 import {
     EVENT_TYPE_FILTER,
+    FABRIC_EVENT_TYPE,
     NPEData,
     NPE_COORDINATES,
     NPE_LINK,
@@ -110,13 +111,21 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 linkDemand[NPE_LINK.Y] === link[NPE_LINK.Y] &&
                                 linkDemand[NPE_LINK.X] === link[NPE_LINK.X]
                             ) {
-                                linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] = transfer.fabric_event_type || false;
+                                const targetFabric = transfer.fabric_event_type
+                                    ? FABRIC_EVENT_TYPE.FABRIC
+                                    : FABRIC_EVENT_TYPE.LOCAL;
+                                if (linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] === undefined) {
+                                    linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] = targetFabric;
+                                } else if (linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] !== targetFabric) {
+                                    linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] = FABRIC_EVENT_TYPE.BOTH;
+                                }
                             }
                         });
                     });
                 });
             }
         });
+
         return timestepData;
     }, [npeData.timestep_data, npeData.noc_transfers, selectedTimestep, fabricEventsFilter, visualizationMode]);
 
@@ -168,7 +177,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
 
     useEffect(() => {
         stopAnimation();
-        setSelectedTimestep(0);
+        setSelectedTimestep(597);
         setSelectedNode(null);
         setSelectedTransferList([]);
         setHighlightedTransfer(null);
@@ -249,7 +258,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const showAllTransfers = () => {
         setIsShowingAllTransfers(true);
         setSelectedNode(null);
-
         const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
             .map((transferId) => npeData.noc_transfers.find((tr) => tr.id === transferId))
             .filter((transfer): transfer is NoCTransfer => transfer !== undefined);
@@ -542,9 +550,13 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     {links?.link_demand.map((linkUtilization, index) => {
                                         let fabricCondition = true;
                                         if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
-                                            fabricCondition = linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE] === true;
+                                            fabricCondition =
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE] ===
+                                                    FABRIC_EVENT_TYPE.FABRIC ||
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE] === FABRIC_EVENT_TYPE.BOTH;
                                         } else if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
-                                            fabricCondition = linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE] !== true;
+                                            fabricCondition =
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE] === FABRIC_EVENT_TYPE.BOTH;
                                         }
                                         if (
                                             linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id &&
