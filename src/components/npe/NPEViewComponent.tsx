@@ -12,7 +12,7 @@ import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
 import {
     EVENT_TYPE_FILTER,
-    FABRIC_EVENT_TYPE,
+    FABRIC_EVENT_SCOPE_OPTIONS,
     NPEData,
     NPE_COORDINATES,
     NPE_LINK,
@@ -112,12 +112,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 linkDemand[NPE_LINK.X] === link[NPE_LINK.X]
                             ) {
                                 const targetFabric = transfer.fabric_event_type
-                                    ? FABRIC_EVENT_TYPE.FABRIC
-                                    : FABRIC_EVENT_TYPE.LOCAL;
-                                if (linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] === undefined) {
-                                    linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] = targetFabric;
-                                } else if (linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] !== targetFabric) {
-                                    linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] = FABRIC_EVENT_TYPE.BOTH;
+                                    ? FABRIC_EVENT_SCOPE_OPTIONS.FABRIC
+                                    : FABRIC_EVENT_SCOPE_OPTIONS.LOCAL;
+                                if (linkDemand[NPE_LINK.FABRIC_EVENT_SCOPE] === undefined) {
+                                    linkDemand[NPE_LINK.FABRIC_EVENT_SCOPE] = targetFabric;
+                                } else if (linkDemand[NPE_LINK.FABRIC_EVENT_SCOPE] !== targetFabric) {
+                                    linkDemand[NPE_LINK.FABRIC_EVENT_SCOPE] = FABRIC_EVENT_SCOPE_OPTIONS.BOTH;
                                 }
                             }
                         });
@@ -551,12 +551,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                         let fabricCondition = true;
                                         if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
                                             fabricCondition =
-                                                linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE] ===
-                                                    FABRIC_EVENT_TYPE.FABRIC ||
-                                                linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE] === FABRIC_EVENT_TYPE.BOTH;
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
+                                                    FABRIC_EVENT_SCOPE_OPTIONS.FABRIC ||
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
+                                                    FABRIC_EVENT_SCOPE_OPTIONS.BOTH;
                                         } else if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
                                             fabricCondition =
-                                                linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE] === FABRIC_EVENT_TYPE.BOTH;
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
+                                                FABRIC_EVENT_SCOPE_OPTIONS.BOTH;
                                         }
                                         if (
                                             linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id &&
@@ -596,7 +598,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                                           linkUtilization[NPE_LINK.DEMAND],
                                                                       )
                                                                     : calculateFabricColor(
-                                                                          linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE],
+                                                                          linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE],
                                                                       ),
                                                             ),
                                                         ]}

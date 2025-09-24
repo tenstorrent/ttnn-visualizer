@@ -110,7 +110,7 @@ export enum NoCID {
     NOC1_IN = 'NOC1_IN',
     NOC1_OUT = 'NOC1_OUT',
 }
-export enum FABRIC_EVENT_TYPE {
+export enum FABRIC_EVENT_SCOPE_OPTIONS {
     BOTH,
     FABRIC,
     LOCAL,
@@ -122,7 +122,7 @@ export type LinkUtilization = [
     col: number,
     noc_id: NoCID,
     demand: number, // percentage - it can exceed 100% if there is congestion
-    fabric_event_type: FABRIC_EVENT_TYPE | undefined,
+    fabric_event_scope: FABRIC_EVENT_SCOPE_OPTIONS | undefined,
 ];
 export type NoCLink = [device_id: number, row: number, col: number, noc_id: NoCID];
 export type NPE_COORDINATES = [device_id: number, row: number, col: number];
@@ -184,8 +184,7 @@ export enum NPE_LINK {
     X,
     NOC_ID,
     DEMAND,
-    // eslint-disable-next-line @typescript-eslint/no-shadow
-    FABRIC_EVENT_TYPE,
+    FABRIC_EVENT_SCOPE,
 }
 
 export interface NPEManifestEntry {
