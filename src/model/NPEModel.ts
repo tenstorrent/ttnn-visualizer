@@ -110,11 +110,18 @@ export enum NoCID {
     NOC1_IN = 'NOC1_IN',
     NOC1_OUT = 'NOC1_OUT',
 }
+
 export enum FABRIC_EVENT_SCOPE_OPTIONS {
     BOTH,
     FABRIC,
     LOCAL,
 }
+
+export const FabricEventScopeColors: Record<FABRIC_EVENT_SCOPE_OPTIONS, string> = {
+    [FABRIC_EVENT_SCOPE_OPTIONS.BOTH]: 'rgb(225,0,0)',
+    [FABRIC_EVENT_SCOPE_OPTIONS.FABRIC]: 'rgb(255,234,0)',
+    [FABRIC_EVENT_SCOPE_OPTIONS.LOCAL]: 'rgb(204,0,204)',
+};
 
 export type LinkUtilization = [
     device_id: number,

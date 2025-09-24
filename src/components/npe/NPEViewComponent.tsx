@@ -13,6 +13,7 @@ import { Fragment } from 'react/jsx-runtime';
 import {
     EVENT_TYPE_FILTER,
     FABRIC_EVENT_SCOPE_OPTIONS,
+    FabricEventScopeColors,
     NPEData,
     NPE_COORDINATES,
     NPE_LINK,
@@ -372,7 +373,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             size={Size.SMALL}
                         >
                             <Button
-                                text='Congestion'
+                                text='Congestion Mode'
                                 icon={
                                     visualizationMode === VISUALIZATION_MODE.CONGESTION
                                         ? IconNames.ENDORSED
@@ -382,7 +383,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 onClick={() => setVisualizationMode(VISUALIZATION_MODE.CONGESTION)}
                             />
                             <Button
-                                text='Transfers'
+                                text='Transfers Scope Mode'
                                 icon={
                                     visualizationMode === VISUALIZATION_MODE.TRANSFERS
                                         ? IconNames.ENDORSED
@@ -405,7 +406,17 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             onChange={() => showNOCType(NoCType.NOC1)}
                         />
                         <Switch
-                            label='Fabric events'
+                            labelElement={
+                                <>
+                                    <div
+                                        className='color-square'
+                                        style={{
+                                            backgroundColor: FabricEventScopeColors[FABRIC_EVENT_SCOPE_OPTIONS.FABRIC],
+                                        }}
+                                    />{' '}
+                                    Fabric events
+                                </>
+                            }
                             checked={
                                 fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS ||
                                 fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS
@@ -422,7 +433,17 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             }}
                         />
                         <Switch
-                            label='Local events'
+                            labelElement={
+                                <>
+                                    <div
+                                        className='color-square'
+                                        style={{
+                                            backgroundColor: FabricEventScopeColors[FABRIC_EVENT_SCOPE_OPTIONS.LOCAL],
+                                        }}
+                                    />{' '}
+                                    Local events
+                                </>
+                            }
                             checked={
                                 fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS ||
                                 fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS
@@ -558,7 +579,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                         } else if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
                                             fabricCondition =
                                                 linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
-                                                FABRIC_EVENT_SCOPE_OPTIONS.BOTH;
+                                                    FABRIC_EVENT_SCOPE_OPTIONS.LOCAL ||
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
+                                                    FABRIC_EVENT_SCOPE_OPTIONS.BOTH;
                                         }
                                         if (
                                             linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id &&
