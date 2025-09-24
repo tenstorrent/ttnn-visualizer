@@ -26,7 +26,7 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
-import { OpType, PerfTableRow } from '../definitions/PerfTable';
+import { PerfTableRow } from '../definitions/PerfTable';
 import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import {
@@ -34,9 +34,7 @@ import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
-    filterBySignpostAtom,
     selectedOperationRangeAtom,
-    stackByIn0Atom,
 } from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
@@ -46,7 +44,6 @@ import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import createToastNotification from '../functions/createToastNotification';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
-import { Signpost } from '../functions/perfFunctions';
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -332,19 +329,14 @@ const fetchDevices = async (reportName: string) => {
 export interface PerformanceReportResponse {
     report: PerfTableRow[];
     stacked_report: StackedPerfRow[];
-    signposts?: Signpost[];
 }
 
-const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, signpost: Signpost | null) => {
+const fetchPerformanceReport = async (name?: string | null) => {
     const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
-        params: { name, stackByIn0, signpost: signpost?.op_code },
+        params: { name },
     });
 
-    // Filtering out signposts until proper support is added
-    return {
-        report: data.report.filter((row) => row.op_type !== OpType.SIGNPOST),
-        stacked_report: data.stacked_report.filter((row) => row.op_type !== OpType.SIGNPOST),
-    };
+    return data;
 };
 
 const fetchNPEManifest = async (): Promise<NPEManifestEntry[]> => {
@@ -843,20 +835,10 @@ export const useDeviceLog = (name?: string | null) => {
 };
 
 export const usePerformanceReport = (name: string | null) => {
-    const signpost = useAtomValue(filterBySignpostAtom);
-    const stackByIn0 = useAtomValue(stackByIn0Atom);
-
     const response = useQuery<PerformanceReportResponse, AxiosError>({
         queryFn: () =>
-            name !== null
-                ? fetchPerformanceReport(name, stackByIn0, signpost)
-                : Promise.resolve({ report: [], stacked_report: [] }),
-        queryKey: [
-            'get-performance-report',
-            name,
-            `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
-        ],
+            name !== null ? fetchPerformanceReport(name) : Promise.resolve({ report: [], stacked_report: [] }),
+        queryKey: ['get-performance-report', name],
         enabled: name !== null,
         retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
     });
@@ -870,8 +852,6 @@ export const usePerformanceReport = (name: string | null) => {
 
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
-    const stackByIn0 = useAtomValue(stackByIn0Atom);
-    const signpost = useAtomValue(filterBySignpostAtom);
 
     const reportNames = useMemo(() => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
@@ -883,18 +863,11 @@ export const usePerformanceComparisonReport = () => {
                 return [];
             }
 
-            const results = await Promise.all(
-                reportNames.map((name) => fetchPerformanceReport(name, stackByIn0, signpost)),
-            );
+            const results = await Promise.all(reportNames.map((name) => fetchPerformanceReport(name)));
 
             return results;
         },
-        queryKey: [
-            'get-performance-comparison-report',
-            reportNames,
-            `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
-        ],
+        queryKey: ['get-performance-comparison-report', reportNames],
         staleTime: Infinity,
         enabled: !!reportNames,
     });
