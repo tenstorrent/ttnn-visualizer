@@ -26,7 +26,7 @@ To run a test with custom input data, you can use the following command with sui
 pytest --disable-warnings --input-path="path/to/input.json" path/to/test_file.py::test_function[param]
 ```
 
-For more information on generating data please refer to [TT-Metalium](https://docs.tenstorrent.com/tt-metalium/latest/get_started/get_started.html), [TT-NN](https://docs.tenstorrent.com/ttnn/latest/ttnn/get_started.html) and [TT-NN models](https://docs.tenstorrent.com/tt-metal/latest/ttnn/tt_metal_models/get_started.html#running-an-example-model) documentation.
+For more information on generating data please refer to [TT-Metalium](https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/get_started/get_started.html) and [TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/ttnn/get_started.html) documentation.
 
 The final output should be a folder including at least a `config.json` and a `db.sqlite` file.
 
