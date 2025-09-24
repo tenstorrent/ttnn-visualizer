@@ -689,7 +689,7 @@ def get_performance_results_report(instance: Instance):
 
     name = request.args.get("name", None)
     signpost = request.args.get("signpost", None)
-    stackByIn0 = str_to_bool(request.args.get("stackByIn0", "true"))
+    stack_by_in0 = str_to_bool(request.args.get("stack_by_in0", "true"))
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -699,7 +699,7 @@ def get_performance_results_report(instance: Instance):
     try:
         report = OpsPerformanceReportQueries.generate_report(
             instance,
-            stackByIn0=stackByIn0,
+            stack_by_in0=stack_by_in0,
             signpost=signpost,
         )
     except DataFormatError:

@@ -339,7 +339,7 @@ export interface PerformanceReportResponse {
 
 const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, signpost: Signpost | null) => {
     const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
-        params: { name, stackByIn0, signpost: signpost?.op_code },
+        params: { name, stack_by_in0: stackByIn0, signpost: signpost?.op_code },
     });
 
     return data;

@@ -451,11 +451,11 @@ class OpsPerformanceReportQueries:
         csv_file = StringIO(raw_csv)
         csv_output_file = tempfile.mktemp(suffix=".csv")
         csv_stacked_output_file = tempfile.mktemp(suffix=".csv")
-        use_signpost = kwargs.get("signpost", cls.DEFAULT_SIGNPOST)
+        signpost = kwargs.get("signpost", cls.DEFAULT_SIGNPOST)
         ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
-        stack_by_in0 = kwargs.get("stackByIn0", cls.DEFAULT_NO_STACK_BY_IN0)
+        stack_by_in0 = kwargs.get("stack_by_in0", cls.DEFAULT_NO_STACK_BY_IN0)
 
-        if use_signpost:
+        if signpost:
             ignore_signposts = False
 
         # perf_report currently generates a PNG alongside the CSV using the same temp name - we'll just delete it afterwards
@@ -464,7 +464,7 @@ class OpsPerformanceReportQueries:
         try:
             perf_report.generate_perf_report(
                 csv_file,
-                use_signpost,
+                signpost,
                 ignore_signposts,
                 cls.DEFAULT_MIN_PERCENTAGE,
                 cls.DEFAULT_ID_RANGE,
@@ -501,19 +501,6 @@ class OpsPerformanceReportQueries:
 
         report = []
 
-        # Returns a list of unique signposts in the order they appear
-        # TODO: Signpost names are not unique but tt-perf-report treats them as such
-        captured_signposts = set()
-        signposts = []
-
-        for index, row in enumerate(ops_perf_results):
-            if row.get("OP TYPE") == "signpost":
-                op_code = row["OP CODE"]
-                op_id = index + 2  # Match IDs with row numbers in ops perf results csv
-                if not any(s["op_code"] == op_code for s in signposts):
-                    captured_signposts.add(op_code)
-                    signposts.append({"id": op_id, "op_code": op_code})
-
         if os.path.exists(csv_output_file):
             try:
                 with open(csv_output_file, newline="") as csvfile:
@@ -531,16 +518,6 @@ class OpsPerformanceReportQueries:
                             )
                         else:
                             processed_row["advice"] = []
-
-                            # Get the op type from the raw file for this row as it is not returned from tt-perf-report
-                            op_id = int(row[0])
-                            raw_idx = op_id - 2
-                            if 0 <= raw_idx < len(ops_perf_results):
-                                processed_row["op_type"] = ops_perf_results[
-                                    raw_idx
-                                ].get("OP TYPE")
-                            else:
-                                processed_row["op_type"] = None
 
                             # Get the op type from the raw file for this row as it is not returned from tt-perf-report
                             op_id = int(row[0])
