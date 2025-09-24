@@ -7,7 +7,6 @@ import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
-import { useAtomValue } from 'jotai';
 import {
     ColumnHeaders,
     ComparisonKeys,
@@ -15,18 +14,19 @@ import {
     TableHeaders,
     TableKeys,
     TypedPerfTableRow,
-    signpostRowDefaults,
 } from '../../definitions/PerfTable';
 import 'styles/components/PerfReport.scss';
-import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
-import { Signpost, formatCell, isHostOp } from '../../functions/perfFunctions';
+import { useDeviceLog, useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
+import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import { OperationDescription } from '../../model/APIData';
 import ROUTES from '../../definitions/Routes';
+import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
+import getCoreCount from '../../functions/getCoreCount';
+import LoadingSpinner from '../LoadingSpinner';
+import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
 import { formatSize } from '../../functions/math';
-import PerfDeviceArchitecture from './PerfDeviceArchitecture';
-import { filterBySignpostAtom } from '../../store/app';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -37,11 +37,11 @@ interface PerformanceTableProps {
     hiliteHighDispatch: boolean;
     shouldHighlightRows: boolean;
     reportName?: string;
-    signposts?: Signpost[];
 }
 
 const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
+const NO_META_DATA = 'n/a';
 const PATTERN_COUNT = 3; // Number of row patterns defined in PerfReport.scss
 
 const PerformanceTable: FC<PerformanceTableProps> = ({
@@ -53,14 +53,16 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     hiliteHighDispatch,
     shouldHighlightRows,
     reportName = null,
-    signposts,
 }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
     const { data: operations } = useOperationsList();
     const { data: npeManifest, error: npeManifestError } = useGetNPEManifest();
-    const filterBySignpost = useAtomValue(filterBySignpostAtom);
     const navigate = useNavigate();
+    const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog(reportName);
+
+    const architecture = deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
+    const maxCores = data ? getCoreCount(architecture, data) : 0;
 
     const filterableColumnKeys = useMemo(
         () => TableHeaders.filter((column) => column.filterable).map((column) => column.key),
@@ -70,29 +72,16 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     // TODO: Refactor so that sortAndFilterPerfTableData is not used here and PerfReport.
     // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
     const tableFields = useMemo<TypedPerfTableRow[]>(() => {
-        let parsedRows = sortAndFilterPerfTableData(
+        const parsedRows = sortAndFilterPerfTableData(
             data?.filter((row) => !isHostOp(row.raw_op_code)),
             filters,
             filterableColumnKeys,
             mathFidelityFilter,
         );
 
-        // If filtering by signpost, add a fake row at the top to represent the signpost as tt-perf-report removes it from the data
-        if (filterBySignpost && parsedRows.length > 0) {
-            parsedRows = [
-                {
-                    ...signpostRowDefaults,
-                    id: filterBySignpost.id,
-                    op_code: filterBySignpost.op_code,
-                    raw_op_code: filterBySignpost.op_code,
-                },
-                ...parsedRows,
-            ];
-        }
-
         // Still some awkward casting here
         return [...sortTableFields(parsedRows as [])];
-    }, [data, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields, filterBySignpost]);
+    }, [data, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields]);
 
     const comparisonDataTableFields = useMemo<TypedPerfTableRow[][]>(
         () =>
@@ -170,10 +159,22 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                 </div>
             )}
 
-            <PerfDeviceArchitecture
-                data={data}
-                reportName={reportName || ''}
-            />
+            <div className='meta-data'>
+                {isLoadingDeviceLog ? (
+                    <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
+                ) : (
+                    <>
+                        <p>
+                            <strong>Arch: </strong>
+                            {architecture || NO_META_DATA}
+                        </p>
+                        <p>
+                            <strong>Cores: </strong>
+                            {maxCores || NO_META_DATA}
+                        </p>
+                    </>
+                )}
+            </div>
 
             <table className='perf-table monospace'>
                 <thead className='table-header'>
@@ -249,7 +250,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                             <tr
                                 className={classNames({
                                     'missing-data': shouldHighlightRows && row.raw_op_code.includes('MISSING'),
-                                    'signpost-op': signposts?.map((sp) => sp.op_code).includes(row.raw_op_code),
                                 })}
                             >
                                 {visibleHeaders.map((h) => (
