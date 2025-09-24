@@ -15,16 +15,13 @@ import {
 } from '../../definitions/StackedPerfTable';
 import 'styles/components/PerfReport.scss';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
-import { useDeviceLog, useGetNPEManifest } from '../../hooks/useAPI';
-import LoadingSpinner from '../LoadingSpinner';
-import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
-import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
-import getCoreCount from '../../functions/getCoreCount';
+import { useGetNPEManifest } from '../../hooks/useAPI';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 import { formatStackedCell } from '../../functions/stackedPerfFunctions';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import { formatSize } from '../../functions/math';
 import { isHostOp } from '../../functions/perfFunctions';
+import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -33,15 +30,9 @@ interface StackedPerformanceTableProps {
     reportName?: string;
 }
 
-const NO_META_DATA = 'n/a';
-
 const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stackedData, filters, reportName }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const { error: npeManifestError } = useGetNPEManifest();
-    const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog(reportName);
-
-    const architecture = deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
-    const maxCores = data ? getCoreCount(architecture, data) : 0;
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
         const parsedRows = stackedData
@@ -65,22 +56,10 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
                 </div>
             )}
 
-            <div className='meta-data'>
-                {isLoadingDeviceLog ? (
-                    <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
-                ) : (
-                    <>
-                        <p>
-                            <strong>Arch: </strong>
-                            {architecture || NO_META_DATA}
-                        </p>
-                        <p>
-                            <strong>Cores: </strong>
-                            {maxCores || NO_META_DATA}
-                        </p>
-                    </>
-                )}
-            </div>
+            <PerfDeviceArchitecture
+                data={data}
+                reportName={reportName || ''}
+            />
 
             <table className='perf-table monospace'>
                 <thead className='table-header'>

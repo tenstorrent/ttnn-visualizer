@@ -26,7 +26,7 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
-import { OpType, PerfTableRow } from '../definitions/PerfTable';
+import { PerfTableRow } from '../definitions/PerfTable';
 import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import {
@@ -34,7 +34,7 @@ import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
-    ignoreSignpostsAtom,
+    filterBySignpostAtom,
     selectedOperationRangeAtom,
     stackByIn0Atom,
 } from '../store/app';
@@ -46,6 +46,9 @@ import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import createToastNotification from '../functions/createToastNotification';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
+import { Signpost } from '../functions/perfFunctions';
+
+const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -331,18 +334,15 @@ const fetchDevices = async (reportName: string) => {
 export interface PerformanceReportResponse {
     report: PerfTableRow[];
     stacked_report: StackedPerfRow[];
+    signposts?: Signpost[];
 }
 
-const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, ignoreSignposts: boolean) => {
+const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, signpost: Signpost | null) => {
     const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
-        params: { name, stackByIn0, ignoreSignposts },
+        params: { name, stack_by_in0: stackByIn0, signpost: signpost?.op_code },
     });
 
-    // Filtering out signposts until proper support is added
-    return {
-        report: data.report.filter((row) => row.op_type !== OpType.SIGNPOST),
-        stacked_report: data.stacked_report.filter((row) => row.op_type !== OpType.SIGNPOST),
-    };
+    return data;
 };
 
 const fetchNPEManifest = async (): Promise<NPEManifestEntry[]> => {
@@ -650,7 +650,7 @@ const useProxyPerformanceReport = (): PerformanceReportResponse => {
 
     return useMemo(() => {
         if (!response.data) {
-            return { report: [], stacked_report: [] };
+            return EMPTY_PERF_RETURN;
         }
         return response.data;
     }, [response.data]);
@@ -841,19 +841,17 @@ export const useDeviceLog = (name?: string | null) => {
 };
 
 export const usePerformanceReport = (name: string | null) => {
-    const ignoreSignposts = useAtomValue(ignoreSignpostsAtom);
+    const signpost = useAtomValue(filterBySignpostAtom);
     const stackByIn0 = useAtomValue(stackByIn0Atom);
 
     const response = useQuery<PerformanceReportResponse, AxiosError>({
         queryFn: () =>
-            name !== null
-                ? fetchPerformanceReport(name, stackByIn0, ignoreSignposts)
-                : Promise.resolve({ report: [], stacked_report: [] }),
+            name !== null ? fetchPerformanceReport(name, stackByIn0, signpost) : Promise.resolve(EMPTY_PERF_RETURN),
         queryKey: [
             'get-performance-report',
             name,
             `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `ignoreSignposts:${ignoreSignposts}`,
+            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
         ],
         enabled: name !== null,
         retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
@@ -869,7 +867,7 @@ export const usePerformanceReport = (name: string | null) => {
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
     const stackByIn0 = useAtomValue(stackByIn0Atom);
-    const ignoreSignposts = useAtomValue(ignoreSignpostsAtom);
+    const signpost = useAtomValue(filterBySignpostAtom);
 
     const reportNames = useMemo(() => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
@@ -882,7 +880,7 @@ export const usePerformanceComparisonReport = () => {
             }
 
             const results = await Promise.all(
-                reportNames.map((name) => fetchPerformanceReport(name, stackByIn0, ignoreSignposts)),
+                reportNames.map((name) => fetchPerformanceReport(name, stackByIn0, signpost)),
             );
 
             return results;
@@ -891,7 +889,7 @@ export const usePerformanceComparisonReport = () => {
             'get-performance-comparison-report',
             reportNames,
             `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `ignoreSignposts:${ignoreSignposts}`,
+            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
         ],
         staleTime: Infinity,
         enabled: !!reportNames,

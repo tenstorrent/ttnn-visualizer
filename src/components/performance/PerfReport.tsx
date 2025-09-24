@@ -19,10 +19,11 @@ import {
     Tabs,
     Tooltip,
 } from '@blueprintjs/core';
-import { MultiSelect } from '@blueprintjs/select';
+import { ItemPredicate, ItemRenderer, MultiSelect, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import {
     FilterableColumnKeys,
+    OpType,
     PerfTableRow,
     TableFilter,
     TableHeaders,
@@ -30,13 +31,14 @@ import {
     TypedPerfTableRow,
 } from '../../definitions/PerfTable';
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
-import { calcHighDispatchOps, isHostOp } from '../../functions/perfFunctions';
+import { Signpost, calcHighDispatchOps, isHostOp } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import useTableFilter from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
 import {
     activePerformanceReportAtom,
     comparisonPerformanceReportListAtom,
+    filterBySignpostAtom,
     isStackedViewAtom,
     stackByIn0Atom,
 } from '../../store/app';
@@ -52,12 +54,14 @@ import {
     TypedStackedPerfRow,
 } from '../../definitions/StackedPerfTable';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
+import HighlightedText from '../HighlightedText';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
     comparisonData?: PerfTableRow[][];
     stackedData?: StackedPerfRow[];
     comparisonStackedData?: StackedPerfRow[][];
+    signposts?: Signpost[];
 }
 
 const INITIAL_TAB_ID = 'perf-table-0';
@@ -67,6 +71,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     comparisonData,
     stackedData,
     comparisonStackedData,
+    signposts,
 }) => {
     const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
     const opIdsMap = useOpToPerfIdFiltered();
@@ -75,6 +80,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const [isStackedView, setIsStackedView] = useAtom(isStackedViewAtom);
     const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
+    const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
+
+    const isSignpostsDisabled = !signposts || signposts.length === 0;
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
@@ -344,19 +352,44 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         </Tooltip>
                     )}
 
-                    {/* <Switch
-                        label='Ignore signposts'
-                        onChange={() => setIgnoreSignposts(!ignoreSignposts)}
-                        checked={ignoreSignposts}
-                        className='option-switch'
-                    /> */}
-
                     <Switch
                         label='Stack by input 0'
                         onChange={() => setStackByIn0(!stackByIn0)}
                         checked={stackByIn0}
                         className='option-switch'
                         disabled={!isStackedView}
+                    />
+
+                    <Select<Signpost>
+                        items={signposts || []}
+                        itemPredicate={filterSignpost}
+                        itemRenderer={renderSignpost}
+                        onItemSelect={setFilterBySignpost}
+                        noResults={
+                            <MenuItem
+                                text='No signposts found'
+                                roleStructure='listoption'
+                            />
+                        }
+                        filterable
+                        disabled={isSignpostsDisabled}
+                    >
+                        <Button
+                            text={
+                                filterBySignpost?.op_code ??
+                                `Select signpost... ${signposts && signposts?.length > 0 ? `(${signposts.length})` : ''}`
+                            }
+                            endIcon={IconNames.CARET_DOWN}
+                            disabled={isSignpostsDisabled}
+                        />
+                    </Select>
+
+                    <Button
+                        variant={ButtonVariant.OUTLINED}
+                        icon={IconNames.CROSS}
+                        onClick={() => setFilterBySignpost(null)}
+                        disabled={isSignpostsDisabled}
+                        aria-label={filterBySignpost ? `Remove signpost` : 'No signpost selected'}
                     />
                 </div>
 
@@ -392,6 +425,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
+                                    signposts={signposts}
                                 />
                             )
                         }
@@ -440,6 +474,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         shouldHighlightRows={highlightRows && useNormalisedData}
                                         reportName={report}
+                                        signposts={signposts}
                                     />
                                 )
                             }
@@ -492,7 +527,8 @@ const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
             flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
             flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
         }))
-        .filter((row) => !isHostOp(row.op_code));
+        .filter((row) => !isHostOp(row.op_code))
+        .filter((row) => row.op_type !== OpType.SIGNPOST); // Filter out signposts here because they are not useful in stacked view
 
 const getTotalDataLength = (
     useNormalisedData: boolean,
@@ -541,6 +577,33 @@ const getRowCount = (
             : null;
 
     return `${rowCountText} ${rowDeltaText ?? ''}`;
+};
+
+const renderSignpost: ItemRenderer<Signpost> = (signpost, { handleClick, handleFocus, modifiers, query }) => {
+    if (!modifiers.matchesPredicate) {
+        return null;
+    }
+
+    return (
+        <MenuItem
+            active={modifiers.active}
+            disabled={modifiers.disabled}
+            key={signpost.id}
+            onClick={handleClick}
+            onFocus={handleFocus}
+            roleStructure='listoption'
+            text={
+                <HighlightedText
+                    text={`${signpost.id}. ${signpost.op_code}`}
+                    filter={query}
+                />
+            }
+        />
+    );
+};
+
+const filterSignpost: ItemPredicate<Signpost> = (query, signpost) => {
+    return signpost.op_code.toLowerCase().includes(query.toLowerCase());
 };
 
 export default PerformanceReport;

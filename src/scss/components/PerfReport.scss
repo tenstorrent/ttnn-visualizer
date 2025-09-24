@@ -80,13 +80,6 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         }
     }
 
-    .meta-data {
-        display: flex;
-        flex-direction: column;
-        height: 46px;
-        margin-bottom: 20px;
-    }
-
     .cell-header {
         text-align: left;
         vertical-align: initial;
@@ -158,6 +151,10 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
 
     .missing-data {
         background-color: colours.$tt-red-shade;
+    }
+
+    .signpost-op {
+        background-color: rgba(colours.$tt-yellow-shade, 0.2);
     }
 
     .cell {
