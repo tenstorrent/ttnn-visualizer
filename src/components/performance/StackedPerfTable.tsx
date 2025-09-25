@@ -7,21 +7,21 @@ import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import {
-    FilterableColumnKeys,
+    ColumnHeaders,
+    FilterableStackedColumnKeys,
     StackedTableHeader,
     TableHeaders,
     TypedStackedPerfRow,
 } from '../../definitions/StackedPerfTable';
 import 'styles/components/PerfReport.scss';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
-import { useDeviceLog, useGetNPEManifest } from '../../hooks/useAPI';
-import LoadingSpinner from '../LoadingSpinner';
-import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
-import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
-import getCoreCount from '../../functions/getCoreCount';
+import { useGetNPEManifest } from '../../hooks/useAPI';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 import { formatStackedCell } from '../../functions/stackedPerfFunctions';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
+import { formatSize } from '../../functions/math';
+import { isHostOp } from '../../functions/perfFunctions';
+import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -30,24 +30,18 @@ interface StackedPerformanceTableProps {
     reportName?: string;
 }
 
-const NO_META_DATA = 'n/a';
-
 const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stackedData, filters, reportName }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const { error: npeManifestError } = useGetNPEManifest();
-    const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog(reportName);
-
-    const architecture = deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
-    const maxCores = data ? getCoreCount(architecture, data) : 0;
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
         const parsedRows = stackedData
-            ? sortAndFilterStackedPerfTableData(stackedData, filters, FilterableColumnKeys)
+            ? sortAndFilterStackedPerfTableData(stackedData, filters, FilterableStackedColumnKeys)
             : [];
 
         // Still some awkward casting here
         return [...sortTableFields(parsedRows as [])];
-    }, [stackedData, sortTableFields, filters]);
+    }, [stackedData, filters, sortTableFields]);
 
     return (
         <>
@@ -62,25 +56,13 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
                 </div>
             )}
 
-            <div className='meta-data'>
-                {isLoadingDeviceLog ? (
-                    <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />
-                ) : (
-                    <>
-                        <p>
-                            <strong>Arch: </strong>
-                            {architecture || NO_META_DATA}
-                        </p>
-                        <p>
-                            <strong>Cores: </strong>
-                            {maxCores || NO_META_DATA}
-                        </p>
-                    </>
-                )}
-            </div>
+            <PerfDeviceArchitecture
+                data={data}
+                reportName={reportName || ''}
+            />
 
             <table className='perf-table monospace'>
-                <thead>
+                <thead className='table-header'>
                     <tr>
                         {TableHeaders.map((h) => {
                             const targetSortDirection =
@@ -128,19 +110,6 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
                                     ) : (
                                         <span className='header-label no-button'>{h.label}</span>
                                     )}
-
-                                    {/* TODO: May want this in the near future */}
-                                    {/* {h?.filterable && (
-                                            <div className='column-filter'>
-                                                <InputGroup
-                                                    asyncControl
-                                                    size='small'
-                                                    onValueChange={(value) => updateColumnFilter(h.key, value)}
-                                                    placeholder='Filter...'
-                                                    value={filters?.[h.key]}
-                                                />
-                                            </div>
-                                        )} */}
                                 </th>
                             );
                         })}
@@ -161,9 +130,49 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
                         </tr>
                     ))}
                 </tbody>
+
+                <tfoot className='table-footer'>
+                    <tr>
+                        {stackedData &&
+                            stackedData?.length > 0 &&
+                            TableHeaders.map((header) => (
+                                <td
+                                    key={header.key}
+                                    className={classNames({
+                                        'no-wrap': header.key === ColumnHeaders.OpCodeJoined,
+                                    })}
+                                >
+                                    {getTotalsForHeader(header, stackedData)}
+                                </td>
+                            ))}
+                    </tr>
+                </tfoot>
             </table>
         </>
     );
+};
+
+const getTotalsForHeader = (header: StackedTableHeader, data: TypedStackedPerfRow[]): string => {
+    if (header.key === ColumnHeaders.Percent) {
+        return `100 %`;
+    }
+
+    if (header.key === ColumnHeaders.DeviceTimeSumUs) {
+        return `${formatSize(
+            data?.reduce((acc, curr) => acc + (curr.device_time_sum_us || 0), 0),
+            2,
+        )} µs`;
+    }
+
+    if (header.key === ColumnHeaders.OpCodeJoined) {
+        return `${data.filter((row) => !isHostOp(row.op_code)).length} device op types`;
+    }
+
+    if (header.key === ColumnHeaders.OpsCount) {
+        return `${data?.reduce((acc, curr) => acc + (curr.ops_count || 0), 0)}`;
+    }
+
+    return '';
 };
 
 export default StackedPerformanceTable;

@@ -10,9 +10,26 @@ import { Button, ButtonGroup, ButtonVariant, Intent, Size, Slider, Switch } from
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
-import { NPEData, NPE_COORDINATES, NPE_LINK, NoCFlowBase, NoCTransfer, NoCType } from '../../model/NPEModel';
+import {
+    EVENT_TYPE_FILTER,
+    FABRIC_EVENT_SCOPE_OPTIONS,
+    FabricEventScopeColors,
+    NPEData,
+    NPE_COORDINATES,
+    NPE_LINK,
+    NoCFlowBase,
+    NoCTransfer,
+    NoCType,
+} from '../../model/NPEModel';
 import TensixTransferRenderer from './TensixTransferRenderer';
-import { NODE_SIZE, calculateLinkCongestionColor, getLines, getLinkPoints, resetRouteColors } from './drawingApi';
+import {
+    NODE_SIZE,
+    calculateFabricColor,
+    calculateLinkCongestionColor,
+    getLines,
+    getLinkPoints,
+    resetRouteColors,
+} from './drawingApi';
 import NPECongestionHeatMap from './NPECongestionHeatMap';
 import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
@@ -37,6 +54,11 @@ const PLAYBACK_SPEED_2X = 2;
 const LABEL_STEP_COUNT_TIMESTEPSCALE = 20;
 const LABEL_STEP_COUNT_CYCLESCALE = 10;
 
+enum VISUALIZATION_MODE {
+    CONGESTION,
+    TRANSFERS,
+}
+
 const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [highlightedRoute, setHighlightedRoute] = useState<number | null>(null);
@@ -45,6 +67,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
     const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
+    const [visualizationMode, setVisualizationMode] = useState<VISUALIZATION_MODE>(VISUALIZATION_MODE.CONGESTION);
     let totalColsChips = 0;
     const [zoom, setZoom] = useState<number>(0.75);
     const chips = Object.entries(npeData.chips).map(([ClusterChipId, coords]) => {
@@ -57,19 +80,29 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
-    const [fabricEventsOnlyFilter, setFabricEventsOnlyFilter] = useState<boolean>(false);
+    const [fabricEventsFilter, setFabricEventsFilter] = useState<EVENT_TYPE_FILTER>(EVENT_TYPE_FILTER.ALL_EVENTS);
     const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
 
     const isFabricTransfersFilteringEnabled = useMemo(() => {
         return npeData.noc_transfers.some((tr) => tr.fabric_event_type);
     }, [npeData]);
 
+    useEffect(() => {
+        if (!isFabricTransfersFilteringEnabled && fabricEventsFilter !== EVENT_TYPE_FILTER.ALL_EVENTS) {
+            setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
+        }
+    }, [fabricEventsFilter, isFabricTransfersFilteringEnabled]);
+
     const links = useMemo(() => {
         const timestepData = npeData.timestep_data[selectedTimestep];
         timestepData.active_transfers.forEach((id) => {
             const transfer = npeData.noc_transfers.find((tr) => tr.id === id);
-            // TODO: this functionality should move to BE. https://github.com/orgs/tenstorrent/projects/178/views/1?pane=issue&itemId=124188622&issue=tenstorrent%7Cttnn-visualizer%7C745
-            if (transfer && transfer.fabric_event_type && fabricEventsOnlyFilter) {
+            // TODO: this functionality should MAYBE move to BE. https://github.com/orgs/tenstorrent/projects/178/views/1?pane=issue&itemId=124188622&issue=tenstorrent%7Cttnn-visualizer%7C745
+            if (
+                transfer &&
+                (fabricEventsFilter !== EVENT_TYPE_FILTER.ALL_EVENTS ||
+                    visualizationMode === VISUALIZATION_MODE.TRANSFERS)
+            ) {
                 transfer.route.forEach((route) => {
                     route.links.forEach((link) => {
                         timestepData.link_demand.forEach((linkDemand) => {
@@ -79,23 +112,40 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 linkDemand[NPE_LINK.Y] === link[NPE_LINK.Y] &&
                                 linkDemand[NPE_LINK.X] === link[NPE_LINK.X]
                             ) {
-                                linkDemand[NPE_LINK.FABRIC_EVENT_TYPE] = true;
+                                const targetFabric = transfer.fabric_event_type
+                                    ? FABRIC_EVENT_SCOPE_OPTIONS.FABRIC
+                                    : FABRIC_EVENT_SCOPE_OPTIONS.LOCAL;
+                                if (linkDemand[NPE_LINK.FABRIC_EVENT_SCOPE] === undefined) {
+                                    linkDemand[NPE_LINK.FABRIC_EVENT_SCOPE] = targetFabric;
+                                } else if (linkDemand[NPE_LINK.FABRIC_EVENT_SCOPE] !== targetFabric) {
+                                    linkDemand[NPE_LINK.FABRIC_EVENT_SCOPE] = FABRIC_EVENT_SCOPE_OPTIONS.BOTH;
+                                }
                             }
                         });
                     });
                 });
             }
         });
+
         return timestepData;
-    }, [npeData.noc_transfers, npeData.timestep_data, selectedTimestep, fabricEventsOnlyFilter]);
+    }, [npeData.timestep_data, npeData.noc_transfers, selectedTimestep, fabricEventsFilter, visualizationMode]);
 
     const transfers = useMemo(() => {
         return npeData.noc_transfers
             .filter((tr) => links?.active_transfers.includes(tr.id))
             .filter((tr) => {
-                return fabricEventsOnlyFilter ? tr.fabric_event_type : true;
+                if (fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS) {
+                    return true;
+                }
+                if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
+                    return tr.fabric_event_type === true;
+                }
+                if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
+                    return tr.fabric_event_type !== true;
+                }
+                return true;
             });
-    }, [npeData.noc_transfers, links?.active_transfers, fabricEventsOnlyFilter]);
+    }, [npeData.noc_transfers, links?.active_transfers, fabricEventsFilter]);
 
     const showNOCType = (value: NoCType) => {
         if (nocFilter === null) {
@@ -209,7 +259,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const showAllTransfers = () => {
         setIsShowingAllTransfers(true);
         setSelectedNode(null);
-
         const activeTransfers = npeData.timestep_data[selectedTimestep].active_transfers
             .map((transferId) => npeData.noc_transfers.find((tr) => tr.id === transferId))
             .filter((transfer): transfer is NoCTransfer => transfer !== undefined);
@@ -245,15 +294,15 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return 0;
         }
         if (selectedTransferList.length === 0) {
-            return 0; // 0.45;
+            return 0;
         }
         const isSelected = selectedTransferList.some((t) => t.id === transfer.id);
 
         if (selectedTransferList.length !== 0 && !isSelected) {
-            return 0.15;
+            return 0;
         }
 
-        return 0.1;
+        return 0.5;
     };
 
     const switchwidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
@@ -319,6 +368,33 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         </ButtonGroup>
                     </div>
                     <div className='npe-controls-line'>
+                        <ButtonGroup
+                            variant={ButtonVariant.OUTLINED}
+                            size={Size.SMALL}
+                        >
+                            <Button
+                                text='Congestion Mode'
+                                icon={
+                                    visualizationMode === VISUALIZATION_MODE.CONGESTION
+                                        ? IconNames.ENDORSED
+                                        : IconNames.CIRCLE
+                                }
+                                active={visualizationMode === VISUALIZATION_MODE.CONGESTION}
+                                onClick={() => setVisualizationMode(VISUALIZATION_MODE.CONGESTION)}
+                            />
+                            <Button
+                                text='Transfers Scope Mode'
+                                icon={
+                                    visualizationMode === VISUALIZATION_MODE.TRANSFERS
+                                        ? IconNames.ENDORSED
+                                        : IconNames.CIRCLE
+                                }
+                                active={visualizationMode === VISUALIZATION_MODE.TRANSFERS}
+                                onClick={() => setVisualizationMode(VISUALIZATION_MODE.TRANSFERS)}
+                            />
+                        </ButtonGroup>
+                    </div>
+                    <div className='npe-controls-line'>
                         <Switch
                             label='NOC0'
                             checked={nocFilter === NoCType.NOC0 || nocFilter === null}
@@ -330,10 +406,58 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             onChange={() => showNOCType(NoCType.NOC1)}
                         />
                         <Switch
-                            label='Fabric events only'
-                            checked={fabricEventsOnlyFilter}
+                            labelElement={
+                                <>
+                                    <div
+                                        className='color-square'
+                                        style={{
+                                            backgroundColor: FabricEventScopeColors[FABRIC_EVENT_SCOPE_OPTIONS.FABRIC],
+                                        }}
+                                    />{' '}
+                                    Fabric events
+                                </>
+                            }
+                            checked={
+                                fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS ||
+                                fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS
+                            }
                             disabled={!isFabricTransfersFilteringEnabled}
-                            onChange={() => setFabricEventsOnlyFilter(!fabricEventsOnlyFilter)}
+                            onChange={() => {
+                                if (fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS) {
+                                    setFabricEventsFilter(EVENT_TYPE_FILTER.LOCAL_EVENTS);
+                                } else if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
+                                    setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
+                                } else if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
+                                    setFabricEventsFilter(EVENT_TYPE_FILTER.LOCAL_EVENTS);
+                                }
+                            }}
+                        />
+                        <Switch
+                            labelElement={
+                                <>
+                                    <div
+                                        className='color-square'
+                                        style={{
+                                            backgroundColor: FabricEventScopeColors[FABRIC_EVENT_SCOPE_OPTIONS.LOCAL],
+                                        }}
+                                    />{' '}
+                                    Local events
+                                </>
+                            }
+                            checked={
+                                fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS ||
+                                fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS
+                            }
+                            disabled={!isFabricTransfersFilteringEnabled}
+                            onChange={() => {
+                                if (fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS) {
+                                    setFabricEventsFilter(EVENT_TYPE_FILTER.FABRIC_EVENTS);
+                                } else if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
+                                    setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
+                                } else if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
+                                    setFabricEventsFilter(EVENT_TYPE_FILTER.FABRIC_EVENTS);
+                                }
+                            }}
                         />
                         |{/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                         <label>
@@ -445,9 +569,20 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                         )}
 
                                     {links?.link_demand.map((linkUtilization, index) => {
-                                        const fabricCondition = fabricEventsOnlyFilter
-                                            ? linkUtilization[NPE_LINK.FABRIC_EVENT_TYPE]
-                                            : true;
+                                        let fabricCondition = true;
+                                        if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
+                                            fabricCondition =
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
+                                                    FABRIC_EVENT_SCOPE_OPTIONS.FABRIC ||
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
+                                                    FABRIC_EVENT_SCOPE_OPTIONS.BOTH;
+                                        } else if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
+                                            fabricCondition =
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
+                                                    FABRIC_EVENT_SCOPE_OPTIONS.LOCAL ||
+                                                linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE] ===
+                                                    FABRIC_EVENT_SCOPE_OPTIONS.BOTH;
+                                        }
                                         if (
                                             linkUtilization[NPE_LINK.CHIP_ID] === clusterChip.id &&
                                             (nocFilter === null ||
@@ -468,6 +603,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                 >
                                                     {/* // TENSIX CONGESTION */}
                                                     <TensixTransferRenderer
+                                                        key={`${index}-${linkUtilization[NPE_LINK.Y]}-${linkUtilization[NPE_LINK.X]}-${linkUtilization[NPE_LINK.NOC_ID]}-transfers`}
                                                         style={{
                                                             opacity:
                                                                 highlightedTransfer !== null ||
@@ -480,14 +616,25 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                         data={[
                                                             getLinkPoints(
                                                                 linkUtilization[NPE_LINK.NOC_ID],
-                                                                calculateLinkCongestionColor(
-                                                                    linkUtilization[NPE_LINK.DEMAND],
-                                                                ),
+                                                                visualizationMode === VISUALIZATION_MODE.CONGESTION
+                                                                    ? calculateLinkCongestionColor(
+                                                                          linkUtilization[NPE_LINK.DEMAND],
+                                                                      )
+                                                                    : calculateFabricColor(
+                                                                          linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE],
+                                                                      ),
                                                             ),
                                                         ]}
                                                         isMulticolor={false}
                                                     />
-                                                    <div style={{ fontSize: '9px', position: 'absolute', top: 0 }}>
+                                                    <div
+                                                        style={{
+                                                            fontSize: '9px',
+                                                            position: 'absolute',
+                                                            top: 0,
+                                                            opacity: 1,
+                                                        }}
+                                                    >
                                                         {linkUtilization[NPE_LINK.Y]}-{linkUtilization[NPE_LINK.X]}
                                                     </div>
                                                 </button>

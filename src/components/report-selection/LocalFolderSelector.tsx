@@ -6,7 +6,7 @@ import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core'
 import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, type FC, useEffect, useState } from 'react';
 
-import { useQueryClient } from 'react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAtom, useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
 import {
@@ -81,8 +81,8 @@ const connectionFailedStatus: ConnectionStatus = {
 
 const LocalFolderOptions: FC = () => {
     const queryClient = useQueryClient();
-    const setProfilerReportLocation = useSetAtom(profilerReportLocationAtom);
-    const setPerformanceReportLocation = useSetAtom(performanceReportLocationAtom);
+    const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
+    const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
@@ -213,7 +213,7 @@ const LocalFolderOptions: FC = () => {
 
     const handleDeleteProfiler = async (folder: ReportFolder) => {
         await deleteProfiler(folder.path);
-        await queryClient.invalidateQueries([PROFILER_FOLDER_QUERY_KEY]);
+        await queryClient.invalidateQueries({ queryKey: [PROFILER_FOLDER_QUERY_KEY] });
 
         createToastNotification('Memory report deleted', folder.reportName);
 
@@ -234,7 +234,7 @@ const LocalFolderOptions: FC = () => {
 
     const handleDeletePerformance = async (folder: ReportFolder) => {
         await deletePerformance(folder.path);
-        await queryClient.invalidateQueries([PERFORMANCE_FOLDER_QUERY_KEY]);
+        await queryClient.invalidateQueries({ queryKey: [PERFORMANCE_FOLDER_QUERY_KEY] });
 
         createToastNotification(`Performance report deleted`, folder.reportName);
 
@@ -257,7 +257,8 @@ const LocalFolderOptions: FC = () => {
                 <LocalFolderPicker
                     items={reportFolderList}
                     value={
-                        reportFolderList?.map((folder: ReportFolder) => folder.path).includes(activeProfilerReport)
+                        reportFolderList?.map((folder: ReportFolder) => folder.path).includes(activeProfilerReport) &&
+                        profilerReportLocation === ReportLocation.LOCAL
                             ? activeProfilerReport
                             : null
                     }
@@ -311,7 +312,7 @@ const LocalFolderOptions: FC = () => {
                     value={
                         perfFolderList
                             ?.map((folder: ReportFolder) => folder.reportName)
-                            .includes(activePerformanceReport)
+                            .includes(activePerformanceReport) && performanceReportLocation === ReportLocation.LOCAL
                             ? activePerformanceReport
                             : null
                     }

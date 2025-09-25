@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import axios, { AxiosError } from 'axios';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import Papa, { ParseResult } from 'papaparse';
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -34,7 +34,9 @@ import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
+    filterBySignpostAtom,
     selectedOperationRangeAtom,
+    stackByIn0Atom,
 } from '../store/app';
 import archWormhole from '../assets/data/arch-wormhole.json';
 import archBlackhole from '../assets/data/arch-blackhole.json';
@@ -44,6 +46,9 @@ import { ChipDesign, ClusterModel } from '../model/ClusterModel';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import createToastNotification from '../functions/createToastNotification';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
+import { Signpost } from '../functions/perfFunctions';
+
+const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
 const parseFileOperationIdentifier = (stackTrace: string): string => {
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
@@ -158,6 +163,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
                   }
                 : argument,
         );
+
         return {
             ...operation,
             operationFileIdentifier: parseFileOperationIdentifier(operation.stack_trace),
@@ -255,7 +261,14 @@ export const useGetL1SmallMarker = (): number => {
         const addresses = buffers?.map((buffer) => {
             return buffer.address;
         }) || [0];
-        return Math.min(...addresses);
+
+        let min = Infinity;
+        for (let i = 0; i < addresses.length; i++) {
+            if (addresses[i] < min) {
+                min = addresses[i];
+            }
+        }
+        return min === Infinity ? 0 : min;
     }, [buffers]);
 };
 
@@ -321,11 +334,12 @@ const fetchDevices = async (reportName: string) => {
 export interface PerformanceReportResponse {
     report: PerfTableRow[];
     stacked_report: StackedPerfRow[];
+    signposts?: Signpost[];
 }
 
-const fetchPerformanceReport = async (name?: string | null) => {
+const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, signpost: Signpost | null) => {
     const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
-        params: { name },
+        params: { name, stack_by_in0: stackByIn0, signpost: signpost?.op_code },
     });
 
     return data;
@@ -474,7 +488,9 @@ export const useOperationDetails = (operationId: number | null) => {
     // Memoized function for fetching operation details
     const fetchDetails = useCallback(() => fetchOperationDetails(operationId), [operationId]);
 
-    const operationDetails = useQuery<OperationDetailsData>(['get-operation-detail', operationId], fetchDetails, {
+    const operationDetails = useQuery<OperationDetailsData>({
+        queryFn: () => fetchDetails(),
+        queryKey: ['get-operation-detail', operationId],
         retry: 2,
         retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
         staleTime: Infinity,
@@ -634,7 +650,7 @@ const useProxyPerformanceReport = (): PerformanceReportResponse => {
 
     return useMemo(() => {
         if (!response.data) {
-            return { report: [], stacked_report: [] };
+            return EMPTY_PERF_RETURN;
         }
         return response.data;
     }, [response.data]);
@@ -698,15 +714,18 @@ export const usePerformanceRange = (): NumberRange | null => {
 export const useReportMeta = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery<ReportMetaData, AxiosError>(['get-report-config', activeProfilerReport], fetchReportMeta);
+    return useQuery<ReportMetaData, AxiosError>({
+        queryKey: ['get-report-config', activeProfilerReport],
+        queryFn: () => fetchReportMeta(),
+    });
 };
 
 export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
-    return useQuery<BufferPage[], AxiosError>(
-        ['get-buffer-pages', operationId, address, bufferType],
-        () => fetchBufferPages(operationId, address, bufferType),
-        { staleTime: Infinity },
-    );
+    return useQuery<BufferPage[], AxiosError>({
+        queryKey: ['get-buffer-pages', operationId, address, bufferType],
+        queryFn: () => fetchBufferPages(operationId, address, bufferType),
+        staleTime: Infinity,
+    });
 };
 
 export const fetchTensors = async (): Promise<Tensor[]> => {
@@ -782,7 +801,8 @@ export const fetchNextUseOfBuffer = async (address: number | null, consumers: nu
 };
 
 export const useNextBuffer = (address: number | null, consumers: number[], queryKey: string) => {
-    return useQuery<BufferData, AxiosError>(queryKey, {
+    return useQuery<BufferData, AxiosError>({
+        queryKey: [queryKey],
         queryFn: () => fetchNextUseOfBuffer(address, consumers),
         retry: false,
         staleTime: Infinity,
@@ -793,9 +813,11 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     const range = useAtomValue(selectedOperationRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    const response = useQuery({
-        queryFn: () => fetchBuffersByOperation(bufferType),
+    const response = useQuery<BuffersByOperationData[], AxiosError>({
+        queryFn: () => (activeProfilerReport !== null ? fetchBuffersByOperation(bufferType) : Promise.resolve([])),
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
+        enabled: activeProfilerReport !== null,
+        retry: false,
         staleTime: Infinity,
     });
 
@@ -805,8 +827,7 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
         }
 
         return response;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [range, response.data, useRange]);
+    }, [range, response, useRange]);
 };
 
 export const useDeviceLog = (name?: string | null) => {
@@ -820,30 +841,33 @@ export const useDeviceLog = (name?: string | null) => {
 };
 
 export const usePerformanceReport = (name: string | null) => {
+    const signpost = useAtomValue(filterBySignpostAtom);
+    const stackByIn0 = useAtomValue(stackByIn0Atom);
+
     const response = useQuery<PerformanceReportResponse, AxiosError>({
         queryFn: () =>
-            name !== null ? fetchPerformanceReport(name) : Promise.resolve({ report: [], stacked_report: [] }),
-        queryKey: ['get-performance-report', name],
+            name !== null ? fetchPerformanceReport(name, stackByIn0, signpost) : Promise.resolve(EMPTY_PERF_RETURN),
+        queryKey: [
+            'get-performance-report',
+            name,
+            `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
+            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
+        ],
         enabled: name !== null,
         retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
     });
 
-    return useMemo(() => {
-        if (response.data) {
-            const df: PerfTableRow[] = response.data.report
-                .slice()
-                .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
-
-            response.data.report = df;
-        }
-
-        return response;
+    return useMemo(
+        () => response,
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [response.data, response.error]);
+        [response.data, response.error],
+    );
 };
 
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
+    const stackByIn0 = useAtomValue(stackByIn0Atom);
+    const signpost = useAtomValue(filterBySignpostAtom);
 
     const reportNames = useMemo(() => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
@@ -855,11 +879,18 @@ export const usePerformanceComparisonReport = () => {
                 return [];
             }
 
-            const results = await Promise.all(reportNames.map((name) => fetchPerformanceReport(name)));
+            const results = await Promise.all(
+                reportNames.map((name) => fetchPerformanceReport(name, stackByIn0, signpost)),
+            );
 
             return results;
         },
-        queryKey: ['get-performance-comparison-report', reportNames],
+        queryKey: [
+            'get-performance-comparison-report',
+            reportNames,
+            `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
+            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
+        ],
         staleTime: Infinity,
         enabled: !!reportNames,
     });

@@ -68,6 +68,7 @@ from ttnn_visualizer.utils import (
     create_path_resolver,
     get_cluster_descriptor_path,
     read_last_synced_file,
+    str_to_bool,
     timer,
 )
 
@@ -346,6 +347,7 @@ def get_all_buffers(instance: Instance):
 def get_operations_buffers(instance: Instance):
     buffer_type = request.args.get("buffer_type", "")
     device_id = request.args.get("device_id", None)
+
     if buffer_type and str.isdigit(buffer_type):
         buffer_type = int(buffer_type)
     else:
@@ -686,6 +688,8 @@ def get_performance_results_report(instance: Instance):
         )
 
     name = request.args.get("name", None)
+    signpost = request.args.get("signpost", None)
+    stack_by_in0 = str_to_bool(request.args.get("stack_by_in0", "true"))
 
     if name and not current_app.config["SERVER_MODE"]:
         performance_path = Path(instance.performance_path).parent / name
@@ -693,7 +697,11 @@ def get_performance_results_report(instance: Instance):
         logger.info(f"************ Performance path set to {instance.performance_path}")
 
     try:
-        report = OpsPerformanceReportQueries.generate_report(instance)
+        report = OpsPerformanceReportQueries.generate_report(
+            instance,
+            stack_by_in0=stack_by_in0,
+            signpost=signpost,
+        )
     except DataFormatError:
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
@@ -905,7 +913,11 @@ def create_npe_files():
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
     for file in files:
-        if not file.filename.endswith(".json") and not file.filename.endswith(".zst"):
+        if (
+            not file.filename.endswith(".json")
+            and not file.filename.endswith(".zst")
+            and not file.filename.endswith(".npeviz")
+        ):
             return StatusMessage(
                 status=ConnectionTestStates.FAILED,
                 message="NPE requires a valid .json or .zst file",
@@ -1026,10 +1038,7 @@ def get_cluster_descriptor(instance: Instance):
         try:
             with open(local_path) as cluster_desc_file:
                 yaml_data = yaml.safe_load(cluster_desc_file)
-                return Response(
-                    orjson.dumps(yaml_data),
-                    mimetype="application/json",
-                )
+                return jsonify(yaml_data)  # yaml_data is not compatible with orjson
         except yaml.YAMLError as e:
             return jsonify({"error": f"Failed to parse YAML: {str(e)}"}), 400
 
@@ -1279,7 +1288,7 @@ def get_npe_data(instance: Instance):
     if instance.npe_path.endswith(".zst"):
         compressed_path = Path(instance.npe_path)
         uncompressed_path = None
-    elif instance.npe_path.endswith(".json"):
+    elif instance.npe_path.endswith(".json") or instance.npe_path.endswith(".npeviz"):
         compressed_path = None
         uncompressed_path = Path(instance.npe_path)
     else:
@@ -1298,16 +1307,15 @@ def get_npe_data(instance: Instance):
         if compressed_path and compressed_path.exists():
             with open(compressed_path, "rb") as file:
                 compressed_data = file.read()
-                uncompressed_data = zstd.uncompress(compressed_data)
-                npe_data = json.loads(uncompressed_data)
+                npe_data = zstd.uncompress(compressed_data)
         else:
             with open(uncompressed_path, "r") as file:
-                npe_data = json.load(file)
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in NPE file: {e}")
+                npe_data = file.read()
+    except Exception as e:
+        logger.error(f"Error reading NPE file: {e}")
         return Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
-    return Response(orjson.dumps(npe_data), mimetype="application/json")
+    return Response(npe_data, mimetype="application/json")
 
 
 @api.route("/notify", methods=["POST"])

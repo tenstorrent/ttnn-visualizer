@@ -9,13 +9,26 @@
 $row-pattern-0: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
 $row-pattern-1: linear-gradient(0deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
 $row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
+$header-footer-border: 2px solid colours.$tt-grey-5;
 
 .perf-report {
     color: #fff;
     min-width: 1240px;
     overflow: auto;
 
-    .table-header {
+    .report-tabs {
+        margin-top: 10px;
+
+        > .bp6-tab-list {
+            flex-wrap: wrap;
+        }
+
+        > .bp6-tab-panel {
+            margin-top: 10px;
+        }
+    }
+
+    .report-header {
         display: flex;
         width: 100%;
         justify-content: space-between;
@@ -48,6 +61,14 @@ $row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50
         margin-bottom: 15px;
     }
 
+    .view-options {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
     .data-options {
         display: flex;
         flex-wrap: nowrap;
@@ -59,21 +80,9 @@ $row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50
         }
     }
 
-    .tab-panel {
-        margin-top: 10px;
-    }
-
-    .meta-data {
-        display: flex;
-        flex-direction: column;
-        height: 46px;
-        margin-bottom: 20px;
-    }
-
     .cell-header {
         text-align: left;
         vertical-align: initial;
-        border-bottom: 1px solid #555;
 
         .header-label {
             font-weight: 400;
@@ -114,7 +123,7 @@ $row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50
             }
 
             &.comparison-row {
-                border-bottom: 1px solid colours.$tt-sand-accent;
+                border-bottom: 2px solid colours.$tt-sand-shade;
                 background-size: 5px 5px;
 
                 &.pattern-0 {
@@ -129,11 +138,23 @@ $row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50
                     background-image: $row-pattern-2;
                 }
             }
+
+            &:last-child {
+                border-bottom: none;
+
+                > td {
+                    border-bottom: none;
+                }
+            }
         }
     }
 
     .missing-data {
         background-color: colours.$tt-red-shade;
+    }
+
+    .signpost-op {
+        background-color: rgba(colours.$tt-yellow-shade, 0.2);
     }
 
     .cell {
@@ -146,6 +167,27 @@ $row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50
 
         &.advice {
             border-bottom: none;
+        }
+    }
+
+    .table-header {
+        border-bottom: $header-footer-border;
+    }
+
+    .table-footer {
+        border-top: $header-footer-border;
+        font-style: italic;
+
+        td {
+            padding: 1rem 0.25rem;
+
+            &.no-wrap {
+                white-space: nowrap;
+            }
+
+            &.break-word {
+                word-break: break-word;
+            }
         }
     }
 

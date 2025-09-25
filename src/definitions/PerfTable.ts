@@ -44,6 +44,7 @@ export interface PerfTableRow {
     output_subblock_w: string;
     high_dispatch?: boolean;
     pm_ideal_ns: string;
+    op_type: OpType;
     op?: number;
     missing?: boolean;
 }
@@ -77,29 +78,37 @@ export interface TypedPerfTableRow
 export type MathFidelity = 'HiFi4' | 'HiFi2' | 'LoFi';
 
 export const MARKER_COLOURS = [
+    'rgb(0, 128, 128)',
+    'rgb(255, 215, 0)',
     'rgb(31, 119, 180)',
-    'rgb(255, 127, 14)',
+    'rgb(255, 69, 0)',
     'rgb(44, 160, 44)',
-    'rgb(214, 39, 40)',
-    'rgb(148, 103, 189)',
-    'rgb(140, 86, 75)',
     'rgb(227, 119, 194)',
-    'rgb(188, 189, 34)',
-    'rgb(23, 190, 207)',
-    'rgb(255, 187, 120)',
-    'rgb(40, 108, 26)',
-    'rgb(255, 152, 150)',
-    'rgb(197, 176, 213)',
-    'rgb(196, 156, 148)',
-    'rgb(247, 182, 210)',
-    'rgb(199, 199, 199)',
-    'rgb(219, 219, 141)',
-    'rgb(158, 218, 229)',
-    'rgb(57, 59, 121)',
-    'rgb(82, 84, 163)',
-    'rgb(107, 110, 207)',
-    'rgb(156, 158, 222)',
+    'rgb(75, 0, 130)',
     'rgb(255, 127, 14)',
+    'rgb(154, 205, 50)',
+    'rgb(0, 191, 255)',
+    'rgb(214, 39, 40)',
+    'rgb(255, 105, 180)',
+    'rgb(188, 189, 34)',
+    'rgb(148, 103, 189)',
+    'rgb(40, 108, 26)',
+    'rgb(255, 187, 120)',
+    'rgb(196, 156, 148)',
+    'rgb(23, 190, 207)',
+    'rgb(199, 199, 199)',
+    'rgb(128, 0, 128)',
+    'rgb(219, 219, 141)',
+    'rgb(82, 84, 163)',
+    'rgb(255, 152, 150)',
+    'rgb(156, 158, 222)',
+    'rgb(107, 110, 207)',
+    'rgb(247, 182, 210)',
+    'rgb(158, 218, 229)',
+    'rgb(197, 176, 213)',
+    'rgb(140, 86, 75)',
+    'rgb(255, 127, 14)',
+    'rgb(57, 59, 121)',
 ];
 
 export interface Marker {
@@ -157,3 +166,39 @@ export const ComparisonKeys: TableKeys[] = [
     ColumnHeaders.high_dispatch,
     ColumnHeaders.global_call_count,
 ];
+
+// Taken from - https://github.com/tenstorrent/tt-metal/blob/main/ttnn/api/tools/profiler/op_profiler.hpp#L33
+export enum OpType {
+    DEVICE_OP = 'tt_dnn_device', // OP implemented in C++ and running on DEVICE
+    PYTHON_OP = 'python_fallback', //  OP fully implemented in python and running on CPU
+    CPU_OP = 'tt_dnn_cpu', // OP implemented in C++ and running on CPU
+    SIGNPOST = 'signpost',
+    UNKNOWN = 'unknown',
+}
+
+export const signpostRowDefaults = {
+    global_call_count: null,
+    total_percent: null,
+    device_time: null,
+    op_to_op_gap: null,
+    cores: null,
+    dram: null,
+    dram_percent: null,
+    flops: null,
+    flops_percent: null,
+    advice: [],
+    bound: '',
+    math_fidelity: '',
+    output_datatype: '',
+    output_0_memory: '',
+    input_0_datatype: '',
+    input_1_datatype: '',
+    dram_sharded: '',
+    input_0_memory: '',
+    input_1_memory: '',
+    inner_dim_block_size: '',
+    output_subblock_h: '',
+    output_subblock_w: '',
+    pm_ideal_ns: '',
+    op_type: OpType.SIGNPOST,
+};

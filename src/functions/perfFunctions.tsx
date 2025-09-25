@@ -6,9 +6,9 @@ import React from 'react';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
-import { MathFidelity, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import { MathFidelity, OpType, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
-import { formatSize, toSecondsPretty } from './math';
+import { formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
 
@@ -22,6 +22,11 @@ export enum CellColour {
     Yellow = 'yellow',
     Orange = 'orange',
     Grey = 'grey',
+}
+
+export interface Signpost {
+    id: number;
+    op_code: string;
 }
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
@@ -40,6 +45,7 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
 
 const DEFAULT_COLOUR = CellColour.White;
 const FALLBACK_COLOUR = CellColour.Grey;
+const WARNING_COLOUR = CellColour.Yellow;
 
 const MIN_PERCENTAGE = 0.5;
 
@@ -63,14 +69,23 @@ export const formatCell = (
     const { key, unit, decimals } = header;
     let formatted: string | boolean | string[];
     let value = row[key];
+    const isSignpost = row.op_type === OpType.SIGNPOST;
+
+    if (isSignpost) {
+        if (key !== 'id' && key !== 'op_code') {
+            return '';
+        }
+
+        return value !== null ? String(value) : '';
+    }
 
     if (key === 'high_dispatch') {
         return (
-            <Tooltip content='Op with > 6µs dispatch latency'>
+            <Tooltip content='Op with > 6 µs dispatch latency'>
                 <Icon
-                    color='#ff0'
+                    className={WARNING_COLOUR}
                     icon={IconNames.WARNING_SIGN}
-                    title='Op with > 6µs dispatch latency'
+                    title='Op with > 6 µs dispatch latency'
                 />
             </Tooltip>
         );
@@ -103,7 +118,7 @@ export const formatCell = (
         // there was a logic here to do something clever with Matmul size, removing it for now
         formatted = `${value}`;
     } else if (typeof value === 'number') {
-        formatted = formatSize(Number(value.toFixed(decimals ?? 0)));
+        formatted = formatSize(value, decimals);
     } else {
         formatted = value.toString();
     }
@@ -143,6 +158,10 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
 
     if (percentage != null && percentage < MIN_PERCENTAGE) {
         return FALLBACK_COLOUR;
+    }
+
+    if (row.op_type === OpType.SIGNPOST) {
+        return DEFAULT_COLOUR;
     }
 
     if (key === 'id' || key === 'total_percent' || key === 'device_time') {
@@ -285,9 +304,9 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     return (
         <div>
             <p>
-                Marked ops have &gt; 6µs dispatch latency. Running with tracing could save{' '}
-                {formatSize(Number(maxDispatchOverhead.toFixed(0)))} µs {toSecondsPretty(maxDispatchOverhead)} (
-                {percentageSaved.toFixed(1)}% of overall time).
+                Marked ops have &gt; 6 µs dispatch latency. Running with tracing could save{' '}
+                {formatSize(maxDispatchOverhead, 0)} µs {toSecondsPretty(maxDispatchOverhead)} (
+                {formatPercentage(percentageSaved, 1)} of overall time).
             </p>
             <p>Alternatively, try moving runtime args in the kernels to compile-time args.</p>
         </div>
@@ -379,3 +398,5 @@ export function getAxisUpperRange(arrays: Array<unknown[]>): number {
     // Adds + 1 to avoid cutting off the last plotted element in some cases and to create some space on the right side of the chart data
     return Math.max(...arrays.map((arr) => arr.length), 0) + 1;
 }
+
+export const isHostOp = (op: string) => op.includes('(torch)');
