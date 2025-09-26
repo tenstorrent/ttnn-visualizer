@@ -23,7 +23,7 @@ import {
 } from '../store/app';
 import PerfCharts from '../components/performance/PerfCharts';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
-import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
+import { MARKER_COLOURS, Marker, OpType, PerfTableRow } from '../definitions/PerfTable';
 import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
@@ -59,11 +59,13 @@ export default function Performance() {
         const opCodes = Array.from(
             new Set([
                 ...(perfData
-                    ?.map((row) => row.raw_op_code)
+                    ?.filter((row) => row.op_type !== OpType.SIGNPOST)
+                    .map((row) => row.raw_op_code)
                     .filter((opCode): opCode is string => opCode !== undefined) || []),
                 ...(comparisonPerfData
                     ? comparisonPerfData.flatMap((report) =>
                           report
+                              .filter((row) => row.op_type !== OpType.SIGNPOST)
                               .map((row) => row.raw_op_code)
                               .filter((opCode): opCode is string => opCode !== undefined),
                       )

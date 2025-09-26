@@ -41,7 +41,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         <th>Producer</th>
                         <td>
                             {isValidNumber(firstOperationId)
-                                ? getFirstOperation(firstOperationId, operations, tensor)
+                                ? getFirstOperation(firstOperationId, operations)
                                 : 'No producer for this tensor'}
                         </td>
                     </tr>
