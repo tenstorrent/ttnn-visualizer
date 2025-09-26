@@ -25,7 +25,7 @@ import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
-    filters: Record<string, string> | null;
+    filters: Record<string, string> | null; // TODO: Type this properly with our definitions
     stackedData?: TypedStackedPerfRow[];
     reportName?: string;
 }
