@@ -10,7 +10,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAtom, useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
 import {
-    ReportLocation,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     performanceReportLocationAtom,
@@ -33,7 +32,7 @@ import {
     useReportFolderList,
 } from '../../hooks/useAPI';
 import LocalFolderPicker from './LocalFolderPicker';
-import { ReportFolder } from '../../definitions/Reports';
+import { ReportFolder, ReportLocation } from '../../definitions/Reports';
 import {
     createDataIntegrityWarning,
     hasBeenNormalised,
