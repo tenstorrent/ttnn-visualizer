@@ -9,7 +9,6 @@ import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
 import {
-    ReportLocation,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     operationRangeAtom,
@@ -22,7 +21,7 @@ import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
 import { useInstance, useReportFolderList } from '../hooks/useAPI';
-import { ReportFolder } from '../definitions/Reports';
+import { ReportFolder, ReportLocation } from '../definitions/Reports';
 import useRemoteConnection from '../hooks/useRemote';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import getServerConfig from '../functions/getServerConfig';

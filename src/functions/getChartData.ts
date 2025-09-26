@@ -14,8 +14,8 @@ export default function getChartData(
     overrides?: { color?: string; colorVariance?: number; hovertemplate?: string },
     options?: { renderPattern?: boolean },
 ): Partial<PlotDataCustom>[] {
-    // TODO: we may want to double check this eventually
-    // @ts-expect-error - PlotDataCustom works just fine
+    // TODO: we may want to double check this eventually (there does't seem to be an error here anymore)
+    // // @ts-expect-error - PlotDataCustom works just fine
     return memory.map((chunk) => {
         const { address, size } = chunk;
         const tensor = getTensorForAddress(address);

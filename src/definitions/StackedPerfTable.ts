@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { OpType } from './PerfTable';
+import { OpType } from './Performance';
 
 export type StackedTableKeys = Partial<keyof StackedPerfRow>;
 

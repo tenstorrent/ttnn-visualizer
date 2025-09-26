@@ -17,7 +17,6 @@ import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemote from '../../hooks/useRemote';
 import {
-    ReportLocation,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     performanceReportLocationAtom,
@@ -28,6 +27,7 @@ import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
+import { ReportLocation } from '../../definitions/Reports';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemote();
