@@ -11,9 +11,9 @@ import { useAtomValue } from 'jotai';
 import {
     ColumnHeaders,
     ComparisonKeys,
+    TableFilter,
     TableHeader,
     TableHeaders,
-    TableKeys,
     TypedPerfTableRow,
     signpostRowDefaults,
 } from '../../definitions/PerfTable';
@@ -32,7 +32,7 @@ import LoadingSpinner from '../LoadingSpinner';
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
     comparisonData?: TypedPerfTableRow[][];
-    filters: Record<TableKeys, string> | null;
+    filters: TableFilter;
     mathFidelityFilter: (string | number)[];
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
