@@ -23,9 +23,7 @@ import { ItemPredicate, ItemRenderer, MultiSelect, Select } from '@blueprintjs/s
 import { IconNames } from '@blueprintjs/icons';
 import {
     FilterableColumnKeys,
-    OpType,
     PerfTableRow,
-    TableFilter,
     TableHeaders,
     TableKeys,
     TypedPerfTableRow,
@@ -40,6 +38,7 @@ import {
     comparisonPerformanceReportListAtom,
     filterBySignpostAtom,
     isStackedViewAtom,
+    perfTableFiltersAtom,
     stackByIn0Atom,
 } from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
@@ -55,6 +54,7 @@ import {
 } from '../../definitions/StackedPerfTable';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 import HighlightedText from '../HighlightedText';
+import { OpType } from '../../definitions/Performance';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -64,7 +64,7 @@ interface PerformanceReportProps {
     signposts?: Signpost[];
 }
 
-const INITIAL_TAB_ID = 'perf-table-0';
+const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
 
 const PerformanceReport: FC<PerformanceReportProps> = ({
     data,
@@ -92,12 +92,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const [highlightRows, setHighlightRows] = useState(true);
-    const [filters, setFilters] = useState<TableFilter>(
-        Object.fromEntries(FilterableColumnKeys.map((key) => [key, ''] as [TableKeys, string])) as Record<
-            TableKeys,
-            string
-        >,
-    );
+    const [filters, setFilters] = useAtom(perfTableFiltersAtom);
     const [stackedFilters, setStackedFilters] = useState<StackedTableFilter>(
         Object.fromEntries(FilterableStackedColumnKeys.map((key) => [key, ''] as [StackedTableKeys, string])) as Record<
             StackedTableKeys,
@@ -481,6 +476,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         />
                     ))}
                 </Tabs>
+
+                {hiliteHighDispatch && calcHighDispatchOps(processedRows)}
             </div>
 
             <hr />
