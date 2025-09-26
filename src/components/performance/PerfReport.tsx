@@ -479,10 +479,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
                 {hiliteHighDispatch && calcHighDispatchOps(processedRows)}
             </div>
-
-            <hr />
-
-            {hiliteHighDispatch && calcHighDispatchOps(processedRows)}
         </>
     );
 };
