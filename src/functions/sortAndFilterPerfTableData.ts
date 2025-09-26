@@ -4,7 +4,7 @@
 
 import { TableFilter, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 
-const isFiltersActive = (filters: Record<TableKeys, string> | null) =>
+const isFiltersActive = (filters: TableFilter) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
 
 const getCellText = (buffer: TypedPerfTableRow, key: TableKeys) => {
