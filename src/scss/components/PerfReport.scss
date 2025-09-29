@@ -201,8 +201,7 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
     .high-dispatch-advice {
         border-top: 1px solid colours.$tt-white;
         padding-top: 20px;
-        color: colours.$tt-yellow-shade;
-        color: #ff0;
+        color: colours.$tt-yellow-tint-1;
     }
 
     @include perf.perf-report-colours;
