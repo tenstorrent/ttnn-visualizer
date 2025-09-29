@@ -25,21 +25,21 @@ const OperationGraph: React.FC<{
     operationList: OperationList;
     operationId?: number;
 }> = ({ operationList, operationId }) => {
+    const focusNodeId = operationId !== undefined ? operationId : (operationList[0].id ?? 0);
+
     const containerRef = useRef<HTMLDivElement | null>(null);
     const navigate = useNavigate();
-    const networkRef = useRef<Network | null>(null);
+
     const [isLoading, setIsLoading] = useState(true);
     const [scale, setScale] = useState(1);
-
-    const focusNodeId = operationId !== undefined ? operationId : (operationList[0].id ?? 0);
-    const [currentOperationId, setCurrentOperationId] = useState<number | null>(operationId ?? null);
-    const currentOpIdRef = useRef<number>(currentOperationId);
-
+    const [currentOperationId, setCurrentOperationId] = useState<number | null>(focusNodeId ?? null);
     const [nodeNameFilter, setNodeNameFilter] = useState<string>('');
     const [filteredNodeIdList, setFilteredNodeIdList] = useState<number[]>([]);
     const [currentFilteredIndex, setCurrentFilteredIndex] = useState<number | null>(null);
-
     const [filterDeallocate, setFilterDeallocate] = useState<boolean>(false);
+
+    const networkRef = useRef<Network | null>(null);
+    const currentOpIdRef = useRef<number>(currentOperationId);
 
     const edges = useMemo(
         () =>
