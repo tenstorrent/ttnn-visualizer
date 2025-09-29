@@ -3,4 +3,3 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 export const DEFAULT_DEVICE_ID = 0;
-
