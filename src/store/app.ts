@@ -9,6 +9,7 @@ import { FileProgress, FileStatus } from '../model/APIData';
 import { DEFAULT_DEVICE_ID } from '../definitions/Devices';
 import { TAB_IDS } from '../definitions/BufferSummary';
 import { ScrollPositions } from '../definitions/ScrollPositions';
+import { Signpost } from '../functions/perfFunctions';
 
 export enum ReportLocation {
     LOCAL = 'local',
@@ -33,6 +34,9 @@ export const expandedTensorsAtom = atom<number[]>([]);
 export const activeToastAtom = atom<number | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorAtom = atom<number | null>(null);
+export const isStackedViewAtom = atom(false);
+export const stackByIn0Atom = atom(true);
+export const filterBySignpostAtom = atom<Signpost | null>(null);
 
 export const operationRangeAtom = atom<NumberRange | null>(null);
 export const selectedOperationRangeAtom = atom<NumberRange | null>(null);

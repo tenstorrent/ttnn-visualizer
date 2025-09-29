@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { TypedPerfTableRow } from '../definitions/PerfTable';
+import { OpType, TypedPerfTableRow } from '../definitions/PerfTable';
 
 const MISSING_OP_STRING = 'MISSING';
 const PLACEHOLDER: TypedPerfTableRow = {
@@ -32,6 +32,7 @@ const PLACEHOLDER: TypedPerfTableRow = {
     output_subblock_h: '',
     output_subblock_w: '',
     pm_ideal_ns: '',
+    op_type: OpType.UNKNOWN,
 };
 
 function alignByOpCode(

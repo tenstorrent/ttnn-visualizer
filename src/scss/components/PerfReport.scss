@@ -16,6 +16,18 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
     min-width: 1240px;
     overflow: auto;
 
+    .report-tabs {
+        margin-top: 10px;
+
+        > .bp6-tab-list {
+            flex-wrap: wrap;
+        }
+
+        > .bp6-tab-panel {
+            margin-top: 10px;
+        }
+    }
+
     .report-header {
         display: flex;
         width: 100%;
@@ -49,6 +61,14 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         margin-bottom: 15px;
     }
 
+    .view-options {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
     .data-options {
         display: flex;
         flex-wrap: nowrap;
@@ -60,21 +80,9 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         }
     }
 
-    .tab-panel {
-        margin-top: 10px;
-    }
-
-    .meta-data {
-        display: flex;
-        flex-direction: column;
-        height: 46px;
-        margin-bottom: 20px;
-    }
-
     .cell-header {
         text-align: left;
         vertical-align: initial;
-        border-bottom: 1px solid #555;
 
         .header-label {
             font-weight: 400;
@@ -143,6 +151,10 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
 
     .missing-data {
         background-color: colours.$tt-red-shade;
+    }
+
+    .signpost-op {
+        background-color: rgba(colours.$tt-yellow-shade, 0.2);
     }
 
     .cell {

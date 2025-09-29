@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useState } from 'react';
-import { Button, Icon, Intent, Switch, Tag } from '@blueprintjs/core';
+import { Button, Icon, Switch, Tag } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
@@ -125,8 +125,8 @@ const ActiveTransferDetails = ({
                                                 {transfer.route[0].injection_rate.toFixed(2)} b/cycle
                                                 {transfer.fabric_event_type && (
                                                     <Tag
+                                                        className='fabric-tag'
                                                         icon={IconNames.FLOW_LINEAR}
-                                                        intent={Intent.PRIMARY}
                                                         minimal
                                                     >
                                                         Fabric
