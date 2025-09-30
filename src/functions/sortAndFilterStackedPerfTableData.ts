@@ -51,7 +51,9 @@ const sortAndFilterStackedPerfTableData = (
         filteredRows = filteredRows.filter(
             (row) =>
                 row?.op_code !== null &&
-                rawOpCodeFilter.some((filterValue) => row.op_code.toLowerCase().includes(filterValue.toLowerCase())),
+                rawOpCodeFilter.some((filterValue) =>
+                    row.op_code.toLowerCase().includes(String(filterValue).toLowerCase()),
+                ),
         );
     }
 

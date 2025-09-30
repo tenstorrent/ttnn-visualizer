@@ -15,7 +15,7 @@ export default function getChartData(
     options?: { renderPattern?: boolean },
 ): Partial<PlotDataCustom>[] {
     // TODO: we may want to double check this eventually
-    // @ts-expect-error - PlotDataCustom works just fine
+    // // @ts-expect-error - PlotDataCustom works just fine
     return memory.map((chunk) => {
         const { address, size } = chunk;
         const tensor = getTensorForAddress(address);

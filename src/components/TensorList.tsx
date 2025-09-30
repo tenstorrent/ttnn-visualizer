@@ -228,11 +228,13 @@ const TensorList = () => {
                         // Type requires this but it seems pointless
                         onItemSelect={(selectedType) => updateBufferTypeFilters(selectedType.toString())}
                         selectedItems={activeBufferTypeFilters}
-                        itemRenderer={(value: unknown) => BufferTypeItem(value, BufferTypeLabel[value])}
-                        tagRenderer={(buffer) => BufferTypeLabel[buffer]}
+                        itemRenderer={(bufferType: TableFilterValue) =>
+                            BufferTypeItem(bufferType, BufferTypeLabel[Number(bufferType)])
+                        }
+                        tagRenderer={(bufferType: TableFilterValue) => BufferTypeLabel[Number(bufferType)]}
                         onRemove={(type) => updateBufferTypeFilters(type.toString())}
-                        itemPredicate={(query, bufferType) =>
-                            !query || BufferTypeLabel[bufferType].toLowerCase().includes(query.toLowerCase())
+                        itemPredicate={(query, bufferType: TableFilterValue) =>
+                            !query || BufferTypeLabel[Number(bufferType)].toLowerCase().includes(query.toLowerCase())
                         }
                         noResults={
                             <MenuItem

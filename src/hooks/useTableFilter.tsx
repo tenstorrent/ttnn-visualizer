@@ -3,9 +3,10 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useState } from 'react';
-import TableFilterItem from '../components/TableFilterItem';
+import { Checkbox } from '@blueprintjs/core';
+import 'styles/components/TableFilterItem.scss'; // Bit weird having this in a hook
 
-export type TableFilterValue = string; // May need to expand this eventually
+export type TableFilterValue = string | number; // May need to expand this eventually
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const useTableFilter = <T extends Record<string, any>>(key: keyof T, data: T[]) => {
@@ -26,13 +27,14 @@ const useTableFilter = <T extends Record<string, any>>(key: keyof T, data: T[]) 
 
     const OptionComponent = (type: TableFilterValue, label?: string) => {
         return (
-            <TableFilterItem
-                label={label}
-                key={String(type)}
-                type={String(type)}
-                onChange={updateFilters}
-                activeFilters={activeFilters}
-            />
+            <li>
+                <Checkbox
+                    className='table-filter-checkbox'
+                    label={label || String(type)}
+                    checked={activeFilters.includes(type)}
+                    onClick={() => updateFilters(type)}
+                />
+            </li>
         );
     };
 

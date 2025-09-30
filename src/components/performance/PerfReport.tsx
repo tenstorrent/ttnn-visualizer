@@ -272,13 +272,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 <div className='filters'>
                     <SearchField
                         onQueryChanged={(value) => updateColumnFilter('op_code', value)}
-                        placeholder='Filter Op Code'
+                        placeholder='Filter OP Code'
                         searchQuery={filters?.op_code || ''}
                     />
 
                     <MultiSelect<TableFilterValue>
                         items={data ? getRawOpCodeOptions() : []}
-                        placeholder='Select Op Code(s)'
+                        placeholder='Select OP Codes...'
                         // Type requires this but it seems pointless
                         onItemSelect={(opCode) => updateRawOpCodeFilters(opCode)}
                         selectedItems={activeRawOpCodeFilters}
@@ -301,7 +301,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
                     <MultiSelect<TableFilterValue>
                         items={data ? getMathFilterOptions() : []}
-                        placeholder='Select Math Fidelity(s)'
+                        placeholder='Select Math Fidelity...'
                         // Type requires this but it seems pointless
                         onItemSelect={(selectedType) => updateMathFilters(selectedType)}
                         selectedItems={activeMathFilters}
