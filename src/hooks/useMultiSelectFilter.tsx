@@ -28,7 +28,7 @@ const useMultiSelectFilter = <T extends Record<string, any>>(key: keyof T, data:
     //
     const OptionComponent = (type: MultiSelectValue, label?: string) => {
         return (
-            <li>
+            <li key={type}>
                 <Checkbox
                     label={label || String(type)}
                     checked={activeMultiSelectFilters.includes(type)}

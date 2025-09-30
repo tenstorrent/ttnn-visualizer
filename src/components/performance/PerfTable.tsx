@@ -178,7 +178,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                 reportName={reportName || ''}
             />
 
-            {}
             {data?.length > 0 ? (
                 <table className='perf-table monospace'>
                     <thead className='table-header'>
