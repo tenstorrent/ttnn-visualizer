@@ -32,7 +32,7 @@ import {
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
 import { Signpost, calcHighDispatchOps, isHostOp } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
-import useTableFilter, { TableFilterValue } from '../../hooks/useTableFilter';
+import useMultiSelectFilter, { MultiSelectValue } from '../../hooks/useMultiSelectFilter';
 import PerfTable from './PerfTable';
 import {
     activePerformanceReportAtom,
@@ -73,17 +73,17 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     signposts,
 }) => {
     const {
-        getFilterOptions: getRawOpCodeOptions,
-        updateFilters: updateRawOpCodeFilters,
-        activeFilters: activeRawOpCodeFilters,
+        getMultiSelectOptions: getRawOpCodeOptions,
+        updateMultiSelect: updateRawOpCodeFilters,
+        activeMultiSelectFilters: activeRawOpCodeFilters,
         OptionComponent: RawOpCodeOption,
-    } = useTableFilter('raw_op_code', data || []);
+    } = useMultiSelectFilter('raw_op_code', data || []);
     const {
-        getFilterOptions: getMathFilterOptions,
-        updateFilters: updateMathFilters,
-        activeFilters: activeMathFilters,
+        getMultiSelectOptions: getMathFilterOptions,
+        updateMultiSelect: updateMathFilters,
+        activeMultiSelectFilters: activeMathFilters,
         OptionComponent: MathOption,
-    } = useTableFilter('math_fidelity', data || []);
+    } = useMultiSelectFilter('math_fidelity', data || []);
     const opIdsMap = useOpToPerfIdFiltered();
 
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
@@ -276,13 +276,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         searchQuery={filters?.op_code || ''}
                     />
 
-                    <MultiSelect<TableFilterValue>
+                    <MultiSelect<MultiSelectValue>
                         items={data ? getRawOpCodeOptions() : []}
                         placeholder='Select OP Codes...'
                         // Type requires this but it seems pointless
                         onItemSelect={(opCode) => updateRawOpCodeFilters(opCode)}
                         selectedItems={activeRawOpCodeFilters}
-                        itemRenderer={(value: TableFilterValue, _props) => RawOpCodeOption(String(value))}
+                        itemRenderer={(value: MultiSelectValue, _props) => RawOpCodeOption(String(value))}
                         tagRenderer={(opCode) => String(opCode)}
                         onRemove={(opCode) => updateRawOpCodeFilters(opCode)}
                         itemPredicate={(query, opCode) =>
@@ -299,13 +299,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         resetOnSelect
                     />
 
-                    <MultiSelect<TableFilterValue>
+                    <MultiSelect<MultiSelectValue>
                         items={data ? getMathFilterOptions() : []}
                         placeholder='Select Math Fidelity...'
                         // Type requires this but it seems pointless
                         onItemSelect={(selectedType) => updateMathFilters(selectedType)}
                         selectedItems={activeMathFilters}
-                        itemRenderer={(value: TableFilterValue, _props) => MathOption(String(value))}
+                        itemRenderer={(value: MultiSelectValue, _props) => MathOption(String(value))}
                         tagRenderer={(mathFidelity) => String(mathFidelity)}
                         onRemove={(type) => updateMathFilters(type)}
                         itemPredicate={(query, mathFidelity) =>

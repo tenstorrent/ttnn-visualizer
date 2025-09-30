@@ -25,7 +25,7 @@ import BufferDetails from './BufferDetails';
 import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
 import { toReadableShape, toReadableType } from '../functions/math';
-import useTableFilter, { TableFilterValue } from '../hooks/useTableFilter';
+import useMultiSelectFilter, { MultiSelectValue } from '../hooks/useMultiSelectFilter';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -64,11 +64,11 @@ const TensorList = () => {
     }, [fetchedTensors, selectedOperationRange]);
 
     const {
-        getFilterOptions: getBufferTypeFilter,
-        updateFilters: updateBufferTypeFilters,
-        activeFilters: activeBufferTypeFilters,
+        getMultiSelectOptions: getBufferTypeFilter,
+        updateMultiSelect: updateBufferTypeFilters,
+        activeMultiSelectFilters: activeBufferTypeFilters,
         OptionComponent: BufferTypeItem,
-    } = useTableFilter('buffer_type', tensorsWithRange || []);
+    } = useMultiSelectFilter('buffer_type', tensorsWithRange || []);
 
     // TODO: Figure out an initial scroll position based on last used tensor - https://github.com/tenstorrent/ttnn-visualizer/issues/737
     const virtualizer = useVirtualizer({
@@ -222,18 +222,18 @@ const TensorList = () => {
                         />
                     </Tooltip>
 
-                    <MultiSelect<TableFilterValue>
+                    <MultiSelect<MultiSelectValue>
                         items={tensorsWithRange ? getBufferTypeFilter() : []}
                         placeholder='Buffer type filter...'
                         // Type requires this but it seems pointless
                         onItemSelect={(selectedType) => updateBufferTypeFilters(selectedType.toString())}
                         selectedItems={activeBufferTypeFilters}
-                        itemRenderer={(bufferType: TableFilterValue) =>
+                        itemRenderer={(bufferType: MultiSelectValue) =>
                             BufferTypeItem(bufferType, BufferTypeLabel[Number(bufferType)])
                         }
-                        tagRenderer={(bufferType: TableFilterValue) => BufferTypeLabel[Number(bufferType)]}
+                        tagRenderer={(bufferType: MultiSelectValue) => BufferTypeLabel[Number(bufferType)]}
                         onRemove={(type) => updateBufferTypeFilters(type.toString())}
-                        itemPredicate={(query, bufferType: TableFilterValue) =>
+                        itemPredicate={(query, bufferType: MultiSelectValue) =>
                             !query || BufferTypeLabel[Number(bufferType)].toLowerCase().includes(query.toLowerCase())
                         }
                         noResults={

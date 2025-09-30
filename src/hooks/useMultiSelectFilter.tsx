@@ -6,18 +6,19 @@ import { useState } from 'react';
 import { Checkbox } from '@blueprintjs/core';
 import 'styles/components/TableFilterItem.scss'; // Bit weird having this in a hook
 
-export type TableFilterValue = string | number; // May need to expand this eventually
+export type MultiSelectValue = string | number; // May need to expand this eventually
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const useTableFilter = <T extends Record<string, any>>(key: keyof T, data: T[]) => {
-    const [activeFilters, setActiveFilters] = useState<TableFilterValue[]>([]);
-    const getFilterOptions = (): TableFilterValue[] =>
+const useMultiSelectFilter = <T extends Record<string, any>>(key: keyof T, data: T[]) => {
+    const [activeMultiSelectFilters, setActiveMultiSelectFilters] = useState<MultiSelectValue[]>([]);
+
+    const getMultiSelectOptions = (): MultiSelectValue[] =>
         [...new Set(data?.map((row) => (row[key] !== null ? row[key] : '')))]
             .filter((value) => value !== '')
             .sort((a, b) => (a > b ? 1 : -1));
 
-    const updateFilters = (updatedFilter: TableFilterValue) => {
-        setActiveFilters((currentFilters: TableFilterValue[]) => {
+    const updateMultiSelect = (updatedFilter: MultiSelectValue) => {
+        setActiveMultiSelectFilters((currentFilters: MultiSelectValue[]) => {
             if (currentFilters.includes(updatedFilter)) {
                 return currentFilters.filter((item) => item !== updatedFilter);
             }
@@ -25,25 +26,26 @@ const useTableFilter = <T extends Record<string, any>>(key: keyof T, data: T[]) 
         });
     };
 
-    const OptionComponent = (type: TableFilterValue, label?: string) => {
+    //
+    const OptionComponent = (type: MultiSelectValue, label?: string) => {
         return (
             <li>
                 <Checkbox
                     className='table-filter-checkbox'
                     label={label || String(type)}
-                    checked={activeFilters.includes(type)}
-                    onClick={() => updateFilters(type)}
+                    checked={activeMultiSelectFilters.includes(type)}
+                    onClick={() => updateMultiSelect(type)}
                 />
             </li>
         );
     };
 
     return {
-        getFilterOptions,
-        updateFilters,
-        activeFilters,
+        getMultiSelectOptions,
+        updateMultiSelect,
+        activeMultiSelectFilters,
         OptionComponent,
     };
 };
 
-export default useTableFilter;
+export default useMultiSelectFilter;

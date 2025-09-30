@@ -28,14 +28,14 @@ import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import { filterBySignpostAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
-import { TableFilterValue } from '../../hooks/useTableFilter';
+import { MultiSelectValue } from '../../hooks/useMultiSelectFilter';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
     comparisonData?: TypedPerfTableRow[][];
     filters: TableFilter;
-    rawOpCodeFilter: TableFilterValue[];
-    mathFidelityFilter: TableFilterValue[];
+    rawOpCodeFilter: MultiSelectValue[];
+    mathFidelityFilter: MultiSelectValue[];
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     shouldHighlightRows: boolean;

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { FilterableColumnKeys, TableFilter, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
-import { TableFilterValue } from '../hooks/useTableFilter';
+import { MultiSelectValue } from '../hooks/useMultiSelectFilter';
 
 const isFiltersActive = (filters: TableFilter) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
@@ -17,8 +17,8 @@ const getCellText = (buffer: TypedPerfTableRow, key: TableKeys) => {
 const sortAndFilterPerfTableData = (
     data: TypedPerfTableRow[],
     filters: TableFilter,
-    rawOpCodeFilter: TableFilterValue[],
-    mathFilter: TableFilterValue[],
+    rawOpCodeFilter: MultiSelectValue[],
+    mathFilter: MultiSelectValue[],
 ): TypedPerfTableRow[] => {
     if (data?.length === 0) {
         return data;

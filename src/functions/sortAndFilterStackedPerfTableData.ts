@@ -8,7 +8,7 @@ import {
     StackedTableKeys,
     TypedStackedPerfRow,
 } from '../definitions/StackedPerfTable';
-import { TableFilterValue } from '../hooks/useTableFilter';
+import { MultiSelectValue } from '../hooks/useMultiSelectFilter';
 
 const isFiltersActive = (filters: Record<StackedTableKeys, string> | null) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
@@ -22,7 +22,7 @@ const getCellText = (buffer: TypedStackedPerfRow, key: StackedTableKeys) => {
 const sortAndFilterStackedPerfTableData = (
     data: TypedStackedPerfRow[],
     filters: StackedTableFilter,
-    rawOpCodeFilter: TableFilterValue[],
+    rawOpCodeFilter: MultiSelectValue[],
 ): TypedStackedPerfRow[] => {
     if (data?.length === 0) {
         return data;
