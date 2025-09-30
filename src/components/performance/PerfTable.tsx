@@ -156,6 +156,10 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         return formatCell(row, header, operations, highlight);
     };
 
+    if (!data) {
+        return <LoadingSpinner />;
+    }
+
     return (
         <>
             {npeManifestError && (
@@ -174,7 +178,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                 reportName={reportName || ''}
             />
 
-            {/* eslint-disable-next-line no-nested-ternary */}
+            {}
             {data?.length > 0 ? (
                 <table className='perf-table monospace'>
                     <thead className='table-header'>
@@ -332,10 +336,10 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                         </tr>
                     </tfoot>
                 </table>
-            ) : filterBySignpost ? (
-                <p>No data to display from this signpost.</p>
             ) : (
-                <LoadingSpinner />
+                <p>
+                    <em>No data to display</em>
+                </p>
             )}
         </>
     );
