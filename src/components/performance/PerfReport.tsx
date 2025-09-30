@@ -26,7 +26,7 @@ import {
     OpType,
     PerfTableRow,
     TableFilter,
-    TableHeaders,
+    TableFilterValue,
     TableKeys,
     TypedPerfTableRow,
 } from '../../definitions/PerfTable';
@@ -73,7 +73,18 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     comparisonStackedData,
     signposts,
 }) => {
-    const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter('math_fidelity', data || []);
+    const {
+        getFilterOptions: getRawOpCodeOptions,
+        updateFilters: updateRawOpCodeFilters,
+        activeFilters: activeRawOpCodeFilters,
+        OptionComponent: RawOpCodeOption,
+    } = useTableFilter('raw_op_code', data || []);
+    const {
+        getFilterOptions: getMathFilterOptions,
+        updateFilters: updateMathFilters,
+        activeFilters: activeMathFilters,
+        OptionComponent: MathOption,
+    } = useTableFilter('math_fidelity', data || []);
     const opIdsMap = useOpToPerfIdFiltered();
 
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
@@ -81,8 +92,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [isStackedView, setIsStackedView] = useAtom(isStackedViewAtom);
     const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
     const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
-
-    const isSignpostsDisabled = !signposts || signposts.length === 0;
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
@@ -104,6 +113,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             string
         >,
     );
+
+    const isSignpostsDisabled = !signposts || signposts.length === 0;
 
     const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
 
@@ -137,10 +148,10 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             sortAndFilterPerfTableData(
                 useNormalisedData ? normalisedData.data[0] : processedRows,
                 filters,
-                FilterableColumnKeys,
-                activeFilters,
+                activeRawOpCodeFilters,
+                activeMathFilters,
             ),
-        [processedRows, filters, activeFilters, useNormalisedData, normalisedData.data],
+        [processedRows, filters, activeMathFilters, activeRawOpCodeFilters, useNormalisedData, normalisedData.data],
     );
 
     const filteredComparisonRows = useMemo(
@@ -148,15 +159,23 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             sortAndFilterPerfTableData(
                 useNormalisedData ? normalisedData.data[comparisonIndex] : processedComparisonRows[comparisonIndex],
                 filters,
-                FilterableColumnKeys,
-                activeFilters,
+                activeRawOpCodeFilters,
+                activeMathFilters,
             ),
-        [comparisonIndex, processedComparisonRows, filters, activeFilters, useNormalisedData, normalisedData.data],
+        [
+            comparisonIndex,
+            processedComparisonRows,
+            filters,
+            activeRawOpCodeFilters,
+            activeMathFilters,
+            useNormalisedData,
+            normalisedData.data,
+        ],
     );
 
     const filteredStackedRows = useMemo(
-        () => sortAndFilterStackedPerfTableData(processedStackedRows, stackedFilters, FilterableStackedColumnKeys),
-        [processedStackedRows, stackedFilters],
+        () => sortAndFilterStackedPerfTableData(processedStackedRows, stackedFilters, activeRawOpCodeFilters),
+        [processedStackedRows, stackedFilters, activeRawOpCodeFilters],
     );
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
@@ -167,7 +186,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
         // TODO: Sort this madness out
         setStackedFilters(updatedFilters as Record<StackedTableKeys, string>);
-        setFilters(updatedFilters as Record<TableKeys, string>);
+        setFilters(updatedFilters as TableFilter);
     };
 
     const totalDataLength = getTotalDataLength(
@@ -252,24 +271,44 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 </div>
 
                 <div className='filters'>
-                    {FilterableColumnKeys.map((key) => (
-                        <SearchField
-                            key={key}
-                            onQueryChanged={(value) => updateColumnFilter(key, value)}
-                            placeholder={`Filter ${TableHeaders.find((header) => header.key === key)?.label}`}
-                            searchQuery={filters?.[key] || ''}
-                        />
-                    ))}
+                    <SearchField
+                        onQueryChanged={(value) => updateColumnFilter('op_code', value)}
+                        placeholder='Filter OP Code'
+                        searchQuery={filters?.op_code || ''}
+                    />
 
-                    <MultiSelect
-                        items={data ? getFilterOptions() : []}
+                    <MultiSelect<TableFilterValue>
+                        items={data ? getRawOpCodeOptions() : []}
+                        placeholder='OP code filter...'
+                        // Type requires this but it seems pointless
+                        onItemSelect={(opCode) => updateRawOpCodeFilters(opCode)}
+                        selectedItems={activeRawOpCodeFilters}
+                        itemRenderer={(value: TableFilterValue, _props) => RawOpCodeOption(String(value))}
+                        tagRenderer={(opCode) => String(opCode)}
+                        onRemove={(opCode) => updateRawOpCodeFilters(opCode)}
+                        itemPredicate={(query, opCode) =>
+                            !query || String(opCode).toLowerCase().includes(query.toLowerCase())
+                        }
+                        // disabled={isStackedView}
+                        noResults={
+                            <MenuItem
+                                disabled
+                                text='No results.'
+                                roleStructure='listoption'
+                            />
+                        }
+                        resetOnSelect
+                    />
+
+                    <MultiSelect<TableFilterValue>
+                        items={data ? getMathFilterOptions() : []}
                         placeholder='Math fidelity filter...'
                         // Type requires this but it seems pointless
-                        onItemSelect={(selectedType) => updateFilters(selectedType)}
-                        selectedItems={activeFilters}
-                        itemRenderer={(value: string | number, _props) => FilterItem(String(value))}
-                        tagRenderer={(mathFidelity) => mathFidelity}
-                        onRemove={(type) => updateFilters(type)}
+                        onItemSelect={(selectedType) => updateMathFilters(selectedType)}
+                        selectedItems={activeMathFilters}
+                        itemRenderer={(value: TableFilterValue, _props) => MathOption(String(value))}
+                        tagRenderer={(mathFidelity) => String(mathFidelity)}
+                        onRemove={(type) => updateMathFilters(type)}
                         itemPredicate={(query, mathFidelity) =>
                             !query || String(mathFidelity).toLowerCase().includes(query.toLowerCase())
                         }
@@ -409,7 +448,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             isStackedView ? (
                                 <StackedPerformanceTable
                                     data={useNormalisedData ? normalisedData.data[0] : filteredRows}
-                                    stackedData={processedStackedRows}
+                                    stackedData={filteredStackedRows}
                                     filters={filters}
                                 />
                             ) : (
@@ -421,7 +460,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                             : []
                                     }
                                     filters={filters}
-                                    mathFidelityFilter={activeFilters}
+                                    rawOpCodeFilter={activeRawOpCodeFilters}
+                                    mathFidelityFilter={activeMathFilters}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
@@ -469,7 +509,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                                 : []
                                         }
                                         filters={filters}
-                                        mathFidelityFilter={activeFilters}
+                                        rawOpCodeFilter={activeRawOpCodeFilters}
+                                        mathFidelityFilter={activeMathFilters}
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         shouldHighlightRows={highlightRows && useNormalisedData}

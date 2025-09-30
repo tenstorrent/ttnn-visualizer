@@ -8,7 +8,6 @@ import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import {
     ColumnHeaders,
-    FilterableStackedColumnKeys,
     StackedTableHeader,
     TableHeaders,
     TypedStackedPerfRow,
@@ -16,7 +15,6 @@ import {
 import 'styles/components/PerfReport.scss';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { useGetNPEManifest } from '../../hooks/useAPI';
-import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 import { formatStackedCell } from '../../functions/stackedPerfFunctions';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import { formatSize } from '../../functions/math';
@@ -35,13 +33,8 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
     const { error: npeManifestError } = useGetNPEManifest();
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
-        const parsedRows = stackedData
-            ? sortAndFilterStackedPerfTableData(stackedData, filters, FilterableStackedColumnKeys)
-            : [];
-
-        // Still some awkward casting here
-        return [...sortTableFields(parsedRows as [])];
-    }, [stackedData, filters, sortTableFields]);
+        return [...sortTableFields(stackedData as [])];
+    }, [stackedData, sortTableFields]);
 
     return (
         <>

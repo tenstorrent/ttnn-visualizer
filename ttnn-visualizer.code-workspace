@@ -37,6 +37,7 @@
             "Pyenv",
             "pyproject",
             "pytest",
+            "Tenstorrent",
             "tinycolor",
             "toastify",
             "TTNN",
@@ -45,7 +46,7 @@
             "xaxis",
             "xref",
             "yaxis",
-            "yref",
+            "yref"
         ],
         "[python]": {
             "editor.codeActionsOnSave": {

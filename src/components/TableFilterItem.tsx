@@ -4,6 +4,7 @@
 
 import { Checkbox } from '@blueprintjs/core';
 import 'styles/components/TableFilterItem.scss';
+import { TableFilterValue } from '../definitions/PerfTable';
 
 const TableFilterItem = ({
     type,
@@ -11,16 +12,16 @@ const TableFilterItem = ({
     onChange,
     label,
 }: {
-    type: string | number;
-    activeFilters: (string | number)[];
-    onChange: (type: string | number) => void;
+    type: string;
+    activeFilters: TableFilterValue[];
+    onChange: (type: TableFilterValue) => void;
     label?: string;
 }) => {
     return (
         <li>
             <Checkbox
                 className='table-filter-checkbox'
-                label={label || String(type)}
+                label={label || type}
                 checked={activeFilters.includes(type)}
                 onClick={() => onChange(type)}
             />

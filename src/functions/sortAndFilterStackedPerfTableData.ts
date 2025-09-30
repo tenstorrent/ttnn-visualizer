@@ -2,7 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { StackedTableFilter, StackedTableKeys, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
+import { TableFilterValue } from '../definitions/PerfTable';
+import {
+    FilterableStackedColumnKeys,
+    StackedTableFilter,
+    StackedTableKeys,
+    TypedStackedPerfRow,
+} from '../definitions/StackedPerfTable';
 
 const isFiltersActive = (filters: Record<StackedTableKeys, string> | null) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
@@ -16,7 +22,7 @@ const getCellText = (buffer: TypedStackedPerfRow, key: StackedTableKeys) => {
 const sortAndFilterStackedPerfTableData = (
     data: TypedStackedPerfRow[],
     filters: StackedTableFilter,
-    filterableColumnKeys: StackedTableKeys[],
+    rawOpCodeFilter: TableFilterValue[],
 ): TypedStackedPerfRow[] => {
     if (data?.length === 0) {
         return data;
@@ -24,7 +30,7 @@ const sortAndFilterStackedPerfTableData = (
 
     let filteredRows = data || [];
 
-    if (filters && isFiltersActive(filters) && filterableColumnKeys) {
+    if (filters && isFiltersActive(filters) && FilterableStackedColumnKeys) {
         filteredRows = filteredRows.filter((row) => {
             const isFilteredOut =
                 filters &&
@@ -38,6 +44,15 @@ const sortAndFilterStackedPerfTableData = (
 
             return !isFilteredOut;
         });
+    }
+
+    // In the stacked data the op_code field is named just "op_code" not "raw_op_code"
+    if (rawOpCodeFilter?.length > 0) {
+        filteredRows = filteredRows.filter(
+            (row) =>
+                row?.op_code !== null &&
+                rawOpCodeFilter.some((filterValue) => row.op_code.toLowerCase().includes(filterValue.toLowerCase())),
+        );
     }
 
     return filteredRows;

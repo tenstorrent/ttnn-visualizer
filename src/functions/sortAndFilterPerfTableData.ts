@@ -2,9 +2,15 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { TableFilter, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import {
+    FilterableColumnKeys,
+    TableFilter,
+    TableFilterValue,
+    TableKeys,
+    TypedPerfTableRow,
+} from '../definitions/PerfTable';
 
-const isFiltersActive = (filters: Record<TableKeys, string> | null) =>
+const isFiltersActive = (filters: TableFilter) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
 
 const getCellText = (buffer: TypedPerfTableRow, key: TableKeys) => {
@@ -16,8 +22,8 @@ const getCellText = (buffer: TypedPerfTableRow, key: TableKeys) => {
 const sortAndFilterPerfTableData = (
     data: TypedPerfTableRow[],
     filters: TableFilter,
-    filterableColumnKeys: TableKeys[],
-    activeFilters: (string | number)[],
+    rawOpCodeFilter: TableFilterValue[],
+    mathFilter: TableFilterValue[],
 ): TypedPerfTableRow[] => {
     if (data?.length === 0) {
         return data;
@@ -25,7 +31,7 @@ const sortAndFilterPerfTableData = (
 
     let filteredRows = data || [];
 
-    if (isFiltersActive(filters) && filterableColumnKeys) {
+    if (isFiltersActive(filters) && FilterableColumnKeys) {
         filteredRows = filteredRows.filter((row) => {
             const isFilteredOut =
                 filters &&
@@ -41,9 +47,15 @@ const sortAndFilterPerfTableData = (
         });
     }
 
-    if (activeFilters?.length > 0) {
+    if (rawOpCodeFilter?.length > 0) {
         filteredRows = filteredRows.filter(
-            (tensor) => tensor?.math_fidelity !== null && activeFilters.includes(tensor.math_fidelity),
+            (row) => row?.raw_op_code !== null && rawOpCodeFilter.includes(row.raw_op_code),
+        );
+    }
+
+    if (mathFilter?.length > 0) {
+        filteredRows = filteredRows.filter(
+            (row) => row?.math_fidelity !== null && mathFilter.includes(row.math_fidelity),
         );
     }
 
