@@ -4,7 +4,6 @@
 
 import { useState } from 'react';
 import { Checkbox } from '@blueprintjs/core';
-import 'styles/components/TableFilterItem.scss'; // Bit weird having this in a hook
 
 export type MultiSelectValue = string | number; // May need to expand this eventually
 
@@ -31,7 +30,6 @@ const useMultiSelectFilter = <T extends Record<string, any>>(key: keyof T, data:
         return (
             <li>
                 <Checkbox
-                    className='table-filter-checkbox'
                     label={label || String(type)}
                     checked={activeMultiSelectFilters.includes(type)}
                     onClick={() => updateMultiSelect(type)}
