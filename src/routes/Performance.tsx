@@ -116,7 +116,8 @@ export default function Performance() {
         setFilteredPerfData(
             perfData?.filter((row) =>
                 selectedOpCodes.length
-                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
+                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '') ||
+                      row.op_type === OpType.SIGNPOST
                     : false,
             ) || [],
         );

@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { Checkbox } from '@blueprintjs/core';
+import { OpType } from '../definitions/Performance';
 
 export type MultiSelectValue = string | number; // May need to expand this eventually
 
@@ -12,7 +13,13 @@ const useMultiSelectFilter = <T extends Record<string, any>>(key: keyof T, data:
     const [activeMultiSelectFilters, setActiveMultiSelectFilters] = useState<MultiSelectValue[]>([]);
 
     const getMultiSelectOptions = (): MultiSelectValue[] =>
-        [...new Set(data?.map((row) => (row[key] !== null ? row[key] : '')))]
+        [
+            ...new Set(
+                data
+                    ?.filter((row) => row.op_type !== OpType.SIGNPOST)
+                    .map((row) => (row[key] !== null ? row[key] : '')),
+            ),
+        ]
             .filter((value) => value !== '')
             .sort((a, b) => (a > b ? 1 : -1));
 
