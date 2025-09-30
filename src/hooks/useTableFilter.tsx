@@ -3,8 +3,9 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useState } from 'react';
-import { TableFilterValue } from '../definitions/PerfTable';
 import TableFilterItem from '../components/TableFilterItem';
+
+export type TableFilterValue = string; // May need to expand this eventually
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const useTableFilter = <T extends Record<string, any>>(key: keyof T, data: T[]) => {

@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 export type TableKeys = Partial<keyof PerfTableRow>;
-export type TableFilterValue = string; // May need to expand this eventually
-export type TableFilter = Record<TableKeys, TableFilterValue> | null;
+
+export type TableFilter = Record<TableKeys, string> | null;
 
 export interface TableHeader {
     label: string;

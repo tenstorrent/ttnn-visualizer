@@ -4,7 +4,7 @@
 
 import { Checkbox } from '@blueprintjs/core';
 import 'styles/components/TableFilterItem.scss';
-import { TableFilterValue } from '../definitions/PerfTable';
+import { TableFilterValue } from '../hooks/useTableFilter';
 
 const TableFilterItem = ({
     type,

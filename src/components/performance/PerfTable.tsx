@@ -12,7 +12,6 @@ import {
     ColumnHeaders,
     ComparisonKeys,
     TableFilter,
-    TableFilterValue,
     TableHeader,
     TableHeaders,
     TypedPerfTableRow,
@@ -29,6 +28,7 @@ import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import { filterBySignpostAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
+import { TableFilterValue } from '../../hooks/useTableFilter';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];

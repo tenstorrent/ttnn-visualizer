@@ -2,13 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { TableFilterValue } from '../definitions/PerfTable';
 import {
     FilterableStackedColumnKeys,
     StackedTableFilter,
     StackedTableKeys,
     TypedStackedPerfRow,
 } from '../definitions/StackedPerfTable';
+import { TableFilterValue } from '../hooks/useTableFilter';
 
 const isFiltersActive = (filters: Record<StackedTableKeys, string> | null) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;

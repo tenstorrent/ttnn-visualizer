@@ -26,14 +26,13 @@ import {
     OpType,
     PerfTableRow,
     TableFilter,
-    TableFilterValue,
     TableKeys,
     TypedPerfTableRow,
 } from '../../definitions/PerfTable';
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
 import { Signpost, calcHighDispatchOps, isHostOp } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
-import useTableFilter from '../../hooks/useTableFilter';
+import useTableFilter, { TableFilterValue } from '../../hooks/useTableFilter';
 import PerfTable from './PerfTable';
 import {
     activePerformanceReportAtom,
@@ -273,13 +272,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 <div className='filters'>
                     <SearchField
                         onQueryChanged={(value) => updateColumnFilter('op_code', value)}
-                        placeholder='Filter OP Code'
+                        placeholder='Filter Op Code'
                         searchQuery={filters?.op_code || ''}
                     />
 
                     <MultiSelect<TableFilterValue>
                         items={data ? getRawOpCodeOptions() : []}
-                        placeholder='OP code filter...'
+                        placeholder='Select Op Code(s)'
                         // Type requires this but it seems pointless
                         onItemSelect={(opCode) => updateRawOpCodeFilters(opCode)}
                         selectedItems={activeRawOpCodeFilters}
@@ -302,7 +301,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
                     <MultiSelect<TableFilterValue>
                         items={data ? getMathFilterOptions() : []}
-                        placeholder='Math fidelity filter...'
+                        placeholder='Select Math Fidelity(s)'
                         // Type requires this but it seems pointless
                         onItemSelect={(selectedType) => updateMathFilters(selectedType)}
                         selectedItems={activeMathFilters}

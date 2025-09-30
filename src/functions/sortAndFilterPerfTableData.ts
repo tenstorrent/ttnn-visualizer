@@ -2,13 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import {
-    FilterableColumnKeys,
-    TableFilter,
-    TableFilterValue,
-    TableKeys,
-    TypedPerfTableRow,
-} from '../definitions/PerfTable';
+import { FilterableColumnKeys, TableFilter, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import { TableFilterValue } from '../hooks/useTableFilter';
 
 const isFiltersActive = (filters: TableFilter) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;

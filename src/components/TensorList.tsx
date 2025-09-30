@@ -25,7 +25,7 @@ import BufferDetails from './BufferDetails';
 import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
 import { toReadableShape, toReadableType } from '../functions/math';
-import useTableFilter from '../hooks/useTableFilter';
+import useTableFilter, { TableFilterValue } from '../hooks/useTableFilter';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -63,10 +63,12 @@ const TensorList = () => {
         return fetchedTensors;
     }, [fetchedTensors, selectedOperationRange]);
 
-    const { getFilterOptions, updateFilters, activeFilters, FilterItem } = useTableFilter(
-        'buffer_type',
-        tensorsWithRange || [],
-    );
+    const {
+        getFilterOptions: getBufferTypeFilter,
+        updateFilters: updateBufferTypeFilters,
+        activeFilters: activeBufferTypeFilters,
+        OptionComponent: BufferTypeItem,
+    } = useTableFilter('buffer_type', tensorsWithRange || []);
 
     // TODO: Figure out an initial scroll position based on last used tensor - https://github.com/tenstorrent/ttnn-visualizer/issues/737
     const virtualizer = useVirtualizer({
@@ -116,9 +118,9 @@ const TensorList = () => {
                 );
             }
 
-            if (activeFilters?.length > 0) {
+            if (activeBufferTypeFilters?.length > 0) {
                 tensors = tensors.filter(
-                    (tensor) => tensor?.buffer_type !== null && activeFilters.includes(tensor.buffer_type),
+                    (tensor) => tensor?.buffer_type !== null && activeBufferTypeFilters.includes(tensor.buffer_type),
                 );
             }
 
@@ -128,7 +130,7 @@ const TensorList = () => {
 
             setFilteredTensorList(tensors);
         }
-    }, [operations, tensorsWithRange, filterQuery, activeFilters, showHighConsumerTensors]);
+    }, [operations, tensorsWithRange, filterQuery, activeBufferTypeFilters, showHighConsumerTensors]);
 
     useEffect(() => {
         const initialTensorId = location.state?.previousOperationId;
@@ -220,19 +222,15 @@ const TensorList = () => {
                         />
                     </Tooltip>
 
-                    <MultiSelect
-                        items={tensorsWithRange ? (getFilterOptions() as number[]) : []}
+                    <MultiSelect<TableFilterValue>
+                        items={tensorsWithRange ? getBufferTypeFilter() : []}
                         placeholder='Buffer type filter...'
                         // Type requires this but it seems pointless
-                        onItemSelect={(selectedType: number) => updateFilters(selectedType.toString())}
-                        selectedItems={activeFilters as number[]}
-                        itemRenderer={(value: number) => {
-                            return FilterItem(value, BufferTypeLabel[value]);
-                        }}
-                        tagRenderer={(buffer: number) => {
-                            return BufferTypeLabel[buffer];
-                        }}
-                        onRemove={(type) => updateFilters(type.toString())}
+                        onItemSelect={(selectedType) => updateBufferTypeFilters(selectedType.toString())}
+                        selectedItems={activeBufferTypeFilters}
+                        itemRenderer={(value: unknown) => BufferTypeItem(value, BufferTypeLabel[value])}
+                        tagRenderer={(buffer) => BufferTypeLabel[buffer]}
+                        onRemove={(type) => updateBufferTypeFilters(type.toString())}
                         itemPredicate={(query, bufferType) =>
                             !query || BufferTypeLabel[bufferType].toLowerCase().includes(query.toLowerCase())
                         }
