@@ -18,6 +18,7 @@ import {
     useDevices,
     useGetL1SmallMarker,
     useGetL1StartMarker,
+    useGetTensorDeallocationReportByOperation,
     useOperationsList,
 } from '../../hooks/useAPI';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
@@ -26,7 +27,7 @@ import BufferSummaryRow from './BufferSummaryRow';
 import 'styles/components/BufferSummaryPlot.scss';
 import ROUTES from '../../definitions/Routes';
 import isValidNumber from '../../functions/isValidNumber';
-import { TensorDeallocationReport, TensorsByOperationByAddress } from '../../model/BufferSummary';
+import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import {
     renderMemoryLayoutAtom,
     selectedDeviceAtom,
@@ -38,7 +39,6 @@ import GlobalSwitch from '../GlobalSwitch';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import { ScrollLocations } from '../../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
-import { Operation } from '../../model/APIData';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -46,11 +46,14 @@ const TOTAL_SHADE_HEIGHT = 20; // Height in px of 'scroll-shade' pseudo elements
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
 
 interface BufferSummaryPlotRendererProps {
-    buffersByOperation: BuffersByOperationData[];
+    uniqueBuffersByOperationList: BuffersByOperationData[];
     tensorListByOperation: TensorsByOperationByAddress;
 }
 
-function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }: BufferSummaryPlotRendererProps) {
+function BufferSummaryPlotRenderer({
+    uniqueBuffersByOperationList,
+    tensorListByOperation,
+}: BufferSummaryPlotRendererProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [activeRow, setActiveRow] = useState<number | null>(null);
@@ -64,62 +67,20 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
     const { data: operations } = useOperationsList();
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
     const navigate = useNavigate();
-    const operationsById = useMemo(() => {
-        const map = new Map<number, Operation>();
-        operations?.forEach((operation) => {
-            map.set(operation.id, operation);
-        });
-        return map;
-    }, [operations]);
 
     const l1StartMarker = useGetL1StartMarker();
     const l1SmallMarker = useGetL1SmallMarker();
 
     const numberOfOperations = useMemo(
         () =>
-            buffersByOperation && buffersByOperation.length >= 0 ? buffersByOperation.length : PLACEHOLDER_ARRAY_SIZE,
-        [buffersByOperation],
+            uniqueBuffersByOperationList && uniqueBuffersByOperationList.length >= 0
+                ? uniqueBuffersByOperationList.length
+                : PLACEHOLDER_ARRAY_SIZE,
+        [uniqueBuffersByOperationList],
     );
 
-    const nondeallocatedTensorsByOperationId = useMemo(() => {
-        const getLastValidConsumer = (consumers: number[]) => {
-            const list = [...consumers];
-            while (list && list.length > 0) {
-                const lastConsumerOperationId = list.sort().pop() || -1;
-                const lastConsumerName = operationsById.get(lastConsumerOperationId)?.name || '';
-
-                if (lastConsumerOperationId > -1 && !lastConsumerName.includes('ttnn.deallocate')) {
-                    return { lastConsumerOperationId, lastConsumerName };
-                }
-            }
-            return { lastConsumerName: '', lastConsumerOperationId: -1 };
-        };
-        const result = new Map<number, TensorDeallocationReport[]>();
-        if (showDeallocationReport) {
-            tensorListByOperation.forEach((tensorsMap, operationId) => {
-                tensorsMap.forEach((tensor, address) => {
-                    if (tensor.id && tensor.consumers && tensor.consumers.length > 0) {
-                        const { lastConsumerOperationId, lastConsumerName } = getLastValidConsumer(tensor.consumers);
-                        if (lastConsumerOperationId !== null && lastConsumerOperationId < operationId) {
-                            if (!result.has(operationId)) {
-                                result.set(operationId, []);
-                            }
-                            const list: TensorDeallocationReport[] = result.get(operationId)!;
-                            list.push({
-                                id: tensor.id,
-                                address,
-                                consumerName: lastConsumerName,
-                                lastConsumerOperationId,
-                                lastOperationId: operationId,
-                            });
-                            result.set(operationId, list);
-                        }
-                    }
-                });
-            });
-        }
-        return result;
-    }, [operationsById, showDeallocationReport, tensorListByOperation]);
+    const { lateDeallocationsByOperation: nondeallocatedTensorsByOperationId } =
+        useGetTensorDeallocationReportByOperation();
 
     const getMemorySize = () =>
         !isLoadingDevices && devices ? devices[deviceId]?.worker_l1_size : L1_DEFAULT_MEMORY_SIZE;
@@ -131,7 +92,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
         let minValue: undefined | number;
         let maxValue: undefined | number;
 
-        buffersByOperation?.forEach((operation) =>
+        uniqueBuffersByOperationList?.forEach((operation) =>
             operation.buffers.forEach((buffer) => {
                 minValue = isValidNumber(minValue) ? Math.min(minValue, buffer.address) : buffer.address;
                 maxValue = isValidNumber(maxValue)
@@ -141,14 +102,14 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
         );
 
         return minValue && maxValue ? [minValue, maxValue] : [0, memorySize];
-    }, [buffersByOperation, memorySize]);
+    }, [uniqueBuffersByOperationList, memorySize]);
 
     const zoomedMemorySizeStart = zoomedMemorySize[0] || 0;
     const zoomedMemorySizeEnd = zoomedMemorySize[1] || memorySize;
     const memoryPadding = (zoomedMemorySizeEnd - zoomedMemorySizeStart) * MEMORY_ZOOM_PADDING_RATIO;
 
     const virtualizer = useVirtualizer({
-        count: buffersByOperation?.length || PLACEHOLDER_ARRAY_SIZE,
+        count: uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => scrollElementRef.current,
         estimateSize: () => OPERATION_EL_HEIGHT,
         overscan: 20,
@@ -177,7 +138,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
           ]
         : [];
 
-    return buffersByOperation && !isLoadingDevices && tensorListByOperation ? (
+    return uniqueBuffersByOperationList && !isLoadingDevices && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
             <div className='controls'>
                 <Switch
@@ -269,7 +230,7 @@ function BufferSummaryPlotRenderer({ buffersByOperation, tensorListByOperation }
                         }}
                     >
                         {virtualItems.map((virtualRow) => {
-                            const operation = buffersByOperation[virtualRow.index];
+                            const operation = uniqueBuffersByOperationList[virtualRow.index];
 
                             return (
                                 <div
