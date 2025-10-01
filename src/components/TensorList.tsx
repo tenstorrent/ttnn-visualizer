@@ -122,11 +122,12 @@ const TensorList = () => {
                     );
                 }
 
-            if (activeBufferTypeFilters?.length > 0) {
-                tensors = tensors.filter(
-                    (tensor) => tensor?.buffer_type !== null && activeBufferTypeFilters.includes(tensor.buffer_type),
-                );
-            }
+                if (activeBufferTypeFilters?.length > 0) {
+                    tensors = tensors.filter(
+                        (tensor) =>
+                            tensor?.buffer_type !== null && activeBufferTypeFilters.includes(tensor.buffer_type),
+                    );
+                }
 
                 if (showHighConsumerTensors) {
                     tensors = tensors.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS);
@@ -140,7 +141,14 @@ const TensorList = () => {
             }
         },
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [tensorsWithRange, operations, filterQuery, activeFilters, showHighConsumerTensors, showLateDeallocatedTensors],
+        [
+            tensorsWithRange,
+            operations,
+            filterQuery,
+            activeBufferTypeFilters,
+            showHighConsumerTensors,
+            showLateDeallocatedTensors,
+        ],
     );
 
     useEffect(() => {
