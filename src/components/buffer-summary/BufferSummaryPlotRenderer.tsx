@@ -249,7 +249,9 @@ function BufferSummaryPlotRenderer({
                                         memoryPadding={memoryPadding}
                                         tensorList={tensorListByOperation.get(operation.id)!}
                                         tensorDeallocationReport={
-                                            nondeallocatedTensorsByOperationId.get(operation.id) || []
+                                            showDeallocationReport
+                                                ? nondeallocatedTensorsByOperationId.get(operation.id) || []
+                                                : []
                                         }
                                         showMemoryLayout={renderMemoryLayout}
                                     />
