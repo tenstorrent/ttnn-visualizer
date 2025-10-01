@@ -43,12 +43,12 @@ const CHART_DATA: Partial<PlotData>[][] = [
 ];
 
 interface BufferSummaryPlotRendererDRAMProps {
-    buffersByOperation: BuffersByOperationData[];
+    uniqueBuffersByOperationList: BuffersByOperationData[];
     tensorListByOperation: TensorsByOperationByAddress;
 }
 
 function BufferSummaryPlotRendererDRAM({
-    buffersByOperation,
+    uniqueBuffersByOperationList,
     tensorListByOperation,
 }: BufferSummaryPlotRendererDRAMProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
@@ -60,17 +60,19 @@ function BufferSummaryPlotRendererDRAM({
 
     const numberOfOperations = useMemo(
         () =>
-            buffersByOperation && buffersByOperation.length >= 0 ? buffersByOperation.length : PLACEHOLDER_ARRAY_SIZE,
-        [buffersByOperation],
+            uniqueBuffersByOperationList && uniqueBuffersByOperationList.length >= 0
+                ? uniqueBuffersByOperationList.length
+                : PLACEHOLDER_ARRAY_SIZE,
+        [uniqueBuffersByOperationList],
     );
 
     const segmentedChartData: BuffersByOperationData[][] = useMemo(() => {
         if (isZoomedIn) {
-            return getSplitBuffers(buffersByOperation);
+            return getSplitBuffers(uniqueBuffersByOperationList);
         }
 
-        return [buffersByOperation];
-    }, [buffersByOperation, isZoomedIn]);
+        return [uniqueBuffersByOperationList];
+    }, [uniqueBuffersByOperationList, isZoomedIn]);
 
     const zoomedMemoryOptions = useMemo(
         () =>
@@ -89,7 +91,7 @@ function BufferSummaryPlotRendererDRAM({
     );
 
     const virtualizer = useVirtualizer({
-        count: buffersByOperation?.length || PLACEHOLDER_ARRAY_SIZE,
+        count: uniqueBuffersByOperationList?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => scrollElementRef.current,
         estimateSize: () => OPERATION_EL_HEIGHT,
         overscan: 20,
@@ -103,7 +105,7 @@ function BufferSummaryPlotRendererDRAM({
         setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
     };
 
-    return buffersByOperation && tensorListByOperation ? (
+    return uniqueBuffersByOperationList && tensorListByOperation ? (
         <div className='buffer-summary-chart'>
             <div className='controls'>
                 <Switch
