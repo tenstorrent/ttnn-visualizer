@@ -23,7 +23,6 @@ import { ItemPredicate, ItemRenderer, MultiSelect, Select } from '@blueprintjs/s
 import { IconNames } from '@blueprintjs/icons';
 import {
     FilterableColumnKeys,
-    OpType,
     PerfTableRow,
     TableFilter,
     TableKeys,
@@ -54,6 +53,7 @@ import {
 } from '../../definitions/StackedPerfTable';
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 import HighlightedText from '../HighlightedText';
+import { OpType } from '../../definitions/Performance';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -63,7 +63,7 @@ interface PerformanceReportProps {
     signposts?: Signpost[];
 }
 
-const INITIAL_TAB_ID = 'perf-table-0';
+const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
 
 const PerformanceReport: FC<PerformanceReportProps> = ({
     data,
@@ -523,11 +523,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         />
                     ))}
                 </Tabs>
+
+                {hiliteHighDispatch && calcHighDispatchOps(processedRows)}
             </div>
-
-            <hr />
-
-            {hiliteHighDispatch && calcHighDispatchOps(processedRows)}
         </>
     );
 };

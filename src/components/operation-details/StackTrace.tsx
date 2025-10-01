@@ -10,10 +10,11 @@ import { Button, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { useAtom, useAtomValue } from 'jotai';
-import { ReportLocation, isFullStackTraceAtom, profilerReportLocationAtom } from '../../store/app';
+import { isFullStackTraceAtom, profilerReportLocationAtom } from '../../store/app';
 import useRemoteConnection from '../../hooks/useRemote';
 import Overlay from '../Overlay';
 import 'styles/components/StackTrace.scss';
+import { ReportLocation } from '../../definitions/Reports';
 
 hljs.registerLanguage('python', python);
 

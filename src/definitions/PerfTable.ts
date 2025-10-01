@@ -2,9 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-export type TableKeys = Partial<keyof PerfTableRow>;
+import { OpType } from './Performance';
 
-export type TableFilter = Record<TableKeys, string> | null;
+export type TableKeys = keyof PerfTableRow;
+export type TableFilter = Partial<Record<TableKeys, string>> | null;
 
 export interface TableHeader {
     label: string;
@@ -75,9 +76,13 @@ export interface TypedPerfTableRow
     flops_percent: number | null;
 }
 
-export type MathFidelity = 'HiFi4' | 'HiFi2' | 'LoFi';
+export enum MathFidelity {
+    HiFi4 = 'HiFi4',
+    HiFi2 = 'HiFi2',
+    LoFi = 'LoFi',
+}
 
-export const MARKER_COLOURS = [
+export const MarkerColours = [
     'rgb(0, 128, 128)',
     'rgb(255, 215, 0)',
     'rgb(31, 119, 180)',
@@ -113,7 +118,7 @@ export const MARKER_COLOURS = [
 
 export interface Marker {
     opCode: string;
-    colour: (typeof MARKER_COLOURS)[number];
+    colour: (typeof MarkerColours)[number];
 }
 
 export enum ColumnHeaders {
@@ -167,16 +172,7 @@ export const ComparisonKeys: TableKeys[] = [
     ColumnHeaders.global_call_count,
 ];
 
-// Taken from - https://github.com/tenstorrent/tt-metal/blob/main/ttnn/api/tools/profiler/op_profiler.hpp#L33
-export enum OpType {
-    DEVICE_OP = 'tt_dnn_device', // OP implemented in C++ and running on DEVICE
-    PYTHON_OP = 'python_fallback', //  OP fully implemented in python and running on CPU
-    CPU_OP = 'tt_dnn_cpu', // OP implemented in C++ and running on CPU
-    SIGNPOST = 'signpost',
-    UNKNOWN = 'unknown',
-}
-
-export const signpostRowDefaults = {
+export const signpostRowDefaults = Object.freeze({
     global_call_count: null,
     total_percent: null,
     device_time: null,
@@ -201,4 +197,4 @@ export const signpostRowDefaults = {
     output_subblock_w: '',
     pm_ideal_ns: '',
     op_type: OpType.SIGNPOST,
-};
+});
