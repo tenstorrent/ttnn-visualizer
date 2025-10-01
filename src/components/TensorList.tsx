@@ -12,7 +12,7 @@ import { useAtom, useAtomValue } from 'jotai';
 import { MultiSelect } from '@blueprintjs/select';
 import SearchField from './SearchField';
 import LoadingSpinner from './LoadingSpinner';
-import { useOperationsList, useTensors } from '../hooks/useAPI';
+import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensors } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
 import { Tensor } from '../model/APIData';
 import { BufferTypeLabel } from '../model/BufferType';
@@ -43,6 +43,7 @@ const TensorList = () => {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [showHighConsumerTensors, setShowHighConsumerTensors] = useState(false);
+    const [showLateDeallocatedTensors, setShowLateDeallocatedTensors] = useState(false);
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
 
@@ -69,6 +70,8 @@ const TensorList = () => {
         activeMultiSelectFilters: activeBufferTypeFilters,
         OptionComponent: BufferTypeItem,
     } = useMultiSelectFilter('buffer_type', tensorsWithRange || []);
+
+    const { nonDeallocatedTensorList } = useGetTensorDeallocationReportByOperation();
 
     // TODO: Figure out an initial scroll position based on last used tensor - https://github.com/tenstorrent/ttnn-visualizer/issues/737
     const virtualizer = useVirtualizer({
@@ -108,15 +111,16 @@ const TensorList = () => {
         );
     };
 
-    useMemo(() => {
-        if (tensorsWithRange && operations) {
-            let tensors = [...tensorsWithRange];
+    useMemo(
+        () => {
+            if (tensorsWithRange && operations) {
+                let tensors = [...tensorsWithRange];
 
-            if (filterQuery) {
-                tensors = tensorsWithRange?.filter((tensor) =>
-                    getTensorFilterName(tensor).toLowerCase().includes(filterQuery.toLowerCase()),
-                );
-            }
+                if (filterQuery) {
+                    tensors = tensorsWithRange?.filter((tensor) =>
+                        getTensorFilterName(tensor).toLowerCase().includes(filterQuery.toLowerCase()),
+                    );
+                }
 
             if (activeBufferTypeFilters?.length > 0) {
                 tensors = tensors.filter(
@@ -124,13 +128,20 @@ const TensorList = () => {
                 );
             }
 
-            if (showHighConsumerTensors) {
-                tensors = tensors.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS);
-            }
+                if (showHighConsumerTensors) {
+                    tensors = tensors.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS);
+                }
 
-            setFilteredTensorList(tensors);
-        }
-    }, [operations, tensorsWithRange, filterQuery, activeBufferTypeFilters, showHighConsumerTensors]);
+                if (showLateDeallocatedTensors) {
+                    tensors = tensors.filter((tensor) => nonDeallocatedTensorList.get(tensor.id));
+                }
+
+                setFilteredTensorList(tensors);
+            }
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [tensorsWithRange, operations, filterQuery, activeFilters, showHighConsumerTensors, showLateDeallocatedTensors],
+    );
 
     useEffect(() => {
         const initialTensorId = location.state?.previousOperationId;
@@ -186,6 +197,21 @@ const TensorList = () => {
                     </Tooltip>
 
                     <Tooltip
+                        content='Show late deallocated tensors'
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => setShowLateDeallocatedTensors(!showLateDeallocatedTensors)}
+                            endIcon={IconNames.OUTDATED}
+                            intent={Intent.WARNING}
+                            disabled={nonDeallocatedTensorList.size === 0}
+                            variant={showLateDeallocatedTensors ? 'outlined' : undefined}
+                            aria-label='Toggle high consumer tensors'
+                        >
+                            {filteredTensorList?.filter((tensor) => nonDeallocatedTensorList.get(tensor.id)).length}
+                        </Button>
+                    </Tooltip>
+                    <Tooltip
                         content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
                         placement={PopoverPosition.TOP}
                     >
@@ -195,7 +221,6 @@ const TensorList = () => {
                             aria-label={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
                         />
                     </Tooltip>
-
                     <Tooltip
                         content='Scroll to top'
                         placement={PopoverPosition.TOP}
@@ -208,7 +233,6 @@ const TensorList = () => {
                             aria-label='Scroll to top'
                         />
                     </Tooltip>
-
                     <Tooltip
                         content='Scroll to bottom'
                         placement={PopoverPosition.TOP}
@@ -221,7 +245,6 @@ const TensorList = () => {
                             aria-label='Scroll to bottom'
                         />
                     </Tooltip>
-
                     <MultiSelect<MultiSelectValue>
                         items={tensorsWithRange ? getBufferTypeFilter() : []}
                         placeholder='Buffer type filter...'
@@ -282,6 +305,8 @@ const TensorList = () => {
                             virtualItems.map((virtualRow) => {
                                 const tensor = filteredTensorList[virtualRow.index];
 
+                                const isLateDeallocated = nonDeallocatedTensorList.get(tensor.id);
+
                                 return (
                                     <li
                                         className='list-item-container'
@@ -320,6 +345,20 @@ const TensorList = () => {
                                                                 icon={IconNames.ISSUE}
                                                                 intent={HIGH_CONSUMER_INTENT}
                                                                 title='Unusually high number of consumers'
+                                                            />
+                                                        </Tooltip>
+                                                    ) : null}
+
+                                                    {isLateDeallocated ? (
+                                                        <Tooltip
+                                                            content='Tensor has an opportunity for earlier deallocation'
+                                                            position={PopoverPosition.TOP}
+                                                            className='high-number-consumers'
+                                                        >
+                                                            <Icon
+                                                                icon={IconNames.OUTDATED}
+                                                                intent={Intent.WARNING}
+                                                                title='Tensor has an opportunity for earlier deallocation'
                                                             />
                                                         </Tooltip>
                                                     ) : null}
