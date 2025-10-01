@@ -272,7 +272,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 <div className='filters'>
                     <SearchField
                         onQueryChanged={(value) => updateColumnFilter('op_code', value)}
-                        placeholder='Filter OP Code'
+                        placeholder='Filter by operation name'
                         searchQuery={filters?.op_code || ''}
                     />
 
