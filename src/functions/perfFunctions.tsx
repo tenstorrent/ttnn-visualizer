@@ -333,55 +333,55 @@ export function evaluateFidelity(
 
     // I note that we're not using the second part of the returned array, only the first part.
     if (in0Bits === 8 && outBits >= 7) {
-        if (mathFidelity === MathFidelity.HIFI4) {
+        if (mathFidelity === MathFidelity.HiFi4) {
             return ['sufficient', 'HiFi2 may also work and has 2x the throughput of HiFi4'];
         }
 
-        if (mathFidelity === MathFidelity.HIFI2) {
+        if (mathFidelity === MathFidelity.HiFi2) {
             return ['too_low', 'If your matmuls are not FLOP-bound use HiFi4 with BF16 activations for full accuracy'];
         }
 
-        if (mathFidelity === MathFidelity.LOFI) {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['too_low', 'Use HiFi2 or HiFi4 with BF16 activations for improved accuracy'];
         }
     } else if (in0Bits === 8 && outBits === 3) {
-        if (mathFidelity === MathFidelity.HIFI4) {
+        if (mathFidelity === MathFidelity.HiFi4) {
             return ['too_high', 'HiFi2 is very likely to work for BFP8 output and has 2x the throughput of HiFi4'];
         }
 
-        if (mathFidelity === MathFidelity.HIFI2) {
+        if (mathFidelity === MathFidelity.HiFi2) {
             return ['sufficient', 'LoFi might also be sufficient with BFP4 output and has almost 2x the throughput'];
         }
 
-        if (mathFidelity === MathFidelity.LOFI) {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['too_low', 'HiFi2 may give better accuracy for large matmuls with many intermediate accumulations'];
         }
     } else if (in1Bits >= 7 && outBits >= 7) {
-        if (mathFidelity === MathFidelity.HIFI4) {
+        if (mathFidelity === MathFidelity.HiFi4) {
             return ['too_high', 'HiFi2 is sufficient for BFP8 multiplication and faster'];
         }
 
-        if (mathFidelity === MathFidelity.HIFI2) {
+        if (mathFidelity === MathFidelity.HiFi2) {
             return ['sufficient', null];
         }
 
-        if (mathFidelity === MathFidelity.LOFI) {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['too_low', 'HiFi2 is recommended for accuracy; LoFi discards low bits of weights'];
         }
     } else if (in1Bits >= 7 && outBits === 3) {
-        if (mathFidelity === MathFidelity.HIFI4) {
+        if (mathFidelity === MathFidelity.HiFi4) {
             return ['too_high', 'HiFi2 is sufficient and 2x throughput'];
         }
 
-        if (mathFidelity === MathFidelity.HIFI2) {
+        if (mathFidelity === MathFidelity.HiFi2) {
             return ['sufficient', 'LoFi might also be sufficient (BFP4 output) and has almost 2x throughput'];
         }
 
-        if (mathFidelity === MathFidelity.LOFI) {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['too_low', 'HiFi2 may give slightly better accuracy for large matmuls'];
         }
     } else if (in1Bits === 3) {
-        if (mathFidelity === MathFidelity.LOFI) {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['sufficient', null];
         }
         return ['too_high', 'LoFi is sufficient with BFP4 weights'];

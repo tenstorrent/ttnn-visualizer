@@ -77,9 +77,9 @@ export interface TypedPerfTableRow
 }
 
 export enum MathFidelity {
-    HIFI4 = 'HiFi4',
-    HIFI2 = 'HiFi2',
-    LOFI = 'LoFi',
+    HiFi4 = 'HiFi4',
+    HiFi2 = 'HiFi2',
+    LoFi = 'LoFi',
 }
 
 export const MarkerColours = [
