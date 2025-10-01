@@ -8,7 +8,6 @@ import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import {
     ColumnHeaders,
-    FilterableStackedColumnKeys,
     StackedTableHeader,
     TableHeaders,
     TypedStackedPerfRow,
@@ -16,16 +15,16 @@ import {
 import 'styles/components/PerfReport.scss';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { useGetNPEManifest } from '../../hooks/useAPI';
-import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 import { formatStackedCell } from '../../functions/stackedPerfFunctions';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import { formatSize } from '../../functions/math';
 import { isHostOp } from '../../functions/perfFunctions';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
+import LoadingSpinner from '../LoadingSpinner';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
-    filters: Record<string, string> | null; // TODO: Type this properly with our definitions
+    filters: Record<string, string> | null;
     stackedData?: TypedStackedPerfRow[];
     reportName?: string;
 }
@@ -35,13 +34,12 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
     const { error: npeManifestError } = useGetNPEManifest();
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
-        const parsedRows = stackedData
-            ? sortAndFilterStackedPerfTableData(stackedData, filters, FilterableStackedColumnKeys)
-            : [];
+        return [...sortTableFields(stackedData as [])];
+    }, [stackedData, sortTableFields]);
 
-        // Still some awkward casting here
-        return [...sortTableFields(parsedRows as [])];
-    }, [stackedData, filters, sortTableFields]);
+    if (!data) {
+        return <LoadingSpinner />;
+    }
 
     return (
         <>
@@ -61,93 +59,99 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
                 reportName={reportName || ''}
             />
 
-            <table className='perf-table monospace'>
-                <thead className='table-header'>
-                    <tr>
-                        {TableHeaders.map((h) => {
-                            const targetSortDirection =
-                                // eslint-disable-next-line no-nested-ternary
-                                sortingColumn === h.key
-                                    ? sortDirection === SortingDirection.ASC
-                                        ? SortingDirection.DESC
-                                        : SortingDirection.ASC
-                                    : sortDirection;
+            {stackedData && stackedData?.length > 0 ? (
+                <table className='perf-table monospace'>
+                    <thead className='table-header'>
+                        <tr>
+                            {TableHeaders.map((h) => {
+                                const targetSortDirection =
+                                    // eslint-disable-next-line no-nested-ternary
+                                    sortingColumn === h.key
+                                        ? sortDirection === SortingDirection.ASC
+                                            ? SortingDirection.DESC
+                                            : SortingDirection.ASC
+                                        : sortDirection;
 
-                            return (
-                                <th
-                                    key={h.key}
-                                    className='cell-header'
-                                >
-                                    {h.sortable ? (
-                                        <Button
-                                            onClick={() => changeSorting(h.key)(targetSortDirection)}
-                                            variant={ButtonVariant.MINIMAL}
-                                            size={Size.SMALL}
-                                        >
-                                            <span className='header-label'>{h.label}</span>
+                                return (
+                                    <th
+                                        key={h.key}
+                                        className='cell-header'
+                                    >
+                                        {h.sortable ? (
+                                            <Button
+                                                onClick={() => changeSorting(h.key)(targetSortDirection)}
+                                                variant={ButtonVariant.MINIMAL}
+                                                size={Size.SMALL}
+                                            >
+                                                <span className='header-label'>{h.label}</span>
 
-                                            {sortingColumn === h.key ? (
-                                                <Icon
-                                                    className={classNames(
-                                                        {
-                                                            'is-active': sortingColumn === h.key,
-                                                        },
-                                                        'sort-icon',
-                                                    )}
-                                                    icon={
-                                                        sortDirection === SortingDirection.ASC
-                                                            ? IconNames.CARET_UP
-                                                            : IconNames.CARET_DOWN
-                                                    }
-                                                />
-                                            ) : (
-                                                <Icon
-                                                    className={classNames('sort-icon')}
-                                                    icon={IconNames.CARET_DOWN}
-                                                />
-                                            )}
-                                        </Button>
-                                    ) : (
-                                        <span className='header-label no-button'>{h.label}</span>
-                                    )}
-                                </th>
-                            );
-                        })}
-                    </tr>
-                </thead>
-
-                <tbody>
-                    {tableFields?.map((row, i) => (
-                        <tr key={i}>
-                            {TableHeaders.map((h: StackedTableHeader) => (
-                                <td
-                                    key={h.key}
-                                    className={classNames('cell')}
-                                >
-                                    {formatStackedCell(row, h, filters?.[h.key])}
-                                </td>
-                            ))}
+                                                {sortingColumn === h.key ? (
+                                                    <Icon
+                                                        className={classNames(
+                                                            {
+                                                                'is-active': sortingColumn === h.key,
+                                                            },
+                                                            'sort-icon',
+                                                        )}
+                                                        icon={
+                                                            sortDirection === SortingDirection.ASC
+                                                                ? IconNames.CARET_UP
+                                                                : IconNames.CARET_DOWN
+                                                        }
+                                                    />
+                                                ) : (
+                                                    <Icon
+                                                        className={classNames('sort-icon')}
+                                                        icon={IconNames.CARET_DOWN}
+                                                    />
+                                                )}
+                                            </Button>
+                                        ) : (
+                                            <span className='header-label no-button'>{h.label}</span>
+                                        )}
+                                    </th>
+                                );
+                            })}
                         </tr>
-                    ))}
-                </tbody>
+                    </thead>
 
-                <tfoot className='table-footer'>
-                    <tr>
-                        {stackedData &&
-                            stackedData?.length > 0 &&
-                            TableHeaders.map((header) => (
-                                <td
-                                    key={header.key}
-                                    className={classNames({
-                                        'no-wrap': header.key === ColumnHeaders.OpCodeJoined,
-                                    })}
-                                >
-                                    {getTotalsForHeader(header, stackedData)}
-                                </td>
-                            ))}
-                    </tr>
-                </tfoot>
-            </table>
+                    <tbody>
+                        {tableFields?.map((row, i) => (
+                            <tr key={i}>
+                                {TableHeaders.map((h: StackedTableHeader) => (
+                                    <td
+                                        key={h.key}
+                                        className={classNames('cell')}
+                                    >
+                                        {formatStackedCell(row, h, filters?.[h.key])}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+
+                    <tfoot className='table-footer'>
+                        <tr>
+                            {stackedData &&
+                                stackedData?.length > 0 &&
+                                TableHeaders.map((header) => (
+                                    <td
+                                        key={header.key}
+                                        className={classNames({
+                                            'no-wrap': header.key === ColumnHeaders.OpCodeJoined,
+                                        })}
+                                    >
+                                        {getTotalsForHeader(header, stackedData)}
+                                    </td>
+                                ))}
+                        </tr>
+                    </tfoot>
+                </table>
+            ) : (
+                <p>
+                    <em>No data to display</em>
+                </p>
+            )}
         </>
     );
 };

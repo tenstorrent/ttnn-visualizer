@@ -54,12 +54,12 @@ function BufferSummaryTab({
             >
                 {isDram ? (
                     <BufferSummaryPlotRendererDRAM
-                        buffersByOperation={uniqueBuffersByOperationList}
+                        uniqueBuffersByOperationList={uniqueBuffersByOperationList}
                         tensorListByOperation={tensorListByOperation}
                     />
                 ) : (
                     <BufferSummaryPlotRenderer
-                        buffersByOperation={uniqueBuffersByOperationList}
+                        uniqueBuffersByOperationList={uniqueBuffersByOperationList}
                         tensorListByOperation={tensorListByOperation}
                     />
                 )}

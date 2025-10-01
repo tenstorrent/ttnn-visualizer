@@ -9,13 +9,7 @@ import { ChangeEvent, type FC, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtom, useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
-import {
-    activePerformanceReportAtom,
-    activeProfilerReportAtom,
-    performanceReportLocationAtom,
-    profilerReportLocationAtom,
-    selectedDeviceAtom,
-} from '../../store/app';
+
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import FileStatusOverlay from '../FileStatusOverlay';
 import createToastNotification from '../../functions/createToastNotification';
@@ -38,6 +32,13 @@ import {
     hasBeenNormalised,
     normaliseReportFolder,
 } from '../../functions/validateReportFolder';
+import {
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
+    performanceReportLocationAtom,
+    profilerReportLocationAtom,
+    selectedDeviceAtom,
+} from '../../store/app';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,

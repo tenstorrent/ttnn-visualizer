@@ -309,7 +309,6 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
                 {formatSize(maxDispatchOverhead, 0)} µs {toSecondsPretty(maxDispatchOverhead)} (
                 {formatPercentage(percentageSaved, 1)} of overall time).
             </p>
-
             <p>Alternatively, try moving runtime args in the kernels to compile-time args.</p>
         </div>
     );

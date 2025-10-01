@@ -16,6 +16,7 @@ import {
     BufferPage,
     Instance,
     NodeType,
+    Operation,
     OperationDescription,
     OperationDetailsData,
     ReportMetaData,
@@ -47,6 +48,7 @@ import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import createToastNotification from '../functions/createToastNotification';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../functions/perfFunctions';
+import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -1035,4 +1037,125 @@ export const usePerfFolderList = () => {
         queryKey: [PERFORMANCE_FOLDER_QUERY_KEY],
         initialData: null,
     });
+};
+
+// TODO: this likely will break with 1.2 gb database
+export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = BufferType.L1) => {
+    const { data: buffersByOperation } = useBuffers(bufferType);
+    const { data: operations } = useOperationsList();
+
+    const tensorsByOperationByAddress: TensorsByOperationByAddress = new Map();
+
+    const uniqueBuffersByOperationList = useMemo(() => {
+        return buffersByOperation?.map((operation) => {
+            const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
+            operation.buffers.forEach((buffer) => {
+                const { address, size } = buffer;
+                if (address) {
+                    const existingBuffer = uniqueBuffers.get(address);
+                    if (!existingBuffer || size > existingBuffer.size) {
+                        uniqueBuffers.set(address, buffer);
+                    }
+                }
+            });
+            return {
+                ...operation,
+                buffers: Array.from(uniqueBuffers.values()),
+            };
+        });
+    }, [buffersByOperation]);
+
+    if (!operations || !buffersByOperation) {
+        return tensorsByOperationByAddress;
+    }
+
+    uniqueBuffersByOperationList?.forEach((operation) => {
+        const tensorsByBufferAddress: Map<number, Tensor> = new Map();
+        const currentOperation = operations.find((op) => op.id === operation.id);
+
+        for (const buffer of operation.buffers) {
+            const bufferAddress = buffer.address;
+            let tensor: Tensor | undefined;
+
+            for (let i = operations.indexOf(currentOperation!); i >= 0; i--) {
+                const op = operations[i];
+                tensor = op.inputs.find((input) => input.address === bufferAddress);
+
+                if (tensor !== undefined) {
+                    break;
+                }
+
+                tensor = op.outputs.find((output) => output.address === bufferAddress);
+
+                if (tensor !== undefined) {
+                    break;
+                }
+            }
+
+            if (tensor !== undefined) {
+                tensorsByBufferAddress.set(bufferAddress, {
+                    ...tensor,
+                    buffer_type: buffer.buffer_type,
+                });
+            }
+        }
+
+        tensorsByOperationByAddress.set(operation.id, tensorsByBufferAddress);
+    });
+
+    return tensorsByOperationByAddress;
+};
+
+export const useGetTensorDeallocationReportByOperation = () => {
+    const tensorListByOperation = useCreateTensorsByOperationByIdList();
+    const { data: operations } = useOperationsList();
+    const operationsById = useMemo(() => {
+        const map = new Map<number, Operation>();
+        operations?.forEach((operation) => {
+            map.set(operation.id, operation);
+        });
+        return map;
+    }, [operations]);
+
+    return useMemo(() => {
+        const getLastValidConsumer = (consumers: number[]) => {
+            const list = [...consumers];
+            while (list && list.length > 0) {
+                const lastConsumerOperationId = list.sort().pop() || -1;
+                const lastConsumerName = operationsById.get(lastConsumerOperationId)?.name || '';
+
+                if (lastConsumerOperationId > -1 && !lastConsumerName.includes('ttnn.deallocate')) {
+                    return { lastConsumerOperationId, lastConsumerName };
+                }
+            }
+            return { lastConsumerName: '', lastConsumerOperationId: -1 };
+        };
+        const lateDeallocationsByOperation = new Map<number, TensorDeallocationReport[]>();
+        const nonDeallocatedTensorListById = new Map<number, TensorDeallocationReport>();
+        tensorListByOperation.forEach((tensorsMap, operationId) => {
+            tensorsMap.forEach((tensor, address) => {
+                if (tensor.id && tensor.consumers && tensor.consumers.length > 0) {
+                    const { lastConsumerOperationId, lastConsumerName } = getLastValidConsumer(tensor.consumers);
+                    if (lastConsumerOperationId !== null && lastConsumerOperationId < operationId) {
+                        if (!lateDeallocationsByOperation.has(operationId)) {
+                            lateDeallocationsByOperation.set(operationId, []);
+                        }
+                        const list: TensorDeallocationReport[] = lateDeallocationsByOperation.get(operationId)!;
+                        const tensorInfo: TensorDeallocationReport = {
+                            id: tensor.id,
+                            address,
+                            consumerName: lastConsumerName,
+                            lastConsumerOperationId,
+                            lastOperationId: operationId,
+                        };
+                        list.push(tensorInfo);
+                        lateDeallocationsByOperation.set(operationId, list);
+                        nonDeallocatedTensorListById.set(tensor.id, tensorInfo);
+                    }
+                }
+            });
+        });
+
+        return { lateDeallocationsByOperation, nonDeallocatedTensorList: nonDeallocatedTensorListById };
+    }, [operationsById, tensorListByOperation]);
 };

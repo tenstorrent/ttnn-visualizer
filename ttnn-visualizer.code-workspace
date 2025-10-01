@@ -21,9 +21,9 @@
         "editor.codeActionsOnSave": {
             "source.fixAll.eslint": "always",
             "source.fixAll.stylelint": "always",
-            "source.fixAll.prettier": "always",
         },
         "cSpell.words": [
+            "blackhole",
             "blueprintjs",
             "dtype",
             "esbenp",
@@ -38,7 +38,10 @@
             "Pyenv",
             "pyproject",
             "pytest",
+            "subblock",
             "tensix",
+            "Tenstorrent",
+            "TFLOPs",
             "tinycolor",
             "toastify",
             "TTNN",

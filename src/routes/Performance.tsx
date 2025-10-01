@@ -107,8 +107,9 @@ export default function Performance() {
             comparisonPerfData?.map((dataset) =>
                 dataset.filter((row) =>
                     selectedOpCodes.length
-                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
-                        : false,
+                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '') ||
+                          row.op_type === OpType.SIGNPOST
+                        : row.op_type === OpType.SIGNPOST,
                 ),
             ) || [],
         );
@@ -118,8 +119,9 @@ export default function Performance() {
         setFilteredPerfData(
             perfData?.filter((row) =>
                 selectedOpCodes.length
-                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
-                    : false,
+                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '') ||
+                      row.op_type === OpType.SIGNPOST
+                    : row.op_type === OpType.SIGNPOST,
             ) || [],
         );
     }, [selectedOpCodes, perfData]);
@@ -218,27 +220,33 @@ export default function Performance() {
                             <h3 className='title'>Performance charts</h3>
 
                             {perfData ? (
-                                <div className='charts-container'>
-                                    <PerfChartFilter
-                                        opCodeOptions={opCodeOptions}
-                                        selectedOpCodes={selectedOpCodes}
-                                        updateOpCodes={setSelectedOpCodes}
-                                    />
+                                <>
+                                    <div className='charts-container'>
+                                        <PerfChartFilter
+                                            opCodeOptions={opCodeOptions}
+                                            selectedOpCodes={selectedOpCodes}
+                                            updateOpCodes={setSelectedOpCodes}
+                                        />
 
-                                    <div>
                                         <PerfCharts
                                             filteredPerfData={rangedData}
                                             comparisonData={filteredComparisonData}
                                             selectedOpCodes={selectedOpCodes}
                                         />
-
-                                        <NonFilterablePerfCharts
-                                            chartData={rangedData}
-                                            secondaryData={comparisonPerfData || []}
-                                            opCodeOptions={opCodeOptions}
-                                        />
                                     </div>
-                                </div>
+
+                                    <div className='charts-container non-filterable-charts'>
+                                        <span />
+
+                                        <div>
+                                            <NonFilterablePerfCharts
+                                                chartData={rangedData}
+                                                secondaryData={comparisonPerfData || []}
+                                                opCodeOptions={opCodeOptions}
+                                            />
+                                        </div>
+                                    </div>
+                                </>
                             ) : null}
                         </div>
                     }

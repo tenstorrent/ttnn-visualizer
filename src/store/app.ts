@@ -21,18 +21,18 @@ export const activeProfilerReportAtom = atom<string | null>(null);
 export const activePerformanceReportAtom = atom<string | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
 export const hasClusterDescriptionAtom = atom<boolean>(false);
+
+export const activeToastAtom = atom<number | null>(null);
+export const selectedAddressAtom = atom<number | null>(null);
+export const selectedTensorAtom = atom<number | null>(null);
+
 export const operationRangeAtom = atom<NumberRange | null>(null);
 export const selectedOperationRangeAtom = atom<NumberRange | null>(null);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
-export const activeToastAtom = atom<number | null>(null);
-export const selectedAddressAtom = atom<number | null>(null);
-export const selectedTensorAtom = atom<number | null>(null);
-export const scrollPositionsAtom = atom<ScrollPositions | null>(null);
-export const selectedDeviceAtom = atom<number | null>(DEFAULT_DEVICE_ID); // Assumes device_id always uses a zero based index (NOT REALLY USED AT THE MOMENT)
-export const renderMemoryLayoutAtom = atom<boolean>(false);
 
-// Reports route
+export const scrollPositionsAtom = atom<ScrollPositions | null>(null);
+
 // This atom stores the file transfer progress data in localStorage (or sessionStorage)
 export const fileTransferProgressAtom = atom<FileProgress>({
     currentFileName: '',
@@ -65,3 +65,5 @@ export const perfTableFiltersAtom = atom<TableFilter | null>(null);
 export const isStackedViewAtom = atom(false);
 export const stackByIn0Atom = atom(true);
 export const filterBySignpostAtom = atom<Signpost | null>(null);
+export const selectedDeviceAtom = atom<number | null>(DEFAULT_DEVICE_ID); // Assumes device_id always uses a zero based index (NOT REALLY USED AT THE MOMENT)
+export const renderMemoryLayoutAtom = atom<boolean>(false);
