@@ -105,8 +105,9 @@ export default function Performance() {
             comparisonPerfData?.map((dataset) =>
                 dataset.filter((row) =>
                     selectedOpCodes.length
-                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
-                        : false,
+                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '') ||
+                          row.op_type === OpType.SIGNPOST
+                        : row.op_type === OpType.SIGNPOST,
                 ),
             ) || [],
         );
@@ -116,8 +117,9 @@ export default function Performance() {
         setFilteredPerfData(
             perfData?.filter((row) =>
                 selectedOpCodes.length
-                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
-                    : false,
+                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '') ||
+                      row.op_type === OpType.SIGNPOST
+                    : row.op_type === OpType.SIGNPOST,
             ) || [],
         );
     }, [selectedOpCodes, perfData]);
