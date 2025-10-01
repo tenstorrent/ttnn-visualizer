@@ -67,3 +67,4 @@ export const stackByIn0Atom = atom(true);
 export const filterBySignpostAtom = atom<Signpost | null>(null);
 export const selectedDeviceAtom = atom<number | null>(DEFAULT_DEVICE_ID); // Assumes device_id always uses a zero based index (NOT REALLY USED AT THE MOMENT)
 export const renderMemoryLayoutAtom = atom<boolean>(false);
+export const hideHostOpsAtom = atom<boolean>(true);

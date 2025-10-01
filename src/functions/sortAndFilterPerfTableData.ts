@@ -4,6 +4,7 @@
 
 import { FilterableColumnKeys, TableFilter, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { MultiSelectValue } from '../hooks/useMultiSelectFilter';
+import { isHostOp } from './perfFunctions';
 
 const isFiltersActive = (filters: TableFilter) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
@@ -19,12 +20,17 @@ const sortAndFilterPerfTableData = (
     filters: TableFilter,
     rawOpCodeFilter: MultiSelectValue[],
     mathFilter: MultiSelectValue[],
+    showHostOps: boolean,
 ): TypedPerfTableRow[] => {
     if (data?.length === 0) {
         return data;
     }
 
     let filteredRows = data || [];
+
+    if (!showHostOps) {
+        filteredRows = filteredRows.filter((row) => !isHostOp(row.raw_op_code));
+    }
 
     if (isFiltersActive(filters) && FilterableColumnKeys) {
         filteredRows = filteredRows.filter((row) => {

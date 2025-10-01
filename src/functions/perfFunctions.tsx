@@ -71,13 +71,21 @@ export const formatCell = (
     let formatted: string | boolean | string[];
     let value = row[key];
     const isSignpost = row.op_type === OpType.SIGNPOST;
+    const isHost = isHostOp(row.raw_op_code);
 
     if (isSignpost) {
         if (key !== 'id' && key !== 'op_code') {
             return '';
         }
 
+        // Return here because we don't want to apply formatting
         return value !== null ? String(value) : '';
+    }
+
+    if (isHost) {
+        if (key !== 'id' && key !== 'op_code' && key !== 'bound') {
+            return '';
+        }
     }
 
     if (key === 'high_dispatch') {

@@ -169,7 +169,10 @@ const getTotalsForHeader = (header: StackedTableHeader, data: TypedStackedPerfRo
     }
 
     if (header.key === ColumnHeaders.OpCodeJoined) {
-        return `${data.filter((row) => !isHostOp(row.op_code)).length} device op types`;
+        const hostOpsCount = data.filter((row) => isHostOp(row.op_code)).length;
+        const deviceOpsCount = data.length - hostOpsCount;
+
+        return `${deviceOpsCount} device ops, ${hostOpsCount} host ops`;
     }
 
     if (header.key === ColumnHeaders.OpsCount) {

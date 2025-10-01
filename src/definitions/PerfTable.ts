@@ -17,12 +17,20 @@ export interface TableHeader {
     filterable?: boolean;
 }
 
+enum BoundType {
+    BOTH,
+    DRAM,
+    FLOP,
+    SLOW,
+    HOST,
+}
+
 export interface PerfTableRow {
     id: string;
     global_call_count: number;
     advice: string[];
     total_percent: string;
-    bound: string;
+    bound: BoundType;
     op_code: string;
     raw_op_code: string;
     device_time: string;
@@ -183,7 +191,7 @@ export const signpostRowDefaults = Object.freeze({
     flops: null,
     flops_percent: null,
     advice: [],
-    bound: '',
+    bound: BoundType.BOTH,
     math_fidelity: '',
     output_datatype: '',
     output_0_memory: '',
