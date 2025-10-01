@@ -105,12 +105,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         activeMultiSelectFilters: activeRawOpCodeFilters,
         OptionComponent: RawOpCodeOption,
     } = useMultiSelectFilter('raw_op_code', data || []);
+
     const {
         getMultiSelectOptions: getMathFilterOptions,
         updateMultiSelect: updateMathFilters,
         activeMultiSelectFilters: activeMathFilters,
         OptionComponent: MathOption,
     } = useMultiSelectFilter('math_fidelity', data || []);
+
     const opIdsMap = useOpToPerfIdFiltered();
 
     const isSignpostsDisabled = !signposts || signposts.length === 0;
