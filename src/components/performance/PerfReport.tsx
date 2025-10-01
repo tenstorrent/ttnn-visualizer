@@ -72,20 +72,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     comparisonStackedData,
     signposts,
 }) => {
-    const {
-        getMultiSelectOptions: getRawOpCodeOptions,
-        updateMultiSelect: updateRawOpCodeFilters,
-        activeMultiSelectFilters: activeRawOpCodeFilters,
-        OptionComponent: RawOpCodeOption,
-    } = useMultiSelectFilter('raw_op_code', data || []);
-    const {
-        getMultiSelectOptions: getMathFilterOptions,
-        updateMultiSelect: updateMathFilters,
-        activeMultiSelectFilters: activeMathFilters,
-        OptionComponent: MathOption,
-    } = useMultiSelectFilter('math_fidelity', data || []);
-    const opIdsMap = useOpToPerfIdFiltered();
-
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeComparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const [isStackedView, setIsStackedView] = useAtom(isStackedViewAtom);
@@ -112,6 +98,20 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             string
         >,
     );
+
+    const {
+        getMultiSelectOptions: getRawOpCodeOptions,
+        updateMultiSelect: updateRawOpCodeFilters,
+        activeMultiSelectFilters: activeRawOpCodeFilters,
+        OptionComponent: RawOpCodeOption,
+    } = useMultiSelectFilter('raw_op_code', data || []);
+    const {
+        getMultiSelectOptions: getMathFilterOptions,
+        updateMultiSelect: updateMathFilters,
+        activeMultiSelectFilters: activeMathFilters,
+        OptionComponent: MathOption,
+    } = useMultiSelectFilter('math_fidelity', data || []);
+    const opIdsMap = useOpToPerfIdFiltered();
 
     const isSignpostsDisabled = !signposts || signposts.length === 0;
 
