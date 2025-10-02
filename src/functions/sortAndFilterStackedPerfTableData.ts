@@ -24,7 +24,7 @@ const sortAndFilterStackedPerfTableData = (
     data: TypedStackedPerfRow[],
     filters: StackedTableFilter,
     rawOpCodeFilter: MultiSelectValue[],
-    showHostOps: boolean,
+    hideHostOps: boolean,
 ): TypedStackedPerfRow[] => {
     if (data?.length === 0) {
         return data;
@@ -32,7 +32,7 @@ const sortAndFilterStackedPerfTableData = (
 
     let filteredRows = data || [];
 
-    if (!showHostOps) {
+    if (hideHostOps) {
         filteredRows = filteredRows.filter((row) => !isHostOp(row.op_code));
     }
 

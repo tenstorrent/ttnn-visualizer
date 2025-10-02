@@ -20,7 +20,7 @@ const sortAndFilterPerfTableData = (
     filters: TableFilter,
     rawOpCodeFilter: MultiSelectValue[],
     mathFilter: MultiSelectValue[],
-    showHostOps: boolean,
+    hideHostOps: boolean,
 ): TypedPerfTableRow[] => {
     if (data?.length === 0) {
         return data;
@@ -28,7 +28,7 @@ const sortAndFilterPerfTableData = (
 
     let filteredRows = data || [];
 
-    if (!showHostOps) {
+    if (hideHostOps) {
         filteredRows = filteredRows.filter((row) => !isHostOp(row.raw_op_code));
     }
 
