@@ -4,7 +4,7 @@
 
 import { Helmet } from 'react-helmet-async';
 import { useEffect, useMemo, useState } from 'react';
-import { Size, Tab, TabId, Tabs } from '@blueprintjs/core';
+import { Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
@@ -19,17 +19,19 @@ import PerformanceReport from '../components/performance/PerfReport';
 import {
     activePerformanceReportAtom,
     comparisonPerformanceReportListAtom,
+    perfSelectedTabAtom,
     selectedPerformanceRangeAtom,
 } from '../store/app';
 import PerfCharts from '../components/performance/PerfCharts';
 import PerfChartFilter from '../components/performance/PerfChartFilter';
-import { MARKER_COLOURS, Marker, PerfTableRow } from '../definitions/PerfTable';
+import { Marker, MarkerColours, PerfTableRow } from '../definitions/PerfTable';
 import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
+import { OpType, PerfTabIds } from '../definitions/Performance';
 
-const INITIAL_TAB_ID = 'tab-1';
+const INITIAL_TAB_ID = PerfTabIds.TABLE;
 
 export default function Performance() {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
@@ -59,11 +61,13 @@ export default function Performance() {
         const opCodes = Array.from(
             new Set([
                 ...(perfData
-                    ?.map((row) => row.raw_op_code)
+                    ?.filter((row) => row.op_type !== OpType.SIGNPOST)
+                    .map((row) => row.raw_op_code)
                     .filter((opCode): opCode is string => opCode !== undefined) || []),
                 ...(comparisonPerfData
                     ? comparisonPerfData.flatMap((report) =>
                           report
+                              .filter((row) => row.op_type !== OpType.SIGNPOST)
                               .map((row) => row.raw_op_code)
                               .filter((opCode): opCode is string => opCode !== undefined),
                       )
@@ -73,11 +77,11 @@ export default function Performance() {
 
         return opCodes.map((opCode, index) => ({
             opCode,
-            colour: MARKER_COLOURS[index],
+            colour: MarkerColours[index],
         }));
     }, [perfData, comparisonPerfData]);
 
-    const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
+    const [selectedTabId, setSelectedTabId] = useAtom(perfSelectedTabAtom);
     const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
     const [filteredComparisonData, setFilteredComparisonData] = useState<PerfTableRow[][]>([]);
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>(opCodeOptions);
@@ -103,8 +107,9 @@ export default function Performance() {
             comparisonPerfData?.map((dataset) =>
                 dataset.filter((row) =>
                     selectedOpCodes.length
-                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
-                        : false,
+                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '') ||
+                          row.op_type === OpType.SIGNPOST
+                        : row.op_type === OpType.SIGNPOST,
                 ),
             ) || [],
         );
@@ -114,8 +119,9 @@ export default function Performance() {
         setFilteredPerfData(
             perfData?.filter((row) =>
                 selectedOpCodes.length
-                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '')
-                    : false,
+                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '') ||
+                      row.op_type === OpType.SIGNPOST
+                    : row.op_type === OpType.SIGNPOST,
             ) || [],
         );
     }, [selectedOpCodes, perfData]);
@@ -206,7 +212,7 @@ export default function Performance() {
                 />
 
                 <Tab
-                    id='tab-2'
+                    id={PerfTabIds.CHARTS}
                     title='Charts'
                     icon={IconNames.TIMELINE_AREA_CHART}
                     panel={

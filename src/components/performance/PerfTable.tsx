@@ -11,9 +11,9 @@ import { useAtomValue } from 'jotai';
 import {
     ColumnHeaders,
     ComparisonKeys,
+    TableFilter,
     TableHeader,
     TableHeaders,
-    TableKeys,
     TypedPerfTableRow,
     signpostRowDefaults,
 } from '../../definitions/PerfTable';
@@ -28,12 +28,14 @@ import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import { filterBySignpostAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
+import { MultiSelectValue } from '../../hooks/useMultiSelectFilter';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
     comparisonData?: TypedPerfTableRow[][];
-    filters: Record<TableKeys, string> | null;
-    mathFidelityFilter: (string | number)[];
+    filters: TableFilter;
+    rawOpCodeFilter: MultiSelectValue[];
+    mathFidelityFilter: MultiSelectValue[];
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     shouldHighlightRows: boolean;
@@ -49,6 +51,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     data,
     comparisonData,
     filters,
+    rawOpCodeFilter,
     mathFidelityFilter,
     provideMatmulAdvice,
     hiliteHighDispatch,
@@ -63,18 +66,13 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     const filterBySignpost = useAtomValue(filterBySignpostAtom);
     const navigate = useNavigate();
 
-    const filterableColumnKeys = useMemo(
-        () => TableHeaders.filter((column) => column.filterable).map((column) => column.key),
-        [],
-    );
-
     // TODO: Refactor so that sortAndFilterPerfTableData is not used here and PerfReport.
     // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
     const tableFields = useMemo<TypedPerfTableRow[]>(() => {
         let parsedRows = sortAndFilterPerfTableData(
             data?.filter((row) => !isHostOp(row.raw_op_code)),
             filters,
-            filterableColumnKeys,
+            rawOpCodeFilter,
             mathFidelityFilter,
         );
 
@@ -93,7 +91,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
 
         // Still some awkward casting here
         return [...sortTableFields(parsedRows as [])];
-    }, [data, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields, filterBySignpost]);
+    }, [data, filters, rawOpCodeFilter, mathFidelityFilter, sortTableFields, filterBySignpost]);
 
     const comparisonDataTableFields = useMemo<TypedPerfTableRow[][]>(
         () =>
@@ -101,14 +99,14 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                 const parsedRows = sortAndFilterPerfTableData(
                     dataset.filter((row) => !isHostOp(row.raw_op_code)),
                     filters,
-                    filterableColumnKeys,
+                    rawOpCodeFilter,
                     mathFidelityFilter,
                 );
 
                 // Still some awkward casting here
                 return [...sortTableFields(parsedRows as [])];
             }) || [],
-        [comparisonData, filters, filterableColumnKeys, mathFidelityFilter, sortTableFields],
+        [comparisonData, filters, rawOpCodeFilter, mathFidelityFilter, sortTableFields],
     );
 
     const visibleHeaders = [
@@ -158,6 +156,10 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
         return formatCell(row, header, operations, highlight);
     };
 
+    if (!data) {
+        return <LoadingSpinner />;
+    }
+
     return (
         <>
             {npeManifestError && (
@@ -176,7 +178,6 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                 reportName={reportName || ''}
             />
 
-            {/* eslint-disable-next-line no-nested-ternary */}
             {data?.length > 0 ? (
                 <table className='perf-table monospace'>
                     <thead className='table-header'>
@@ -334,10 +335,10 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                         </tr>
                     </tfoot>
                 </table>
-            ) : filterBySignpost ? (
-                <p>No data to display from this signpost.</p>
             ) : (
-                <LoadingSpinner />
+                <p>
+                    <em>No data to display</em>
+                </p>
             )}
         </>
     );

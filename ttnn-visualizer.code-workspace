@@ -23,13 +23,17 @@
             "source.fixAll.stylelint": "always",
         },
         "cSpell.words": [
+            "BFLOAT",
+            "blackhole",
             "blueprintjs",
+            "Conv",
             "dtype",
             "esbenp",
             "hilite",
             "isort",
             "jsonify",
             "matmul",
+            "matmuls",
             "Metalium",
             "mypy",
             "pipx",
@@ -37,6 +41,10 @@
             "Pyenv",
             "pyproject",
             "pytest",
+            "subblock",
+            "tensix",
+            "Tenstorrent",
+            "TFLOPs",
             "tinycolor",
             "toastify",
             "TTNN",
@@ -45,7 +53,7 @@
             "xaxis",
             "xref",
             "yaxis",
-            "yref",
+            "yref"
         ],
         "[python]": {
             "editor.codeActionsOnSave": {

@@ -6,11 +6,12 @@ import React from 'react';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
-import { MathFidelity, OpType, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import { MathFidelity, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
 import { formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
+import { OpType } from '../definitions/Performance';
 
 export enum CellColour {
     White = 'white',
@@ -302,7 +303,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     const percentageSaved = (maxDispatchOverhead / totalDuration) * 100;
 
     return (
-        <div>
+        <div className='high-dispatch-advice'>
             <p>
                 Marked ops have &gt; 6 µs dispatch latency. Running with tracing could save{' '}
                 {formatSize(maxDispatchOverhead, 0)} µs {toSecondsPretty(maxDispatchOverhead)} (
@@ -320,6 +321,7 @@ export function evaluateFidelity(
     mathFidelity: MathFidelity | '',
 ): [string, string | null] {
     const mantissaBits: Record<string, number> = {
+        FLOAT32: 23,
         BFLOAT16: 8,
         BFLOAT8_B: 7,
         BFLOAT4_B: 3,
@@ -331,55 +333,55 @@ export function evaluateFidelity(
 
     // I note that we're not using the second part of the returned array, only the first part.
     if (in0Bits === 8 && outBits >= 7) {
-        if (mathFidelity === 'HiFi4') {
+        if (mathFidelity === MathFidelity.HiFi4) {
             return ['sufficient', 'HiFi2 may also work and has 2x the throughput of HiFi4'];
         }
 
-        if (mathFidelity === 'HiFi2') {
+        if (mathFidelity === MathFidelity.HiFi2) {
             return ['too_low', 'If your matmuls are not FLOP-bound use HiFi4 with BF16 activations for full accuracy'];
         }
 
-        if (mathFidelity === 'LoFi') {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['too_low', 'Use HiFi2 or HiFi4 with BF16 activations for improved accuracy'];
         }
     } else if (in0Bits === 8 && outBits === 3) {
-        if (mathFidelity === 'HiFi4') {
+        if (mathFidelity === MathFidelity.HiFi4) {
             return ['too_high', 'HiFi2 is very likely to work for BFP8 output and has 2x the throughput of HiFi4'];
         }
 
-        if (mathFidelity === 'HiFi2') {
+        if (mathFidelity === MathFidelity.HiFi2) {
             return ['sufficient', 'LoFi might also be sufficient with BFP4 output and has almost 2x the throughput'];
         }
 
-        if (mathFidelity === 'LoFi') {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['too_low', 'HiFi2 may give better accuracy for large matmuls with many intermediate accumulations'];
         }
     } else if (in1Bits >= 7 && outBits >= 7) {
-        if (mathFidelity === 'HiFi4') {
+        if (mathFidelity === MathFidelity.HiFi4) {
             return ['too_high', 'HiFi2 is sufficient for BFP8 multiplication and faster'];
         }
 
-        if (mathFidelity === 'HiFi2') {
+        if (mathFidelity === MathFidelity.HiFi2) {
             return ['sufficient', null];
         }
 
-        if (mathFidelity === 'LoFi') {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['too_low', 'HiFi2 is recommended for accuracy; LoFi discards low bits of weights'];
         }
     } else if (in1Bits >= 7 && outBits === 3) {
-        if (mathFidelity === 'HiFi4') {
+        if (mathFidelity === MathFidelity.HiFi4) {
             return ['too_high', 'HiFi2 is sufficient and 2x throughput'];
         }
 
-        if (mathFidelity === 'HiFi2') {
+        if (mathFidelity === MathFidelity.HiFi2) {
             return ['sufficient', 'LoFi might also be sufficient (BFP4 output) and has almost 2x throughput'];
         }
 
-        if (mathFidelity === 'LoFi') {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['too_low', 'HiFi2 may give slightly better accuracy for large matmuls'];
         }
     } else if (in1Bits === 3) {
-        if (mathFidelity === 'LoFi') {
+        if (mathFidelity === MathFidelity.LoFi) {
             return ['sufficient', null];
         }
         return ['too_high', 'LoFi is sufficient with BFP4 weights'];
