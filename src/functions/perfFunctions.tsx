@@ -445,6 +445,6 @@ export const getStandardViewCounts = (
 };
 
 export const getStackedViewCounts = (data: TypedStackedPerfRow[], filteredData: TypedStackedPerfRow[]) => ({
-    filtered: filteredData.length,
+    filtered: filteredData?.length || 0,
     total: data?.length || 0,
 });
