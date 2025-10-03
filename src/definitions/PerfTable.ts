@@ -71,6 +71,7 @@ export interface TypedPerfTableRow
         | 'dram_percent'
         | 'flops'
         | 'flops_percent'
+        | 'bound'
     > {
     id: number | null;
     global_call_count: number | null;
@@ -82,6 +83,7 @@ export interface TypedPerfTableRow
     dram_percent: number | null;
     flops: number | null;
     flops_percent: number | null;
+    bound: BoundType | null;
 }
 
 export enum MathFidelity {
@@ -191,7 +193,7 @@ export const signpostRowDefaults = Object.freeze({
     flops: null,
     flops_percent: null,
     advice: [],
-    bound: BoundType.BOTH,
+    bound: null,
     math_fidelity: '',
     output_datatype: '',
     output_0_memory: '',

@@ -327,7 +327,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 header.key === ColumnHeaders.op_to_op_gap,
                                         })}
                                     >
-                                        {getTotalsForFooter(header, data)}
+                                        {getTotalsForFooter(header, data, hideHostOps)}
                                     </td>
                                 ))}
                         </tr>
@@ -342,7 +342,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     );
 };
 
-const getTotalsForFooter = (header: TableHeader, data: TypedPerfTableRow[]): string => {
+const getTotalsForFooter = (header: TableHeader, data: TypedPerfTableRow[], hideHostOps: boolean): string => {
     if (header.key === ColumnHeaders.total_percent) {
         return `100 %`;
     }
@@ -358,7 +358,7 @@ const getTotalsForFooter = (header: TableHeader, data: TypedPerfTableRow[]): str
         const hostOpsCount = data.filter((row) => isHostOp(row.raw_op_code)).length;
         const deviceOpsCount = data.length - hostOpsCount;
 
-        return `${deviceOpsCount} device ops${hostOpsCount !== 0 ? `, ${hostOpsCount} host ops` : ''}`;
+        return `${deviceOpsCount} device ops${hostOpsCount !== 0 && !hideHostOps ? `, ${hostOpsCount} host ops` : ''}`;
     }
 
     if (header.key === ColumnHeaders.op_to_op_gap) {

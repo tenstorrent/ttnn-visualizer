@@ -11,7 +11,7 @@ const PLACEHOLDER: TypedPerfTableRow = {
     global_call_count: null,
     advice: [],
     total_percent: null,
-    bound: '',
+    bound: null,
     op_code: MISSING_OP_STRING,
     raw_op_code: MISSING_OP_STRING,
     device_time: null,
@@ -36,12 +36,17 @@ const PLACEHOLDER: TypedPerfTableRow = {
     op_type: OpType.UNKNOWN,
 };
 
+export interface NormalisedPerfData {
+    data: TypedPerfTableRow[][];
+    missingRows: TypedPerfTableRow[];
+}
+
 function alignByOpCode(
     refData: TypedPerfTableRow[],
     dataToAlign: TypedPerfTableRow[][],
     threshold = 5,
     maxMissingRatio = 0.3,
-): { data: TypedPerfTableRow[][]; missingRows: TypedPerfTableRow[] } {
+): NormalisedPerfData {
     const missingRows = new Map<string, TypedPerfTableRow>();
     const missingCounts = Array(dataToAlign.length).fill(0); // Tracks how many placeholder rows have been inserted for each dataset
     const currentIndexes = Array(dataToAlign.length).fill(0); // Tracks the current index/position in each dataset as the alignment proceeds

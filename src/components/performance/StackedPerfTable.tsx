@@ -6,6 +6,7 @@ import { FC, useMemo } from 'react';
 import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { useAtomValue } from 'jotai';
 import {
     ColumnHeaders,
     StackedTableHeader,
@@ -21,6 +22,7 @@ import { formatSize } from '../../functions/math';
 import { isHostOp } from '../../functions/perfFunctions';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import LoadingSpinner from '../LoadingSpinner';
+import { hideHostOpsAtom } from '../../store/app';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -32,6 +34,7 @@ interface StackedPerformanceTableProps {
 const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stackedData, filters, reportName }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const { error: npeManifestError } = useGetNPEManifest();
+    const hideHostOps = useAtomValue(hideHostOpsAtom);
 
     const tableFields = useMemo<TypedStackedPerfRow[]>(() => {
         return [...sortTableFields(stackedData as [])];
@@ -141,7 +144,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
                                             'no-wrap': header.key === ColumnHeaders.OpCodeJoined,
                                         })}
                                     >
-                                        {getTotalsForFooter(header, stackedData)}
+                                        {getTotalsForFooter(header, stackedData, hideHostOps)}
                                     </td>
                                 ))}
                         </tr>
@@ -156,7 +159,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
     );
 };
 
-const getTotalsForFooter = (header: StackedTableHeader, data: TypedStackedPerfRow[]): string => {
+const getTotalsForFooter = (header: StackedTableHeader, data: TypedStackedPerfRow[], hideHostOps: boolean): string => {
     if (header.key === ColumnHeaders.Percent) {
         return `100 %`;
     }
@@ -172,7 +175,7 @@ const getTotalsForFooter = (header: StackedTableHeader, data: TypedStackedPerfRo
         const hostOpsCount = data.filter((row) => isHostOp(row.op_code)).length;
         const deviceOpsCount = data.length - hostOpsCount;
 
-        return `${deviceOpsCount} device op types${hostOpsCount !== 0 ? `, ${hostOpsCount} host op type` : ''}`;
+        return `${deviceOpsCount} device op types${hostOpsCount !== 0 && !hideHostOps ? `, ${hostOpsCount} host op type` : ''}`;
     }
 
     if (header.key === ColumnHeaders.OpsCount) {
