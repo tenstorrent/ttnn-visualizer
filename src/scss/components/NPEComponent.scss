@@ -15,6 +15,13 @@
 .npe {
     position: relative;
 
+    .header {
+        position: sticky;
+        top: 0;
+        background-color: $tt-grey-2;
+        z-index: 5;
+    }
+
     .npe-controls {
         display: flex;
         flex-direction: column;
