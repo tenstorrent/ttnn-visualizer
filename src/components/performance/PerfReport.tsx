@@ -29,7 +29,7 @@ import {
     TypedPerfTableRow,
 } from '../../definitions/PerfTable';
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
-import { Signpost, calcHighDispatchOps, isHostOp } from '../../functions/perfFunctions';
+import { Signpost, calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import useMultiSelectFilter, { MultiSelectValue } from '../../hooks/useMultiSelectFilter';
 import PerfTable from './PerfTable';
@@ -37,6 +37,7 @@ import {
     activePerformanceReportAtom,
     comparisonPerformanceReportListAtom,
     filterBySignpostAtom,
+    hideHostOpsAtom,
     isStackedViewAtom,
     stackByIn0Atom,
 } from '../../store/app';
@@ -77,6 +78,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [isStackedView, setIsStackedView] = useAtom(isStackedViewAtom);
     const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
     const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
+    const [hideHostOps, setHideHostOps] = useAtom(hideHostOpsAtom);
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
@@ -151,8 +153,17 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 filters,
                 activeRawOpCodeFilters,
                 activeMathFilters,
+                hideHostOps,
             ),
-        [processedRows, filters, activeMathFilters, activeRawOpCodeFilters, useNormalisedData, normalisedData.data],
+        [
+            processedRows,
+            filters,
+            activeMathFilters,
+            activeRawOpCodeFilters,
+            useNormalisedData,
+            normalisedData.data,
+            hideHostOps,
+        ],
     );
 
     const filteredComparisonRows = useMemo(
@@ -162,6 +173,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 filters,
                 activeRawOpCodeFilters,
                 activeMathFilters,
+                hideHostOps,
             ),
         [
             comparisonIndex,
@@ -171,12 +183,19 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             activeMathFilters,
             useNormalisedData,
             normalisedData.data,
+            hideHostOps,
         ],
     );
 
     const filteredStackedRows = useMemo(
-        () => sortAndFilterStackedPerfTableData(processedStackedRows, stackedFilters, activeRawOpCodeFilters),
-        [processedStackedRows, stackedFilters, activeRawOpCodeFilters],
+        () =>
+            sortAndFilterStackedPerfTableData(
+                processedStackedRows,
+                stackedFilters,
+                activeRawOpCodeFilters,
+                hideHostOps,
+            ),
+        [processedStackedRows, stackedFilters, activeRawOpCodeFilters, hideHostOps],
     );
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
@@ -323,82 +342,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         }
                         resetOnSelect
                     />
-                </div>
-
-                <div className='view-options'>
-                    <ButtonGroup
-                        variant={ButtonVariant.OUTLINED}
-                        size={Size.SMALL}
-                    >
-                        <Button
-                            text='Standard'
-                            icon={IconNames.LIST}
-                            active={!isStackedView}
-                            onClick={() => setIsStackedView(false)}
-                            intent={!isStackedView ? Intent.PRIMARY : Intent.NONE}
-                        />
-                        <Button
-                            text='Stacked'
-                            icon={IconNames.LAYOUT_TWO_ROWS}
-                            active={isStackedView}
-                            onClick={() => setIsStackedView(true)}
-                            intent={isStackedView ? Intent.PRIMARY : Intent.NONE}
-                        />
-                    </ButtonGroup>
-                </div>
-
-                <div className='data-options'>
-                    <Switch
-                        label='Matmul optimization analysis'
-                        onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
-                        checked={provideMatmulAdvice}
-                        className='option-switch'
-                        disabled={isStackedView}
-                    />
-
-                    <Switch
-                        label='Highlight high dispatch ops'
-                        onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
-                        checked={hiliteHighDispatch}
-                        className='option-switch'
-                        disabled={isStackedView}
-                    />
-
-                    <Tooltip
-                        content='Tries to match up operations between the performance reports'
-                        position={Position.TOP}
-                    >
-                        <Switch
-                            label='Normalise data'
-                            disabled={!activeComparisonReportList || isStackedView}
-                            onChange={() => setUseNormalisedData(!useNormalisedData)}
-                            checked={useNormalisedData}
-                            className='option-switch'
-                        />
-                    </Tooltip>
-
-                    {activeComparisonReportList && useNormalisedData && (
-                        <Tooltip
-                            content='Highlights rows where ops have been added or are missing after normalising the data'
-                            position={Position.TOP}
-                        >
-                            <Switch
-                                label='Highlight row differences'
-                                onChange={() => setHighlightRows(!highlightRows)}
-                                disabled={!activeComparisonReportList || !useNormalisedData || isStackedView}
-                                checked={highlightRows}
-                                className='option-switch'
-                            />
-                        </Tooltip>
-                    )}
-
-                    <Switch
-                        label='Stack by input 0'
-                        onChange={() => setStackByIn0(!stackByIn0)}
-                        checked={stackByIn0}
-                        className='option-switch'
-                        disabled={!isStackedView}
-                    />
 
                     <Select<Signpost>
                         items={signposts || []}
@@ -431,6 +374,99 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         disabled={isSignpostsDisabled}
                         aria-label={filterBySignpost ? `Remove signpost` : 'No signpost selected'}
                     />
+                </div>
+
+                <div className='view-options'>
+                    <ButtonGroup
+                        variant={ButtonVariant.OUTLINED}
+                        size={Size.SMALL}
+                    >
+                        <Button
+                            text='Standard'
+                            icon={IconNames.LIST}
+                            active={!isStackedView}
+                            onClick={() => setIsStackedView(false)}
+                            intent={!isStackedView ? Intent.PRIMARY : Intent.NONE}
+                        />
+                        <Button
+                            text='Stacked'
+                            icon={IconNames.LAYOUT_TWO_ROWS}
+                            active={isStackedView}
+                            onClick={() => setIsStackedView(true)}
+                            intent={isStackedView ? Intent.PRIMARY : Intent.NONE}
+                        />
+                    </ButtonGroup>
+                </div>
+
+                <div className='data-options'>
+                    {!isStackedView && (
+                        <>
+                            <Switch
+                                label='Matmul optimization analysis'
+                                onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                                checked={provideMatmulAdvice}
+                                className='option-switch'
+                                disabled={isStackedView}
+                            />
+
+                            <Switch
+                                label='Highlight high dispatch ops'
+                                onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                                checked={hiliteHighDispatch}
+                                className='option-switch'
+                                disabled={isStackedView}
+                            />
+                        </>
+                    )}
+
+                    <Switch
+                        label='Hide host ops'
+                        onChange={() => setHideHostOps(!hideHostOps)}
+                        checked={hideHostOps}
+                        className='option-switch'
+                    />
+
+                    {!isStackedView && (
+                        <>
+                            <Tooltip
+                                content='Tries to match up operations between the performance reports'
+                                position={Position.TOP}
+                            >
+                                <Switch
+                                    label='Normalise data'
+                                    disabled={!activeComparisonReportList || isStackedView}
+                                    onChange={() => setUseNormalisedData(!useNormalisedData)}
+                                    checked={useNormalisedData}
+                                    className='option-switch'
+                                />
+                            </Tooltip>
+
+                            {activeComparisonReportList && useNormalisedData && (
+                                <Tooltip
+                                    content='Highlights rows where ops have been added or are missing after normalising the data'
+                                    position={Position.TOP}
+                                >
+                                    <Switch
+                                        label='Highlight row differences'
+                                        onChange={() => setHighlightRows(!highlightRows)}
+                                        disabled={!activeComparisonReportList || !useNormalisedData || isStackedView}
+                                        checked={highlightRows}
+                                        className='option-switch'
+                                    />
+                                </Tooltip>
+                            )}
+                        </>
+                    )}
+
+                    {isStackedView && (
+                        <Switch
+                            label='Stack by input 0'
+                            onChange={() => setStackByIn0(!stackByIn0)}
+                            checked={stackByIn0}
+                            className='option-switch'
+                            disabled={!isStackedView}
+                        />
+                    )}
                 </div>
 
                 <Tabs
@@ -524,7 +560,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                     ))}
                 </Tabs>
 
-                {hiliteHighDispatch && calcHighDispatchOps(processedRows)}
+                {hiliteHighDispatch && !isStackedView && calcHighDispatchOps(processedRows)}
             </div>
         </>
     );
@@ -567,7 +603,6 @@ const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
             flops_mean: row.flops_mean ? parseFloat(row.flops_mean) : null,
             flops_std: row.flops_std ? parseFloat(row.flops_std) : null,
         }))
-        .filter((row) => !isHostOp(row.op_code))
         .filter((row) => row.op_type !== OpType.SIGNPOST); // Filter out signposts here because they are not useful in stacked view
 
 const getTotalDataLength = (

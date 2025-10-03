@@ -141,7 +141,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
                                             'no-wrap': header.key === ColumnHeaders.OpCodeJoined,
                                         })}
                                     >
-                                        {getTotalsForHeader(header, stackedData)}
+                                        {getTotalsForFooter(header, stackedData)}
                                     </td>
                                 ))}
                         </tr>
@@ -156,7 +156,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
     );
 };
 
-const getTotalsForHeader = (header: StackedTableHeader, data: TypedStackedPerfRow[]): string => {
+const getTotalsForFooter = (header: StackedTableHeader, data: TypedStackedPerfRow[]): string => {
     if (header.key === ColumnHeaders.Percent) {
         return `100 %`;
     }
@@ -169,7 +169,10 @@ const getTotalsForHeader = (header: StackedTableHeader, data: TypedStackedPerfRo
     }
 
     if (header.key === ColumnHeaders.OpCodeJoined) {
-        return `${data.filter((row) => !isHostOp(row.op_code)).length} device op types`;
+        const hostOpsCount = data.filter((row) => isHostOp(row.op_code)).length;
+        const deviceOpsCount = data.length - hostOpsCount;
+
+        return `${deviceOpsCount} device op types${hostOpsCount !== 0 ? `, ${hostOpsCount} host op type` : ''}`;
     }
 
     if (header.key === ColumnHeaders.OpsCount) {
