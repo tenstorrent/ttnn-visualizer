@@ -6,12 +6,14 @@ import React from 'react';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
-import { MathFidelity, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import { MathFidelity, PerfTableRow, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
 import { formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
 import { OpType } from '../definitions/Performance';
+import { TypedStackedPerfRow } from '../definitions/StackedPerfTable';
+import { NormalisedPerfData } from './normalisePerformanceData';
 
 export enum CellColour {
     White = 'white',
@@ -410,3 +412,39 @@ export function getAxisUpperRange(arrays: Array<unknown[]>): number {
 }
 
 export const isHostOp = (op: string) => op.includes('(torch)');
+
+export const getStandardViewCounts = (
+    data: TypedPerfTableRow[],
+    filteredData: TypedPerfTableRow[],
+    isInitialTab: boolean,
+    processedComparisonRows: TypedPerfTableRow[][],
+    filteredComparisonRows: TypedPerfTableRow[],
+    normalisedData: NormalisedPerfData | null,
+    comparisonIndex: number,
+    comparisonData?: PerfTableRow[][],
+) => {
+    const filtered = isInitialTab ? filteredData.length : filteredComparisonRows.length;
+    let total = 0;
+    let delta = 0;
+
+    if (normalisedData) {
+        total = normalisedData.data[0]?.length || 0;
+    } else {
+        total = isInitialTab ? data?.length || 0 : comparisonData?.[comparisonIndex]?.length || 0;
+    }
+
+    if (normalisedData) {
+        if (isInitialTab) {
+            delta = data.length - (normalisedData.data?.[0]?.length || 0);
+        } else if (processedComparisonRows?.[comparisonIndex] && normalisedData.data?.[comparisonIndex + 1]) {
+            delta = processedComparisonRows[comparisonIndex].length - normalisedData.data[comparisonIndex + 1].length;
+        }
+    }
+
+    return { filtered, total, delta };
+};
+
+export const getStackedViewCounts = (data: TypedStackedPerfRow[], filteredData: TypedStackedPerfRow[]) => ({
+    filtered: filteredData.length,
+    total: data?.length || 0,
+});

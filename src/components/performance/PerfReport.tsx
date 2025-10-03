@@ -29,7 +29,12 @@ import {
     TypedPerfTableRow,
 } from '../../definitions/PerfTable';
 import { useOpToPerfIdFiltered } from '../../hooks/useAPI';
-import { Signpost, calcHighDispatchOps } from '../../functions/perfFunctions';
+import {
+    Signpost,
+    calcHighDispatchOps,
+    getStackedViewCounts,
+    getStandardViewCounts,
+} from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
 import useMultiSelectFilter, { MultiSelectValue } from '../../hooks/useMultiSelectFilter';
 import PerfTable from './PerfTable';
@@ -41,7 +46,7 @@ import {
     isStackedViewAtom,
     stackByIn0Atom,
 } from '../../store/app';
-import alignByOpCode, { NormalisedPerfData } from '../../functions/normalisePerformanceData';
+import alignByOpCode from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
@@ -608,42 +613,5 @@ const renderSignpost: ItemRenderer<Signpost> = (signpost, { handleClick, handleF
 const filterSignpost: ItemPredicate<Signpost> = (query, signpost) => {
     return signpost.op_code.toLowerCase().includes(query.toLowerCase());
 };
-
-// Calculate data counts for row count component
-const getStandardViewCounts = (
-    data: TypedPerfTableRow[],
-    filteredData: TypedPerfTableRow[],
-    isInitialTab: boolean,
-    processedComparisonRows: TypedPerfTableRow[][],
-    filteredComparisonRows: TypedPerfTableRow[],
-    normalisedData: NormalisedPerfData | null,
-    comparisonIndex: number,
-    comparisonData?: PerfTableRow[][],
-) => {
-    const filtered = isInitialTab ? filteredData.length : filteredComparisonRows.length;
-    let total = 0;
-    let delta = 0;
-
-    if (normalisedData) {
-        total = normalisedData.data[0]?.length || 0;
-    } else {
-        total = isInitialTab ? data?.length || 0 : comparisonData?.[comparisonIndex]?.length || 0;
-    }
-
-    if (normalisedData) {
-        if (isInitialTab) {
-            delta = data.length - (normalisedData.data?.[0]?.length || 0);
-        } else if (processedComparisonRows?.[comparisonIndex] && normalisedData.data?.[comparisonIndex + 1]) {
-            delta = processedComparisonRows[comparisonIndex].length - normalisedData.data[comparisonIndex + 1].length;
-        }
-    }
-
-    return { filtered, total, delta };
-};
-
-const getStackedViewCounts = (data: TypedStackedPerfRow[], filteredData: TypedStackedPerfRow[]) => ({
-    filtered: filteredData.length,
-    total: data?.length || 0,
-});
 
 export default PerformanceReport;
