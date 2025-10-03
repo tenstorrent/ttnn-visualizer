@@ -41,7 +41,7 @@ import {
     isStackedViewAtom,
     stackByIn0Atom,
 } from '../../store/app';
-import alignByOpCode from '../../functions/normalisePerformanceData';
+import alignByOpCode, { NormalisedPerfData } from '../../functions/normalisePerformanceData';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
@@ -55,6 +55,7 @@ import {
 import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStackedPerfTableData';
 import HighlightedText from '../HighlightedText';
 import { OpType } from '../../definitions/Performance';
+import PerfReportRowCount from './PerfReportRowCount';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -209,37 +210,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
         setFilters(updatedFilters as TableFilter);
     };
 
-    const totalDataLength = getTotalDataLength(
-        useNormalisedData,
-        normalisedData,
-        selectedTabId,
-        data,
-        comparisonData?.[comparisonIndex],
-    );
-    const filteredDataLength = getFilteredDataLength(selectedTabId, filteredRows, filteredComparisonRows);
-    const rowDelta = useMemo(() => {
-        if (!useNormalisedData) {
-            return 0;
-        }
-
-        if (selectedTabId === INITIAL_TAB_ID) {
-            return processedRows.length - (normalisedData.data?.[0]?.length || 0);
-        }
-
-        if (processedComparisonRows?.[comparisonIndex] && normalisedData.data?.[comparisonIndex + 1]) {
-            return processedComparisonRows[comparisonIndex].length - normalisedData.data[comparisonIndex + 1].length;
-        }
-
-        return 0;
-    }, [
-        useNormalisedData,
-        selectedTabId,
-        processedRows,
-        normalisedData.data,
-        comparisonIndex,
-        processedComparisonRows,
-    ]);
-
     // Resets various state if we remove all comparison reports
     useEffect(() => {
         if (!activeComparisonReportList?.includes(selectedTabId as string) && selectedTabId !== INITIAL_TAB_ID) {
@@ -277,15 +247,20 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
                     <div className='header-aside'>
                         <p className='result-count'>
-                            {getRowCount(
-                                filteredDataLength,
-                                totalDataLength,
-                                rowDelta,
-                                useNormalisedData,
-                                isStackedView,
-                                filteredStackedRows.length,
-                                processedStackedRows?.length || 0,
-                            )}
+                            <PerfReportRowCount
+                                standardView={getStandardViewCounts(
+                                    processedRows,
+                                    filteredRows,
+                                    selectedTabId === INITIAL_TAB_ID,
+                                    processedComparisonRows,
+                                    filteredComparisonRows,
+                                    useNormalisedData ? normalisedData : null,
+                                    comparisonIndex,
+                                    comparisonData,
+                                )}
+                                stackedView={getStackedViewCounts(processedStackedRows, filteredStackedRows)}
+                                useNormalisedData={useNormalisedData}
+                            />
                         </p>
                     </div>
                 </div>
@@ -299,7 +274,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
                     <MultiSelect<MultiSelectValue>
                         items={data ? getRawOpCodeOptions() : []}
-                        placeholder='Select OP Codes...'
+                        placeholder='Select Op Codes...'
                         // Type requires this but it seems pointless
                         onItemSelect={(opCode) => updateRawOpCodeFilters(opCode)}
                         selectedItems={activeRawOpCodeFilters}
@@ -424,6 +399,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         onChange={() => setHideHostOps(!hideHostOps)}
                         checked={hideHostOps}
                         className='option-switch'
+                        // TODO: Host Ops don't get sent in non-stacked-by-in0
+                        disabled={!stackByIn0}
                     />
 
                     {!isStackedView && (
@@ -605,55 +582,6 @@ const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
         }))
         .filter((row) => row.op_type !== OpType.SIGNPOST); // Filter out signposts here because they are not useful in stacked view
 
-const getTotalDataLength = (
-    useNormalisedData: boolean,
-    normalisedData: { data: TypedPerfTableRow[][] },
-    selectedTabId: TabId,
-    data?: PerfTableRow[],
-    comparisonData?: PerfTableRow[],
-) => {
-    if (useNormalisedData) {
-        return normalisedData.data[0]?.length || 0;
-    }
-
-    if (selectedTabId === INITIAL_TAB_ID) {
-        return data?.length || 0;
-    }
-
-    return comparisonData?.length || 0;
-};
-
-const getFilteredDataLength = (
-    selectedTabId: TabId,
-    filteredRows: TypedPerfTableRow[],
-    filteredComparisonRows: TypedPerfTableRow[],
-) => (selectedTabId === INITIAL_TAB_ID ? filteredRows?.length : filteredComparisonRows?.length || 0);
-
-const getRowCount = (
-    filteredDataLength: number,
-    totalDataLength: number,
-    rowDelta: number,
-    useNormalisedData: boolean,
-    isStackedView: boolean,
-    filteredStackedDataLength: number,
-    stackedDataLength: number,
-): string => {
-    const totalRowCount = isStackedView ? stackedDataLength : totalDataLength;
-    const filteredRowCount = isStackedView ? filteredStackedDataLength : filteredDataLength;
-
-    const rowCountText =
-        filteredRowCount !== totalRowCount
-            ? `Showing ${filteredRowCount} of ${totalRowCount} rows`
-            : `Showing ${totalRowCount} rows`;
-
-    const rowDeltaText =
-        useNormalisedData && rowDelta
-            ? ` (${rowDelta > 0 ? `${rowDelta} ops removed` : `${rowDelta * -1} ops added`})`
-            : null;
-
-    return `${rowCountText} ${rowDeltaText ?? ''}`;
-};
-
 const renderSignpost: ItemRenderer<Signpost> = (signpost, { handleClick, handleFocus, modifiers, query }) => {
     if (!modifiers.matchesPredicate) {
         return null;
@@ -680,5 +608,42 @@ const renderSignpost: ItemRenderer<Signpost> = (signpost, { handleClick, handleF
 const filterSignpost: ItemPredicate<Signpost> = (query, signpost) => {
     return signpost.op_code.toLowerCase().includes(query.toLowerCase());
 };
+
+// Calculate data counts for row count component
+const getStandardViewCounts = (
+    data: TypedPerfTableRow[],
+    filteredData: TypedPerfTableRow[],
+    isInitialTab: boolean,
+    processedComparisonRows: TypedPerfTableRow[][],
+    filteredComparisonRows: TypedPerfTableRow[],
+    normalisedData: NormalisedPerfData | null,
+    comparisonIndex: number,
+    comparisonData?: PerfTableRow[][],
+) => {
+    const filtered = isInitialTab ? filteredData.length : filteredComparisonRows.length;
+    let total = 0;
+    let delta = 0;
+
+    if (normalisedData) {
+        total = normalisedData.data[0]?.length || 0;
+    } else {
+        total = isInitialTab ? data?.length || 0 : comparisonData?.[comparisonIndex]?.length || 0;
+    }
+
+    if (normalisedData) {
+        if (isInitialTab) {
+            delta = data.length - (normalisedData.data?.[0]?.length || 0);
+        } else if (processedComparisonRows?.[comparisonIndex] && normalisedData.data?.[comparisonIndex + 1]) {
+            delta = processedComparisonRows[comparisonIndex].length - normalisedData.data[comparisonIndex + 1].length;
+        }
+    }
+
+    return { filtered, total, delta };
+};
+
+const getStackedViewCounts = (data: TypedStackedPerfRow[], filteredData: TypedStackedPerfRow[]) => ({
+    filtered: filteredData.length,
+    total: data?.length || 0,
+});
 
 export default PerformanceReport;
