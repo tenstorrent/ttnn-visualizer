@@ -15,6 +15,7 @@ import {
     FABRIC_EVENT_SCOPE_OPTIONS,
     FabricEventScopeColors,
     NPEData,
+    NPERootZone,
     NPE_COORDINATES,
     NPE_LINK,
     NoCFlowBase,
@@ -82,6 +83,12 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
     const [fabricEventsFilter, setFabricEventsFilter] = useState<EVENT_TYPE_FILTER>(EVENT_TYPE_FILTER.ALL_EVENTS);
     const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
+
+    const zones: NPERootZone[] = useMemo(() => {
+        return npeData.zones || [];
+    }, [npeData]);
+    // eslint-disable-next-line no-void
+    void zones;
 
     const isFabricTransfersFilteringEnabled = useMemo(() => {
         return npeData.noc_transfers.some((tr) => tr.fabric_event_type);
