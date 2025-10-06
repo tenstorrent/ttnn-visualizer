@@ -159,6 +159,7 @@ export interface NoCTransfer extends NoCFlowBase {
     start_cycle: number;
     end_cycle: number;
     route: NoCRoute[];
+    zones?: string;
 }
 
 export interface TimestepData {
@@ -180,15 +181,36 @@ export interface NPEData {
     common_info: CommonInfo;
     noc_transfers: NoCTransfer[];
     timestep_data: TimestepData[];
+    zones?: NPERootZone[];
     chips: {
         [key: device_id]: ClusterCoordinates;
     };
 }
 
-export enum NPE_LINK {
+export interface NPERootZone {
+    id: string;
+    zones: NPEZone[];
+    proc: KERNEL_PROCESS;
+    core: NPE_COORDINATES[];
+}
+
+export interface NPEZone {
+    id: string;
+    zones: NPEZone[];
+    start: number;
+    end: number;
+}
+
+export enum NPE_COORDINATE_INDEX {
     CHIP_ID,
     Y,
     X,
+}
+
+export enum NPE_LINK {
+    CHIP_ID = NPE_COORDINATE_INDEX.CHIP_ID,
+    Y = NPE_COORDINATE_INDEX.Y,
+    X = NPE_COORDINATE_INDEX.X,
     NOC_ID,
     DEMAND,
     FABRIC_EVENT_SCOPE,
@@ -197,4 +219,13 @@ export enum NPE_LINK {
 export interface NPEManifestEntry {
     global_call_count: number;
     file: string;
+}
+
+export enum KERNEL_PROCESS {
+    BRISC = 'BRISC',
+    TRISC_0 = 'TRISC_0',
+    TRISC_1 = 'TRISC_1',
+    NCRISC = 'NCRISC',
+    ERISC = 'ERISC',
+    CORE_AGG = 'CORE_AGG',
 }
