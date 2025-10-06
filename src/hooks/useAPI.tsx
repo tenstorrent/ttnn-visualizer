@@ -1039,7 +1039,6 @@ export const usePerfFolderList = () => {
     });
 };
 
-// TODO: this likely will break with 1.2 gb database
 export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = BufferType.L1) => {
     const { data: buffersByOperation } = useBuffers(bufferType);
     const { data: operations } = useOperationsList();
@@ -1069,39 +1068,56 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
         return tensorsByOperationByAddress;
     }
 
-    uniqueBuffersByOperationList?.forEach((operation) => {
-        const tensorsByBufferAddress: Map<number, Tensor> = new Map();
-        const currentOperation = operations.find((op) => op.id === operation.id);
+    const buffersByOpId = new Map<number, Buffer[]>();
+    uniqueBuffersByOperationList?.forEach((op) => {
+        buffersByOpId.set(op.id, op.buffers);
+    });
 
-        for (const buffer of operation.buffers) {
-            const bufferAddress = buffer.address;
-            let tensor: Tensor | undefined;
+    const latestTensorByAddress = new Map<number, Tensor>();
 
-            for (let i = operations.indexOf(currentOperation!); i >= 0; i--) {
-                const op = operations[i];
-                tensor = op.inputs.find((input) => input.address === bufferAddress);
-
-                if (tensor !== undefined) {
-                    break;
-                }
-
-                tensor = op.outputs.find((output) => output.address === bufferAddress);
-
-                if (tensor !== undefined) {
-                    break;
+    for (const op of operations) {
+        if (op.inputs) {
+            for (const t of op.inputs) {
+                if (t && t.address !== null && t.address !== undefined) {
+                    latestTensorByAddress.set(t.address, t);
                 }
             }
+        }
+        if (op.outputs) {
+            for (const t of op.outputs) {
+                if (t && t.address !== null && t.address !== undefined) {
+                    latestTensorByAddress.set(t.address, t);
+                }
+            }
+        }
 
-            if (tensor !== undefined) {
-                tensorsByBufferAddress.set(bufferAddress, {
+        const buffers = buffersByOpId.get(op.id);
+        if (!buffers?.length) {
+            tensorsByOperationByAddress.set(op.id, new Map());
+            // eslint-disable-next-line no-continue
+            continue;
+        }
+
+        const tensorsByBufferAddress = new Map<number, Tensor>();
+
+        for (const buffer of buffers) {
+            const addr = buffer.address;
+            if (addr === null || addr === undefined) {
+                // eslint-disable-next-line no-continue
+                continue;
+            }
+
+            const tensor = latestTensorByAddress.get(addr);
+            if (tensor) {
+                tensorsByBufferAddress.set(addr, {
                     ...tensor,
                     buffer_type: buffer.buffer_type,
                 });
             }
         }
 
-        tensorsByOperationByAddress.set(operation.id, tensorsByBufferAddress);
-    });
+        tensorsByOperationByAddress.set(op.id, tensorsByBufferAddress);
+    }
 
     return tensorsByOperationByAddress;
 };
@@ -1109,6 +1125,7 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
 export const useGetTensorDeallocationReportByOperation = () => {
     const tensorListByOperation = useCreateTensorsByOperationByIdList();
     const { data: operations } = useOperationsList();
+
     const operationsById = useMemo(() => {
         const map = new Map<number, Operation>();
         operations?.forEach((operation) => {
