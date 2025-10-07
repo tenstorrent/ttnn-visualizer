@@ -86,6 +86,7 @@ export interface TypedPerfTableRow
     bound: BoundType | null;
 }
 
+// Not a general enum but used in evaluateFidelity to analyze tt-perf-report output
 export enum MathFidelity {
     HiFi4 = 'HiFi4',
     HiFi2 = 'HiFi2',
