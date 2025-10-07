@@ -821,10 +821,10 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
         retry: false,
         staleTime: Infinity,
         queryFn: async () => {
-            const data = await fetchBuffersByOperation(bufferType);
             if (activeProfilerReport === null) {
                 await Promise.resolve([]);
             }
+            const data = await fetchBuffersByOperation(bufferType);
             // @ts-expect-error will happen with extra large data sets where we get a string instead of an array
             if (data === '' || !Array.isArray(data)) {
                 throw new AxiosError(
