@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Button, Icon, Switch, Tag } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
@@ -123,44 +123,48 @@ const ActiveTransferDetails = ({
                                                 <div>{formatUnit(transfer.total_bytes, 'byte')}</div>
                                                 <div>{transfer.noc_event_type}</div>
                                                 {transfer.route[0].injection_rate.toFixed(2)} b/cycle
-                                                {transfer.fabric_event_type && (
-                                                    <Tag
-                                                        className='fabric-tag'
-                                                        icon={IconNames.FLOW_LINEAR}
-                                                        minimal
-                                                    >
-                                                        Fabric
-                                                    </Tag>
-                                                )}
-                                                {showRoutes && (
-                                                    <ul className='routes'>
-                                                        {transfer.route.map((route, index) => (
-                                                            <li
-                                                                key={`${transfer.id}-${route.src}-${route.dst.join('-')}`}
-                                                                // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
-                                                                onMouseOver={() => setHighlightedRoute(index)}
-                                                                // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
-                                                                onMouseOut={() => setHighlightedRoute(null)}
-                                                                style={{
-                                                                    opacity:
-                                                                        highlightedRoute === null ||
-                                                                        (highlightedRoute === index &&
-                                                                            highlightedTransfer === transfer)
-                                                                            ? 1
-                                                                            : 0.5,
-                                                                }}
-                                                            >
-                                                                <Icon icon={IconNames.FLOW_LINEAR} />
-                                                                {route.src.join('-')}
-                                                                <Icon
-                                                                    size={11}
-                                                                    icon={IconNames.ArrowRight}
-                                                                />{' '}
-                                                                {route.dst.map((el) => el.join('-')).join('-')}
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                )}
+                                                <div className='transfer-properties'>
+                                                    {transfer.fabric_event_type && (
+                                                        <Tag
+                                                            className='fabric-tag'
+                                                            icon={IconNames.FLOW_LINEAR}
+                                                            minimal
+                                                        >
+                                                            Fabric
+                                                        </Tag>
+                                                    )}
+
+                                                    {transfer.zones && <ZoneDetails zones={transfer.zones} />}
+                                                    {showRoutes && (
+                                                        <ul className='routes'>
+                                                            {transfer.route.map((route, index) => (
+                                                                <li
+                                                                    key={`${transfer.id}-${route.src}-${route.dst.join('-')}`}
+                                                                    // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                                                    onMouseOver={() => setHighlightedRoute(index)}
+                                                                    // eslint-disable-next-line jsx-a11y/mouse-events-have-key-events
+                                                                    onMouseOut={() => setHighlightedRoute(null)}
+                                                                    style={{
+                                                                        opacity:
+                                                                            highlightedRoute === null ||
+                                                                            (highlightedRoute === index &&
+                                                                                highlightedTransfer === transfer)
+                                                                                ? 1
+                                                                                : 0.5,
+                                                                    }}
+                                                                >
+                                                                    <Icon icon={IconNames.FLOW_LINEAR} />
+                                                                    {route.src.join('-')}
+                                                                    <Icon
+                                                                        size={11}
+                                                                        icon={IconNames.ArrowRight}
+                                                                    />{' '}
+                                                                    {route.dst.map((el) => el.join('-')).join('-')}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
@@ -172,5 +176,22 @@ const ActiveTransferDetails = ({
             )}
         </aside>
     );
+};
+
+interface ZoneDetailsProps {
+    zones: string;
+}
+
+const ZoneDetails: React.FC<ZoneDetailsProps> = ({ zones }) => {
+    const render = zones.split('/').map((zone: string, index: number) => (
+        <Tag
+            style={{ paddingLeft: `${10 * index}px` }}
+            key={zone}
+            minimal
+        >
+            {zone}
+        </Tag>
+    ));
+    return <div className='zones'>{render}</div>;
 };
 export default ActiveTransferDetails;

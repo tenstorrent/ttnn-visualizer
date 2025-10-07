@@ -127,4 +127,16 @@ $outer-padding: 10px;
             }
         }
     }
+
+    .transfer-properties {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        align-items: flex-start;
+    }
+
+    .zones {
+        display: flex;
+        flex-direction: column;
+    }
 }
