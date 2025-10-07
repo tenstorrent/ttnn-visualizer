@@ -8,6 +8,7 @@ type MultiSelectFieldProps<T, K extends keyof T> = {
     placeholder: string;
     values: T[K][];
     updateHandler: Dispatch<SetStateAction<T[K][]>>;
+    labelFormatter?: (value: T[K]) => string;
 };
 
 const MultiSelectField = <T, K extends keyof T>({
@@ -16,6 +17,7 @@ const MultiSelectField = <T, K extends keyof T>({
     placeholder,
     values,
     updateHandler,
+    labelFormatter,
 }: MultiSelectFieldProps<T, K>) => {
     const updateMultiSelect = useCallback(
         (updatedFilter: T[K]) => {
@@ -34,12 +36,12 @@ const MultiSelectField = <T, K extends keyof T>({
             <Option
                 key={String(option)}
                 type={option}
-                label={String(option)}
+                label={labelFormatter ? labelFormatter(option) : String(option)}
                 values={values}
                 updateHandler={updateMultiSelect}
             />
         ),
-        [values, updateMultiSelect],
+        [values, updateMultiSelect, labelFormatter],
     );
 
     const formattedOptions = useMemo((): T[K][] => {
@@ -62,7 +64,7 @@ const MultiSelectField = <T, K extends keyof T>({
             onItemSelect={(selectedType) => updateMultiSelect(selectedType)}
             selectedItems={formattedOptions.filter((option) => values.includes(option))}
             itemRenderer={renderOption}
-            tagRenderer={(selected) => String(selected)}
+            tagRenderer={(selected) => (labelFormatter ? labelFormatter(selected) : String(selected))}
             onRemove={(selected) => updateMultiSelect(selected)}
             itemPredicate={filterPredicate}
             noResults={RenderNoResults}

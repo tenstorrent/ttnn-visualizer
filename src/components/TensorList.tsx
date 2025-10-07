@@ -252,12 +252,13 @@ const TensorList = () => {
                         placeholder='Buffer type filter...'
                         values={bufferTypeFilters}
                         updateHandler={setBufferTypeFilters}
+                        labelFormatter={(value) => (value === null ? 'Unknown' : BufferTypeLabel[value])}
                     />
                 </ButtonGroup>
 
                 {!isTensorsLoading && !isOperationsLoading ? (
                     <p className='result-count'>
-                        {tensorsWithRange && filterQuery
+                        {tensorsWithRange && (filterQuery || bufferTypeFilters)
                             ? `Showing ${numberOfTensors} of ${tensorsWithRange.length} tensors`
                             : `Showing ${numberOfTensors} tensors`}
                     </p>
