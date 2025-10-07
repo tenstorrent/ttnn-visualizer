@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 import { Checkbox, MenuItem } from '@blueprintjs/core';
 import { ItemPredicate, MultiSelect } from '@blueprintjs/select';
 import { Dispatch, SetStateAction, useCallback, useMemo } from 'react';
