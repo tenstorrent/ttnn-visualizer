@@ -19,7 +19,7 @@ import {
     Tabs,
     Tooltip,
 } from '@blueprintjs/core';
-import { ItemPredicate, ItemRenderer, MultiSelect, Select } from '@blueprintjs/select';
+import { ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import {
     FilterableColumnKeys,
@@ -36,7 +36,6 @@ import {
     getStandardViewCounts,
 } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';
-import useMultiSelectFilter, { MultiSelectValue } from '../../hooks/useMultiSelectFilter';
 import PerfTable from './PerfTable';
 import {
     activePerformanceReportAtom,
@@ -44,6 +43,8 @@ import {
     filterBySignpostAtom,
     hideHostOpsAtom,
     isStackedViewAtom,
+    mathFiltersAtom,
+    rawOpCodeFiltersAtom,
     stackByIn0Atom,
 } from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
@@ -61,6 +62,7 @@ import sortAndFilterStackedPerfTableData from '../../functions/sortAndFilterStac
 import HighlightedText from '../HighlightedText';
 import { OpType } from '../../definitions/Performance';
 import PerfReportRowCount from './PerfReportRowCount';
+import MultiSelectField from '../MultiSelectField';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -85,6 +87,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
     const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
     const [hideHostOps, setHideHostOps] = useAtom(hideHostOpsAtom);
+    const [activeMathFilters, setActiveMathFilters] = useAtom(mathFiltersAtom);
+    const [activeRawOpCodeFilters, setActiveRawOpCodeFilters] = useAtom(rawOpCodeFiltersAtom);
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
@@ -106,20 +110,6 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             string
         >,
     );
-
-    const {
-        getMultiSelectOptions: getRawOpCodeOptions,
-        updateMultiSelect: updateRawOpCodeFilters,
-        activeMultiSelectFilters: activeRawOpCodeFilters,
-        OptionComponent: RawOpCodeOption,
-    } = useMultiSelectFilter('raw_op_code', data || []);
-
-    const {
-        getMultiSelectOptions: getMathFilterOptions,
-        updateMultiSelect: updateMathFilters,
-        activeMultiSelectFilters: activeMathFilters,
-        OptionComponent: MathOption,
-    } = useMultiSelectFilter('math_fidelity', data || []);
 
     const opIdsMap = useOpToPerfIdFiltered();
 
@@ -277,50 +267,20 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         searchQuery={filters?.op_code || ''}
                     />
 
-                    <MultiSelect<MultiSelectValue>
-                        items={data ? getRawOpCodeOptions() : []}
+                    <MultiSelectField<PerfTableRow, 'raw_op_code'>
+                        keyName='raw_op_code'
+                        options={data || []}
                         placeholder='Select Op Codes...'
-                        // Type requires this but it seems pointless
-                        onItemSelect={(opCode) => updateRawOpCodeFilters(opCode)}
-                        selectedItems={activeRawOpCodeFilters}
-                        itemRenderer={(value: MultiSelectValue, _props) => RawOpCodeOption(String(value))}
-                        tagRenderer={(opCode) => String(opCode)}
-                        onRemove={(opCode) => updateRawOpCodeFilters(opCode)}
-                        itemPredicate={(query, opCode) =>
-                            !query || String(opCode).toLowerCase().includes(query.toLowerCase())
-                        }
-                        // disabled={isStackedView}
-                        noResults={
-                            <MenuItem
-                                disabled
-                                text='No results.'
-                                roleStructure='listoption'
-                            />
-                        }
-                        resetOnSelect
+                        values={activeRawOpCodeFilters}
+                        updateHandler={setActiveRawOpCodeFilters}
                     />
 
-                    <MultiSelect<MultiSelectValue>
-                        items={data ? getMathFilterOptions() : []}
+                    <MultiSelectField<PerfTableRow, 'math_fidelity'>
+                        keyName='math_fidelity'
+                        options={data || []}
                         placeholder='Select Math Fidelity...'
-                        // Type requires this but it seems pointless
-                        onItemSelect={(selectedType) => updateMathFilters(selectedType)}
-                        selectedItems={activeMathFilters}
-                        itemRenderer={(value: MultiSelectValue, _props) => MathOption(String(value))}
-                        tagRenderer={(mathFidelity) => String(mathFidelity)}
-                        onRemove={(type) => updateMathFilters(type)}
-                        itemPredicate={(query, mathFidelity) =>
-                            !query || String(mathFidelity).toLowerCase().includes(query.toLowerCase())
-                        }
-                        disabled={isStackedView}
-                        noResults={
-                            <MenuItem
-                                disabled
-                                text='No results.'
-                                roleStructure='listoption'
-                            />
-                        }
-                        resetOnSelect
+                        values={activeMathFilters}
+                        updateHandler={setActiveMathFilters}
                     />
 
                     <Select<Signpost>
