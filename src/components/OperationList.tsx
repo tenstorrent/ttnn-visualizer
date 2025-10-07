@@ -188,12 +188,12 @@ const OperationList = () => {
     useEffect(() => {
         if (operationListScroll) {
             virtualizer.scrollToIndex(operationListScroll + 1, { align: 'start' });
-
-            // Bind event listener after scrollToIndex runs
-            scrollElementRef.current?.addEventListener('scroll', (event: Event) =>
-                handleUserScrolling(event as unknown as UIEvent<HTMLDivElement>),
-            );
         }
+
+        // Bind event listener after scrollToIndex runs
+        scrollElementRef.current?.addEventListener('scroll', (event: Event) =>
+            handleUserScrolling(event as unknown as UIEvent<HTMLDivElement>),
+        );
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
