@@ -742,7 +742,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         );
                     })}
                 </div>
-                {selectedNode && <div style={{ width: '380px' }}>&nbsp;</div>}
+                {selectedNode && <div className='grid-spacer'>&nbsp;</div>}
             </div>
             <ActiveTransferDetails
                 groupedTransfersByNoCID={groupedTransfersByNoCID}

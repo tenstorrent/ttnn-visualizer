@@ -8,10 +8,10 @@
 $outer-padding: 10px;
 
 .side-data {
-    z-index: 10;
+    z-index: variables.$z-index-active-transfer-details;
     display: flex;
     flex-direction: column;
-    width: 380px;
+    width: variables.$active-transfer-width;
     overflow-y: scroll;
     flex: 0 1 auto;
     background-color: $tt-grey-3;
