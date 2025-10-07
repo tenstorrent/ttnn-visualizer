@@ -61,12 +61,17 @@ const MultiSelectField = <T, K extends keyof T>({
         [],
     );
 
+    const selectedItems = useMemo(
+        () => formattedOptions.filter((option) => values.includes(option)),
+        [formattedOptions, values],
+    );
+
     return (
         <MultiSelect<T[K]>
             items={formattedOptions}
             placeholder={placeholder}
             onItemSelect={(selectedType) => updateMultiSelect(selectedType)}
-            selectedItems={formattedOptions.filter((option) => values.includes(option))}
+            selectedItems={selectedItems}
             itemRenderer={renderOption}
             tagRenderer={(selected) => (labelFormatter ? labelFormatter(selected) : String(selected))}
             onRemove={(selected) => updateMultiSelect(selected)}
