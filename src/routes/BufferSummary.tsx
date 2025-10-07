@@ -118,7 +118,11 @@ function BufferSummary() {
                                 title='Error loading buffer data'
                                 compact
                             >
-                                <p>{`We've been unable to load the L1 buffer data for /${activeProfilerReport}. ${buffersError.message}`}</p>
+                                <p>
+                                    {`We've been unable to load the L1 buffer data for /${activeProfilerReport}.`}
+                                    <br />
+                                    {buffersError.message}
+                                </p>
                             </Callout>
                         ) : (
                             <LoadingSpinner />
@@ -147,7 +151,11 @@ function BufferSummary() {
                                 title='Error loading buffer data'
                                 compact
                             >
-                                <p>{`We've been unable to load the DRAM buffer data for /${activeProfilerReport}. ${buffersError.message}`}</p>
+                                <p>
+                                    {`We've been unable to load the DRAM buffer data for /${activeProfilerReport}.`}
+                                    <br />
+                                    {buffersError.message}
+                                </p>
                             </Callout>
                         ) : (
                             <LoadingSpinner />
