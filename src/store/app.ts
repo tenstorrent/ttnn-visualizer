@@ -45,12 +45,14 @@ export const fileTransferProgressAtom = atom<FileProgress>({
 // Operations route
 export const shouldCollapseAllOperationsAtom = atom(false);
 export const expandedOperationsAtom = atom<number[]>([]);
+export const operationListScrollAtom = atom<number | null>(null);
 
 // Operation details route
 export const isFullStackTraceAtom = atom(false);
 
 // Tensors route
 export const expandedTensorsAtom = atom<number[]>([]);
+export const tensorListScrollAtom = atom<number>(0);
 
 // Buffers route
 export const showHexAtom = atomWithStorage<boolean>('showHex', false);

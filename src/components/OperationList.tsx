@@ -19,6 +19,7 @@ import ROUTES from '../definitions/Routes';
 import {
     activePerformanceReportAtom,
     expandedOperationsAtom,
+    operationListScrollAtom,
     selectedOperationRangeAtom,
     shouldCollapseAllOperationsAtom,
 } from '../store/app';
@@ -38,10 +39,11 @@ enum SortingOptions {
 }
 
 const OperationList = () => {
-    const location = useLocation();
-    const navigate = useNavigate();
-    const { data: fetchedOperations, error, isLoading } = useOperationsList();
-    const scrollElementRef = useRef<HTMLDivElement>(null);
+    const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
+    const [expandedOperations, setExpandedOperations] = useAtom(expandedOperationsAtom);
+    const [operationListScroll, setOperationListScroll] = useAtom(operationListScrollAtom);
+    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
     const [filterQuery, setFilterQuery] = useState('');
     const [filteredOperationsList, setFilteredOperationsList] = useState<OperationDescription[]>([]);
@@ -49,10 +51,11 @@ const OperationList = () => {
     const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
-    const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
-    const [expandedOperations, setExpandedOperations] = useAtom(expandedOperationsAtom);
-    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { data: fetchedOperations, error, isLoading } = useOperationsList();
+    const scrollElementRef = useRef<HTMLDivElement>(null);
 
     // TODO: Figure out an initial scroll position based on last used operation - https://github.com/tenstorrent/ttnn-visualizer/issues/737
     const virtualizer = useVirtualizer({
@@ -61,10 +64,7 @@ const OperationList = () => {
         estimateSize: () => OPERATION_EL_HEIGHT,
     });
     const virtualItems = virtualizer.getVirtualItems();
-    const numberOfOperations =
-        filteredOperationsList && filteredOperationsList.length >= 0
-            ? filteredOperationsList.length
-            : PLACEHOLDER_ARRAY_SIZE;
+    const numberOfOperations = filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE;
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
 
     const handleToggleCollapsible = (operationId: number) => {
@@ -103,6 +103,12 @@ const OperationList = () => {
 
     const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
         const el = event.currentTarget;
+        const firstVirtualIndex = virtualizer.getVirtualIndexes()[0];
+
+        // On first load firstVirtualIndex can return 0 even if we've scrolled down the list
+        if (firstVirtualIndex !== 0) {
+            setOperationListScroll(virtualizer.getVirtualIndexes()[0]);
+        }
 
         setHasScrolledFromTop(!(el.scrollTop < OPERATION_EL_HEIGHT / 2));
         setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
@@ -167,8 +173,10 @@ const OperationList = () => {
             // Navigating to the same page replaces the entry in the browser history
             // TODO: Revisit this code later to make sure it's not causing any weird side effects
             navigate(ROUTES.OPERATIONS, { replace: true });
+
+            setOperationListScroll(operationIndex);
         }
-    }, [virtualizer, fetchedOperations, location, navigate]);
+    }, [virtualizer, fetchedOperations, location, navigate, setOperationListScroll]);
 
     useEffect(() => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
@@ -176,6 +184,18 @@ const OperationList = () => {
             setHasScrolledFromTop(false);
         }
     }, [virtualHeight]);
+
+    useEffect(() => {
+        if (operationListScroll) {
+            virtualizer.scrollToIndex(operationListScroll + 1, { align: 'start' });
+
+            // Bind event listener after scrollToIndex runs
+            scrollElementRef.current?.addEventListener('scroll', (event: Event) =>
+                handleUserScrolling(event as unknown as UIEvent<HTMLDivElement>),
+            );
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList
@@ -292,7 +312,6 @@ const OperationList = () => {
                     'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
                     'scroll-lock': virtualHeight <= 0,
                 })}
-                onScroll={(event) => handleUserScrolling(event)}
             >
                 <div
                     style={{

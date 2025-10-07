@@ -17,7 +17,7 @@ import ROUTES from '../definitions/Routes';
 import { Tensor } from '../model/APIData';
 import { BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
-import { expandedTensorsAtom, selectedOperationRangeAtom } from '../store/app';
+import { expandedTensorsAtom, selectedOperationRangeAtom, tensorListScrollAtom } from '../store/app';
 import ListItem from './ListItem';
 import '@blueprintjs/select/lib/css/blueprint-select.css';
 import 'styles/components/ListView.scss';
@@ -28,14 +28,14 @@ import { toReadableShape, toReadableType } from '../functions/math';
 import useMultiSelectFilter, { MultiSelectValue } from '../hooks/useMultiSelectFilter';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
-const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
+const OPERATION_EL_HEIGHT = 39; // Estimated size of each element in px
 const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
 const HIGH_CONSUMER_INTENT = Intent.DANGER;
 
 const TensorList = () => {
-    const location = useLocation();
-    const navigate = useNavigate();
-    const scrollElementRef = useRef<HTMLDivElement>(null);
+    const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
+    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
+    const [tensorListScroll, setTensorListScroll] = useAtom(tensorListScrollAtom);
 
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [filterQuery, setFilterQuery] = useState('');
@@ -44,9 +44,10 @@ const TensorList = () => {
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [showHighConsumerTensors, setShowHighConsumerTensors] = useState(false);
     const [showLateDeallocatedTensors, setShowLateDeallocatedTensors] = useState(false);
-    const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
-    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
 
+    const location = useLocation();
+    const navigate = useNavigate();
+    const scrollElementRef = useRef<HTMLDivElement>(null);
     const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
     const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
 
@@ -80,8 +81,7 @@ const TensorList = () => {
         estimateSize: () => OPERATION_EL_HEIGHT,
     });
     const virtualItems = virtualizer.getVirtualItems();
-    const numberOfTensors =
-        filteredTensorList && filteredTensorList.length >= 0 ? filteredTensorList.length : PLACEHOLDER_ARRAY_SIZE;
+    const numberOfTensors = filteredTensorList.length || PLACEHOLDER_ARRAY_SIZE;
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
 
     const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
@@ -294,7 +294,7 @@ const TensorList = () => {
                     'scroll-shade-bottom': !hasScrolledToBottom && numberOfTensors > virtualItems.length,
                     'scroll-lock': virtualHeight <= 0,
                 })}
-                onScroll={(event) => handleUserScrolling(event)}
+                onScroll={handleUserScrolling}
             >
                 <div
                     style={{
@@ -318,7 +318,7 @@ const TensorList = () => {
                                 return (
                                     <li
                                         className='list-item-container'
-                                        key={virtualRow.index}
+                                        key={virtualRow.key}
                                         data-index={virtualRow.index}
                                         ref={virtualizer.measureElement}
                                     >
