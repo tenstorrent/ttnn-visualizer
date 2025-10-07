@@ -139,5 +139,6 @@ $outer-padding: 10px;
     .zones {
         display: flex;
         flex-direction: column;
+        align-items: flex-start;
     }
 }

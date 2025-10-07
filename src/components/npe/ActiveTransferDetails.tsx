@@ -185,7 +185,7 @@ interface ZoneDetailsProps {
 const ZoneDetails: React.FC<ZoneDetailsProps> = ({ zones }) => {
     const render = zones.split('/').map((zone: string, index: number) => (
         <Tag
-            style={{ paddingLeft: `${10 * index}px` }}
+            style={{ marginLeft: `${15 * index}px` }}
             key={zone}
             minimal
         >
