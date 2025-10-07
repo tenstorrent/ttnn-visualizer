@@ -15,6 +15,13 @@
 .npe {
     position: relative;
 
+    .header {
+        position: sticky;
+        top: 0;
+        background-color: $tt-grey-2;
+        z-index: 5;
+    }
+
     .npe-controls {
         display: flex;
         flex-direction: column;
@@ -52,12 +59,14 @@
 
     .split-grid {
         display: flex;
-
-        // align-items: stretch;
         gap: 10px;
         margin-top: 10px;
         margin-bottom: 20px;
         border: 1px solid $tt-grey-5;
+
+        .grid-spacer {
+            width: variables.$active-transfer-width;
+        }
     }
 
     .metadata {

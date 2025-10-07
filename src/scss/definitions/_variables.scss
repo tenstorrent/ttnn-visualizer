@@ -21,3 +21,7 @@ $tt-dark-minimal-button-background-color-hover: color.adjust($dark-button-backgr
 // NPE
 $npe-highlight-src: #ff0;
 $npe-highlight-dst: #ff4500;
+
+// TODO: we should refactor ALL z-indexes across the code base. none use vars
+$z-index-active-transfer-details: 10;
+$active-transfer-width: 380px;

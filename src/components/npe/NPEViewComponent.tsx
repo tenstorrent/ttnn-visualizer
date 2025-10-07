@@ -749,23 +749,23 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         );
                     })}
                 </div>
-
-                <ActiveTransferDetails
-                    groupedTransfersByNoCID={groupedTransfersByNoCID}
-                    selectedNode={selectedNode}
-                    congestionData={links?.link_demand.filter(
-                        (route) =>
-                            route[NPE_LINK.Y] === selectedNode?.coords[NPE_LINK.Y] &&
-                            route[NPE_LINK.X] === selectedNode?.coords[NPE_LINK.X],
-                    )}
-                    showActiveTransfers={showActiveTransfers}
-                    highlightedTransfer={highlightedTransfer}
-                    setHighlightedTransfer={setHighlightedTransfer}
-                    highlightedRoute={highlightedRoute}
-                    setHighlightedRoute={setHighlightedRoute}
-                    nocType={nocFilter}
-                />
+                {selectedNode && <div className='grid-spacer'>&nbsp;</div>}
             </div>
+            <ActiveTransferDetails
+                groupedTransfersByNoCID={groupedTransfersByNoCID}
+                selectedNode={selectedNode}
+                congestionData={links?.link_demand.filter(
+                    (route) =>
+                        route[NPE_LINK.Y] === selectedNode?.coords[NPE_LINK.Y] &&
+                        route[NPE_LINK.X] === selectedNode?.coords[NPE_LINK.X],
+                )}
+                showActiveTransfers={showActiveTransfers}
+                highlightedTransfer={highlightedTransfer}
+                setHighlightedTransfer={setHighlightedTransfer}
+                highlightedRoute={highlightedRoute}
+                setHighlightedRoute={setHighlightedRoute}
+                nocType={nocFilter}
+            />
         </div>
     );
 };
