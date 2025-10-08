@@ -816,11 +816,25 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     const response = useQuery<BuffersByOperationData[], AxiosError>({
-        queryFn: () => (activeProfilerReport !== null ? fetchBuffersByOperation(bufferType) : Promise.resolve([])),
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
         enabled: activeProfilerReport !== null,
         retry: false,
         staleTime: Infinity,
+        queryFn: async () => {
+            if (activeProfilerReport === null) {
+                await Promise.resolve([]);
+            }
+            const data = await fetchBuffersByOperation(bufferType);
+            // @ts-expect-error will happen with extra large data sets where we get a string instead of an array
+            if (data === '' || !Array.isArray(data)) {
+                throw new AxiosError(
+                    `Invalid response: data is invalid or too large to render."`,
+                    'ERR_INVALID_RESPONSE',
+                );
+            }
+
+            return data;
+        },
     });
 
     return useMemo(() => {
@@ -1044,7 +1058,6 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
     const { data: operations } = useOperationsList();
 
     const tensorsByOperationByAddress: TensorsByOperationByAddress = new Map();
-
     const uniqueBuffersByOperationList = useMemo(() => {
         return buffersByOperation?.map((operation) => {
             const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
