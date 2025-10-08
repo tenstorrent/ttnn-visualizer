@@ -151,6 +151,10 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
 
     .missing-data {
         background-color: colours.$tt-red-shade;
+
+        &:hover {
+            background-color: colours.$tt-red-shade;
+        }
     }
 
     .signpost-op {

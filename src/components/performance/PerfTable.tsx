@@ -26,16 +26,15 @@ import { OperationDescription } from '../../model/APIData';
 import ROUTES from '../../definitions/Routes';
 import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
-import { filterBySignpostAtom } from '../../store/app';
+import { filterBySignpostAtom, hideHostOpsAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
-import { MultiSelectValue } from '../../hooks/useMultiSelectFilter';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
     comparisonData?: TypedPerfTableRow[][];
     filters: TableFilter;
-    rawOpCodeFilter: MultiSelectValue[];
-    mathFidelityFilter: MultiSelectValue[];
+    rawOpCodeFilter: string[];
+    mathFidelityFilter: string[];
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     shouldHighlightRows: boolean;
@@ -59,22 +58,19 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     reportName = null,
     signposts,
 }) => {
+    const filterBySignpost = useAtomValue(filterBySignpostAtom);
+    const hideHostOps = useAtomValue(hideHostOpsAtom);
+
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const opIdsMap = useOpToPerfIdFiltered();
     const { data: operations } = useOperationsList();
     const { data: npeManifest, error: npeManifestError } = useGetNPEManifest();
-    const filterBySignpost = useAtomValue(filterBySignpostAtom);
     const navigate = useNavigate();
 
     // TODO: Refactor so that sortAndFilterPerfTableData is not used here and PerfReport.
     // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
     const tableFields = useMemo<TypedPerfTableRow[]>(() => {
-        let parsedRows = sortAndFilterPerfTableData(
-            data?.filter((row) => !isHostOp(row.raw_op_code)),
-            filters,
-            rawOpCodeFilter,
-            mathFidelityFilter,
-        );
+        let parsedRows = sortAndFilterPerfTableData(data, filters, rawOpCodeFilter, mathFidelityFilter, hideHostOps);
 
         // If filtering by signpost, add a fake row at the top to represent the signpost as tt-perf-report removes it from the data
         if (filterBySignpost && parsedRows.length > 0) {
@@ -91,22 +87,23 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
 
         // Still some awkward casting here
         return [...sortTableFields(parsedRows as [])];
-    }, [data, filters, rawOpCodeFilter, mathFidelityFilter, sortTableFields, filterBySignpost]);
+    }, [data, filters, rawOpCodeFilter, mathFidelityFilter, sortTableFields, filterBySignpost, hideHostOps]);
 
     const comparisonDataTableFields = useMemo<TypedPerfTableRow[][]>(
         () =>
             comparisonData?.map((dataset) => {
                 const parsedRows = sortAndFilterPerfTableData(
-                    dataset.filter((row) => !isHostOp(row.raw_op_code)),
+                    dataset,
                     filters,
                     rawOpCodeFilter,
                     mathFidelityFilter,
+                    hideHostOps,
                 );
 
                 // Still some awkward casting here
                 return [...sortTableFields(parsedRows as [])];
             }) || [],
-        [comparisonData, filters, rawOpCodeFilter, mathFidelityFilter, sortTableFields],
+        [comparisonData, filters, rawOpCodeFilter, mathFidelityFilter, sortTableFields, hideHostOps],
     );
 
     const visibleHeaders = [
@@ -329,7 +326,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 header.key === ColumnHeaders.op_to_op_gap,
                                         })}
                                     >
-                                        {getTotalsForHeader(header, data)}
+                                        {getTotalsForFooter(header, data, hideHostOps)}
                                     </td>
                                 ))}
                         </tr>
@@ -344,7 +341,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     );
 };
 
-const getTotalsForHeader = (header: TableHeader, data: TypedPerfTableRow[]): string => {
+const getTotalsForFooter = (header: TableHeader, data: TypedPerfTableRow[], hideHostOps: boolean): string => {
     if (header.key === ColumnHeaders.total_percent) {
         return `100 %`;
     }
@@ -360,7 +357,7 @@ const getTotalsForHeader = (header: TableHeader, data: TypedPerfTableRow[]): str
         const hostOpsCount = data.filter((row) => isHostOp(row.raw_op_code)).length;
         const deviceOpsCount = data.length - hostOpsCount;
 
-        return `${deviceOpsCount} device ops, ${hostOpsCount} host ops`;
+        return `${deviceOpsCount} device ops${hostOpsCount !== 0 && !hideHostOps ? `, ${hostOpsCount} host ops` : ''}`;
     }
 
     if (header.key === ColumnHeaders.op_to_op_gap) {

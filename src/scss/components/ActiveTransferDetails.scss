@@ -8,17 +8,18 @@
 $outer-padding: 10px;
 
 .side-data {
+    z-index: variables.$z-index-active-transfer-details;
     display: flex;
     flex-direction: column;
-    width: 380px;
+    width: variables.$active-transfer-width;
     overflow-y: scroll;
     flex: 0 1 auto;
     background-color: $tt-grey-3;
-    position: sticky;
+    position: fixed;
     top: 0;
     right: 0;
-    left: 0;
     max-height: 100vh;
+    min-height: 100vh;
 
     &:empty {
         display: none;
@@ -126,5 +127,18 @@ $outer-padding: 10px;
                 fill: rgb(255 234 0);
             }
         }
+    }
+
+    .transfer-properties {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        align-items: flex-start;
+    }
+
+    .zones {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
     }
 }

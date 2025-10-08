@@ -17,12 +17,20 @@ export interface TableHeader {
     filterable?: boolean;
 }
 
+enum BoundType {
+    BOTH,
+    DRAM,
+    FLOP,
+    SLOW,
+    HOST,
+}
+
 export interface PerfTableRow {
     id: string;
     global_call_count: number;
     advice: string[];
     total_percent: string;
-    bound: string;
+    bound: BoundType;
     op_code: string;
     raw_op_code: string;
     device_time: string;
@@ -63,6 +71,7 @@ export interface TypedPerfTableRow
         | 'dram_percent'
         | 'flops'
         | 'flops_percent'
+        | 'bound'
     > {
     id: number | null;
     global_call_count: number | null;
@@ -74,8 +83,10 @@ export interface TypedPerfTableRow
     dram_percent: number | null;
     flops: number | null;
     flops_percent: number | null;
+    bound: BoundType | null;
 }
 
+// Not a general enum but used in evaluateFidelity to analyze tt-perf-report output
 export enum MathFidelity {
     HiFi4 = 'HiFi4',
     HiFi2 = 'HiFi2',
@@ -183,7 +194,7 @@ export const signpostRowDefaults = Object.freeze({
     flops: null,
     flops_percent: null,
     advice: [],
-    bound: '',
+    bound: null,
     math_fidelity: '',
     output_datatype: '',
     output_0_memory: '',
