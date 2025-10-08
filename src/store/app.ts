@@ -70,5 +70,5 @@ export const filterBySignpostAtom = atom<Signpost | null>(null);
 export const selectedDeviceAtom = atom<number | null>(DEFAULT_DEVICE_ID); // Assumes device_id always uses a zero based index (NOT REALLY USED AT THE MOMENT)
 export const renderMemoryLayoutAtom = atom<boolean>(false);
 export const hideHostOpsAtom = atom<boolean>(true);
-export const mathFiltersAtom = atom<PerfTableRow['math_fidelity'][]>([]);
-export const rawOpCodeFiltersAtom = atom<PerfTableRow['raw_op_code'][]>([]);
+export const mathFilterAtom = atom<PerfTableRow['math_fidelity'][]>([]);
+export const rawOpCodeFilterAtom = atom<PerfTableRow['raw_op_code'][]>([]);
