@@ -159,7 +159,9 @@ const ActiveTransferDetails = ({
                                                                         size={11}
                                                                         icon={IconNames.ArrowRight}
                                                                     />{' '}
-                                                                    {route.dst.map((el) => el.join('-')).join('-')}
+                                                                    {route.dst.length === 1
+                                                                        ? route.dst[0].join('-')
+                                                                        : `${route.dst[0].join('-')} - ${route.dst[route.dst.length - 1].join('-')}`}
                                                                 </li>
                                                             ))}
                                                         </ul>
