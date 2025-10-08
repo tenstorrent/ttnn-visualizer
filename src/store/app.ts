@@ -12,7 +12,8 @@ import { ScrollPositions } from '../definitions/ScrollPositions';
 import { Signpost } from '../functions/perfFunctions';
 import { PerfTabIds } from '../definitions/Performance';
 import { ReportLocation } from '../definitions/Reports';
-import { TableFilter } from '../definitions/PerfTable';
+import { PerfTableRow, TableFilter } from '../definitions/PerfTable';
+import { BufferType } from '../model/BufferType';
 
 // Unsorted
 export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
@@ -53,6 +54,7 @@ export const isFullStackTraceAtom = atom(false);
 // Tensors route
 export const expandedTensorsAtom = atom<number[]>([]);
 export const tensorListScrollAtom = atom<number>(0);
+export const tensorBufferTypeFiltersAtom = atom<(BufferType | null)[]>([]);
 
 // Buffers route
 export const showHexAtom = atomWithStorage<boolean>('showHex', false);
@@ -70,3 +72,5 @@ export const filterBySignpostAtom = atom<Signpost | null>(null);
 export const selectedDeviceAtom = atom<number | null>(DEFAULT_DEVICE_ID); // Assumes device_id always uses a zero based index (NOT REALLY USED AT THE MOMENT)
 export const renderMemoryLayoutAtom = atom<boolean>(false);
 export const hideHostOpsAtom = atom<boolean>(true);
+export const mathFilterListAtom = atom<PerfTableRow['math_fidelity'][]>([]);
+export const rawOpCodeFilterListAtom = atom<PerfTableRow['raw_op_code'][]>([]);
