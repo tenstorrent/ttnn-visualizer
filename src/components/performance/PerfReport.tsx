@@ -43,8 +43,8 @@ import {
     filterBySignpostAtom,
     hideHostOpsAtom,
     isStackedViewAtom,
-    mathFilterAtom,
-    rawOpCodeFilterAtom,
+    mathFilterListAtom,
+    rawOpCodeFilterListAtom,
     stackByIn0Atom,
 } from '../../store/app';
 import alignByOpCode from '../../functions/normalisePerformanceData';
@@ -87,8 +87,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [stackByIn0, setStackByIn0] = useAtom(stackByIn0Atom);
     const [filterBySignpost, setFilterBySignpost] = useAtom(filterBySignpostAtom);
     const [hideHostOps, setHideHostOps] = useAtom(hideHostOpsAtom);
-    const [activeMathFilter, setActiveMathFilter] = useAtom(mathFilterAtom);
-    const [activeRawOpCodeFilter, setActiveRawOpCodeFilter] = useAtom(rawOpCodeFilterAtom);
+    const [activeMathFilterList, setActiveMathFilterList] = useAtom(mathFilterListAtom);
+    const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
@@ -147,15 +147,15 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             sortAndFilterPerfTableData(
                 useNormalisedData ? normalisedData.data[0] : processedRows,
                 filters,
-                activeRawOpCodeFilter,
-                activeMathFilter,
+                activeRawOpCodeFilterList,
+                activeMathFilterList,
                 hideHostOps,
             ),
         [
             processedRows,
             filters,
-            activeMathFilter,
-            activeRawOpCodeFilter,
+            activeMathFilterList,
+            activeRawOpCodeFilterList,
             useNormalisedData,
             normalisedData.data,
             hideHostOps,
@@ -167,16 +167,16 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             sortAndFilterPerfTableData(
                 useNormalisedData ? normalisedData.data[comparisonIndex] : processedComparisonRows[comparisonIndex],
                 filters,
-                activeRawOpCodeFilter,
-                activeMathFilter,
+                activeRawOpCodeFilterList,
+                activeMathFilterList,
                 hideHostOps,
             ),
         [
             comparisonIndex,
             processedComparisonRows,
             filters,
-            activeRawOpCodeFilter,
-            activeMathFilter,
+            activeRawOpCodeFilterList,
+            activeMathFilterList,
             useNormalisedData,
             normalisedData.data,
             hideHostOps,
@@ -185,8 +185,13 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
     const filteredStackedRows = useMemo(
         () =>
-            sortAndFilterStackedPerfTableData(processedStackedRows, stackedFilters, activeRawOpCodeFilter, hideHostOps),
-        [processedStackedRows, stackedFilters, activeRawOpCodeFilter, hideHostOps],
+            sortAndFilterStackedPerfTableData(
+                processedStackedRows,
+                stackedFilters,
+                activeRawOpCodeFilterList,
+                hideHostOps,
+            ),
+        [processedStackedRows, stackedFilters, activeRawOpCodeFilterList, hideHostOps],
     );
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
@@ -266,16 +271,16 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         keyName='raw_op_code'
                         options={data || []}
                         placeholder='Select Op Codes...'
-                        values={activeRawOpCodeFilter}
-                        updateHandler={setActiveRawOpCodeFilter}
+                        values={activeRawOpCodeFilterList}
+                        updateHandler={setActiveRawOpCodeFilterList}
                     />
 
                     <MultiSelectField<PerfTableRow, 'math_fidelity'>
                         keyName='math_fidelity'
                         options={data || []}
                         placeholder='Select Math Fidelity...'
-                        values={activeMathFilter}
-                        updateHandler={setActiveMathFilter}
+                        values={activeMathFilterList}
+                        updateHandler={setActiveMathFilterList}
                     />
 
                     <Select<Signpost>
@@ -434,8 +439,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                             : []
                                     }
                                     filters={filters}
-                                    rawOpCodeFilter={activeRawOpCodeFilter}
-                                    mathFidelityFilter={activeMathFilter}
+                                    rawOpCodeFilter={activeRawOpCodeFilterList}
+                                    mathFidelityFilter={activeMathFilterList}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
@@ -483,8 +488,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                                 : []
                                         }
                                         filters={filters}
-                                        rawOpCodeFilter={activeRawOpCodeFilter}
-                                        mathFidelityFilter={activeMathFilter}
+                                        rawOpCodeFilter={activeRawOpCodeFilterList}
+                                        mathFidelityFilter={activeMathFilterList}
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         shouldHighlightRows={highlightRows && useNormalisedData}
