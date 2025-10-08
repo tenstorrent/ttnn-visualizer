@@ -6,10 +6,9 @@ import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Button, ButtonGroup, Icon, Intent, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
-import { MultiSelect } from '@blueprintjs/select';
 import SearchField from './SearchField';
 import LoadingSpinner from './LoadingSpinner';
 import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensors } from '../hooks/useAPI';
@@ -17,7 +16,7 @@ import ROUTES from '../definitions/Routes';
 import { Tensor } from '../model/APIData';
 import { BufferTypeLabel } from '../model/BufferType';
 import Collapsible from './Collapsible';
-import { expandedTensorsAtom, selectedOperationRangeAtom } from '../store/app';
+import { expandedTensorsAtom, selectedOperationRangeAtom, tensorBufferTypeFiltersAtom } from '../store/app';
 import ListItem from './ListItem';
 import '@blueprintjs/select/lib/css/blueprint-select.css';
 import 'styles/components/ListView.scss';
@@ -25,7 +24,7 @@ import BufferDetails from './BufferDetails';
 import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
 import { toReadableShape, toReadableType } from '../functions/math';
-import useMultiSelectFilter, { MultiSelectValue } from '../hooks/useMultiSelectFilter';
+import MultiSelectField from './MultiSelectField';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -46,6 +45,7 @@ const TensorList = () => {
     const [showLateDeallocatedTensors, setShowLateDeallocatedTensors] = useState(false);
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
+    const [bufferTypeFilters, setBufferTypeFilters] = useAtom(tensorBufferTypeFiltersAtom);
 
     const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
     const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
@@ -63,13 +63,6 @@ const TensorList = () => {
 
         return fetchedTensors;
     }, [fetchedTensors, selectedOperationRange]);
-
-    const {
-        getMultiSelectOptions: getBufferTypeFilter,
-        updateMultiSelect: updateBufferTypeFilters,
-        activeMultiSelectFilters: activeBufferTypeFilters,
-        OptionComponent: BufferTypeItem,
-    } = useMultiSelectFilter('buffer_type', tensorsWithRange || []);
 
     const { nonDeallocatedTensorList } = useGetTensorDeallocationReportByOperation();
 
@@ -122,10 +115,9 @@ const TensorList = () => {
                     );
                 }
 
-                if (activeBufferTypeFilters?.length > 0) {
+                if (bufferTypeFilters && bufferTypeFilters?.length > 0) {
                     tensors = tensors.filter(
-                        (tensor) =>
-                            tensor?.buffer_type !== null && activeBufferTypeFilters.includes(tensor.buffer_type),
+                        (tensor) => tensor?.buffer_type !== null && bufferTypeFilters.includes(tensor.buffer_type),
                     );
                 }
 
@@ -145,7 +137,7 @@ const TensorList = () => {
             tensorsWithRange,
             operations,
             filterQuery,
-            activeBufferTypeFilters,
+            bufferTypeFilters,
             showHighConsumerTensors,
             showLateDeallocatedTensors,
         ],
@@ -253,34 +245,20 @@ const TensorList = () => {
                             aria-label='Scroll to bottom'
                         />
                     </Tooltip>
-                    <MultiSelect<MultiSelectValue>
-                        items={tensorsWithRange ? getBufferTypeFilter() : []}
+
+                    <MultiSelectField<Tensor, 'buffer_type'>
+                        keyName='buffer_type'
+                        options={tensorsWithRange || []}
                         placeholder='Buffer type filter...'
-                        // Type requires this but it seems pointless
-                        onItemSelect={(selectedType) => updateBufferTypeFilters(selectedType.toString())}
-                        selectedItems={activeBufferTypeFilters}
-                        itemRenderer={(bufferType: MultiSelectValue) =>
-                            BufferTypeItem(bufferType, BufferTypeLabel[Number(bufferType)])
-                        }
-                        tagRenderer={(bufferType: MultiSelectValue) => BufferTypeLabel[Number(bufferType)]}
-                        onRemove={(type) => updateBufferTypeFilters(type.toString())}
-                        itemPredicate={(query, bufferType: MultiSelectValue) =>
-                            !query || BufferTypeLabel[Number(bufferType)].toLowerCase().includes(query.toLowerCase())
-                        }
-                        noResults={
-                            <MenuItem
-                                disabled
-                                text='No results.'
-                                roleStructure='listoption'
-                            />
-                        }
-                        resetOnSelect
+                        values={bufferTypeFilters}
+                        updateHandler={setBufferTypeFilters}
+                        labelFormatter={(value) => (value === null ? 'Unknown' : BufferTypeLabel[value])}
                     />
                 </ButtonGroup>
 
                 {!isTensorsLoading && !isOperationsLoading ? (
                     <p className='result-count'>
-                        {tensorsWithRange && filterQuery
+                        {tensorsWithRange && (filterQuery || bufferTypeFilters)
                             ? `Showing ${numberOfTensors} of ${tensorsWithRange.length} tensors`
                             : `Showing ${numberOfTensors} tensors`}
                     </p>
