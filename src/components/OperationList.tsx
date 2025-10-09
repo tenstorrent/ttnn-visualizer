@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { UIEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -51,6 +51,7 @@ const OperationList = () => {
     const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const [focussedRow, setFocussedRow] = useState<number | null>(null);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -103,12 +104,9 @@ const OperationList = () => {
 
     const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
         const el = event.currentTarget;
-        const firstVirtualIndex = virtualizer.getVirtualIndexes()[0];
+        const firstVirtualIndex = Math.max(virtualizer.getVirtualIndexes()[0], 0);
 
-        // On first load firstVirtualIndex can return 0 even if we've scrolled down the list
-        if (firstVirtualIndex !== 0) {
-            setOperationListScroll(virtualizer.getVirtualIndexes()[0]);
-        }
+        setOperationListScroll(firstVirtualIndex);
 
         setHasScrolledFromTop(!(el.scrollTop < OPERATION_EL_HEIGHT / 2));
         setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
@@ -157,6 +155,13 @@ const OperationList = () => {
     }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration, selectedOperationRange]);
 
     useEffect(() => {
+        if (virtualHeight <= 0 && scrollElementRef.current) {
+            scrollElementRef.current.scrollTop = 0;
+            setHasScrolledFromTop(false);
+        }
+    }, [virtualHeight]);
+
+    useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;
 
         if (initialOperationId && virtualizer) {
@@ -165,37 +170,55 @@ const OperationList = () => {
                     (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
                 ) || 0;
 
-            // Looks better if we scroll to the previous index
-            virtualizer.scrollToIndex(operationIndex - 1, {
-                align: 'start',
-            });
+            // Looks better to scroll to the previous index
+            const indexToScrollTo = Math.min(Math.max(operationIndex - 1, 0), numberOfOperations);
+
+            scrollToIndex(indexToScrollTo);
+            setOperationListScroll(operationIndex);
+            setFocussedRow(operationIndex);
 
             // Navigating to the same page replaces the entry in the browser history
             // TODO: Revisit this code later to make sure it's not causing any weird side effects
             navigate(ROUTES.OPERATIONS, { replace: true });
 
             setOperationListScroll(operationIndex);
-        }
-    }, [virtualizer, fetchedOperations, location, navigate, setOperationListScroll]);
+        } else if (operationListScroll !== null) {
+            // Scrolling to the next item looks better, and if we do that we have to focus on the index after that one
+            const indexToScroll =
+                operationListScroll === 0 ? 0 : Math.min(Math.max(operationListScroll + 1, 0), numberOfOperations);
+            const indexToFocus = indexToScroll > 0 ? indexToScroll + 1 : indexToScroll;
 
-    useEffect(() => {
-        if (virtualHeight <= 0 && scrollElementRef.current) {
-            scrollElementRef.current.scrollTop = 0;
-            setHasScrolledFromTop(false);
-        }
-    }, [virtualHeight]);
-
-    useEffect(() => {
-        if (operationListScroll) {
-            virtualizer.scrollToIndex(operationListScroll + 1, { align: 'start' });
+            scrollToIndex(indexToScroll);
+            setFocussedRow(indexToFocus);
+            // }
         }
 
         // Bind event listener after scrollToIndex runs
-        scrollElementRef.current?.addEventListener('scroll', (event: Event) =>
-            handleUserScrolling(event as unknown as UIEvent<HTMLDivElement>),
-        );
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        const scrollElement = scrollElementRef.current;
+        const scrollHandler = (event: Event) => handleUserScrolling(event as unknown as UIEvent<HTMLDivElement>);
+        scrollElement?.addEventListener('scroll', scrollHandler);
+
+        return () => {
+            scrollElement?.removeEventListener('scroll', scrollHandler);
+        };
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- Only want to run this on mount
     }, []);
+
+    const scrollToIndex = useCallback(
+        (index: number) => virtualizer.scrollToIndex(index, { align: 'start' }),
+        [virtualizer],
+    );
+
+    const scrollToTop = () => {
+        setOperationListScroll(null);
+        setFocussedRow(null);
+        scrollToIndex(0);
+    };
+
+    const scrollToEnd = () => {
+        scrollToIndex(numberOfOperations);
+    };
 
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList
@@ -274,9 +297,7 @@ const OperationList = () => {
                         placement={PopoverPosition.TOP}
                     >
                         <Button
-                            onClick={() => {
-                                virtualizer.scrollToIndex(0);
-                            }}
+                            onClick={scrollToTop}
                             icon={IconNames.DOUBLE_CHEVRON_UP}
                             aria-label='Scroll to top'
                         />
@@ -287,9 +308,7 @@ const OperationList = () => {
                         placement={PopoverPosition.TOP}
                     >
                         <Button
-                            onClick={() => {
-                                virtualizer.scrollToIndex(numberOfOperations - 1);
-                            }}
+                            onClick={scrollToEnd}
                             icon={IconNames.DOUBLE_CHEVRON_DOWN}
                             aria-label='Scroll to bottom'
                         />
@@ -332,7 +351,10 @@ const OperationList = () => {
 
                                 return (
                                     <li
-                                        className='list-item-container'
+                                        className={classNames('list-item-container', {
+                                            'focus-fade': focussedRow === virtualRow.index,
+                                        })}
+                                        data-id={operation.id}
                                         key={virtualRow.key}
                                         data-index={virtualRow.index}
                                         ref={virtualizer.measureElement}
@@ -347,7 +369,7 @@ const OperationList = () => {
                                                     iconColour='operation'
                                                 />
                                             }
-                                            keepChildrenMounted={false}
+                                            keepChildrenMounted
                                             additionalElements={
                                                 <Button
                                                     className='buffer-view'

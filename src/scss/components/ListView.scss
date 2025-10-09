@@ -78,11 +78,26 @@
     }
 
     .list-item-container {
-        padding-bottom: 15px;
+        padding-top: 6px;
+        padding-bottom: 6px;
 
         // Style added to avoid possible infinite scroll loops
         // https://github.com/TanStack/virtual/issues/540#issuecomment-1720745734
         overflow-anchor: none;
+
+        &.focus-fade {
+            animation: focus-fade-bg 1.5s ease-out;
+
+            @keyframes focus-fade-bg {
+                0% {
+                    background-color: rgba($tt-purple, 0.5);
+                }
+
+                100% {
+                    background-color: transparent;
+                }
+            }
+        }
     }
 
     .high-number-consumers {
