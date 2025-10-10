@@ -39,7 +39,7 @@ interface PerformanceTableProps {
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     shouldHighlightRows: boolean;
-    reportName?: string;
+    reportName: string | null;
     signposts?: Signpost[];
 }
 
@@ -55,7 +55,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     provideMatmulAdvice,
     hiliteHighDispatch,
     shouldHighlightRows,
-    reportName = null,
+    reportName,
     signposts,
 }) => {
     const filterBySignpost = useAtomValue(filterBySignpostAtom);
@@ -172,7 +172,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
 
             <PerfDeviceArchitecture
                 data={data}
-                reportName={reportName || ''}
+                reportName={reportName}
             />
 
             {data?.length > 0 ? (

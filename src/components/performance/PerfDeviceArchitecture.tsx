@@ -14,7 +14,7 @@ const NO_META_DATA = 'n/a';
 
 interface PerfDeviceArchitectureProps {
     data: TypedPerfTableRow[];
-    reportName: string;
+    reportName: string | null;
 }
 
 const PerfDeviceArchitecture = ({ data, reportName }: PerfDeviceArchitectureProps) => {

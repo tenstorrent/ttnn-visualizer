@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, useMemo } from 'react';
+import { FC, Fragment, useMemo } from 'react';
 import classNames from 'classnames';
 import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -27,17 +27,17 @@ import { PATTERN_COUNT } from '../../definitions/Performance';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
-    filters: Record<string, string> | null;
     stackedData: TypedStackedPerfRow[];
     stackedComparisonData: TypedStackedPerfRow[][];
+    filters: Record<string, string> | null;
     reportName: string | null;
 }
 
 const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
     data,
     stackedData,
-    filters,
     stackedComparisonData,
+    filters,
     reportName,
 }) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
@@ -67,7 +67,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 
             <PerfDeviceArchitecture
                 data={data}
-                reportName={reportName || ''}
+                reportName={reportName}
             />
 
             {stackedData && stackedData?.length > 0 ? (
@@ -128,8 +128,8 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 
                     <tbody>
                         {tableFields?.map((row, i) => (
-                            <>
-                                <tr key={i}>
+                            <Fragment key={`row-${i}`}>
+                                <tr>
                                     {TableHeaders.map((h: StackedTableHeader) => (
                                         <td
                                             key={h.key}
@@ -147,7 +147,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
 
                                     return (
                                         <tr
-                                            key={`comparison-${datasetIndex}`}
+                                            key={`comparison-${i}-${datasetIndex}`}
                                             className={classNames(
                                                 'comparison-row',
                                                 `pattern-${datasetIndex >= PATTERN_COUNT ? datasetIndex - PATTERN_COUNT : datasetIndex}`,
@@ -155,7 +155,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                                         >
                                             {TableHeaders.map((h: StackedTableHeader) => (
                                                 <td
-                                                    key={h.key}
+                                                    key={`comparison-${h.key}`}
                                                     className='cell'
                                                 >
                                                     {matchingRow
@@ -166,7 +166,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                                         </tr>
                                     );
                                 })}
-                            </>
+                            </Fragment>
                         ))}
                     </tbody>
 
@@ -176,7 +176,7 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
                                 stackedData?.length > 0 &&
                                 TableHeaders.map((header) => (
                                     <td
-                                        key={header.key}
+                                        key={`footer-${header.key}`}
                                         className={classNames({
                                             'no-wrap': header.key === ColumnHeaders.OpCodeJoined,
                                         })}

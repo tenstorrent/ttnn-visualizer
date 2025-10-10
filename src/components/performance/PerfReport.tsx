@@ -142,6 +142,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     );
     const normalisedComparisonData = normalisedData.data.slice(1);
 
+    const isNormalisationApplied = !isStackedView && useNormalisedData;
+
     const filteredRows = useMemo(
         () =>
             sortAndFilterPerfTableData(
@@ -190,8 +192,28 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 stackedFilters,
                 activeRawOpCodeFilterList,
                 hideHostOps,
+                stackByIn0,
             ),
-        [processedStackedRows, stackedFilters, activeRawOpCodeFilterList, hideHostOps],
+        [processedStackedRows, stackedFilters, activeRawOpCodeFilterList, hideHostOps, stackByIn0],
+    );
+
+    const filteredComparisonStackedRows = useMemo(
+        () =>
+            sortAndFilterStackedPerfTableData(
+                processedComparisonStackedRows[comparisonIndex],
+                stackedFilters,
+                activeRawOpCodeFilterList,
+                hideHostOps,
+                stackByIn0,
+            ),
+        [
+            comparisonIndex,
+            processedComparisonStackedRows,
+            stackedFilters,
+            activeRawOpCodeFilterList,
+            hideHostOps,
+            stackByIn0,
+        ],
     );
 
     const updateColumnFilter = (key: TableKeys, value: string) => {
@@ -219,12 +241,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     // If currently selected tab is disabled, reset to initial tab
     useEffect(() => {
         const isSelectedTabDisabled =
-            useNormalisedData && normalisedData?.data?.slice(1)?.[comparisonIndex]?.length === 0;
+            isNormalisationApplied && normalisedData?.data?.slice(1)?.[comparisonIndex]?.length === 0;
 
         if (isSelectedTabDisabled) {
             setSelectedTabId(INITIAL_TAB_ID);
         }
-    }, [selectedTabId, useNormalisedData, normalisedData, comparisonIndex]);
+    }, [selectedTabId, useNormalisedData, normalisedData, comparisonIndex, isNormalisationApplied]);
 
     return (
         <>
@@ -253,7 +275,14 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     comparisonIndex,
                                     comparisonData,
                                 )}
-                                stackedView={getStackedViewCounts(processedStackedRows, filteredStackedRows)}
+                                stackedView={getStackedViewCounts(
+                                    processedStackedRows,
+                                    filteredStackedRows,
+                                    processedComparisonStackedRows,
+                                    filteredComparisonStackedRows,
+                                    comparisonIndex,
+                                    selectedTabId === INITIAL_TAB_ID,
+                                )}
                                 useNormalisedData={useNormalisedData}
                             />
                         </p>
@@ -426,7 +455,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         panel={
                             isStackedView ? (
                                 <StackedPerformanceTable
-                                    data={useNormalisedData ? normalisedData.data[0] : filteredRows}
+                                    data={filteredRows}
                                     stackedData={filteredStackedRows}
                                     filters={filters}
                                     stackedComparisonData={processedComparisonStackedRows}
@@ -447,6 +476,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
                                     signposts={signposts}
+                                    reportName={activePerformanceReport}
                                 />
                             )
                         }
@@ -457,9 +487,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             id={report}
                             key={index}
                             icon={IconNames.TH_LIST}
-                            disabled={useNormalisedData && normalisedComparisonData?.[index]?.length === 0}
+                            disabled={isNormalisationApplied && normalisedComparisonData?.[index]?.length === 0}
                             title={
-                                useNormalisedData && normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
+                                isNormalisationApplied && normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
                                     <Tooltip
                                         content='Report has too many differences to be normalised'
                                         position={PopoverPosition.TOP}
@@ -473,9 +503,16 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             panel={
                                 isStackedView ? (
                                     <StackedPerformanceTable
-                                        data={useNormalisedData ? normalisedData.data[0] : filteredRows}
-                                        stackedData={processedComparisonStackedRows[comparisonIndex]}
-                                        stackedComparisonData={processedComparisonStackedRows}
+                                        data={filteredRows}
+                                        stackedData={
+                                            comparisonIndex > -1
+                                                ? processedComparisonStackedRows[comparisonIndex]
+                                                : filteredStackedRows
+                                        }
+                                        stackedComparisonData={[
+                                            processedStackedRows,
+                                            ...processedComparisonStackedRows.filter((_, i) => i !== comparisonIndex),
+                                        ]}
                                         filters={filters}
                                         reportName={report}
                                     />
