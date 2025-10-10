@@ -23,15 +23,23 @@ import { isHostOp } from '../../functions/perfFunctions';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import LoadingSpinner from '../LoadingSpinner';
 import { hideHostOpsAtom } from '../../store/app';
+import { PATTERN_COUNT } from '../../definitions/Performance';
 
 interface StackedPerformanceTableProps {
     data: TypedPerfTableRow[];
     filters: Record<string, string> | null;
-    stackedData?: TypedStackedPerfRow[];
-    reportName?: string;
+    stackedData: TypedStackedPerfRow[];
+    stackedComparisonData: TypedStackedPerfRow[][];
+    reportName: string | null;
 }
 
-const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stackedData, filters, reportName }) => {
+const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({
+    data,
+    stackedData,
+    filters,
+    stackedComparisonData,
+    reportName,
+}) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const { error: npeManifestError } = useGetNPEManifest();
     const hideHostOps = useAtomValue(hideHostOpsAtom);
@@ -120,16 +128,45 @@ const StackedPerformanceTable: FC<StackedPerformanceTableProps> = ({ data, stack
 
                     <tbody>
                         {tableFields?.map((row, i) => (
-                            <tr key={i}>
-                                {TableHeaders.map((h: StackedTableHeader) => (
-                                    <td
-                                        key={h.key}
-                                        className={classNames('cell')}
-                                    >
-                                        {formatStackedCell(row, h, filters?.[h.key])}
-                                    </td>
-                                ))}
-                            </tr>
+                            <>
+                                <tr key={i}>
+                                    {TableHeaders.map((h: StackedTableHeader) => (
+                                        <td
+                                            key={h.key}
+                                            className={classNames('cell')}
+                                        >
+                                            {formatStackedCell(row, h, filters?.[h.key])}
+                                        </td>
+                                    ))}
+                                </tr>
+
+                                {stackedComparisonData.map((comparisonDataset, datasetIndex) => {
+                                    const matchingRow = comparisonDataset.find(
+                                        (stackedRow) => stackedRow.op_code === row.op_code,
+                                    );
+
+                                    return (
+                                        <tr
+                                            key={`comparison-${datasetIndex}`}
+                                            className={classNames(
+                                                'comparison-row',
+                                                `pattern-${datasetIndex >= PATTERN_COUNT ? datasetIndex - PATTERN_COUNT : datasetIndex}`,
+                                            )}
+                                        >
+                                            {TableHeaders.map((h: StackedTableHeader) => (
+                                                <td
+                                                    key={h.key}
+                                                    className='cell'
+                                                >
+                                                    {matchingRow
+                                                        ? formatStackedCell(matchingRow, h, filters?.[h.key])
+                                                        : ''}
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    );
+                                })}
+                            </>
                         ))}
                     </tbody>
 

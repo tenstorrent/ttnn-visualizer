@@ -429,6 +429,8 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     data={useNormalisedData ? normalisedData.data[0] : filteredRows}
                                     stackedData={filteredStackedRows}
                                     filters={filters}
+                                    stackedComparisonData={processedComparisonStackedRows}
+                                    reportName={activePerformanceReport}
                                 />
                             ) : (
                                 <PerfTable
@@ -436,7 +438,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     comparisonData={
                                         useNormalisedData && normalisedComparisonData.length > 0
                                             ? normalisedComparisonData
-                                            : []
+                                            : processedComparisonRows
                                     }
                                     filters={filters}
                                     rawOpCodeFilter={activeRawOpCodeFilterList}
@@ -457,7 +459,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                             icon={IconNames.TH_LIST}
                             disabled={useNormalisedData && normalisedComparisonData?.[index]?.length === 0}
                             title={
-                                normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
+                                useNormalisedData && normalisedData?.data?.slice(1)?.[index]?.length === 0 ? (
                                     <Tooltip
                                         content='Report has too many differences to be normalised'
                                         position={PopoverPosition.TOP}
@@ -473,7 +475,9 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     <StackedPerformanceTable
                                         data={useNormalisedData ? normalisedData.data[0] : filteredRows}
                                         stackedData={processedComparisonStackedRows[comparisonIndex]}
+                                        stackedComparisonData={processedComparisonStackedRows}
                                         filters={filters}
+                                        reportName={report}
                                     />
                                 ) : (
                                     <PerfTable
@@ -485,7 +489,12 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                         comparisonData={
                                             useNormalisedData && normalisedData.data.length > 1
                                                 ? normalisedData.data.filter((_, i) => i !== comparisonIndex + 1)
-                                                : []
+                                                : [
+                                                      processedRows,
+                                                      ...processedComparisonRows.filter(
+                                                          (_, i) => i !== comparisonIndex,
+                                                      ),
+                                                  ]
                                         }
                                         filters={filters}
                                         rawOpCodeFilter={activeRawOpCodeFilterList}

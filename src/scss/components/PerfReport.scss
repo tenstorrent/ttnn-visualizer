@@ -125,6 +125,7 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
             &.comparison-row {
                 border-bottom: 2px solid colours.$tt-sand-shade;
                 background-size: 5px 5px;
+                height: 12px; // Add a more visible height for empty rows
 
                 &.pattern-0 {
                     background-image: $row-pattern-0;

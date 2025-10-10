@@ -28,6 +28,7 @@ import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import { filterBySignpostAtom, hideHostOpsAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
+import { PATTERN_COUNT } from '../../definitions/Performance';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -44,7 +45,6 @@ interface PerformanceTableProps {
 
 const OP_ID_INSERTION_POINT = 1;
 const HIGH_DISPATCH_INSERTION_POINT = 5;
-const PATTERN_COUNT = 3; // Number of row patterns defined in PerfReport.scss
 
 const PerformanceTable: FC<PerformanceTableProps> = ({
     data,
