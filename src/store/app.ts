@@ -74,4 +74,4 @@ export const mathFilterListAtom = atom<PerfTableRow['math_fidelity'][]>([]);
 export const rawOpCodeFilterListAtom = atom<PerfTableRow['raw_op_code'][]>([]);
 
 // NPE
-export const highContrastCongestionAtom = atomWithStorage<boolean>('highContrastCongestionColors', false);
+export const altCongestionColorsAtom = atomWithStorage<boolean>('altCongestionColorsAtom', false);

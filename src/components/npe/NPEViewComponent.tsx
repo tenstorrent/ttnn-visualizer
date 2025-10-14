@@ -41,7 +41,7 @@ import NPEMetadata from './NPEMetadata';
 import { EmptyChipRenderer } from './EmptyChipRenderer';
 import { RouteOriginsRenderer } from './RouteOriginsRenderer';
 import { useSelectedTransferGrouping, useShowActiveTransfers } from './useNPEHandlers';
-import { highContrastCongestionAtom } from '../../store/app';
+import { altCongestionColorsAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 
 interface NPEViewProps {
@@ -84,7 +84,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
-    const [highContrast, setHighContrast] = useAtom(highContrastCongestionAtom);
+    const [altCongestionColors, setAltCongestionColors] = useAtom(altCongestionColorsAtom);
     const [fabricEventsFilter, setFabricEventsFilter] = useState<EVENT_TYPE_FILTER>(EVENT_TYPE_FILTER.ALL_EVENTS);
     const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
 
@@ -390,9 +390,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                             />
                         </ButtonGroup>
                         <GlobalSwitch
-                            label='High contrast congestion'
-                            checked={highContrast}
-                            onChange={() => setHighContrast(!highContrast)}
+                            label='Alternate congestion colors'
+                            checked={altCongestionColors}
+                            onChange={() => setAltCongestionColors(!altCongestionColors)}
                         />
                     </div>
                     <div className='npe-controls-line'>
@@ -621,7 +621,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                                     ? calculateLinkCongestionColor(
                                                                           linkUtilization[NPE_LINK.DEMAND],
                                                                           0,
-                                                                          highContrast,
+                                                                          altCongestionColors,
                                                                       )
                                                                     : calculateFabricColor(
                                                                           linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE],
