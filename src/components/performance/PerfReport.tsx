@@ -507,13 +507,27 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                         data={filteredRows}
                                         stackedData={
                                             comparisonIndex > -1
-                                                ? processedComparisonStackedRows[comparisonIndex]
+                                                ? sortAndFilterStackedPerfTableData(
+                                                      processedComparisonStackedRows[comparisonIndex],
+                                                      stackedFilters,
+                                                      activeRawOpCodeFilterList,
+                                                      hideHostOps,
+                                                      stackByIn0,
+                                                  )
                                                 : filteredStackedRows
                                         }
                                         stackedComparisonData={[
                                             processedStackedRows,
                                             ...processedComparisonStackedRows.filter((_, i) => i !== comparisonIndex),
-                                        ]}
+                                        ].map((dataset) =>
+                                            sortAndFilterStackedPerfTableData(
+                                                dataset,
+                                                stackedFilters,
+                                                activeRawOpCodeFilterList,
+                                                hideHostOps,
+                                                stackByIn0,
+                                            ),
+                                        )}
                                         filters={filters}
                                         reportName={report}
                                     />
