@@ -365,7 +365,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         checked={hideHostOps}
                         className='option-switch'
                         // TODO: Host Ops don't get sent in non-stacked-by-in0
-                        disabled={!stackByIn0}
+                        disabled={!stackByIn0 && isStackedView}
                     />
 
                     {!isStackedView && (
