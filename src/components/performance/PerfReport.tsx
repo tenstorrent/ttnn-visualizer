@@ -310,6 +310,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         placeholder='Select Math Fidelity...'
                         values={activeMathFilterList}
                         updateHandler={setActiveMathFilterList}
+                        disabled={isStackedView}
                     />
 
                     <Select<Signpost>
