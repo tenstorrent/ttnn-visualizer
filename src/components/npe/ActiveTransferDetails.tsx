@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { useState } from 'react';
+import { useAtomValue } from 'jotai';
 import { Button, Icon, Switch, Tag } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
@@ -10,6 +11,7 @@ import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../mo
 import { calculateLinkCongestionColor, getRouteColor } from './drawingApi';
 import { formatPercentage, formatUnit } from '../../functions/math';
 import 'styles/components/ActiveTransferDetails.scss';
+import { highContrastCongestionAtom } from '../../store/app';
 
 const ActiveTransferDetails = ({
     groupedTransfersByNoCID,
@@ -33,6 +35,7 @@ const ActiveTransferDetails = ({
     setHighlightedRoute: (route: number | null) => void;
     nocType: NoCType | null;
 }) => {
+    const isHighContrast = useAtomValue(highContrastCongestionAtom);
     const hasData = Object.keys(groupedTransfersByNoCID).length !== 0;
     const [showRoutes, setShowRoutes] = useState(false);
     return (
@@ -77,7 +80,13 @@ const ActiveTransferDetails = ({
                                         {nocId}
                                         <span
                                             className='color-square'
-                                            style={{ backgroundColor: calculateLinkCongestionColor(congestion) }}
+                                            style={{
+                                                backgroundColor: calculateLinkCongestionColor(
+                                                    congestion,
+                                                    0,
+                                                    isHighContrast,
+                                                ),
+                                            }}
                                         />
                                         {formatPercentage(congestion)}
                                     </h4>

@@ -4,8 +4,10 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { useAtomValue } from 'jotai';
 import { calculateLinkCongestionColor } from './drawingApi';
 import { NPE_LINK, NoCType, TimestepData } from '../../model/NPEModel';
+import { highContrastCongestionAtom } from '../../store/app';
 
 interface NPEHeatMapProps {
     timestepList: TimestepData[];
@@ -14,6 +16,7 @@ interface NPEHeatMapProps {
 }
 
 const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasWidth, nocType = null }) => {
+    const isHighContrast = useAtomValue(highContrastCongestionAtom);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const canvasHeight = 30;
 
@@ -29,11 +32,11 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                             .filter((linkData) => linkData[NPE_LINK.NOC_ID].indexOf(nocType) === 0)
                             .map((linkData) => linkData[NPE_LINK.DEMAND]),
                     );
-                    const color = calculateLinkCongestionColor(value);
+                    const color = calculateLinkCongestionColor(value, 0, isHighContrast);
                     return { value, color };
                 }
                 const value = Math.max(-1, ...timestep.link_demand.map((linkData) => linkData[NPE_LINK.DEMAND]));
-                const color = calculateLinkCongestionColor(value);
+                const color = calculateLinkCongestionColor(value, 0, isHighContrast);
                 return { value, color };
             }),
 
@@ -43,13 +46,13 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                     if (nocData) {
                         return {
                             value: nocData.avg_link_util,
-                            color: calculateLinkCongestionColor(nocData.avg_link_util),
+                            color: calculateLinkCongestionColor(nocData.avg_link_util, 0, isHighContrast),
                         };
                     }
                 }
                 return {
                     value: timestep.avg_link_util,
-                    color: calculateLinkCongestionColor(timestep.avg_link_util),
+                    color: calculateLinkCongestionColor(timestep.avg_link_util, 0, isHighContrast),
                 };
             }),
 
@@ -59,18 +62,18 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                     if (nocData) {
                         return {
                             value: nocData.avg_link_demand,
-                            color: calculateLinkCongestionColor(nocData.avg_link_demand),
+                            color: calculateLinkCongestionColor(nocData.avg_link_demand, 0, isHighContrast),
                         };
                     }
                 }
-                const color = calculateLinkCongestionColor(timestep.avg_link_demand);
+                const color = calculateLinkCongestionColor(timestep.avg_link_demand, 0, isHighContrast);
                 return {
                     value: timestep.avg_link_demand,
                     color,
                 };
             }),
         };
-    }, [nocType, timestepList]);
+    }, [nocType, timestepList, isHighContrast]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
