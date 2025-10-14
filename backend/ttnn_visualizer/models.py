@@ -154,6 +154,16 @@ class StackTrace(SerializeableDataclass):
     stack_trace: str
 
 
+@dataclasses.dataclass
+class ErrorRecord(SerializeableDataclass):
+    operation_id: int
+    operation_name: str
+    error_type: str
+    error_message: str
+    stack_trace: str
+    timestamp: str
+
+
 # Non Data Models
 
 

@@ -211,6 +211,30 @@ def operation_history(instance: Instance):
         )
 
 
+@api.route("/errors", methods=["GET"])
+@with_instance
+@timer
+def errors_list(instance: Instance):
+    with DatabaseQueries(instance) as db:
+        if not db._check_table_exists("errors"):
+            return (
+                jsonify(
+                    {
+                        "error": "Error records table does not exist in this report database."
+                    }
+                ),
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+            )
+
+        error_records = list(db.query_error_records())
+        serialized_errors = [dataclasses.asdict(error) for error in error_records]
+
+        return Response(
+            orjson.dumps(serialized_errors),
+            mimetype="application/json",
+        )
+
+
 @api.route("/config")
 @with_instance
 @timer
