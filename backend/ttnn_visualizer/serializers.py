@@ -19,6 +19,7 @@ def serialize_operations(
     devices,
     producers_consumers,
     device_operations,
+    error_records=None,
 ):
     tensors_dict = {t.tensor_id: t for t in tensors}
     device_operations_dict = {
@@ -28,6 +29,11 @@ def serialize_operations(
     }
 
     stack_traces_dict = {st.operation_id: st.stack_trace for st in stack_traces}
+
+    errors_dict = {}
+    if error_records:
+        for error in error_records:
+            errors_dict[error.operation_id] = error.to_dict()
 
     arguments_dict = defaultdict(list)
     for argument in operation_arguments:
@@ -49,6 +55,8 @@ def serialize_operations(
         )
         id = operation_data.pop("operation_id", None)
 
+        error_data = errors_dict.get(operation.operation_id)
+
         results.append(
             {
                 **operation_data,
@@ -58,6 +66,7 @@ def serialize_operations(
                 "arguments": arguments,
                 "inputs": inputs,
                 "outputs": outputs,
+                "error": error_data,
             }
         )
     return results
@@ -144,6 +153,7 @@ def serialize_operation(
     devices,
     producers_consumers,
     device_operations,
+    error_record=None,
 ):
     tensors_dict = {t.tensor_id: t for t in tensors}
     comparisons = comparisons_by_tensor_id(
@@ -176,6 +186,9 @@ def serialize_operation(
             device_operations_data = do.captured_graph
             break
 
+    # Convert error record to dict if it exists
+    error_data = error_record.to_dict() if error_record else None
+
     return {
         **operation_data,
         "id": id,
@@ -186,6 +199,7 @@ def serialize_operation(
         "arguments": arguments_data,
         "inputs": inputs_data or [],
         "outputs": outputs_data or [],
+        "error": error_data,
     }
 
 
