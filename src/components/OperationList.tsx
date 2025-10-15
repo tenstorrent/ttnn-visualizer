@@ -325,12 +325,17 @@ const OperationList = () => {
                                         <Collapsible
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
-                                                <ListItem
-                                                    filterName={getOperationFilterName(operation)}
-                                                    filterQuery={filterQuery}
-                                                    icon={memoryError ? IconNames.ERROR : IconNames.CUBE}
-                                                    iconColour={memoryError ? 'error' : 'operation'}
-                                                />
+                                                <Tooltip
+                                                    content={memoryError && `Error detected in this operation`}
+                                                    placement={PopoverPosition.TOP}
+                                                >
+                                                    <ListItem
+                                                        filterName={getOperationFilterName(operation)}
+                                                        filterQuery={filterQuery}
+                                                        icon={memoryError ? IconNames.ERROR : IconNames.CUBE}
+                                                        iconColour={memoryError ? 'error' : 'operation'}
+                                                    />
+                                                </Tooltip>
                                             }
                                             keepChildrenMounted={false}
                                             additionalElements={
