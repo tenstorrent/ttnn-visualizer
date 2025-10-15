@@ -15,3 +15,5 @@ export enum OpType {
     SIGNPOST = 'signpost',
     UNKNOWN = 'unknown',
 }
+
+export const PATTERN_COUNT = 3; // Number of row patterns defined in PerfReport.scss

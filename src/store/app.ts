@@ -74,3 +74,6 @@ export const renderMemoryLayoutAtom = atom<boolean>(false);
 export const hideHostOpsAtom = atom<boolean>(true);
 export const mathFilterListAtom = atom<PerfTableRow['math_fidelity'][]>([]);
 export const rawOpCodeFilterListAtom = atom<PerfTableRow['raw_op_code'][]>([]);
+
+// NPE
+export const altCongestionColorsAtom = atomWithStorage<boolean>('altCongestionColorsAtom', false);
