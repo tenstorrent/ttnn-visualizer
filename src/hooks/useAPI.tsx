@@ -1189,28 +1189,3 @@ export const useGetTensorDeallocationReportByOperation = () => {
         return { lateDeallocationsByOperation, nonDeallocatedTensorList: nonDeallocatedTensorListById };
     }, [operationsById, tensorListByOperation]);
 };
-
-const fetchErrors = async () => {
-    const { data } = await axiosInstance.get('/api/errors');
-
-    return data;
-};
-
-interface MemoryError {
-    operation_id: 240;
-    operation_name: string;
-    error_type: string;
-    error_message: string;
-    stack_trace: string;
-    timestamp: string;
-}
-
-export const useMemoryErrors = () => {
-    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
-
-    return useQuery<MemoryError[], AxiosError>({
-        queryFn: () => fetchErrors(),
-        queryKey: ['fetch-errors', activeProfilerReport],
-        staleTime: Infinity,
-    });
-};

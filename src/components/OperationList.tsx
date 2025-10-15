@@ -14,7 +14,7 @@ import Collapsible from './Collapsible';
 import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ListView.scss';
-import { useMemoryErrors, useOperationsList } from '../hooks/useAPI';
+import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
 import {
     activePerformanceReportAtom,
@@ -41,7 +41,6 @@ const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
-    const { data: memoryErrors } = useMemoryErrors();
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const [filterQuery, setFilterQuery] = useState('');
@@ -311,9 +310,6 @@ const OperationList = () => {
                         {filteredOperationsList?.length ? (
                             virtualItems.map((virtualRow) => {
                                 const operation = filteredOperationsList[virtualRow.index];
-                                const memoryError = memoryErrors?.find(
-                                    (mError) => mError.operation_id === operation.id,
-                                );
 
                                 return (
                                     <li
@@ -326,14 +322,14 @@ const OperationList = () => {
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
                                                 <Tooltip
-                                                    content={memoryError && `Error detected in this operation`}
+                                                    content={operation?.error ? `Error detected in this operation` : ''}
                                                     placement={PopoverPosition.TOP}
                                                 >
                                                     <ListItem
                                                         filterName={getOperationFilterName(operation)}
                                                         filterQuery={filterQuery}
-                                                        icon={memoryError ? IconNames.ERROR : IconNames.CUBE}
-                                                        iconColour={memoryError ? 'error' : 'operation'}
+                                                        icon={operation?.error ? IconNames.ERROR : IconNames.CUBE}
+                                                        iconColour={operation?.error ? 'error' : 'operation'}
                                                     />
                                                 </Tooltip>
                                             }
@@ -356,17 +352,19 @@ const OperationList = () => {
                                                     Python execution time: {formatSize(operation.duration)} s
                                                 </p>
 
-                                                {memoryError && (
+                                                {operation?.error && (
                                                     <div className='memory-error'>
-                                                        <p className='memory-error-title'>{memoryError.error_type}</p>
-                                                        <p>{memoryError.error_message}</p>
+                                                        <p className='memory-error-title'>
+                                                            {operation?.error.error_type}
+                                                        </p>
+                                                        <p>{operation?.error.error_message}</p>
 
                                                         <div className='code-wrapper'>
                                                             <code
                                                                 className='language-python code-output'
                                                                 // eslint-disable-next-line react/no-danger
                                                                 dangerouslySetInnerHTML={{
-                                                                    __html: memoryError.error_message,
+                                                                    __html: operation?.error.error_message,
                                                                 }}
                                                             />
                                                         </div>
@@ -378,7 +376,7 @@ const OperationList = () => {
                                                                 className='language-python code-output'
                                                                 // eslint-disable-next-line react/no-danger
                                                                 dangerouslySetInnerHTML={{
-                                                                    __html: memoryError.stack_trace,
+                                                                    __html: operation?.error.stack_trace,
                                                                 }}
                                                             />
                                                         </div>
