@@ -13,6 +13,7 @@ type MultiSelectFieldProps<T, K extends keyof T> = {
     values: T[K][];
     updateHandler: Dispatch<SetStateAction<T[K][]>>;
     labelFormatter?: (value: T[K]) => string;
+    disabled?: boolean;
 };
 
 const MultiSelectField = <T, K extends keyof T>({
@@ -22,6 +23,7 @@ const MultiSelectField = <T, K extends keyof T>({
     values,
     updateHandler,
     labelFormatter,
+    disabled,
 }: MultiSelectFieldProps<T, K>) => {
     const updateMultiSelect = useCallback(
         (updatedFilter: T[K]) => {
@@ -49,9 +51,8 @@ const MultiSelectField = <T, K extends keyof T>({
     );
 
     const formattedOptions = useMemo((): T[K][] => {
-        const uniqueValues = new Set(
-            options.map((option) => option[keyName]).filter((val): val is T[K] => val != null && val !== ''),
-        );
+        const keyData = options.map((option) => option[keyName]);
+        const uniqueValues = new Set(keyData.filter((val): val is T[K] => val != null && val !== ''));
 
         return Array.from(uniqueValues).sort((a, b) => (a > b ? 1 : -1));
     }, [options, keyName]);
@@ -78,6 +79,7 @@ const MultiSelectField = <T, K extends keyof T>({
             itemPredicate={filterPredicate}
             noResults={RenderNoResults}
             resetOnSelect
+            disabled={disabled}
         />
     );
 };
