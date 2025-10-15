@@ -99,6 +99,11 @@ def operation_list(instance: Instance):
         inputs = list(db.query_input_tensors())
         devices = list(db.query_devices())
         producers_consumers = list(db.query_producers_consumers())
+
+        error_records = None
+        if db._check_table_exists("errors"):
+            error_records = list(db.query_error_records())
+
         serialized_operations = serialize_operations(
             inputs,
             operation_arguments,
@@ -109,6 +114,7 @@ def operation_list(instance: Instance):
             devices,
             producers_consumers,
             device_operations,
+            error_records,
         )
         return Response(
             orjson.dumps(serialized_operations),
@@ -173,6 +179,14 @@ def operation_detail(operation_id, instance: Instance):
 
         devices = list(db.query_devices())
 
+        error_record = None
+        if db._check_table_exists("errors"):
+            error_records = list(
+                db.query_error_records(filters={"operation_id": operation_id})
+            )
+            if error_records:
+                error_record = error_records[0]
+
         serialized_operation = serialize_operation(
             buffers,
             inputs,
@@ -186,6 +200,7 @@ def operation_detail(operation_id, instance: Instance):
             devices,
             producers_consumers,
             device_operations,
+            error_record,
         )
 
         return Response(
@@ -207,6 +222,30 @@ def operation_history(instance: Instance):
     with open(operation_history_file, "r") as file:
         return Response(
             orjson.dumps(json.load(file)),
+            mimetype="application/json",
+        )
+
+
+@api.route("/errors", methods=["GET"])
+@with_instance
+@timer
+def errors_list(instance: Instance):
+    with DatabaseQueries(instance) as db:
+        if not db._check_table_exists("errors"):
+            return (
+                jsonify(
+                    {
+                        "error": "Error records table does not exist in this report database."
+                    }
+                ),
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+            )
+
+        error_records = list(db.query_error_records())
+        serialized_errors = [dataclasses.asdict(error) for error in error_records]
+
+        return Response(
+            orjson.dumps(serialized_errors),
             mimetype="application/json",
         )
 

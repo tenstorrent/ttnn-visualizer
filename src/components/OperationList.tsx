@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { UIEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, ButtonGroup, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Intent, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
@@ -387,12 +387,17 @@ const OperationList = () => {
                                         <Collapsible
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
-                                                <ListItem
-                                                    filterName={getOperationFilterName(operation)}
-                                                    filterQuery={filterQuery}
-                                                    icon={IconNames.CUBE}
-                                                    iconColour='operation'
-                                                />
+                                                <Tooltip
+                                                    content={operation?.error ? `Error detected in this operation` : ''}
+                                                    placement={PopoverPosition.TOP}
+                                                >
+                                                    <ListItem
+                                                        filterName={getOperationFilterName(operation)}
+                                                        filterQuery={filterQuery}
+                                                        icon={operation?.error ? IconNames.ERROR : IconNames.CUBE}
+                                                        iconColour={operation?.error ? 'error' : 'operation'}
+                                                    />
+                                                </Tooltip>
                                             }
                                             keepChildrenMounted
                                             additionalElements={
@@ -402,8 +407,8 @@ const OperationList = () => {
                                                     text='Memory details'
                                                     intent={Intent.PRIMARY}
                                                     endIcon={IconNames.SEGMENTED_CONTROL}
-                                                    size='small'
-                                                    variant='outlined'
+                                                    size={Size.SMALL}
+                                                    variant={ButtonVariant.OUTLINED}
                                                 />
                                             }
                                             isOpen={expandedOperations.includes(operation.id)}
@@ -412,6 +417,37 @@ const OperationList = () => {
                                                 <p className='monospace'>
                                                     Python execution time: {formatSize(operation.duration)} s
                                                 </p>
+
+                                                {operation?.error && (
+                                                    <div className='memory-error'>
+                                                        <p className='memory-error-title'>
+                                                            {operation?.error.error_type}
+                                                        </p>
+                                                        <p>{operation?.error.error_message}</p>
+
+                                                        <div className='code-wrapper'>
+                                                            <code
+                                                                className='language-python code-output'
+                                                                // eslint-disable-next-line react/no-danger
+                                                                dangerouslySetInnerHTML={{
+                                                                    __html: operation?.error.error_message,
+                                                                }}
+                                                            />
+                                                        </div>
+
+                                                        <p className='memory-error-title'>Stack Trace</p>
+
+                                                        <div className='code-wrapper'>
+                                                            <code
+                                                                className='language-python code-output'
+                                                                // eslint-disable-next-line react/no-danger
+                                                                dangerouslySetInnerHTML={{
+                                                                    __html: operation?.error.stack_trace,
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 {activePerformanceReport && (
                                                     <OperationListPerfData operation={operation} />

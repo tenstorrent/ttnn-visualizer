@@ -154,6 +154,26 @@ class StackTrace(SerializeableDataclass):
     stack_trace: str
 
 
+@dataclasses.dataclass
+class ErrorRecord(SerializeableDataclass):
+    operation_id: int
+    operation_name: str
+    error_type: str
+    error_message: str
+    stack_trace: str
+    timestamp: str
+
+    def to_nested_dict(self) -> dict:
+        """
+        Returns a dictionary representation without operation_id and operation_name.
+        Use this when the error is nested under an operation to avoid redundancy.
+        """
+        result = self.to_dict()
+        result.pop("operation_id", None)
+        result.pop("operation_name", None)
+        return result
+
+
 # Non Data Models
 
 
