@@ -78,11 +78,16 @@
     }
 
     .list-item-container {
-        padding-bottom: 15px;
+        padding-top: 6px;
+        padding-bottom: 6px;
 
         // Style added to avoid possible infinite scroll loops
         // https://github.com/TanStack/virtual/issues/540#issuecomment-1720745734
         overflow-anchor: none;
+
+        &.has-error {
+            background-color: rgba($tt-red-accent, 0.5);
+        }
     }
 
     .high-number-consumers {

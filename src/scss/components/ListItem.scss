@@ -30,4 +30,25 @@
             color: $tt-tensors;
         }
     }
+
+    &.error-icon {
+        .bp6-icon:not([class*='bp6-intent-']).styled-icon {
+            color: $tt-red-accent;
+        }
+    }
+}
+
+// TODO: Temp location as we are going to refactor the error display in the short term
+.memory-error {
+    margin-bottom: 10px;
+
+    .memory-error-title {
+        font-size: 20px;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .code-wrapper {
+        margin-bottom: 20px;
+    }
 }
