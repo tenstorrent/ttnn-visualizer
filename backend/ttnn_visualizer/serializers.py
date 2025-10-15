@@ -33,7 +33,7 @@ def serialize_operations(
     errors_dict = {}
     if error_records:
         for error in error_records:
-            errors_dict[error.operation_id] = error.to_dict()
+            errors_dict[error.operation_id] = error.to_nested_dict()
 
     arguments_dict = defaultdict(list)
     for argument in operation_arguments:
@@ -186,8 +186,8 @@ def serialize_operation(
             device_operations_data = do.captured_graph
             break
 
-    # Convert error record to dict if it exists
-    error_data = error_record.to_dict() if error_record else None
+    # Convert error record to nested dict if it exists (excludes operation_id and operation_name)
+    error_data = error_record.to_nested_dict() if error_record else None
 
     return {
         **operation_data,
