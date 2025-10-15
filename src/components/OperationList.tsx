@@ -7,7 +7,7 @@ import { Button, ButtonGroup, Intent, PopoverPosition, Tooltip } from '@blueprin
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { VirtualItem, useVirtualizer } from '@tanstack/react-virtual';
 import { useAtom, useAtomValue } from 'jotai';
 import SearchField from './SearchField';
 import Collapsible from './Collapsible';
@@ -31,6 +31,7 @@ import OperationListPerfData from './OperationListPerfData';
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
+const TIMEOUT_TIME = 0;
 
 enum SortingOptions {
     OFF,
@@ -42,6 +43,8 @@ const OperationList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
     const [expandedOperations, setExpandedOperations] = useAtom(expandedOperationsAtom);
     const [operationListScroll, setOperationListScroll] = useAtom(operationListScrollAtom);
+    // TODO: Look more at this initialMeasurementsCache
+    const [initialMeasurementsCache, setInitialMeasurementsCache] = useState<VirtualItem[]>([]);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
@@ -58,11 +61,11 @@ const OperationList = () => {
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
-    // TODO: Figure out an initial scroll position based on last used operation - https://github.com/tenstorrent/ttnn-visualizer/issues/737
     const virtualizer = useVirtualizer({
         count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
         getScrollElement: () => scrollElementRef.current,
         estimateSize: () => OPERATION_EL_HEIGHT,
+        initialMeasurementsCache,
     });
     const virtualItems = virtualizer.getVirtualItems();
     const numberOfOperations = filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE;
@@ -122,6 +125,16 @@ const OperationList = () => {
         return fetchedOperations;
     }, [fetchedOperations, selectedOperationRange]);
 
+    useEffect(() => {
+        // console.log(
+        //     'update initial cache',
+        //     virtualizer.measurementsCache,
+        //     'total size:',
+        //     virtualizer.measurementsCache.reduce((sum, item) => sum + (item?.size ?? 0), 0),
+        // );
+        setInitialMeasurementsCache(virtualizer.measurementsCache);
+    }, [virtualizer.measurementsCache]);
+
     useMemo(() => {
         if (operationsWithRange) {
             let operations = [...operationsWithRange];
@@ -173,24 +186,28 @@ const OperationList = () => {
             // Looks better to scroll to the previous index
             const indexToScrollTo = Math.min(Math.max(operationIndex - 1, 0), numberOfOperations);
 
-            scrollToIndex(indexToScrollTo);
-            setOperationListScroll(operationIndex);
-            setFocussedRow(operationIndex);
+            // scrollToIndex is not instant, so we have to wait for the virtualHeight to be recalculated
+            setTimeout(() => {
+                scrollToIndex(indexToScrollTo);
+                setOperationListScroll(operationIndex);
+                setFocussedRow(operationIndex);
+            }, TIMEOUT_TIME);
 
             // Navigating to the same page replaces the entry in the browser history
-            // TODO: Revisit this code later to make sure it's not causing any weird side effects
             navigate(ROUTES.OPERATIONS, { replace: true });
 
             setOperationListScroll(operationIndex);
         } else if (operationListScroll !== null) {
             // Scrolling to the next item looks better, and if we do that we have to focus on the index after that one
-            const indexToScroll =
+            const indexToScrollTo =
                 operationListScroll === 0 ? 0 : Math.min(Math.max(operationListScroll + 1, 0), numberOfOperations);
-            const indexToFocus = indexToScroll > 0 ? indexToScroll + 1 : indexToScroll;
+            const indexToFocus = indexToScrollTo > 0 ? indexToScrollTo + 1 : indexToScrollTo;
 
-            scrollToIndex(indexToScroll);
-            setFocussedRow(indexToFocus);
-            // }
+            // scrollToIndex is not instant, so we have to wait for the virtualHeight to be recalculated
+            setTimeout(() => {
+                scrollToIndex(indexToScrollTo);
+                setFocussedRow(indexToFocus);
+            }, TIMEOUT_TIME);
         }
 
         // Bind event listener after scrollToIndex runs
@@ -206,7 +223,15 @@ const OperationList = () => {
     }, []);
 
     const scrollToIndex = useCallback(
-        (index: number) => virtualizer.scrollToIndex(index, { align: 'start' }),
+        (index: number) => {
+            // console.log(
+            //     'scrollToIndex',
+            //     virtualizer.measurementsCache,
+            //     'total size:',
+            //     virtualizer.measurementsCache.reduce((sum, item) => sum + (item?.size ?? 0), 0),
+            // );
+            virtualizer.scrollToIndex(index, { align: 'start' });
+        },
         [virtualizer],
     );
 
