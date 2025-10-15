@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, ButtonGroup, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Intent, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
@@ -14,7 +14,7 @@ import Collapsible from './Collapsible';
 import OperationArguments from './OperationArguments';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ListView.scss';
-import { useOperationsList } from '../hooks/useAPI';
+import { useMemoryErrors, useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
 import {
     activePerformanceReportAtom,
@@ -41,6 +41,7 @@ const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
+    const { data: memoryErrors } = useMemoryErrors();
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const [filterQuery, setFilterQuery] = useState('');
@@ -310,10 +311,13 @@ const OperationList = () => {
                         {filteredOperationsList?.length ? (
                             virtualItems.map((virtualRow) => {
                                 const operation = filteredOperationsList[virtualRow.index];
+                                const memoryError = memoryErrors?.find(
+                                    (mError) => mError.operation_id === operation.id,
+                                );
 
                                 return (
                                     <li
-                                        className='list-item-container'
+                                        className={classNames('list-item-container')}
                                         key={virtualRow.key}
                                         data-index={virtualRow.index}
                                         ref={virtualizer.measureElement}
@@ -324,8 +328,8 @@ const OperationList = () => {
                                                 <ListItem
                                                     filterName={getOperationFilterName(operation)}
                                                     filterQuery={filterQuery}
-                                                    icon={IconNames.CUBE}
-                                                    iconColour='operation'
+                                                    icon={memoryError ? IconNames.ERROR : IconNames.CUBE}
+                                                    iconColour={memoryError ? 'error' : 'operation'}
                                                 />
                                             }
                                             keepChildrenMounted={false}
@@ -336,8 +340,8 @@ const OperationList = () => {
                                                     text='Memory details'
                                                     intent={Intent.PRIMARY}
                                                     endIcon={IconNames.SEGMENTED_CONTROL}
-                                                    size='small'
-                                                    variant='outlined'
+                                                    size={Size.SMALL}
+                                                    variant={ButtonVariant.OUTLINED}
                                                 />
                                             }
                                             isOpen={expandedOperations.includes(operation.id)}
@@ -346,6 +350,35 @@ const OperationList = () => {
                                                 <p className='monospace'>
                                                     Python execution time: {formatSize(operation.duration)} s
                                                 </p>
+
+                                                {memoryError && (
+                                                    <div className='memory-error'>
+                                                        <p className='memory-error-title'>{memoryError.error_type}</p>
+                                                        <p>{memoryError.error_message}</p>
+
+                                                        <div className='code-wrapper'>
+                                                            <code
+                                                                className='language-python code-output'
+                                                                // eslint-disable-next-line react/no-danger
+                                                                dangerouslySetInnerHTML={{
+                                                                    __html: memoryError.error_message,
+                                                                }}
+                                                            />
+                                                        </div>
+
+                                                        <p className='memory-error-title'>Stack Trace</p>
+
+                                                        <div className='code-wrapper'>
+                                                            <code
+                                                                className='language-python code-output'
+                                                                // eslint-disable-next-line react/no-danger
+                                                                dangerouslySetInnerHTML={{
+                                                                    __html: memoryError.stack_trace,
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 {activePerformanceReport && (
                                                     <OperationListPerfData operation={operation} />
