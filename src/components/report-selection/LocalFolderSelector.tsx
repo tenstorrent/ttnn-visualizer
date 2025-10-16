@@ -134,9 +134,14 @@ const LocalFolderOptions: FC = () => {
                 createDataIntegrityWarning(response.data);
             }
 
+            const updatedReport = {
+                path: response.data.path,
+                reportName: response.data.reportName,
+            };
+
             setSelectedDevice(DEFAULT_DEVICE_ID);
-            setActiveProfilerReport(response.data.path);
-            createToastNotification('Active memory report', response.data.reportName);
+            setActiveProfilerReport(updatedReport);
+            createToastNotification('Active memory report', updatedReport.reportName);
             setProfilerReportLocation(ReportLocation.LOCAL);
             setProfilerFolder(connectionStatus);
         }
@@ -198,15 +203,15 @@ const LocalFolderOptions: FC = () => {
         }
     }, [isUploadingReport, isUploadingPerformance]);
 
-    const handleSelectProfiler = async (item: ReportFolder) => {
-        await updateInstance({ ...instance, active_report: { profiler_name: item.path } });
+    const handleSelectProfiler = async (folder: ReportFolder) => {
+        await updateInstance({ ...instance, active_report: { profiler_name: folder.path } });
 
-        if (hasBeenNormalised(item)) {
-            createDataIntegrityWarning(item);
+        if (hasBeenNormalised(folder)) {
+            createDataIntegrityWarning(folder);
         }
 
-        createToastNotification('Active memory report', getReportName(reportFolderList, item.path) ?? '');
-        setActiveProfilerReport(item.path);
+        createToastNotification('Active memory report', folder.reportName ?? '');
+        setActiveProfilerReport(folder);
         setProfilerReportLocation(ReportLocation.LOCAL);
     };
 
@@ -216,7 +221,7 @@ const LocalFolderOptions: FC = () => {
 
         createToastNotification('Memory report deleted', folder.reportName);
 
-        if (activeProfilerReport === folder.path) {
+        if (activeProfilerReport === folder) {
             setActiveProfilerReport(null);
             setProfilerUploadLabel('Choose directory...');
             setProfilerFolder(undefined);
@@ -256,9 +261,12 @@ const LocalFolderOptions: FC = () => {
                 <LocalFolderPicker
                     items={reportFolderList}
                     value={
-                        reportFolderList?.map((folder: ReportFolder) => folder.path).includes(activeProfilerReport) &&
+                        activeProfilerReport &&
+                        reportFolderList
+                            ?.map((folder: ReportFolder) => folder.path)
+                            .includes(activeProfilerReport.path) &&
                         profilerReportLocation === ReportLocation.LOCAL
-                            ? activeProfilerReport
+                            ? activeProfilerReport.path
                             : null
                     }
                     handleSelect={handleSelectProfiler}
@@ -358,9 +366,5 @@ const LocalFolderOptions: FC = () => {
 };
 
 const getFolderName = (files: FileList) => files[0].webkitRelativePath.split('/')[0];
-
-const getReportName = (reports: ReportFolder[], path: string | null) => {
-    return reports?.find((report) => report.path === path)?.reportName;
-};
 
 export default LocalFolderOptions;

@@ -46,7 +46,7 @@ it('Main Navigation enables specific options when there is an active memory repo
     render(
         <TestProviders
             initialAtomValues={[
-                [activeProfilerReportAtom, 'test'],
+                [activeProfilerReportAtom, { reportName: 'test', path: 'testPath' }],
                 [hasClusterDescriptionAtom, true],
             ]}
         >

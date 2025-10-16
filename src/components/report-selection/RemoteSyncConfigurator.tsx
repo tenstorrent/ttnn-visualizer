@@ -4,18 +4,17 @@
 
 import { FC, useState } from 'react';
 
-import { Button, FormGroup, Tooltip } from '@blueprintjs/core';
+import { Button, FormGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
 
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useSetAtom } from 'jotai';
 import { useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
-import getFolderNameFromPath from '../../definitions/getFolderNameFromPath';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import createToastNotification from '../../functions/createToastNotification';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
-import useRemote from '../../hooks/useRemote';
+import useRemoteConnection from '../../hooks/useRemote';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
@@ -30,7 +29,7 @@ import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/v
 import { ReportLocation } from '../../definitions/Reports';
 
 const RemoteSyncConfigurator: FC = () => {
-    const remote = useRemote();
+    const remote = useRemoteConnection();
     const queryClient = useQueryClient();
     const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
 
@@ -49,7 +48,7 @@ const RemoteSyncConfigurator: FC = () => {
     const [isSyncingReportFolder, setIsSyncingReportFolder] = useState(false);
     const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(
         activeProfilerReport
-            ? reportFolderList.find((folder) => folder.remotePath?.includes(activeProfilerReport))
+            ? reportFolderList.find((folder) => folder.remotePath?.includes(activeProfilerReport.path))
             : reportFolderList[0],
     );
 
@@ -84,7 +83,7 @@ const RemoteSyncConfigurator: FC = () => {
             return {
                 ...existingFolder,
                 ...updatedFolder,
-            } as RemoteFolder;
+            };
         });
 
         remote.persistentState.setSavedReportFolders(connection, mergedFolders);
@@ -105,7 +104,7 @@ const RemoteSyncConfigurator: FC = () => {
             return {
                 ...existingFolder,
                 ...updatedFolder,
-            } as RemoteFolder;
+            };
         });
 
         remote.persistentState.setSavedPerformanceFolders(connection, mergedFolders);
@@ -131,7 +130,10 @@ const RemoteSyncConfigurator: FC = () => {
         queryClient.clear();
         setProfilerReportLocation(ReportLocation.REMOTE);
         setSelectedDevice(DEFAULT_DEVICE_ID);
-        setActiveProfilerReport(getFolderNameFromPath(folder.remotePath));
+        setActiveProfilerReport({
+            path: folder.remotePath,
+            reportName: folder.reportName,
+        });
         createToastNotification('Active memory report', folder.reportName);
     };
 
@@ -289,7 +291,10 @@ const RemoteSyncConfigurator: FC = () => {
                     }}
                     type='profiler'
                 >
-                    <Tooltip content='Sync remote folder'>
+                    <Tooltip
+                        content='Sync remote folder'
+                        position={PopoverPosition.TOP}
+                    >
                         <Button
                             aria-label='Sync remote folder'
                             icon={IconNames.REFRESH}
@@ -381,7 +386,10 @@ const RemoteSyncConfigurator: FC = () => {
                         }}
                         type='performance'
                     >
-                        <Tooltip content='Sync remote folder'>
+                        <Tooltip
+                            content='Sync remote folder'
+                            position={PopoverPosition.TOP}
+                        >
                             <Button
                                 aria-label='Sync remote folder'
                                 icon={IconNames.REFRESH}
