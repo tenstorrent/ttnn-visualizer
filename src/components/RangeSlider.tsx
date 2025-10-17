@@ -46,7 +46,7 @@ function Range() {
     const setHasClusterDescription = useSetAtom(hasClusterDescriptionAtom);
 
     const { data: operations } = useOperationsList();
-    const { data: perfData, error: perfDataError } = usePerformanceReport(activePerformanceReport);
+    const { data: perfData, error: perfDataError } = usePerformanceReport(activePerformanceReport?.path || null);
     const { data: clusterData } = useGetClusterDescription();
     const location = useLocation();
     const listPerf = useGetDeviceOperationListPerf();
@@ -161,7 +161,7 @@ function Range() {
         if (perfDataError && activePerformanceReport) {
             createToastNotification(
                 'Performance data format is not supported, use TT-NN Visualizer v0.49.0',
-                activePerformanceReport,
+                activePerformanceReport?.reportName,
                 true,
             );
         }

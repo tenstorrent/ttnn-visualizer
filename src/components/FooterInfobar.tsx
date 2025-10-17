@@ -58,6 +58,7 @@ function FooterInfobar() {
     const activeProfilerReportPath = activeProfilerReport?.path;
     const hasLoadedRemoteReport =
         instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
+    const activePerformanceReportName = activePerformanceReport?.reportName;
 
     const serverConfig = getServerConfig();
     const isServerMode = serverConfig.SERVER_MODE;
@@ -101,23 +102,21 @@ function FooterInfobar() {
                         </Tooltip>
                     )}
 
-                    {activePerformanceReport &&
-                        (activePerformanceReport.length > MAX_TITLE_LENGTH ? (
-                            <Tooltip
-                                content={`/${activePerformanceReport}`}
-                                position={PopoverPosition.TOP}
-                            >
-                                <div className='title'>
-                                    <strong>Performance:</strong>
-                                    <span className='report-name'>{activePerformanceReport}</span>
-                                </div>
-                            </Tooltip>
-                        ) : (
+                    {activePerformanceReportName && (
+                        <Tooltip
+                            content={
+                                activePerformanceReportName?.length > MAX_TITLE_LENGTH
+                                    ? `/${activePerformanceReportName}`
+                                    : ''
+                            }
+                            position={PopoverPosition.TOP}
+                        >
                             <div className='title'>
                                 <strong>Performance:</strong>
-                                <span className='report-name'>{activePerformanceReport}</span>
+                                <span className='report-name'>{activePerformanceReportName}</span>
                             </div>
-                        ))}
+                        </Tooltip>
+                    )}
                     {activeProfilerReport && activePerformanceReport && <SyncStatus />}
                 </div>
 

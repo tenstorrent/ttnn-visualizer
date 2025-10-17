@@ -56,6 +56,8 @@ function Layout() {
             ? getRemoteReportName(remoteFolders, profilerReportPath) || ''
             : getLocalReportName(reports, profilerReportPath) || '';
 
+    const perfReportPath = instance?.active_report?.performance_name || null;
+
     useEffect(() => {
         if (instance?.active_report) {
             setActiveProfilerReport(
@@ -66,7 +68,14 @@ function Layout() {
                       }
                     : null,
             );
-            setActivePerformanceReport(instance.active_report?.performance_name ?? null);
+            setActivePerformanceReport(
+                perfReportPath
+                    ? {
+                          path: perfReportPath,
+                          reportName: perfReportPath,
+                      }
+                    : null,
+            );
             setActiveNpe(instance.active_report?.npe_name ?? null);
             setProfilerReportLocation(
                 instance?.profiler_path?.includes('/remote') ? ReportLocation.REMOTE : ReportLocation.LOCAL,
@@ -76,6 +85,7 @@ function Layout() {
         instance,
         profilerReportPath,
         profilerReportName,
+        perfReportPath,
         setActiveProfilerReport,
         setActivePerformanceReport,
         setActiveNpe,

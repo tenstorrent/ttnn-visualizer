@@ -19,7 +19,7 @@ import { BufferType } from '../model/BufferType';
 export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
 export const performanceReportLocationAtom = atom<ReportLocation | null>(null);
 export const activeProfilerReportAtom = atom<ReportFolder | null>(null);
-export const activePerformanceReportAtom = atom<string | null>(null);
+export const activePerformanceReportAtom = atom<ReportFolder | null>(null);
 export const activeNpeOpTraceAtom = atom<string | null>(null);
 export const hasClusterDescriptionAtom = atom<boolean>(false);
 

@@ -114,6 +114,16 @@ const LocalFolderOptions: FC = () => {
         [activeProfilerReport, reportFolderList, profilerReportLocation],
     );
 
+    const perfFolderPickerValue = useMemo(
+        () =>
+            activePerformanceReport &&
+            perfFolderList?.some((folder: ReportFolder) => folder.path.includes(activePerformanceReport.path)) &&
+            performanceReportLocation === ReportLocation.LOCAL
+                ? activePerformanceReport.path
+                : null,
+        [activePerformanceReport, perfFolderList, performanceReportLocation],
+    );
+
     const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
 
     const handleReportDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -190,7 +200,7 @@ const LocalFolderOptions: FC = () => {
             const fileName = getFolderName(files);
             setPerformanceDataUploadLabel(`${files.length} files uploaded`);
             setPerformanceReportLocation(ReportLocation.LOCAL);
-            setActivePerformanceReport(fileName);
+            setActivePerformanceReport({ path: fileName, reportName: fileName });
             createToastNotification('Active performance report', fileName);
         }
 
@@ -227,11 +237,11 @@ const LocalFolderOptions: FC = () => {
         }
     };
 
-    const handleSelectPerformance = async (item: ReportFolder) => {
-        await updateInstance({ ...instance, active_report: { performance_name: item.path } });
+    const handleSelectPerformance = async (folder: ReportFolder) => {
+        await updateInstance({ ...instance, active_report: { performance_name: folder.path } });
 
-        createToastNotification('Active performance report', item.reportName);
-        setActivePerformanceReport(item.path);
+        createToastNotification('Active performance report', folder.reportName);
+        setActivePerformanceReport(folder);
         setPerformanceReportLocation(ReportLocation.LOCAL);
     };
 
@@ -241,7 +251,7 @@ const LocalFolderOptions: FC = () => {
 
         createToastNotification(`Performance report deleted`, folder.reportName);
 
-        if (activePerformanceReport === folder.reportName) {
+        if (activePerformanceReport?.path === folder.path) {
             setActivePerformanceReport(null);
             setPerformanceDataUploadLabel('Choose directory...');
             setPerformanceFolder(undefined);
@@ -321,13 +331,7 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={perfFolderList}
-                    value={
-                        perfFolderList
-                            ?.map((folder: ReportFolder) => folder.reportName)
-                            .includes(activePerformanceReport) && performanceReportLocation === ReportLocation.LOCAL
-                            ? activePerformanceReport
-                            : null
-                    }
+                    value={perfFolderPickerValue}
                     handleSelect={handleSelectPerformance}
                     handleDelete={handleDeletePerformance}
                 />

@@ -648,7 +648,7 @@ export interface DeviceOperationMapping {
 // Unused
 const useProxyPerformanceReport = (): PerformanceReportResponse => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const response = usePerformanceReport(activePerformanceReport);
+    const response = usePerformanceReport(activePerformanceReport?.path || null);
 
     return useMemo(() => {
         if (!response.data) {
@@ -698,7 +698,7 @@ export const useOpToPerfIdFiltered = () => {
 
 export const usePerformanceRange = (): NumberRange | null => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const { data: perfData } = usePerformanceReport(activePerformanceReport);
+    const { data: perfData } = usePerformanceReport(activePerformanceReport?.path || null);
 
     return useMemo(
         () =>
