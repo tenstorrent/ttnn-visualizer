@@ -19,31 +19,6 @@ const formatter = new Intl.DateTimeFormat('en-US', {
 
 type FolderTypes = 'performance' | 'profiler';
 
-const formatRemoteFolderName = (
-    folder: RemoteFolder,
-    type: FolderTypes,
-    selectedConnection?: RemoteConnection,
-): string => {
-    if (!folder || !selectedConnection) {
-        return 'n/a';
-    }
-
-    const paths = {
-        profiler: selectedConnection.profilerPath,
-        performance: selectedConnection.performancePath,
-    };
-
-    const pathToReplace = paths[type]!;
-
-    return folder.remotePath.toLowerCase().replace(pathToReplace.toLowerCase(), '');
-};
-
-const filterFolders =
-    (type: FolderTypes, connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
-    (query, folder) => {
-        return formatRemoteFolderName(folder, type, connection).toLowerCase().includes(query.toLowerCase());
-    };
-
 const remoteFolderRenderer =
     (
         syncingFolderList: boolean,
@@ -56,7 +31,7 @@ const remoteFolderRenderer =
             return null;
         }
 
-        const { lastSynced, lastModified, reportName } = folder;
+        const { lastSynced, lastModified, reportName, remotePath } = folder;
         const lastSyncedDate = lastSynced ? formatter.format(getUTC(lastSynced)) : 'Never';
 
         let statusIcon = (
@@ -100,12 +75,12 @@ const remoteFolderRenderer =
         return (
             <MenuItem
                 className='remote-folder-item'
-                active={selectedFolder?.reportName === reportName}
+                active={selectedFolder?.remotePath === remotePath}
                 disabled={modifiers.disabled}
                 key={`${formatRemoteFolderName(folder, type, connection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
                 text={formatRemoteFolderName(folder, type, connection)}
-                icon={selectedFolder?.reportName === reportName ? IconNames.SAVED : IconNames.DOCUMENT}
+                icon={selectedFolder?.remotePath === remotePath ? IconNames.SAVED : IconNames.DOCUMENT}
                 labelElement={getLabelElement(query)}
                 labelClassName='remote-folder-status-icon'
             />
@@ -163,7 +138,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
                     icon={icon as IconName}
                     endIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={isDisabled}
-                    text={remoteFolder ? formatRemoteFolderName(remoteFolder, type, remoteConnection) : fallbackLabel}
+                    text={remoteFolder?.reportName ?? fallbackLabel}
                 />
             </Select>
 
@@ -178,5 +153,30 @@ const getUTC = (epoch: number): Date => {
 
     return date;
 };
+
+const formatRemoteFolderName = (
+    folder: RemoteFolder,
+    type: FolderTypes,
+    selectedConnection?: RemoteConnection,
+): string => {
+    if (!folder || !selectedConnection) {
+        return 'n/a';
+    }
+
+    const paths = {
+        profiler: selectedConnection.profilerPath,
+        performance: selectedConnection.performancePath,
+    };
+
+    const pathToReplace = paths[type]!;
+
+    return folder.remotePath.toLowerCase().replace(pathToReplace.toLowerCase(), '');
+};
+
+const filterFolders =
+    (type: FolderTypes, connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
+    (query, folder) => {
+        return formatRemoteFolderName(folder, type, connection).toLowerCase().includes(query.toLowerCase());
+    };
 
 export default RemoteFolderSelector;

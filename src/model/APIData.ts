@@ -85,10 +85,14 @@ export interface OperationDetailsData extends Operation {
 }
 
 export interface Instance {
-    active_report?: { performance_name?: string; profiler_name?: string; npe_name?: string };
-    remote_connection?: RemoteConnection;
-    remote_profiler_folder?: RemoteFolder;
-    remote_performance_folder?: RemoteFolder;
+    instance_id: string;
+    profiler_path: string | null;
+    performance_path: string | null;
+    npe_path: string | null;
+    active_report: { performance_name?: string; profiler_name?: string; npe_name?: string } | null;
+    remote_connection: RemoteConnection | null;
+    remote_profiler_folder: RemoteFolder | null;
+    remote_performance_folder: RemoteFolder | null;
 }
 
 export enum FileStatus {

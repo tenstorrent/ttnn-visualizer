@@ -26,7 +26,10 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     updateInstance: () => ({
         ...mockInstanceEmpty,
         active_report: {
-            profiler_name: mockProfilerFolderList[0].reportName,
+            profiler: {
+                reportName: mockProfilerFolderList[0].reportName,
+                path: mockProfilerFolderList[0].path,
+            },
         },
         profiler_path: `/Users/ctr-dblundell/Projects/ttnn-visualizer/backend/ttnn_visualizer/data/local/profiler-reports/${mockProfilerFolderList[0].path}`,
     }),

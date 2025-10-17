@@ -119,7 +119,7 @@ function BufferSummary() {
                                 compact
                             >
                                 <p>
-                                    {`We've been unable to load the L1 buffer data for /${activeProfilerReport}.`}
+                                    {`We've been unable to load the L1 buffer data for /${activeProfilerReport?.path}.`}
                                     <br />
                                     {buffersError.message}
                                 </p>
@@ -152,7 +152,7 @@ function BufferSummary() {
                                 compact
                             >
                                 <p>
-                                    {`We've been unable to load the DRAM buffer data for /${activeProfilerReport}.`}
+                                    {`We've been unable to load the DRAM buffer data for /${activeProfilerReport?.path}.`}
                                     <br />
                                     {buffersError.message}
                                 </p>

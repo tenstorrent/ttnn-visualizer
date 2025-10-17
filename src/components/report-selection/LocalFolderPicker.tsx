@@ -6,11 +6,13 @@ import { useState } from 'react';
 import { Alert, Button, ButtonVariant, Intent, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
+import { useAtomValue } from 'jotai';
 import { useInstance } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
 import HighlightedText from '../HighlightedText';
+import { activeProfilerReportAtom } from '../../store/app';
 
 interface LocalFolderPickerProps {
     items: ReportFolder[];
@@ -29,12 +31,14 @@ const LocalFolderPicker = ({
     handleDelete,
     defaultLabel = 'Select a report...',
 }: LocalFolderPickerProps) => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
     const { data: instance } = useInstance();
-    const isDisabled = !items || items.length === 0;
-    const path = value || '';
 
     const [folderToDelete, setFolderToDelete] = useState<ReportFolder | null>(null);
 
+    const isDisabled = !items || items.length === 0;
+    const activePath = value;
     const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
 
     // Map through items and if reportNames are duplicated append (count) to the name
@@ -80,11 +84,11 @@ const LocalFolderPicker = ({
                     }
                     labelClassName='folder-picker-name-label'
                     roleStructure='listoption'
-                    active={folder.path === path}
+                    active={folder.path === activePath}
                     disabled={modifiers.disabled}
                     onClick={handleClick}
                     onFocus={handleFocus}
-                    icon={folder.path === path ? IconNames.SAVED : IconNames.DOCUMENT}
+                    icon={folder.path === activePath ? IconNames.SAVED : IconNames.DOCUMENT}
                 />
 
                 {handleDelete && !isDeleteDisabled && (
@@ -140,14 +144,10 @@ const LocalFolderPicker = ({
             onItemSelect={handleSelect}
             disabled={!items || !instance}
         >
-            <Tooltip content={path ? `/${getPrettyPath(path)}` : ''}>
+            <Tooltip content={activePath ? `/${activePath}` : ''}>
                 <Button
                     className='folder-picker-button'
-                    text={
-                        itemsWithUniqueReportNames && path
-                            ? getReportName(itemsWithUniqueReportNames, path)
-                            : defaultLabel
-                    }
+                    text={activePath && activeProfilerReport ? activeProfilerReport.reportName : defaultLabel}
                     disabled={isDisabled || !instance}
                     alignText='start'
                     icon={IconNames.DOCUMENT_OPEN}
@@ -159,9 +159,6 @@ const LocalFolderPicker = ({
         </Select>
     );
 };
-
-const getReportName = (reports: ReportFolder[], path: string | null) =>
-    reports?.find((report) => report.path === path)?.reportName;
 
 const PATH_REGEX = /^\d+_/gm;
 const getPrettyPath = (path: string) => (PATH_REGEX.test(path) ? path.replace(PATH_REGEX, '') : path);

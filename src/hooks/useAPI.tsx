@@ -248,7 +248,7 @@ const useGetAllBuffers = (bufferType: BufferType | null) => {
 
     return useQuery<Buffer[], AxiosError>({
         queryFn: () => fetchAllBuffers(bufferType),
-        queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
+        queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport?.path],
         staleTime: Infinity,
     });
 };
@@ -438,7 +438,7 @@ export const useGetClusterDescription = () => {
 
     return useQuery({
         queryFn: () => fetchClusterDescription(),
-        queryKey: ['get-cluster-description', activeProfilerReport],
+        queryKey: ['get-cluster-description', activeProfilerReport?.path],
         initialData: null,
         retry: false,
     });
@@ -448,7 +448,7 @@ export const useOperationsList = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     return useQuery<OperationDescription[], AxiosError>({
         queryFn: () => (activeProfilerReport !== null ? fetchOperations() : Promise.resolve([])),
-        queryKey: ['get-operations', activeProfilerReport],
+        queryKey: ['get-operations', activeProfilerReport?.path],
         retry: false,
         staleTime: Infinity,
     });
@@ -459,7 +459,7 @@ export const useOperationListRange = (): NumberRange | null => {
 
     return useMemo(
         () => (response?.data?.length ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
-        // TODO: this used to rely on response.isLoading... which iis an invalid dependency. will have to wait for david to come  bakc.
+        // TODO: this used to rely on response.isLoading... which iis an invalid dependency. will have to wait for david to come back.
         // this fixes #613 https://github.com/tenstorrent/ttnn-visualizer/issues/613
         [response.data],
     );
@@ -717,7 +717,7 @@ export const useReportMeta = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<ReportMetaData, AxiosError>({
-        queryKey: ['get-report-config', activeProfilerReport],
+        queryKey: ['get-report-config', activeProfilerReport?.path],
         queryFn: () => fetchReportMeta(),
     });
 };
@@ -771,7 +771,7 @@ export const useTensors = () => {
 
     return useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(),
-        queryKey: ['get-tensors', activeProfilerReport],
+        queryKey: ['get-tensors', activeProfilerReport?.path],
         retry: false,
         staleTime: Infinity,
     });
@@ -781,8 +781,8 @@ export const useDevices = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<DeviceData[], AxiosError>({
-        queryFn: () => (activeProfilerReport !== null ? fetchDevices(activeProfilerReport) : Promise.resolve([])),
-        queryKey: ['get-devices', activeProfilerReport],
+        queryFn: () => (activeProfilerReport !== null ? fetchDevices(activeProfilerReport?.path) : Promise.resolve([])),
+        queryKey: ['get-devices', activeProfilerReport?.path],
         retry: false,
         staleTime: Infinity,
     });
@@ -935,7 +935,7 @@ export const useInstance = () => {
 
     return useQuery({
         queryFn: () => fetchInstance(),
-        queryKey: ['fetch-instance', activeProfilerReport, activePerformanceReport, activeNpe],
+        queryKey: ['fetch-instance', activeProfilerReport?.path, activePerformanceReport, activeNpe],
         initialData: null,
     });
 };

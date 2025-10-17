@@ -4,7 +4,7 @@
 
 import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ChangeEvent, type FC, useEffect, useState } from 'react';
+import { ChangeEvent, type FC, useEffect, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtom, useSetAtom } from 'jotai';
@@ -104,6 +104,18 @@ const LocalFolderOptions: FC = () => {
     const [performanceFolder, setPerformanceFolder] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
+    const folderPickerValue = useMemo(
+        () =>
+            activeProfilerReport &&
+            reportFolderList?.some((folder: ReportFolder) => folder.path.includes(activeProfilerReport.path)) &&
+            profilerReportLocation === ReportLocation.LOCAL
+                ? activeProfilerReport.path
+                : null,
+        [activeProfilerReport, reportFolderList, profilerReportLocation],
+    );
+
+    const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
+
     const handleReportDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) {
             return;
@@ -134,9 +146,14 @@ const LocalFolderOptions: FC = () => {
                 createDataIntegrityWarning(response.data);
             }
 
+            const updatedReport = {
+                path: response.data.path,
+                reportName: response.data.reportName,
+            };
+
             setSelectedDevice(DEFAULT_DEVICE_ID);
-            setActiveProfilerReport(response.data.path);
-            createToastNotification('Active memory report', response.data.reportName);
+            setActiveProfilerReport(updatedReport);
+            createToastNotification('Active memory report', updatedReport.reportName);
             setProfilerReportLocation(ReportLocation.LOCAL);
             setProfilerFolder(connectionStatus);
         }
@@ -182,31 +199,18 @@ const LocalFolderOptions: FC = () => {
         setPerformanceFolder(connectionStatus);
     };
 
-    useEffect(() => {
-        if (isUploadingReport) {
-            setProfilerFolder({
-                status: ConnectionTestStates.PROGRESS,
-                message: 'Files uploading...',
-            });
+    const handleSelectProfiler = async (folder: ReportFolder) => {
+        await updateInstance({
+            ...instance,
+            active_report: { profiler_name: folder.path },
+        });
+
+        if (hasBeenNormalised(folder)) {
+            createDataIntegrityWarning(folder);
         }
 
-        if (isUploadingPerformance) {
-            setPerformanceFolder({
-                status: ConnectionTestStates.PROGRESS,
-                message: 'Files uploading...',
-            });
-        }
-    }, [isUploadingReport, isUploadingPerformance]);
-
-    const handleSelectProfiler = async (item: ReportFolder) => {
-        await updateInstance({ ...instance, active_report: { profiler_name: item.path } });
-
-        if (hasBeenNormalised(item)) {
-            createDataIntegrityWarning(item);
-        }
-
-        createToastNotification('Active memory report', getReportName(reportFolderList, item.path) ?? '');
-        setActiveProfilerReport(item.path);
+        createToastNotification('Active memory report', folder.reportName ?? '');
+        setActiveProfilerReport(folder);
         setProfilerReportLocation(ReportLocation.LOCAL);
     };
 
@@ -216,7 +220,7 @@ const LocalFolderOptions: FC = () => {
 
         createToastNotification('Memory report deleted', folder.reportName);
 
-        if (activeProfilerReport === folder.path) {
+        if (activeProfilerReport === folder) {
             setActiveProfilerReport(null);
             setProfilerUploadLabel('Choose directory...');
             setProfilerFolder(undefined);
@@ -244,7 +248,21 @@ const LocalFolderOptions: FC = () => {
         }
     };
 
-    const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
+    useEffect(() => {
+        if (isUploadingReport) {
+            setProfilerFolder({
+                status: ConnectionTestStates.PROGRESS,
+                message: 'Files uploading...',
+            });
+        }
+
+        if (isUploadingPerformance) {
+            setPerformanceFolder({
+                status: ConnectionTestStates.PROGRESS,
+                message: 'Files uploading...',
+            });
+        }
+    }, [isUploadingReport, isUploadingPerformance]);
 
     return (
         <>
@@ -255,12 +273,7 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={reportFolderList}
-                    value={
-                        reportFolderList?.map((folder: ReportFolder) => folder.path).includes(activeProfilerReport) &&
-                        profilerReportLocation === ReportLocation.LOCAL
-                            ? activeProfilerReport
-                            : null
-                    }
+                    value={folderPickerValue}
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
                 />
@@ -358,9 +371,5 @@ const LocalFolderOptions: FC = () => {
 };
 
 const getFolderName = (files: FileList) => files[0].webkitRelativePath.split('/')[0];
-
-const getReportName = (reports: ReportFolder[], path: string | null) => {
-    return reports?.find((report) => report.path === path)?.reportName;
-};
 
 export default LocalFolderOptions;
