@@ -459,7 +459,7 @@ export const useOperationListRange = (): NumberRange | null => {
 
     return useMemo(
         () => (response?.data?.length ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
-        // TODO: this used to rely on response.isLoading... which iis an invalid dependency. will have to wait for david to come  bakc.
+        // TODO: this used to rely on response.isLoading... which iis an invalid dependency. will have to wait for david to come back.
         // this fixes #613 https://github.com/tenstorrent/ttnn-visualizer/issues/613
         [response.data],
     );

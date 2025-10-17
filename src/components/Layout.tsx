@@ -5,7 +5,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Classes } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.min.css';
 import 'styles/components/ToastOverrides.scss';
@@ -39,42 +39,48 @@ function Layout() {
     const setActiveProfilerReport = useSetAtom(activeProfilerReportAtom);
     const setActivePerformanceReport = useSetAtom(activePerformanceReportAtom);
     const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
-    const reportLocation = useAtomValue(profilerReportLocationAtom);
+    const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
+
     const remote = useRemoteConnection();
-
-    const appVersion = import.meta.env.APP_VERSION;
-    const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
-
     const { data: instance } = useInstance();
     const { data: reports } = useReportFolderList();
     const location = useLocation();
 
+    const appVersion = import.meta.env.APP_VERSION;
+    const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
     const state = location.state as { background?: Location };
+
+    const profilerReportPath = instance?.active_report?.profiler_name || null;
+    const profilerReportName =
+        (profilerReportLocation === ReportLocation.REMOTE && profilerReportPath) || instance?.remote_profiler_folder
+            ? getRemoteReportName(remoteFolders, profilerReportPath) || ''
+            : getLocalReportName(reports, profilerReportPath) || '';
 
     useEffect(() => {
         if (instance?.active_report) {
             setActiveProfilerReport(
-                instance.active_report?.profiler_name
+                profilerReportPath
                     ? {
-                          path: instance.active_report.profiler_name,
-                          reportName:
-                              reportLocation === ReportLocation.REMOTE
-                                  ? getRemoteReportName(remoteFolders, instance.active_report.profiler_name) || ''
-                                  : getLocalReportName(reports, instance.active_report.profiler_name) || '',
+                          path: profilerReportPath,
+                          reportName: profilerReportName,
                       }
                     : null,
             );
             setActivePerformanceReport(instance.active_report?.performance_name ?? null);
             setActiveNpe(instance.active_report?.npe_name ?? null);
+            setProfilerReportLocation(
+                instance?.profiler_path?.includes('/remote') ? ReportLocation.REMOTE : ReportLocation.LOCAL,
+            );
         }
     }, [
         instance,
+        profilerReportPath,
+        profilerReportName,
         setActiveProfilerReport,
         setActivePerformanceReport,
         setActiveNpe,
-        reports,
-        reportLocation,
-        remoteFolders,
+        profilerReportLocation,
+        setProfilerReportLocation,
     ]);
 
     return (
@@ -86,7 +92,7 @@ function Layout() {
                 <meta charSet='utf-8' />
                 <meta
                     name='description'
-                    content='A comprehensive tool for visualizing and analysing model execution, offering interactive graphs, memory plots, tensor details, buffer overviews, operation flow graphs, and multi-instance support with file or SSH-based report loading.'
+                    content='A comprehensive tool for visualizing and analyzing model execution, offering interactive graphs, memory plots, tensor details, buffer overviews, operation flow graphs, and multi-instance support with file or SSH-based report loading.'
                 />
             </Helmet>
 

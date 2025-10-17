@@ -4,7 +4,7 @@
 
 import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ChangeEvent, type FC, useEffect, useState } from 'react';
+import { ChangeEvent, type FC, useEffect, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtom, useSetAtom } from 'jotai';
@@ -104,6 +104,18 @@ const LocalFolderOptions: FC = () => {
     const [performanceFolder, setPerformanceFolder] = useState<ConnectionStatus | undefined>();
     const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
 
+    const folderPickerValue = useMemo(
+        () =>
+            activeProfilerReport &&
+            reportFolderList?.some((folder: ReportFolder) => folder.path.includes(activeProfilerReport.path)) &&
+            profilerReportLocation === ReportLocation.LOCAL
+                ? activeProfilerReport.path
+                : null,
+        [activeProfilerReport, reportFolderList, profilerReportLocation],
+    );
+
+    const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
+
     const handleReportDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) {
             return;
@@ -187,24 +199,11 @@ const LocalFolderOptions: FC = () => {
         setPerformanceFolder(connectionStatus);
     };
 
-    useEffect(() => {
-        if (isUploadingReport) {
-            setProfilerFolder({
-                status: ConnectionTestStates.PROGRESS,
-                message: 'Files uploading...',
-            });
-        }
-
-        if (isUploadingPerformance) {
-            setPerformanceFolder({
-                status: ConnectionTestStates.PROGRESS,
-                message: 'Files uploading...',
-            });
-        }
-    }, [isUploadingReport, isUploadingPerformance]);
-
     const handleSelectProfiler = async (folder: ReportFolder) => {
-        await updateInstance({ ...instance, active_report: { profiler_name: folder.path } });
+        await updateInstance({
+            ...instance,
+            active_report: { profiler_name: folder.path },
+        });
 
         if (hasBeenNormalised(folder)) {
             createDataIntegrityWarning(folder);
@@ -249,7 +248,21 @@ const LocalFolderOptions: FC = () => {
         }
     };
 
-    const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
+    useEffect(() => {
+        if (isUploadingReport) {
+            setProfilerFolder({
+                status: ConnectionTestStates.PROGRESS,
+                message: 'Files uploading...',
+            });
+        }
+
+        if (isUploadingPerformance) {
+            setPerformanceFolder({
+                status: ConnectionTestStates.PROGRESS,
+                message: 'Files uploading...',
+            });
+        }
+    }, [isUploadingReport, isUploadingPerformance]);
 
     return (
         <>
@@ -260,15 +273,7 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={reportFolderList}
-                    value={
-                        activeProfilerReport &&
-                        reportFolderList
-                            ?.map((folder: ReportFolder) => folder.path)
-                            .includes(activeProfilerReport.path) &&
-                        profilerReportLocation === ReportLocation.LOCAL
-                            ? activeProfilerReport.path
-                            : null
-                    }
+                    value={folderPickerValue}
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
                 />

@@ -9,10 +9,10 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import { useInstance } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
-import { ReportFolder, ReportLocation } from '../../definitions/Reports';
+import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
 import HighlightedText from '../HighlightedText';
-import { activeProfilerReportAtom, profilerReportLocationAtom } from '../../store/app';
+import { activeProfilerReportAtom } from '../../store/app';
 
 interface LocalFolderPickerProps {
     items: ReportFolder[];
@@ -31,7 +31,6 @@ const LocalFolderPicker = ({
     handleDelete,
     defaultLabel = 'Select a report...',
 }: LocalFolderPickerProps) => {
-    const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     const { data: instance } = useInstance();
@@ -39,7 +38,7 @@ const LocalFolderPicker = ({
     const [folderToDelete, setFolderToDelete] = useState<ReportFolder | null>(null);
 
     const isDisabled = !items || items.length === 0;
-    const activePath = value || null;
+    const activePath = value;
     const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
 
     // Map through items and if reportNames are duplicated append (count) to the name
@@ -145,10 +144,10 @@ const LocalFolderPicker = ({
             onItemSelect={handleSelect}
             disabled={!items || !instance}
         >
-            <Tooltip content={activePath && !isRemote ? `/${activePath}` : ''}>
+            <Tooltip content={activePath ? `/${activePath}` : ''}>
                 <Button
                     className='folder-picker-button'
-                    text={activeProfilerReport && !isRemote ? activeProfilerReport.reportName : defaultLabel}
+                    text={activePath && activeProfilerReport ? activeProfilerReport.reportName : defaultLabel}
                     disabled={isDisabled || !instance}
                     alignText='start'
                     icon={IconNames.DOCUMENT_OPEN}
