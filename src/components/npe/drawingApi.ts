@@ -232,11 +232,14 @@ export const calculateLinkCongestionColor = (value: number, min: number = 0, isH
     const max = 150;
     const normalizedVal = Math.min(value, max);
     const ratio = (normalizedVal - min) / (max - min);
-    const intensity = Math.round(ratio * 255);
-    if (isHC) {
-        return `rgb(${intensity},${intensity},${255 - intensity})`;
-    }
 
+    if (isHC) {
+        const r = Math.round(ratio * 255);
+        const g = Math.round(100 + ratio * (165 - 100));
+        const b = Math.round(255 - ratio * 255);
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+    const intensity = Math.round(ratio * 255);
     return `rgb(${intensity}, ${255 - intensity}, 0)`;
 };
 

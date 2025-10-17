@@ -6,6 +6,15 @@ import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection'
 import { BufferMemoryLayout, MemoryConfig } from '../functions/parseMemoryConfig';
 import { BufferType } from './BufferType';
 
+interface OperationError {
+    operation_id: number;
+    operation_name: string;
+    error_type: string;
+    error_message: string;
+    stack_trace: string;
+    timestamp: string;
+}
+
 export interface Operation {
     id: number;
     name: string;
@@ -14,6 +23,7 @@ export interface Operation {
     stack_trace: string;
     device_operations: Node[];
     operationFileIdentifier: string;
+    error: OperationError | null;
 }
 
 export interface Tensor {
@@ -113,6 +123,7 @@ export const defaultOperationDetailsData: OperationDetailsData = {
     stack_trace: '',
     device_operations: [],
     operationFileIdentifier: '',
+    error: null,
 };
 
 export const defaultTensorData: Tensor = {

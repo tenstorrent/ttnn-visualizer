@@ -134,6 +134,7 @@ class TestSerializers(unittest.TestCase):
                         "device_addresses": [25],
                     }
                 ],
+                "error": None,
             }
         ]
 
@@ -447,6 +448,7 @@ class TestSerializers(unittest.TestCase):
                 }
             ],
             "stack_trace": "trace1",
+            "error": None,
         }
 
         self.assertEqual(result, expected)

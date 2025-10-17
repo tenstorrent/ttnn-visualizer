@@ -44,6 +44,7 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
             <div className='collapsible-controls'>
                 {children && (
                     <Button
+                        className='collapsible-button'
                         size='small'
                         variant='minimal'
                         onClick={

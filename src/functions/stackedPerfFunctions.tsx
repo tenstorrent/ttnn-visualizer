@@ -31,7 +31,8 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
     NlpCreateHeadsDeviceOperation: CellColour.Blue,
     NLPConcatHeadsDecodeDeviceOperation: CellColour.Blue,
     UpdateCache: CellColour.Blue,
-    OptimizedConvNew: CellColour.Orange,
+    OptimizedConvNew: CellColour.Orange, // Deprecated - Conv2d is the new name for this operation
+    Conv2d: CellColour.Orange,
 };
 
 const DEFAULT_COLOUR = CellColour.White;

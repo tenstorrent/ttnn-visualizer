@@ -10,6 +10,7 @@ import { Button, ButtonGroup, ButtonVariant, Intent, Size, Slider, Switch } from
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
+import { useAtom } from 'jotai';
 import {
     EVENT_TYPE_FILTER,
     FABRIC_EVENT_SCOPE_OPTIONS,
@@ -40,6 +41,8 @@ import NPEMetadata from './NPEMetadata';
 import { EmptyChipRenderer } from './EmptyChipRenderer';
 import { RouteOriginsRenderer } from './RouteOriginsRenderer';
 import { useSelectedTransferGrouping, useShowActiveTransfers } from './useNPEHandlers';
+import { altCongestionColorsAtom } from '../../store/app';
+import GlobalSwitch from '../GlobalSwitch';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -81,6 +84,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
+    const [altCongestionColors, setAltCongestionColors] = useAtom(altCongestionColorsAtom);
     const [fabricEventsFilter, setFabricEventsFilter] = useState<EVENT_TYPE_FILTER>(EVENT_TYPE_FILTER.ALL_EVENTS);
     const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
 
@@ -272,21 +276,6 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedTransferList(activeTransfers as NoCTransfer[]);
     };
 
-    // DEBUG CODE, keeping for now
-    // useEffect(() => {
-    //     // console.log('------------ selected transfers -------------');
-    //     // console.log(selectedTransferList);
-    //     selectedTransferList
-    //         .find((transfer) => {
-    //             return transfer.id === 50;
-    //         })
-    //         ?.route.forEach((r) => console.log(r));
-    // }, [selectedTransferList]);
-    // useEffect(() => {
-    //     // console.log('route', highlightedRoute);
-    //     // console.log('transfer', highlightedTransfer);
-    // }, [highlightedRoute, highlightedTransfer]);
-
     const getOriginOpacity = (transfer: NoCFlowBase): number => {
         if (transfer.id === null || transfer.id === undefined) {
             return 1;
@@ -400,6 +389,11 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                 onClick={() => setVisualizationMode(VISUALIZATION_MODE.TRANSFERS)}
                             />
                         </ButtonGroup>
+                        <GlobalSwitch
+                            label='Alternate congestion colors'
+                            checked={altCongestionColors}
+                            onChange={() => setAltCongestionColors(!altCongestionColors)}
+                        />
                     </div>
                     <div className='npe-controls-line'>
                         <Switch
@@ -626,6 +620,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                                                 visualizationMode === VISUALIZATION_MODE.CONGESTION
                                                                     ? calculateLinkCongestionColor(
                                                                           linkUtilization[NPE_LINK.DEMAND],
+                                                                          0,
+                                                                          altCongestionColors,
                                                                       )
                                                                     : calculateFabricColor(
                                                                           linkUtilization[NPE_LINK.FABRIC_EVENT_SCOPE],

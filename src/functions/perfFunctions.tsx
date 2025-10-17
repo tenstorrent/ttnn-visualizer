@@ -43,7 +43,8 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
     NlpCreateHeadsDeviceOperation: CellColour.Blue,
     NLPConcatHeadsDecodeDeviceOperation: CellColour.Blue,
     UpdateCache: CellColour.Blue,
-    OptimizedConvNew: CellColour.Orange,
+    OptimizedConvNew: CellColour.Orange, // Deprecated - Conv2d is the new name for this operation
+    Conv2d: CellColour.Orange,
 };
 
 const DEFAULT_COLOUR = CellColour.White;
@@ -444,7 +445,24 @@ export const getStandardViewCounts = (
     return { filtered, total, delta };
 };
 
-export const getStackedViewCounts = (data: TypedStackedPerfRow[], filteredData: TypedStackedPerfRow[]) => ({
-    filtered: filteredData?.length || 0,
-    total: data?.length || 0,
-});
+export const getStackedViewCounts = (
+    data: TypedStackedPerfRow[],
+    filteredData: TypedStackedPerfRow[],
+    processedComparisonStackedRows: TypedStackedPerfRow[][],
+    filteredComparisonRows: TypedStackedPerfRow[],
+    comparisonIndex: number,
+    isInitialTab: boolean,
+) => {
+    const filtered = isInitialTab ? filteredData.length : filteredComparisonRows.length;
+    let total = data?.length;
+
+    if (comparisonIndex > -1) {
+        total = processedComparisonStackedRows[comparisonIndex]?.length || 0;
+    }
+
+    return {
+        filtered,
+        total,
+        delta: total - filtered,
+    };
+};
