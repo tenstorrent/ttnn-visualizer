@@ -56,7 +56,7 @@ const remoteFolderRenderer =
             return null;
         }
 
-        const { lastSynced, lastModified, reportName } = folder;
+        const { lastSynced, lastModified, reportName, remotePath } = folder;
         const lastSyncedDate = lastSynced ? formatter.format(getUTC(lastSynced)) : 'Never';
 
         let statusIcon = (
@@ -100,12 +100,12 @@ const remoteFolderRenderer =
         return (
             <MenuItem
                 className='remote-folder-item'
-                active={selectedFolder?.reportName === reportName}
+                active={selectedFolder?.remotePath === remotePath}
                 disabled={modifiers.disabled}
                 key={`${formatRemoteFolderName(folder, type, connection)}${lastSynced ?? lastModified}`}
                 onClick={handleClick}
                 text={formatRemoteFolderName(folder, type, connection)}
-                icon={selectedFolder?.reportName === reportName ? IconNames.SAVED : IconNames.DOCUMENT}
+                icon={selectedFolder?.remotePath === remotePath ? IconNames.SAVED : IconNames.DOCUMENT}
                 labelElement={getLabelElement(query)}
                 labelClassName='remote-folder-status-icon'
             />
