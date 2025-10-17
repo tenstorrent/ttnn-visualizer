@@ -19,31 +19,6 @@ const formatter = new Intl.DateTimeFormat('en-US', {
 
 type FolderTypes = 'performance' | 'profiler';
 
-const formatRemoteFolderName = (
-    folder: RemoteFolder,
-    type: FolderTypes,
-    selectedConnection?: RemoteConnection,
-): string => {
-    if (!folder || !selectedConnection) {
-        return 'n/a';
-    }
-
-    const paths = {
-        profiler: selectedConnection.profilerPath,
-        performance: selectedConnection.performancePath,
-    };
-
-    const pathToReplace = paths[type]!;
-
-    return folder.remotePath.toLowerCase().replace(pathToReplace.toLowerCase(), '');
-};
-
-const filterFolders =
-    (type: FolderTypes, connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
-    (query, folder) => {
-        return formatRemoteFolderName(folder, type, connection).toLowerCase().includes(query.toLowerCase());
-    };
-
 const remoteFolderRenderer =
     (
         syncingFolderList: boolean,
@@ -163,7 +138,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
                     icon={icon as IconName}
                     endIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={isDisabled}
-                    text={remoteFolder ? formatRemoteFolderName(remoteFolder, type, remoteConnection) : fallbackLabel}
+                    text={remoteFolder?.reportName ?? fallbackLabel}
                 />
             </Select>
 
@@ -178,5 +153,30 @@ const getUTC = (epoch: number): Date => {
 
     return date;
 };
+
+const formatRemoteFolderName = (
+    folder: RemoteFolder,
+    type: FolderTypes,
+    selectedConnection?: RemoteConnection,
+): string => {
+    if (!folder || !selectedConnection) {
+        return 'n/a';
+    }
+
+    const paths = {
+        profiler: selectedConnection.profilerPath,
+        performance: selectedConnection.performancePath,
+    };
+
+    const pathToReplace = paths[type]!;
+
+    return folder.remotePath.toLowerCase().replace(pathToReplace.toLowerCase(), '');
+};
+
+const filterFolders =
+    (type: FolderTypes, connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
+    (query, folder) => {
+        return formatRemoteFolderName(folder, type, connection).toLowerCase().includes(query.toLowerCase());
+    };
 
 export default RemoteFolderSelector;
