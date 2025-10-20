@@ -37,7 +37,7 @@ const LocalFolderPicker = ({
 
     const isDisabled = !items || items.length === 0;
     const activePath = value;
-    const activeName = valueLabel || value;
+    const activeName = value ? (valueLabel ?? value) : null;
     const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
 
     // Map through items and if reportNames are duplicated append (count) to the name

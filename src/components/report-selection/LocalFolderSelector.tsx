@@ -283,7 +283,7 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={reportFolderList}
-                    value={folderPickerValue}
+                    value={profilerReportLocation === ReportLocation.LOCAL ? folderPickerValue : null}
                     valueLabel={activeProfilerReport?.reportName ?? null}
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
@@ -332,7 +332,7 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={perfFolderList}
-                    value={perfFolderPickerValue}
+                    value={performanceReportLocation === ReportLocation.LOCAL ? perfFolderPickerValue : null}
                     valueLabel={activePerformanceReport?.reportName ?? null}
                     handleSelect={handleSelectPerformance}
                     handleDelete={handleDeletePerformance}

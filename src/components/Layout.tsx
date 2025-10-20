@@ -14,6 +14,7 @@ import {
     activeNpeOpTraceAtom,
     activePerformanceReportAtom,
     activeProfilerReportAtom,
+    performanceReportLocationAtom,
     profilerReportLocationAtom,
 } from '../store/app';
 import MainNavigation from './MainNavigation';
@@ -40,6 +41,7 @@ function Layout() {
     const setActivePerformanceReport = useSetAtom(activePerformanceReportAtom);
     const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
     const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
+    const setPerformanceReportLocation = useSetAtom(performanceReportLocationAtom);
 
     const remote = useRemoteConnection();
     const { data: instance } = useInstance();
@@ -80,6 +82,9 @@ function Layout() {
             setProfilerReportLocation(
                 instance?.profiler_path?.includes('/remote') ? ReportLocation.REMOTE : ReportLocation.LOCAL,
             );
+            setPerformanceReportLocation(
+                instance?.performance_path?.includes('/remote') ? ReportLocation.REMOTE : ReportLocation.LOCAL,
+            );
         }
     }, [
         instance,
@@ -91,6 +96,7 @@ function Layout() {
         setActiveNpe,
         profilerReportLocation,
         setProfilerReportLocation,
+        setPerformanceReportLocation,
     ]);
 
     return (
