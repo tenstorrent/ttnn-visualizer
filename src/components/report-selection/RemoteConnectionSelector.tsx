@@ -33,7 +33,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
     onRemoveConnection,
     onSyncRemoteFolderList,
 }) => {
-    const [isEditdialogOpen, setIsEditDialogOpen] = useState(false);
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const selectedConnection = connection ?? connectionList[0];
 
     return (
@@ -87,7 +87,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
 
                 <RemoteConnectionDialog
                     key={`${selectedConnection?.name}${selectedConnection?.host}${selectedConnection?.port}${selectedConnection?.profilerPath}`}
-                    open={isEditdialogOpen}
+                    open={isEditDialogOpen}
                     onAddConnection={(updatedConnection) => {
                         onEditConnection(updatedConnection, connection);
                     }}

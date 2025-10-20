@@ -648,7 +648,7 @@ export interface DeviceOperationMapping {
 // Unused
 const useProxyPerformanceReport = (): PerformanceReportResponse => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const response = usePerformanceReport(activePerformanceReport?.path || null);
+    const response = usePerformanceReport(activePerformanceReport?.reportName || null);
 
     return useMemo(() => {
         if (!response.data) {
@@ -698,7 +698,7 @@ export const useOpToPerfIdFiltered = () => {
 
 export const usePerformanceRange = (): NumberRange | null => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const { data: perfData } = usePerformanceReport(activePerformanceReport?.path || null);
+    const { data: perfData } = usePerformanceReport(activePerformanceReport?.reportName || null);
 
     return useMemo(
         () =>
@@ -857,6 +857,7 @@ export const useDeviceLog = (name?: string | null) => {
 };
 
 export const usePerformanceReport = (name: string | null) => {
+    // TODO: Name in this case is the report "name" which is really just the parent folder name, which we're using as the unique key
     const signpost = useAtomValue(filterBySignpostAtom);
     const stackByIn0 = useAtomValue(stackByIn0Atom);
 
@@ -935,7 +936,7 @@ export const useInstance = () => {
 
     return useQuery({
         queryFn: () => fetchInstance(),
-        queryKey: ['fetch-instance', activeProfilerReport?.path, activePerformanceReport, activeNpe],
+        queryKey: ['fetch-instance', activeProfilerReport?.path, activePerformanceReport?.path, activeNpe],
         initialData: null,
     });
 };

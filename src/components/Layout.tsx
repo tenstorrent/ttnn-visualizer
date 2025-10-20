@@ -52,12 +52,12 @@ function Layout() {
     const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
     const state = location.state as { background?: Location };
 
+    // TODO: Resolve naming issue here with profiler_name/performance_name being the path
     const profilerReportPath = instance?.active_report?.profiler_name || null;
     const profilerReportName =
         (profilerReportLocation === ReportLocation.REMOTE && profilerReportPath) || instance?.remote_profiler_folder
             ? getRemoteReportName(remoteFolders, profilerReportPath) || ''
             : getLocalReportName(reports, profilerReportPath) || '';
-
     const perfReportPath = instance?.active_report?.performance_name || null;
 
     useEffect(() => {

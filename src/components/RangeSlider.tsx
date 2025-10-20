@@ -46,7 +46,7 @@ function Range() {
     const setHasClusterDescription = useSetAtom(hasClusterDescriptionAtom);
 
     const { data: operations } = useOperationsList();
-    const { data: perfData, error: perfDataError } = usePerformanceReport(activePerformanceReport?.path || null);
+    const { data: perfData, error: perfDataError } = usePerformanceReport(activePerformanceReport?.reportName || null);
     const { data: clusterData } = useGetClusterDescription();
     const location = useLocation();
     const listPerf = useGetDeviceOperationListPerf();
