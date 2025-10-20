@@ -26,7 +26,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     updateInstance: () => ({
         ...mockInstanceEmpty,
         active_report: {
-            profiler: {
+            profiler_name: {
                 reportName: mockProfilerFolderList[0].reportName,
                 path: mockProfilerFolderList[0].path,
             },
