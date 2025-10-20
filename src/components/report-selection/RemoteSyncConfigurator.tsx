@@ -389,11 +389,11 @@ const RemoteSyncConfigurator: FC = () => {
                     type='profiler'
                 >
                     <Tooltip
-                        content='Sync remote folder'
+                        content='Re-sync remote folder'
                         position={PopoverPosition.TOP}
                     >
                         <Button
-                            aria-label='Sync remote folder'
+                            aria-label='Re-sync remote folder'
                             icon={IconNames.REFRESH}
                             loading={isSyncingReportFolder}
                             disabled={isDisabled || !selectedReportFolder || reportFolderList?.length === 0}
@@ -441,11 +441,11 @@ const RemoteSyncConfigurator: FC = () => {
                     type='performance'
                 >
                     <Tooltip
-                        content='Sync remote folder'
+                        content='Re-sync remote folder'
                         position={PopoverPosition.TOP}
                     >
                         <Button
-                            aria-label='Sync remote folder'
+                            aria-label='Re-sync remote folder'
                             icon={IconNames.REFRESH}
                             loading={isSyncingPerformanceFolder}
                             disabled={
