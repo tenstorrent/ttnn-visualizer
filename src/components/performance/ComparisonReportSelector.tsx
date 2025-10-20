@@ -43,10 +43,7 @@ const ComparisonReportSelector: FC<ComparisonReportSelectorProps> = ({
                             (_reportName, index) => index !== reportIndex,
                         );
 
-                        return (
-                            folder.reportName !== activePerformanceReport &&
-                            !selectedReports.includes(folder.reportName)
-                        );
+                        return folder.path !== activePerformanceReport?.path && !selectedReports.includes(folder.path);
                     })}
                     value={comparisonReportList?.[reportIndex] || null}
                     handleSelect={(folder: ReportFolder) => {

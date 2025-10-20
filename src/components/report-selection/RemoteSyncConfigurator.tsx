@@ -34,9 +34,9 @@ const RemoteSyncConfigurator: FC = () => {
     const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
 
     const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
+    const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
-    const setPerformanceReportLocation = useSetAtom(performanceReportLocationAtom);
     const setSelectedDevice = useSetAtom(selectedDeviceAtom);
 
     const [isRemoteOffline, setIsRemoteOffline] = useState(false);
@@ -56,7 +56,9 @@ const RemoteSyncConfigurator: FC = () => {
     const [isSyncingPerformanceFolder, setIsSyncingPerformanceFolder] = useState(false);
     const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(
         activePerformanceReport
-            ? remotePerformanceFolderList.find((folder) => folder.reportName?.includes(activePerformanceReport))
+            ? remotePerformanceFolderList.find((folder) =>
+                  folder.reportName?.includes(activePerformanceReport?.reportName),
+              )
             : remotePerformanceFolderList[0],
     );
 
@@ -132,12 +134,15 @@ const RemoteSyncConfigurator: FC = () => {
         createToastNotification('Active memory report', folder.reportName);
     };
 
-    const updatePerformanceSelection = (fileName: string) => {
+    const updatePerformanceSelection = (folder: RemoteFolder) => {
         queryClient.clear();
         setPerformanceReportLocation(ReportLocation.REMOTE);
         setSelectedDevice(DEFAULT_DEVICE_ID);
-        setActivePerformanceReport(fileName);
-        createToastNotification('Active performance report', fileName);
+        setActivePerformanceReport({
+            path: folder.remotePath,
+            reportName: folder.reportName,
+        });
+        createToastNotification('Active performance report', folder.reportName);
     };
 
     const syncSelectedReportFolder = async (folder?: RemoteFolder) => {
@@ -201,7 +206,22 @@ const RemoteSyncConfigurator: FC = () => {
 
             setSelectedReportFolder(matchedFolder);
         }
-    }, [activeProfilerReport, profilerReportLocation, reportFolderList]);
+
+        if (activePerformanceReport && performanceReportLocation === ReportLocation.REMOTE) {
+            const matchedFolder = remotePerformanceFolderList.find((folder) =>
+                folder.reportName?.includes(activePerformanceReport.reportName),
+            );
+
+            setSelectedPerformanceFolder(matchedFolder);
+        }
+    }, [
+        activeProfilerReport,
+        profilerReportLocation,
+        reportFolderList,
+        activePerformanceReport,
+        remotePerformanceFolderList,
+        performanceReportLocation,
+    ]);
 
     return (
         <>
@@ -255,45 +275,33 @@ const RemoteSyncConfigurator: FC = () => {
                         setSelectedReportFolder(undefined);
                         setSelectedPerformanceFolder(undefined);
                     }}
-                    onSelectConnection={async (connection) => {
-                        try {
-                            setIsFetching(true);
-
-                            updateSelectedConnection(connection);
-
-                            const fetchedPerformanceFolders = connection.performancePath
-                                ? await remote.listPerformanceFolders(connection)
-                                : [];
-
-                            const updatedPerformanceFolders = updateSavedPerformanceFolders(
-                                connection,
-                                fetchedPerformanceFolders,
-                            );
-
-                            setIsRemoteOffline(false);
-                            setSelectedPerformanceFolder(updatedPerformanceFolders[0]);
-                        } catch {
-                            setIsRemoteOffline(true);
-                        } finally {
-                            setIsFetching(false);
-                        }
+                    onSelectConnection={(connection) => {
+                        updateSelectedConnection(connection);
+                        setIsRemoteOffline(false);
                     }}
                     onSyncRemoteFolderList={async () => {
                         try {
                             setIsFetching(true);
 
                             if (remote.persistentState.selectedConnection) {
+                                const fetchedReportFolders = remote.persistentState.selectedConnection.profilerPath
+                                    ? await remote.listReportFolders(remote.persistentState.selectedConnection)
+                                    : [];
+
+                                updateSavedReportFolders(
+                                    remote.persistentState.selectedConnection,
+                                    fetchedReportFolders,
+                                );
+
                                 const fetchedPerformanceFolders = remote.persistentState.selectedConnection
                                     .performancePath
                                     ? await remote.listPerformanceFolders(remote.persistentState.selectedConnection)
                                     : [];
 
-                                const updatedPerformanceFolders = updateSavedPerformanceFolders(
+                                updateSavedPerformanceFolders(
                                     remote.persistentState.selectedConnection,
                                     fetchedPerformanceFolders,
                                 );
-
-                                setSelectedPerformanceFolder(updatedPerformanceFolders[0]);
                             }
                             // eslint-disable-next-line @typescript-eslint/no-unused-vars
                         } catch (err) {
@@ -364,7 +372,9 @@ const RemoteSyncConfigurator: FC = () => {
                     subLabel='Select a performance report'
                 >
                     <RemoteFolderSelector
-                        remoteFolder={selectedPerformanceFolder}
+                        remoteFolder={
+                            performanceReportLocation === ReportLocation.REMOTE ? selectedReportFolder : undefined
+                        }
                         remoteFolderList={remotePerformanceFolderList}
                         loading={isLoading || isFetching}
                         updatingFolderList={isFetching}
@@ -372,17 +382,23 @@ const RemoteSyncConfigurator: FC = () => {
                         onSelectFolder={async (folder) => {
                             setSelectedPerformanceFolder(folder);
 
-                            if (remote.persistentState.selectedConnection && !isRemoteFolderOutdated(folder)) {
-                                const response = await remote.mountRemoteFolder(
-                                    remote.persistentState.selectedConnection,
-                                    selectedReportFolder,
-                                    folder,
-                                );
+                            if (remote.persistentState.selectedConnection) {
+                                if (isRemoteFolderOutdated(folder)) {
+                                    await syncSelectedReportFolder(folder);
+                                } else {
+                                    const response = await remote.mountRemoteFolder(
+                                        remote.persistentState.selectedConnection,
+                                        selectedReportFolder,
+                                        folder,
+                                    );
 
-                                if (response.status === 200) {
-                                    const fileName = folder.remotePath;
+                                    if (response.status === 200) {
+                                        updateReportSelection(folder);
 
-                                    updatePerformanceSelection(fileName);
+                                        if (hasBeenNormalised(folder)) {
+                                            createDataIntegrityWarning(folder);
+                                        }
+                                    }
                                 }
                             }
                         }}
@@ -442,9 +458,7 @@ const RemoteSyncConfigurator: FC = () => {
                                                 );
 
                                                 if (response.status === 200) {
-                                                    const fileName = selectedPerformanceFolder.reportName;
-
-                                                    updatePerformanceSelection(fileName);
+                                                    updatePerformanceSelection(selectedPerformanceFolder);
                                                 }
                                             }
                                         }
