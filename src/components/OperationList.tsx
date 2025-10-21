@@ -119,6 +119,11 @@ const OperationList = () => {
         return fetchedOperations;
     }, [fetchedOperations, selectedOperationRange]);
 
+    const handleToggleStackTrace = (index: number) => {
+        const scrollToIndex = index - 1;
+        virtualizer.scrollToIndex(scrollToIndex < 0 ? 0 : scrollToIndex);
+    };
+
     useMemo(() => {
         if (operationsWithRange) {
             let operations = [...operationsWithRange];
@@ -365,6 +370,9 @@ const OperationList = () => {
                                                                 language='cpp'
                                                                 hideSourceButton
                                                                 isInline
+                                                                onToggleExpanded={(_isOpen: boolean) =>
+                                                                    handleToggleStackTrace(virtualRow.index)
+                                                                }
                                                             />
                                                         </div>
 
@@ -376,6 +384,9 @@ const OperationList = () => {
                                                                 language='cpp'
                                                                 hideSourceButton
                                                                 isInline
+                                                                onToggleExpanded={(_isOpen: boolean) =>
+                                                                    handleToggleStackTrace(virtualRow.index)
+                                                                }
                                                             />
                                                         </div>
                                                     </>

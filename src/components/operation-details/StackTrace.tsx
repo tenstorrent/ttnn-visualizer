@@ -5,7 +5,7 @@
 import hljs from 'highlight.js/lib/core';
 import python from 'highlight.js/lib/languages/python';
 import cpp from 'highlight.js/lib/languages/cpp';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import 'highlight.js/styles/a11y-dark.css';
 import { Button, ButtonVariant, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -42,12 +42,11 @@ function StackTrace({
     isExpanded,
     onToggleExpanded,
 }: StackTraceProps) {
-    const [isExpandedInternal, setIsExpandedInternal] = useState(isExpanded || false);
-
     // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
     // const [canReadRemoteFile, setCanReadRemoteFile] = useState(true);
     const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
 
+    const [isExpandedInternal, setIsExpandedInternal] = useState(isExpanded || false);
     const [filePath, setFilePath] = useState('');
     const [isFetchingFile, setIsFetchingFile] = useState(false);
     const [fileContents, setFileContents] = useState('');
@@ -124,13 +123,11 @@ function StackTrace({
         if (isExpandedInternal && scrollElementRef?.current && !isTopOfElementInViewport(scrollElementRef.current)) {
             scrollElementRef?.current?.scrollIntoView();
         }
-    };
 
-    useEffect(() => {
         if (onToggleExpanded) {
             onToggleExpanded(isExpandedInternal);
         }
-    }, [isExpandedInternal, onToggleExpanded]);
+    };
 
     return (
         <pre
