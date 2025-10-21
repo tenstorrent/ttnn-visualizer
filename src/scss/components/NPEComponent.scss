@@ -38,6 +38,26 @@
             margin-bottom: 0;
             padding-bottom: 0;
         }
+
+        .zones-open-panel-btn {
+            &:not([class*='bp6-intent-'], [class*='bp6-disabled']) {
+                background-color: rgba($tt-zone-color, 0.2);
+
+                &:hover {
+                    background-color: rgba($tt-zone-color, 0.5);
+                }
+            }
+
+            // .bp6-disabled {
+            //    background-color: rgba($tt-zone-color, 00);
+            // }
+
+            border: 1px solid rgba($tt-zone-color, 0);
+
+            &.bp6-active {
+                border: 1px solid $tt-zone-color;
+            }
+        }
     }
 
     .bp6-slider-progress {
@@ -184,6 +204,11 @@
             &.empty-tensix {
                 border: 1px solid $tt-black;
                 position: relative;
+            }
+
+            &.selected-zone {
+                border: 2px solid $tt-zone-color;
+                inset: -1px;
             }
 
             &.no-click {
