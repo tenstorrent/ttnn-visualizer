@@ -73,17 +73,18 @@ const OperationList = () => {
         initialMeasurementsCache: restoreMeasurementsCache,
         count: restoredItemCount || filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
         initialOffset: restoredOffset || 0,
-        measureElement: (element, _entry, instance) => {
-            const direction = instance.scrollDirection;
-            if (direction === 'forward' || direction === null) {
-                // Allow remeasuring when scrolling down or direction is null
-                return element.getBoundingClientRect().height;
-            }
-            // When scrolling up, use cached measurement to prevent stuttering
-            const indexKey = Number(element.getAttribute('data-index'));
-            const cachedMeasurement = instance.measurementsCache[indexKey]?.size;
-            return cachedMeasurement || element.getBoundingClientRect().height;
-        },
+        // Can help prevent stuttering when scrolling back up
+        // measureElement: (element, _entry, instance) => {
+        //     const direction = instance.scrollDirection;
+        //     if (direction === 'forward' || direction === null) {
+        //         // Allow remeasuring when scrolling down or direction is null
+        //         return element.getBoundingClientRect().height;
+        //     }
+        //     // When scrolling up, use cached measurement to prevent stuttering
+        //     const indexKey = Number(element.getAttribute('data-index'));
+        //     const cachedMeasurement = instance.measurementsCache[indexKey]?.size;
+        //     return cachedMeasurement || element.getBoundingClientRect().height;
+        // },
     });
     const virtualItems = virtualizer.getVirtualItems();
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
