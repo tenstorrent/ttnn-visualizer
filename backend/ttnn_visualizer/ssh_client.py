@@ -210,9 +210,7 @@ class SSHClient:
                     detail=raw_error,
                 )
 
-    def read_file(
-        self, remote_path: Union[str, Path], timeout: int = 30
-    ) -> Optional[bytes]:
+    def read_file(self, remote_path: str, timeout: int = 30) -> Optional[bytes]:
         """
         Read a remote file using SSH cat command.
 
@@ -224,13 +222,32 @@ class SSHClient:
         path = Path(remote_path)
         logger.info(f"Reading remote file {path}")
 
+        # Check if path exists and is a regular file before attempting to read
+        if not self.check_path_exists(path, timeout=10):
+            logger.error(f"File not found: {path}")
+            return None
+
+        if self.is_directory(path, timeout=10):
+            logger.error(f"Cannot read file - path is a directory: {path}")
+            raise SSHException(f"Cannot read file: '{path}' is a directory, not a file")
+
+        if not self.is_file(path, timeout=10):
+            logger.error(f"Path exists but is not a regular file: {path}")
+            raise SSHException(f"Cannot read: '{path}' is not a regular file")
+
         try:
             result = self.execute_command(f"cat '{path}'", timeout=timeout)
             return result.encode("utf-8")
         except SSHException as e:
-            if "No such file" in str(e) or "cannot open" in str(e):
-                logger.error(f"File not found or cannot be read: {path}")
-                return None
+            error_str = str(e).lower()
+            if any(
+                err in error_str
+                for err in ["no such file", "cannot open", "permission denied"]
+            ):
+                logger.error(
+                    f"File cannot be read due to permissions or other error: {path}"
+                )
+                raise SSHException(f"Cannot read file: {e}")
             raise
 
     def check_path_exists(
@@ -248,6 +265,40 @@ class SSHClient:
 
         try:
             self.execute_command(f"test -e '{path}'", timeout=timeout)
+            return True
+        except SSHException:
+            return False
+
+    def is_file(self, remote_path: Union[str, Path], timeout: int = 10) -> bool:
+        """
+        Check if a remote path is a regular file.
+
+        :param remote_path: Path to check
+        :param timeout: Timeout in seconds
+        :return: True if path is a regular file
+        """
+        path = Path(remote_path)
+        logger.debug(f"Checking if remote path is a file: {path}")
+
+        try:
+            self.execute_command(f"test -f '{path}'", timeout=timeout)
+            return True
+        except SSHException:
+            return False
+
+    def is_directory(self, remote_path: Union[str, Path], timeout: int = 10) -> bool:
+        """
+        Check if a remote path is a directory.
+
+        :param remote_path: Path to check
+        :param timeout: Timeout in seconds
+        :return: True if path is a directory
+        """
+        path = Path(remote_path)
+        logger.debug(f"Checking if remote path is a directory: {path}")
+
+        try:
+            self.execute_command(f"test -d '{path}'", timeout=timeout)
             return True
         except SSHException:
             return False

@@ -19,6 +19,7 @@ import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
 import { PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
 import {
+    isFullStackTraceAtom,
     renderMemoryLayoutAtom,
     selectedAddressAtom,
     selectedTensorAtom,
@@ -48,6 +49,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
     const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorAtom);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
+    const [showFullStackTrace, setShowFullStackTrace] = useAtom(isFullStackTraceAtom);
 
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
@@ -174,6 +176,8 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             <StackTrace
                                 stackTrace={details.stack_trace}
                                 language='python'
+                                isExpanded={showFullStackTrace}
+                                onToggleExpanded={() => setShowFullStackTrace(!showFullStackTrace)}
                             />
                         )}
                         <div className='chart-controls'>

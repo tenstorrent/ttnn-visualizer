@@ -30,8 +30,8 @@ interface StackTraceProps {
     language: HighlightLanguages;
     hideSourceButton?: boolean;
     isInline?: boolean;
-    isVisible?: boolean;
-    toggleVisibilityHandler?: (isVisible: boolean) => void;
+    isExpanded?: boolean;
+    onToggleExpanded?: (isVisible: boolean) => void;
 }
 
 function StackTrace({
@@ -39,10 +39,10 @@ function StackTrace({
     language,
     hideSourceButton,
     isInline,
-    isVisible,
-    toggleVisibilityHandler,
+    isExpanded,
+    onToggleExpanded,
 }: StackTraceProps) {
-    const [isVisibleInternal, setIsVisibleInternal] = useState(isVisible || false);
+    const [isExpandedInternal, setIsExpandedInternal] = useState(isExpanded || false);
 
     // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
     // const [canReadRemoteFile, setCanReadRemoteFile] = useState(true);
@@ -108,14 +108,9 @@ function StackTrace({
         }
 
         if (selectedConnection && !fileContents && isRemote) {
-            const connectionWithFilePath = {
-                ...selectedConnection,
-                path: filePath,
-            };
-
             setIsFetchingFile(true);
 
-            const response = await readRemoteFile(connectionWithFilePath);
+            const response = await readRemoteFile(filePath);
             setFileContents(response);
 
             setIsFetchingFile(false);
@@ -124,18 +119,18 @@ function StackTrace({
     };
 
     const handleToggleStackTrace = () => {
-        setIsFullStackTrace(!isFullStackTrace);
+        setIsExpandedInternal(!isExpandedInternal);
 
-        if (isFullStackTrace && scrollElementRef?.current && !isTopOfElementInViewport(scrollElementRef.current)) {
+        if (isExpandedInternal && scrollElementRef?.current && !isTopOfElementInViewport(scrollElementRef.current)) {
             scrollElementRef?.current?.scrollIntoView();
         }
     };
 
     useEffect(() => {
-        if (toggleVisibilityHandler) {
-            toggleVisibilityHandler(isVisibleInternal);
+        if (onToggleExpanded) {
+            onToggleExpanded(isExpandedInternal);
         }
-    }, [isVisibleInternal, toggleVisibilityHandler]);
+    }, [isExpandedInternal, onToggleExpanded]);
 
     return (
         <pre
@@ -144,7 +139,7 @@ function StackTrace({
             })}
             ref={scrollElementRef}
         >
-            {isVisibleInternal ? (
+            {isExpandedInternal ? (
                 <div className='code-wrapper'>
                     <code
                         className={`language-${language} code-output`}
@@ -164,34 +159,30 @@ function StackTrace({
                 </div>
             )}
 
-            <div
-                className={classNames('stack-trace-buttons', {
-                    'is-sticky': isVisibleInternal,
-                })}
-            >
+            <div className={classNames('stack-trace-buttons is-sticky')}>
                 <Button
                     variant={ButtonVariant.MINIMAL}
                     intent={Intent.PRIMARY}
                     onClick={handleToggleStackTrace}
-                    text={isVisibleInternal ? 'Collapse' : 'Expand'}
-                    endIcon={isVisibleInternal ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
+                    text={isExpandedInternal ? 'Collapse' : 'Expand'}
+                    endIcon={isExpandedInternal ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
                 />
 
                 {!hideSourceButton && (
-                <Tooltip
-                    content={isRemote ? 'View external source file' : 'Cannot view local source file'}
-                    placement={PopoverPosition.TOP}
-                >
-                    <Button
+                    <Tooltip
+                        content={isRemote ? 'View external source file' : 'Cannot view local source file'}
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
                             variant={ButtonVariant.MINIMAL}
-                        intent={Intent.SUCCESS}
-                        onClick={handleReadRemoteFile}
-                        endIcon={IconNames.DOCUMENT_OPEN}
-                        text='Source'
-                        disabled={isFetchingFile || !persistentState.selectedConnection || !isRemote}
-                        loading={isFetchingFile}
-                    />
-                </Tooltip>
+                            intent={Intent.SUCCESS}
+                            onClick={handleReadRemoteFile}
+                            endIcon={IconNames.DOCUMENT_OPEN}
+                            text='Source'
+                            disabled={isFetchingFile || !persistentState.selectedConnection || !isRemote}
+                            loading={isFetchingFile}
+                        />
+                    </Tooltip>
                 )}
             </div>
 
