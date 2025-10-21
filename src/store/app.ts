@@ -14,6 +14,7 @@ import { PerfTabIds } from '../definitions/Performance';
 import { ReportLocation } from '../definitions/Reports';
 import { PerfTableRow, TableFilter } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
+import { VirtualListState } from '../definitions/VirtualList';
 
 // Unsorted
 export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
@@ -46,7 +47,7 @@ export const fileTransferProgressAtom = atom<FileProgress>({
 // Operations route
 export const shouldCollapseAllOperationsAtom = atom(false);
 export const expandedOperationsAtom = atom<number[]>([]);
-export const operationListScrollAtom = atom<number | null>(null);
+export const operationListStateAtom = atom<VirtualListState>();
 
 // Operation details route
 export const isFullStackTraceAtom = atom(false);
