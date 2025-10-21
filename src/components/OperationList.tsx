@@ -73,7 +73,7 @@ const OperationList = () => {
         initialMeasurementsCache: restoreMeasurementsCache,
         count: restoredItemCount || filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
         initialOffset: restoredOffset || 0,
-        // Can help prevent stuttering when scrolling back up
+        // TODO: Can help prevent stuttering when scrolling back up but needs more research
         // measureElement: (element, _entry, instance) => {
         //     const direction = instance.scrollDirection;
         //     if (direction === 'forward' || direction === null) {
