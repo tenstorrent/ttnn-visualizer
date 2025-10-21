@@ -26,6 +26,7 @@ import { OperationDescription } from '../model/APIData';
 import ListItem from './ListItem';
 import { formatSize } from '../functions/math';
 import OperationListPerfData from './OperationListPerfData';
+import StackTrace from './operation-details/StackTrace';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -322,7 +323,7 @@ const OperationList = () => {
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
                                                 <Tooltip
-                                                    content={operation?.error ? `Error detected in this operation` : ''}
+                                                    content={operation?.error ? `Error recorded in this operation` : ''}
                                                     placement={PopoverPosition.TOP}
                                                 >
                                                     <ListItem
@@ -353,34 +354,31 @@ const OperationList = () => {
                                                 </p>
 
                                                 {operation?.error && (
-                                                    <div className='memory-error'>
-                                                        <p className='memory-error-title'>
-                                                            {operation?.error.error_type}
-                                                        </p>
-                                                        <p>{operation?.error.error_message}</p>
+                                                    <>
+                                                        <div className='memory-error'>
+                                                            <p className='memory-error-title'>
+                                                                {operation.error.error_type}
+                                                            </p>
 
-                                                        <div className='code-wrapper'>
-                                                            <code
-                                                                className='language-python code-output'
-                                                                // eslint-disable-next-line react/no-danger
-                                                                dangerouslySetInnerHTML={{
-                                                                    __html: operation?.error.error_message,
-                                                                }}
+                                                            <StackTrace
+                                                                stackTrace={operation.error.error_message}
+                                                                language='cpp'
+                                                                hideSourceButton
+                                                                isInline
                                                             />
                                                         </div>
 
-                                                        <p className='memory-error-title'>Stack Trace</p>
+                                                        <div className='memory-error'>
+                                                            <p className='memory-error-title'>Stack Trace</p>
 
-                                                        <div className='code-wrapper'>
-                                                            <code
-                                                                className='language-python code-output'
-                                                                // eslint-disable-next-line react/no-danger
-                                                                dangerouslySetInnerHTML={{
-                                                                    __html: operation?.error.stack_trace,
-                                                                }}
+                                                            <StackTrace
+                                                                stackTrace={operation.error.stack_trace}
+                                                                language='cpp'
+                                                                hideSourceButton
+                                                                isInline
                                                             />
                                                         </div>
-                                                    </div>
+                                                    </>
                                                 )}
 
                                                 {activePerformanceReport && (

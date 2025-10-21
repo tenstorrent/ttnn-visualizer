@@ -4,49 +4,61 @@
 
 import hljs from 'highlight.js/lib/core';
 import python from 'highlight.js/lib/languages/python';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import cpp from 'highlight.js/lib/languages/cpp';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import 'highlight.js/styles/a11y-dark.css';
-import { Button, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
-import { useAtom, useAtomValue } from 'jotai';
-import { isFullStackTraceAtom, profilerReportLocationAtom } from '../../store/app';
+import { useAtomValue } from 'jotai';
+import { profilerReportLocationAtom } from '../../store/app';
 import useRemoteConnection from '../../hooks/useRemote';
 import Overlay from '../Overlay';
 import 'styles/components/StackTrace.scss';
 import { ReportLocation } from '../../definitions/Reports';
 
 hljs.registerLanguage('python', python);
-
-interface StackTraceProps {
-    stackTrace: string;
-}
+hljs.registerLanguage('cpp', cpp);
 
 const FILE_PATH_REGEX = /(?<=File ")(.*)(?=")/m;
 const LINE_NUMBER_REGEX = /(?<=line )(\d*)(?=,)/m;
 
-function isTopOfElementInViewport(element: HTMLElement): boolean {
-    const elementPosition = element.getBoundingClientRect();
+type HighlightLanguages = 'python' | 'cpp';
 
-    return elementPosition.top > window.scrollY;
+interface StackTraceProps {
+    stackTrace: string;
+    language: HighlightLanguages;
+    hideSourceButton?: boolean;
+    isInline?: boolean;
+    isVisible?: boolean;
+    toggleVisibilityHandler?: (isVisible: boolean) => void;
 }
 
-function StackTrace({ stackTrace }: StackTraceProps) {
-    const [isFullStackTrace, setIsFullStackTrace] = useAtom(isFullStackTraceAtom);
+function StackTrace({
+    stackTrace,
+    language,
+    hideSourceButton,
+    isInline,
+    isVisible,
+    toggleVisibilityHandler,
+}: StackTraceProps) {
+    const [isVisibleInternal, setIsVisibleInternal] = useState(isVisible || false);
+
     // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
     // const [canReadRemoteFile, setCanReadRemoteFile] = useState(true);
+    const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
+
     const [filePath, setFilePath] = useState('');
     const [isFetchingFile, setIsFetchingFile] = useState(false);
     const [fileContents, setFileContents] = useState('');
     const [isViewingFile, setIsViewingFile] = useState(false);
-    const toggleViewingFile = useCallback(() => setIsViewingFile((open) => !open), [setIsViewingFile]);
+
     const { readRemoteFile, persistentState } = useRemoteConnection();
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
-    const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
 
     const stackTraceWithHighlights = useMemo(() => {
         const filePathMatches = FILE_PATH_REGEX.exec(stackTrace);
-        let highlightedString = hljs.highlight(stackTrace, { language: 'python' }).value;
+        let highlightedString = hljs.highlight(stackTrace, { language }).value;
 
         if (filePathMatches) {
             setFilePath(filePathMatches[0]);
@@ -60,13 +72,13 @@ function StackTrace({ stackTrace }: StackTraceProps) {
         highlightedString = highlightedString.replace(/<div class="ttnn-line">/gm, (match) => `</div>${match}`);
 
         return highlightedString;
-    }, [stackTrace]);
+    }, [stackTrace, language]);
 
     const fileWithHighlights = useMemo(() => {
         const lineNumberMatches = LINE_NUMBER_REGEX.exec(stackTrace);
 
         if (fileContents && lineNumberMatches?.[0]) {
-            let highlightedString = hljs.highlight(fileContents, { language: 'python' }).value;
+            let highlightedString = hljs.highlight(fileContents, { language }).value;
 
             let line = 1;
             highlightedString = highlightedString.replace(/^/gm, () => {
@@ -83,7 +95,9 @@ function StackTrace({ stackTrace }: StackTraceProps) {
         }
 
         return '';
-    }, [fileContents, stackTrace]);
+    }, [fileContents, stackTrace, language]);
+
+    const toggleViewingFile = useCallback(() => setIsViewingFile((open) => !open), [setIsViewingFile]);
 
     const handleReadRemoteFile = async () => {
         const { selectedConnection } = persistentState;
@@ -117,29 +131,31 @@ function StackTrace({ stackTrace }: StackTraceProps) {
         }
     };
 
+    useEffect(() => {
+        if (toggleVisibilityHandler) {
+            toggleVisibilityHandler(isVisibleInternal);
+        }
+    }, [isVisibleInternal, toggleVisibilityHandler]);
+
     return (
         <pre
-            className='stack-trace'
+            className={classNames('stack-trace', {
+                'is-inline': isInline,
+            })}
             ref={scrollElementRef}
         >
-            {isFullStackTrace ? (
-                // <Collapse
-                //     isOpen={isFullStackTrace}
-                //     keepChildrenMounted={false}
-                //     className='code-wrapper'
-                // >
+            {isVisibleInternal ? (
                 <div className='code-wrapper'>
                     <code
-                        className='language-python code-output'
+                        className={`language-${language} code-output`}
                         // eslint-disable-next-line react/no-danger
                         dangerouslySetInnerHTML={{ __html: stackTraceWithHighlights }}
                     />
                 </div>
             ) : (
-                // </Collapse>
                 <div className='code-wrapper'>
                     <code
-                        className='language-python code-output'
+                        className={`language-${language} code-output`}
                         // eslint-disable-next-line react/no-danger
                         dangerouslySetInnerHTML={{
                             __html: getStackTracePreview(stackTraceWithHighlights),
@@ -150,23 +166,24 @@ function StackTrace({ stackTrace }: StackTraceProps) {
 
             <div
                 className={classNames('stack-trace-buttons', {
-                    'is-sticky': isFullStackTrace,
+                    'is-sticky': isVisibleInternal,
                 })}
             >
                 <Button
-                    variant='minimal'
+                    variant={ButtonVariant.MINIMAL}
                     intent={Intent.PRIMARY}
                     onClick={handleToggleStackTrace}
-                    text={isFullStackTrace ? 'Collapse' : 'Expand'}
-                    endIcon={isFullStackTrace ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
+                    text={isVisibleInternal ? 'Collapse' : 'Expand'}
+                    endIcon={isVisibleInternal ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
                 />
 
+                {!hideSourceButton && (
                 <Tooltip
                     content={isRemote ? 'View external source file' : 'Cannot view local source file'}
                     placement={PopoverPosition.TOP}
                 >
                     <Button
-                        variant='minimal'
+                            variant={ButtonVariant.MINIMAL}
                         intent={Intent.SUCCESS}
                         onClick={handleReadRemoteFile}
                         endIcon={IconNames.DOCUMENT_OPEN}
@@ -175,6 +192,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                         loading={isFetchingFile}
                     />
                 </Tooltip>
+                )}
             </div>
 
             <Overlay
@@ -184,7 +202,7 @@ function StackTrace({ stackTrace }: StackTraceProps) {
                 {fileWithHighlights && (
                     <pre className='stack-trace'>
                         <code
-                            className='language-python code-output'
+                            className={`language-${language} code-output`}
                             // eslint-disable-next-line react/no-danger
                             dangerouslySetInnerHTML={{
                                 __html: fileWithHighlights,
@@ -201,6 +219,15 @@ function getStackTracePreview(stackTrace: string) {
     const splitTrace: Array<string> = stackTrace.split('<span class="line-number">').splice(0, 3);
 
     return splitTrace.join('<span class="line-number">');
+}
+
+function isTopOfElementInViewport(element: HTMLElement, scrollContainer?: React.RefObject<HTMLDivElement>): boolean {
+    const elementPosition = element.getBoundingClientRect();
+    const comparisonElementPosition = scrollContainer?.current
+        ? scrollContainer.current.getBoundingClientRect().top
+        : window.scrollY;
+
+    return elementPosition.top > comparisonElementPosition;
 }
 
 export default StackTrace;

@@ -43,32 +43,29 @@ interface OperationDetailsProps {
 }
 
 const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationId }) => {
-    const { data: operations } = useOperationsList();
-    const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
     const [renderMemoryLayoutPattern, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
-    const [showCircularBuffer, setShowCircularBuffer] = useState(false);
-    const [showL1Small, setShowL1Small] = useState(false);
-    const [showHex, setShowHex] = useAtom(showHexAtom);
-    const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
-    const l1start = useGetL1StartMarker();
-    const l1end = useGetL1SmallMarker();
-
-    const {
-        operationDetails: { data: operationDetails, isLoading, status },
-    } = useOperationDetails(operationId);
-
-    const { data: previousOperationDetails, isLoading: isPrevLoading } =
-        usePreviousOperationDetails(operationId).operationDetails;
-
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
     const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorAtom);
+    const [showHex, setShowHex] = useAtom(showHexAtom);
+    const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
+
+    const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
+    const [showCircularBuffer, setShowCircularBuffer] = useState(false);
+    const [showL1Small, setShowL1Small] = useState(false);
     const [tensixFullVisualisationOpen, setTensixFullVisualisationOpen] = useState(false);
     const [tensixIOVisualisationOpen, setTensixIOVisualisationOpen] = useState(false);
     const [deviceOperationsGraphOpen, setDeviceOperationsGraphOpen] = useState(false);
-
     const [isL1Active, setIsL1Active] = useState(true);
     const [isDramActive, setIsDramActive] = useState(false);
 
+    const { data: operations } = useOperationsList();
+    const l1start = useGetL1StartMarker();
+    const l1end = useGetL1SmallMarker();
+    const {
+        operationDetails: { data: operationDetails, isLoading, status },
+    } = useOperationDetails(operationId);
+    const { data: previousOperationDetails, isLoading: isPrevLoading } =
+        usePreviousOperationDetails(operationId).operationDetails;
     const { createToast, resetToasts } = useBufferFocus();
 
     const onClickOutside = () => {
@@ -173,7 +170,12 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                 )}
                 {!isLoading && isValidNumber(operationDetails?.id) ? (
                     <>
-                        {details.stack_trace && <StackTrace stackTrace={details.stack_trace} />}
+                        {details.stack_trace && (
+                            <StackTrace
+                                stackTrace={details.stack_trace}
+                                language='python'
+                            />
+                        )}
                         <div className='chart-controls'>
                             <ButtonGroup>
                                 <Button
