@@ -72,7 +72,7 @@
 
     &.is-inline {
         overflow: hidden scroll;
-        max-height: 500px;
+        max-height: 500px; // Allows sticky behaviour to work within operation list
 
         .code-wrapper {
             padding-top: 0;
