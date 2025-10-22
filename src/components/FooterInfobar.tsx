@@ -13,17 +13,13 @@ import {
     activeProfilerReportAtom,
     operationRangeAtom,
     performanceRangeAtom,
-    profilerReportLocationAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
 import SyncStatus from './SyncStatus';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
-import { useInstance, useReportFolderList } from '../hooks/useAPI';
-import { ReportFolder, ReportLocation } from '../definitions/Reports';
-import useRemoteConnection from '../hooks/useRemote';
-import { RemoteFolder } from '../definitions/RemoteConnection';
+import { useInstance } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
 import { Instance } from '../model/APIData';
 
@@ -36,13 +32,9 @@ function FooterInfobar() {
     const performanceRange = useAtomValue(performanceRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const profilerReportLocationType = useAtomValue(profilerReportLocationAtom);
-    const remote = useRemoteConnection();
     const { data: instance } = useInstance();
 
-    const { data: reports } = useReportFolderList();
     const location = useLocation();
-    const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
 
     const isOperationDetails = location.pathname.includes(`${ROUTES.OPERATIONS}/`);
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
@@ -62,12 +54,11 @@ function FooterInfobar() {
         return selectedRange && `Selected: ${selectedRange[0]} - ${selectedRange[1]}`;
     };
 
-    const activeProfilerReportName =
-        profilerReportLocationType === ReportLocation.REMOTE
-            ? getRemoteReportName(remoteFolders, activeProfilerReport)
-            : getLocalReportName(reports, activeProfilerReport);
+    const activeProfilerReportName = activeProfilerReport?.reportName;
+    const activeProfilerReportPath = activeProfilerReport?.path;
     const hasLoadedRemoteReport =
         instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
+    const activePerformanceReportName = activePerformanceReport?.reportName;
 
     const serverConfig = getServerConfig();
     const isServerMode = serverConfig.SERVER_MODE;
@@ -101,7 +92,7 @@ function FooterInfobar() {
 
                     {activeProfilerReportName && (
                         <Tooltip
-                            content={`/${activeProfilerReport}`}
+                            content={`/${activeProfilerReportPath}`}
                             position={PopoverPosition.TOP}
                         >
                             <div className='title'>
@@ -111,23 +102,21 @@ function FooterInfobar() {
                         </Tooltip>
                     )}
 
-                    {activePerformanceReport &&
-                        (activePerformanceReport.length > MAX_TITLE_LENGTH ? (
-                            <Tooltip
-                                content={activePerformanceReport}
-                                className='title'
-                            >
-                                <div className='title'>
-                                    <strong>Performance:</strong>
-                                    <span className='report-name'>{activePerformanceReport}</span>
-                                </div>
-                            </Tooltip>
-                        ) : (
+                    {activePerformanceReportName && (
+                        <Tooltip
+                            content={
+                                activePerformanceReportName?.length > MAX_TITLE_LENGTH
+                                    ? `/${activePerformanceReportName}`
+                                    : ''
+                            }
+                            position={PopoverPosition.TOP}
+                        >
                             <div className='title'>
                                 <strong>Performance:</strong>
-                                <span className='report-name'>{activePerformanceReport}</span>
+                                <span className='report-name'>{activePerformanceReportName}</span>
                             </div>
-                        ))}
+                        </Tooltip>
+                    )}
                     {activeProfilerReport && activePerformanceReport && <SyncStatus />}
                 </div>
 
@@ -168,12 +157,6 @@ const hasRangeSelected = (selectedRange: NumberRange | null, operationRange: Num
         selectedRange[0] === operationRange[0] &&
         selectedRange[1] === operationRange[1]
     );
-
-const getLocalReportName = (reports: ReportFolder[], path: string | null) =>
-    reports?.find((report) => report.path === path)?.reportName;
-
-const getRemoteReportName = (remoteFolders: RemoteFolder[], folderName: string | null) =>
-    folderName ? remoteFolders?.find((report) => report.remotePath.includes(folderName))?.reportName : false;
 
 const getRemotePaths = (instance: Instance): string => {
     const paths = [instance?.remote_connection?.profilerPath, instance?.remote_connection?.performancePath].filter(

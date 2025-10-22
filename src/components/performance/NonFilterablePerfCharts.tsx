@@ -104,7 +104,7 @@ const NonFilterablePerfCharts: FC<NonFilterablePerfChartsProps> = ({
                 {performanceReport && (
                     <PerfOperationTypesChart
                         className='flex-chart'
-                        reportTitle={comparisonReportList ? performanceReport : ''}
+                        reportTitle={comparisonReportList ? performanceReport.reportName : ''}
                         data={chartData}
                         opCodes={opCodeOptions}
                     />

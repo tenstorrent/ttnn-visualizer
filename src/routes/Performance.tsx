@@ -42,7 +42,7 @@ export default function Performance() {
         data,
         isLoading: isLoadingPerformance,
         error: perfDataError,
-    } = usePerformanceReport(activePerformanceReport);
+    } = usePerformanceReport(activePerformanceReport?.reportName || null);
     const { data: comparisonData } = usePerformanceComparisonReport();
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
@@ -88,8 +88,8 @@ export default function Performance() {
 
     // Clear comparison report if users switches active perf report to the comparison report
     useEffect(() => {
-        if (activePerformanceReport && comparisonReportList?.includes(activePerformanceReport)) {
-            const filteredReports = comparisonReportList.filter((report) => report !== activePerformanceReport);
+        if (activePerformanceReport && comparisonReportList?.includes(activePerformanceReport?.path)) {
+            const filteredReports = comparisonReportList.filter((report) => report !== activePerformanceReport?.path);
 
             setComparisonReportList(filteredReports.length === 0 ? null : filteredReports);
         }
