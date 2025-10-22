@@ -30,6 +30,7 @@ interface StackTraceProps {
     language: HighlightLanguages;
     hideSourceButton?: boolean;
     isInline?: boolean;
+    // Supply these two props if you want to control the expanded state from outside
     isExpanded?: boolean;
     onToggleExpanded?: (isVisible: boolean) => void;
 }
@@ -50,7 +51,7 @@ function StackTrace({
     const [filePath, setFilePath] = useState('');
     const [isFetchingFile, setIsFetchingFile] = useState(false);
     const [fileContents, setFileContents] = useState('');
-    const [isViewingFile, setIsViewingFile] = useState(false);
+    const [isViewingSourceFile, setIsViewingSourceFile] = useState(false);
 
     const { readRemoteFile, persistentState } = useRemoteConnection();
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
@@ -96,13 +97,13 @@ function StackTrace({
         return '';
     }, [fileContents, stackTrace, language]);
 
-    const toggleViewingFile = useCallback(() => setIsViewingFile((open) => !open), [setIsViewingFile]);
+    const toggleViewingFile = useCallback(() => setIsViewingSourceFile((open) => !open), [setIsViewingSourceFile]);
 
     const handleReadRemoteFile = async () => {
         const { selectedConnection } = persistentState;
 
         if (fileContents) {
-            setIsViewingFile(true);
+            setIsViewingSourceFile(true);
             return;
         }
 
@@ -113,7 +114,7 @@ function StackTrace({
             setFileContents(response);
 
             setIsFetchingFile(false);
-            setIsViewingFile(true);
+            setIsViewingSourceFile(true);
         }
     };
 
@@ -184,7 +185,7 @@ function StackTrace({
             </div>
 
             <Overlay
-                isOpen={isViewingFile}
+                isOpen={isViewingSourceFile}
                 onClose={toggleViewingFile}
             >
                 {fileWithHighlights && (
