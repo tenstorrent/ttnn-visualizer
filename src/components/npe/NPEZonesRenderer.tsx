@@ -21,8 +21,8 @@ interface NPEZonesRendererProps {
 }
 
 const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = false, onClose, onSelect }) => {
-    const [selectedDeviceId, setSelectedDeviceId] = React.useState<number>(-1);
-    const [selectedCoreAddress, setSelectedCoreAddress] = React.useState<string>('');
+    const [selectedDeviceId, setSelectedDeviceId] = React.useState<number | null>(null);
+    const [selectedCoreAddress, setSelectedCoreAddress] = React.useState<string | null>(null);
     const sortCoreAddress = useCallback((a: NPERootZone, b: NPERootZone) => {
         const chip = a.core[NPE_COORDINATE_INDEX.CHIP_ID] - b.core[NPE_COORDINATE_INDEX.CHIP_ID];
         if (chip !== 0) {
@@ -55,7 +55,7 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
         const addresses =
             npeData.zones
                 ?.filter(
-                    (zone) => zone.core[NPE_COORDINATE_INDEX.CHIP_ID] === selectedDeviceId || selectedDeviceId === -1,
+                    (zone) => zone.core[NPE_COORDINATE_INDEX.CHIP_ID] === selectedDeviceId || selectedDeviceId === null,
                 )
                 .sort(sortCoreAddress)
                 .map((rootZone) => rootZone.core.join('-')) || [];
@@ -63,15 +63,10 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
     }, [npeData.zones, sortCoreAddress, selectedDeviceId]);
 
     const sortedFilteredZones = useMemo(() => {
-        return (
-            [...(npeData.zones || [])]
-                // .sort((a, b) => a.core[NPE_COORDINATE_INDEX.CHIP_ID] - b.core[NPE_COORDINATE_INDEX.CHIP_ID])
-                .sort(sortCoreAddress)
-                .filter(
-                    (zone) => zone.core[NPE_COORDINATE_INDEX.CHIP_ID] === selectedDeviceId || selectedDeviceId === -1,
-                )
-                .filter((zone) => zone.core.join('-') === selectedCoreAddress || selectedCoreAddress === '')
-        );
+        return [...(npeData.zones || [])]
+            .sort(sortCoreAddress)
+            .filter((zone) => zone.core[NPE_COORDINATE_INDEX.CHIP_ID] === selectedDeviceId || selectedDeviceId === null)
+            .filter((zone) => zone.core.join('-') === selectedCoreAddress || selectedCoreAddress === null);
     }, [npeData.zones, sortCoreAddress, selectedDeviceId, selectedCoreAddress]);
 
     const getZoneElements = (
@@ -128,13 +123,13 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
                         }
                         onItemSelect={(id) => {
                             onSelect(null);
-                            setSelectedCoreAddress('');
+                            setSelectedCoreAddress(null);
                             setSelectedDeviceId(id);
                         }}
                     >
                         <Button
                             variant={ButtonVariant.OUTLINED}
-                            text={selectedDeviceId > -1 ? `Device ${selectedDeviceId}` : 'Filter device'}
+                            text={selectedDeviceId !== null ? `Device ${selectedDeviceId}` : 'Filter device'}
                         />
                     </Select>
                     <Select
@@ -165,15 +160,15 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
                     </Select>
                     <Tooltip
                         content='Clear filters'
-                        disabled={selectedDeviceId === -1 && selectedCoreAddress === ''}
+                        disabled={selectedDeviceId === null && selectedCoreAddress === null}
                     >
                         <Button
                             variant={ButtonVariant.OUTLINED}
-                            disabled={selectedDeviceId === -1 && selectedCoreAddress === ''}
+                            disabled={selectedDeviceId === null && selectedCoreAddress === null}
                             icon={IconNames.CROSS}
                             onClick={() => {
-                                setSelectedDeviceId(-1);
-                                setSelectedCoreAddress('');
+                                setSelectedDeviceId(null);
+                                setSelectedCoreAddress(null);
                                 onSelect(null);
                             }}
                         />
@@ -199,7 +194,7 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
 };
 
 const coreAddressItemRenderer =
-    (selected: string): ItemRenderer<string> =>
+    (selected: string | null): ItemRenderer<string> =>
     (id, { handleClick }) => (
         <MenuItem
             key={id}
@@ -212,7 +207,7 @@ const coreAddressItemRenderer =
     );
 
 const deviceIdItemRenderer =
-    (selected: number): ItemRenderer<number> =>
+    (selected: number | null): ItemRenderer<number> =>
     (id, { handleClick }) => (
         <MenuItem
             key={id}
