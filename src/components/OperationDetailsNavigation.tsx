@@ -129,7 +129,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
 
                         {operation?.error && (
                             <Tooltip
-                                content='Error recorded in this operation'
+                                content='Error recorded in operation'
                                 placement={PopoverPosition.TOP}
                             >
                                 <Icon
