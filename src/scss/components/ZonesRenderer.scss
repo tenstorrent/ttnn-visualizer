@@ -1,0 +1,72 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+@use 'sass:color';
+@use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
+
+.zones-renderer {
+    z-index: 20;
+    position: fixed;
+    top: 0;
+    left: 0;
+    max-height: 100vh;
+    min-height: 200px;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    background-color: rgba($tt-background, 0.96);
+    padding: 0 10px 10px;
+    min-width: 300px;
+    border-right: rgba($tt-zone-color, 0.3) 1px solid;
+    border-bottom: rgba($tt-zone-color, 0.3) 1px solid;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease-in-out;
+
+    &.open {
+        transform: translateX(0);
+        box-shadow: 6px 7px 9px rgb(0 0 0 / 40%);
+    }
+
+    .zones-controls {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background-color: $tt-background;
+
+        h3 {
+            padding-top: 5px;
+            margin-top: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .zone-filters {
+            display: inline-flex;
+            gap: 5px;
+            margin-bottom: 5px;
+        }
+    }
+
+    .zones-container {
+        padding-top: 10px;
+        display: grid;
+        align-content: flex-start;
+    }
+
+    .root-zone-collapsible {
+        //
+    }
+
+    .zone-interactive {
+        // cursor: pointer; //will need this eventually
+        margin-bottom: 2px;
+
+        .zone-timeline-range {
+            font-family: variables.$monospace-font;
+            font-size: 12px;
+            padding-left: 20px;
+        }
+    }
+}

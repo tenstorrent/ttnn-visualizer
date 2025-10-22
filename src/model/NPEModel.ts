@@ -188,10 +188,9 @@ export interface NPEData {
 }
 
 export interface NPERootZone {
-    id: string;
     zones: NPEZone[];
     proc: KERNEL_PROCESS;
-    core: NPE_COORDINATES[];
+    core: NPE_COORDINATES;
 }
 
 export interface NPEZone {
