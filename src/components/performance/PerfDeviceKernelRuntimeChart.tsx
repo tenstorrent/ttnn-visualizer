@@ -34,7 +34,7 @@ function PerfDeviceKernelRuntimeChart({ datasets = [] }: PerfDeviceKernelRuntime
                 y: data?.map((row) => row.cores),
                 type: 'bar',
                 hovertemplate: `Operation: %{x}<br />Cores: %{y}`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
+                name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
                 showlegend: true,
                 legendgroup: `group${dataIndex}`,
                 marker: {
@@ -51,7 +51,7 @@ function PerfDeviceKernelRuntimeChart({ datasets = [] }: PerfDeviceKernelRuntime
                 y: data?.map((row) => row.device_time),
                 yaxis: 'y2',
                 hovertemplate: `Operation: %{x}<br />Device Kernel Duration: %{y} ns`,
-                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
+                name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
                 showlegend: true,
                 legendgroup: `group${dataIndex}`,
                 marker: {

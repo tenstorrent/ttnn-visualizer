@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { FC, useState } from 'react';
-import { Button, MenuItem, Tooltip } from '@blueprintjs/core';
+import { Button, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRendererProps, Select } from '@blueprintjs/select';
 import RemoteConnectionDialog from './RemoteConnectionDialog';
@@ -33,7 +33,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
     onRemoveConnection,
     onSyncRemoteFolderList,
 }) => {
-    const [isEditdialogOpen, setIsEditDialogOpen] = useState(false);
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const selectedConnection = connection ?? connectionList[0];
 
     return (
@@ -62,7 +62,10 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                         text={formatConnectionString(selectedConnection)}
                     />
                 </Select>
-                <Tooltip content='Edit selected connection'>
+                <Tooltip
+                    content='Edit selected connection'
+                    position={PopoverPosition.TOP}
+                >
                     <Button
                         aria-label='Edit selected connection'
                         icon={IconNames.EDIT}
@@ -70,7 +73,10 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
                         onClick={() => setIsEditDialogOpen(true)}
                     />
                 </Tooltip>
-                <Tooltip content='Remove selected connection'>
+                <Tooltip
+                    content='Remove selected connection'
+                    position={PopoverPosition.TOP}
+                >
                     <Button
                         aria-label='Remove selected connection'
                         icon={IconNames.TRASH}
@@ -81,7 +87,7 @@ const RemoteConnectionSelector: FC<RemoteConnectionSelectorProps> = ({
 
                 <RemoteConnectionDialog
                     key={`${selectedConnection?.name}${selectedConnection?.host}${selectedConnection?.port}${selectedConnection?.profilerPath}`}
-                    open={isEditdialogOpen}
+                    open={isEditDialogOpen}
                     onAddConnection={(updatedConnection) => {
                         onEditConnection(updatedConnection, connection);
                     }}

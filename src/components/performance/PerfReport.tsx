@@ -451,7 +451,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 >
                     <Tab
                         id={INITIAL_TAB_ID}
-                        title={activePerformanceReport || 'Loading...'}
+                        title={activePerformanceReport?.reportName || 'Loading...'}
                         icon={IconNames.TH_LIST}
                         panel={
                             isStackedView ? (
@@ -460,7 +460,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     stackedData={filteredStackedRows}
                                     filters={filters}
                                     stackedComparisonData={processedComparisonStackedRows}
-                                    reportName={activePerformanceReport}
+                                    reportName={activePerformanceReport?.reportName || null}
                                 />
                             ) : (
                                 <PerfTable
@@ -477,7 +477,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
                                     signposts={signposts}
-                                    reportName={activePerformanceReport}
+                                    reportName={activePerformanceReport?.reportName || null}
                                 />
                             )
                         }
