@@ -210,9 +210,7 @@ class SSHClient:
                     detail=raw_error,
                 )
 
-    def read_file(
-        self, remote_path: Union[str, Path], timeout: int = 30
-    ) -> Optional[bytes]:
+    def read_file(self, remote_path: str, timeout: int = 30) -> Optional[bytes]:
         """
         Read a remote file using SSH cat command.
 
@@ -229,7 +227,6 @@ class SSHClient:
             return result.encode("utf-8")
         except SSHException as e:
             if "No such file" in str(e) or "cannot open" in str(e):
-                logger.error(f"File not found or cannot be read: {path}")
                 return None
             raise
 

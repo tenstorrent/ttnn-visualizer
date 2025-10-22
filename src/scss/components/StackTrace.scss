@@ -21,7 +21,6 @@
     }
 
     .code-output {
-        width: 100%;
         text-wrap: balance;
     }
 
@@ -68,6 +67,23 @@
             .line-number {
                 color: $tt-grey-7;
             }
+        }
+    }
+
+    &.is-inline {
+        overflow: hidden scroll;
+        max-height: 500px; // Allows sticky behaviour to work within operation list
+
+        .code-wrapper {
+            padding-top: 0;
+            padding-bottom: 0;
+            overflow: hidden scroll;
+        }
+
+        .stack-trace-buttons.is-sticky {
+            position: sticky;
+            top: 5px;
+            z-index: 10;
         }
     }
 }

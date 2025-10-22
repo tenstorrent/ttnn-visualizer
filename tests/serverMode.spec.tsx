@@ -40,7 +40,7 @@ vi.mock('../src/functions/getServerConfig.ts', () => ({
 
 it('Disable remote sync in Home route', () => {
     render(
-        <TestProviders initialAtomValues={[[activePerformanceReportAtom, 'test-report']]}>
+        <TestProviders initialAtomValues={[[activePerformanceReportAtom, { reportName: 'test', path: 'testPath' }]]}>
             <Home />
         </TestProviders>,
     );
@@ -58,7 +58,7 @@ it('Disable remote sync in Home route', () => {
 
 it('Hide comparison component in Performance route', () => {
     render(
-        <TestProviders initialAtomValues={[[activePerformanceReportAtom, 'test-report']]}>
+        <TestProviders initialAtomValues={[[activePerformanceReportAtom, { reportName: 'test', path: 'testPath' }]]}>
             <Performance />
         </TestProviders>,
     );

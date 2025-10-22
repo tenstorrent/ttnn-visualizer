@@ -18,6 +18,7 @@ interface LocalFolderPickerProps {
     handleSelect: (folder: ReportFolder) => void;
     handleDelete?: (folder: ReportFolder) => void;
     defaultLabel?: string;
+    valueLabel?: string | null;
 }
 
 const REPORT_NAME_MAX_LENGTH = 18;
@@ -28,13 +29,15 @@ const LocalFolderPicker = ({
     handleSelect,
     handleDelete,
     defaultLabel = 'Select a report...',
+    valueLabel,
 }: LocalFolderPickerProps) => {
     const { data: instance } = useInstance();
-    const isDisabled = !items || items.length === 0;
-    const path = value || '';
 
     const [folderToDelete, setFolderToDelete] = useState<ReportFolder | null>(null);
 
+    const isDisabled = !items || items.length === 0;
+    const activePath = value;
+    const activeName = value ? (valueLabel ?? value) : null;
     const isDeleteDisabled = getServerConfig()?.SERVER_MODE;
 
     // Map through items and if reportNames are duplicated append (count) to the name
@@ -80,11 +83,11 @@ const LocalFolderPicker = ({
                     }
                     labelClassName='folder-picker-name-label'
                     roleStructure='listoption'
-                    active={folder.path === path}
+                    active={folder.path === activePath}
                     disabled={modifiers.disabled}
                     onClick={handleClick}
                     onFocus={handleFocus}
-                    icon={folder.path === path ? IconNames.SAVED : IconNames.DOCUMENT}
+                    icon={folder.path === activePath ? IconNames.SAVED : IconNames.DOCUMENT}
                 />
 
                 {handleDelete && !isDeleteDisabled && (
@@ -140,14 +143,10 @@ const LocalFolderPicker = ({
             onItemSelect={handleSelect}
             disabled={!items || !instance}
         >
-            <Tooltip content={path ? `/${getPrettyPath(path)}` : ''}>
+            <Tooltip content={activePath ? `/${activePath}` : ''}>
                 <Button
                     className='folder-picker-button'
-                    text={
-                        itemsWithUniqueReportNames && path
-                            ? getReportName(itemsWithUniqueReportNames, path)
-                            : defaultLabel
-                    }
+                    text={activeName || defaultLabel}
                     disabled={isDisabled || !instance}
                     alignText='start'
                     icon={IconNames.DOCUMENT_OPEN}
@@ -159,9 +158,6 @@ const LocalFolderPicker = ({
         </Select>
     );
 };
-
-const getReportName = (reports: ReportFolder[], path: string | null) =>
-    reports?.find((report) => report.path === path)?.reportName;
 
 const PATH_REGEX = /^\d+_/gm;
 const getPrettyPath = (path: string) => (PATH_REGEX.test(path) ? path.replace(PATH_REGEX, '') : path);

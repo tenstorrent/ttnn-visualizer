@@ -5,6 +5,7 @@
 
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
+import 'styles/components/ZonesRenderer.scss';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -43,6 +44,7 @@ import { RouteOriginsRenderer } from './RouteOriginsRenderer';
 import { useSelectedTransferGrouping, useShowActiveTransfers } from './useNPEHandlers';
 import { altCongestionColorsAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
+import NPEZonesRenderer from './NPEZonesRenderer';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -72,6 +74,8 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [selectedNode, setSelectedNode] = useState<{ index: number; coords: NPE_COORDINATES } | null>(null);
     const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
     const [visualizationMode, setVisualizationMode] = useState<VISUALIZATION_MODE>(VISUALIZATION_MODE.CONGESTION);
+    const [openZonesPanel, setOpenZonesPanel] = useState<boolean>(false);
+    const [selectedZoneAddress, setSelectedZoneAddress] = useState<NPE_COORDINATES | null>(null);
     let totalColsChips = 0;
     const [zoom, setZoom] = useState<number>(0.75);
     const chips = Object.entries(npeData.chips).map(([ClusterChipId, coords]) => {
@@ -364,6 +368,14 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         </ButtonGroup>
                     </div>
                     <div className='npe-controls-line'>
+                        <Button
+                            text='Zones'
+                            className='zones-open-panel-btn'
+                            icon={IconNames.MultiSelect}
+                            active={openZonesPanel}
+                            onClick={() => setOpenZonesPanel(true)}
+                            disabled={!npeData.zones}
+                        />
                         <ButtonGroup
                             variant={ButtonVariant.OUTLINED}
                             size={Size.SMALL}
@@ -536,6 +548,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                                     eth={eth}
                                     pcie={pcie}
                                     showActiveTransfers={showActiveTransfers}
+                                    selectedZoneAddress={selectedZoneAddress}
                                     isAnnotatingCores={isAnnotatingCores}
                                     TENSIX_SIZE={TENSIX_SIZE}
                                     renderChipId={chips.length > 1}
@@ -761,6 +774,16 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 highlightedRoute={highlightedRoute}
                 setHighlightedRoute={setHighlightedRoute}
                 nocType={nocFilter}
+            />
+            <NPEZonesRenderer
+                npeData={npeData}
+                open={openZonesPanel}
+                onClose={() => {
+                    setOpenZonesPanel(false);
+                }}
+                onSelect={(coords: NPE_COORDINATES | null) => {
+                    setSelectedZoneAddress(coords);
+                }}
             />
         </div>
     );

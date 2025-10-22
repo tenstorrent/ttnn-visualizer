@@ -46,7 +46,7 @@ it('Main Navigation enables specific options when there is an active memory repo
     render(
         <TestProviders
             initialAtomValues={[
-                [activeProfilerReportAtom, 'test'],
+                [activeProfilerReportAtom, { reportName: 'test', path: 'testPath' }],
                 [hasClusterDescriptionAtom, true],
             ]}
         >
@@ -68,7 +68,7 @@ it('Main Navigation enables specific options when there is an active performance
     (useGetClusterDescription as Mock).mockReturnValue({ data: null });
 
     render(
-        <TestProviders initialAtomValues={[[activePerformanceReportAtom, 'test']]}>
+        <TestProviders initialAtomValues={[[activePerformanceReportAtom, { reportName: 'test', path: 'testPath' }]]}>
             <MainNavigation />
         </TestProviders>,
     );

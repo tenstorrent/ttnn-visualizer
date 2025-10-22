@@ -34,7 +34,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                             x: [`Op Count % ${datasets.length > 1 ? `(${dataIndex + 1})` : ''}`],
                             y: [data.filter((row) => row.raw_op_code === opCode).length / data.length],
                             type: 'bar',
-                            name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
+                            name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
                             hovertemplate: `${opCode}<br />%{y:.1%}`,
                             marker: {
                                 color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,
@@ -57,7 +57,7 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [] }: PerfOpCou
                                     data.reduce(getDeviceTimePercentage, 0),
                             ],
                             type: 'bar',
-                            name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
+                            name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
                             hovertemplate: `${opCode}<br />%{y:.1%}`,
                             marker: {
                                 color: selectedOpCodes.find((selected) => selected.opCode === opCode)?.colour,

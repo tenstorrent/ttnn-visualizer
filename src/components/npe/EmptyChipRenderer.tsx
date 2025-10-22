@@ -3,6 +3,8 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React, { JSX } from 'react';
+import classNames from 'classnames';
+import { NPE_COORDINATES, NPE_COORDINATE_INDEX } from '../../model/NPEModel';
 
 interface EmptyChipRendererProps {
     id: number;
@@ -13,6 +15,7 @@ interface EmptyChipRendererProps {
     eth?: number[][];
     pcie?: number[][];
     showActiveTransfers: (arg: null) => void;
+    selectedZoneAddress?: NPE_COORDINATES | null;
     isAnnotatingCores: boolean;
     TENSIX_SIZE: number;
     renderChipId: boolean;
@@ -27,6 +30,7 @@ export const EmptyChipRenderer: React.FC<EmptyChipRendererProps> = ({
     eth,
     pcie,
     showActiveTransfers,
+    selectedZoneAddress,
     isAnnotatingCores,
     TENSIX_SIZE,
     renderChipId = true,
@@ -60,22 +64,31 @@ export const EmptyChipRenderer: React.FC<EmptyChipRendererProps> = ({
             {renderChipId && <div className='chip-id'>{id}</div>}
 
             {Array.from({ length: width }).map((_, x) =>
-                Array.from({ length: height }).map((__, y) => (
-                    // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
-                    <div
-                        className='tensix empty-tensix'
-                        onClick={() => showActiveTransfers(null)}
-                        style={{
-                            gridColumn: x + 1,
-                            gridRow: y + 1,
-                            width: `${TENSIX_SIZE}px`,
-                            height: `${TENSIX_SIZE}px`,
-                        }}
-                        key={`${x}-${y}`}
-                    >
-                        {isAnnotatingCores ? getNodeType([y, x]) : ''}
-                    </div>
-                )),
+                Array.from({ length: height }).map((__, y) => {
+                    const isSelectedZone =
+                        selectedZoneAddress &&
+                        selectedZoneAddress[NPE_COORDINATE_INDEX.CHIP_ID] === id &&
+                        selectedZoneAddress[NPE_COORDINATE_INDEX.Y] === y &&
+                        selectedZoneAddress[NPE_COORDINATE_INDEX.X] === x;
+                    return (
+                        // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
+                        <div
+                            className={classNames('tensix empty-tensix', {
+                                'selected-zone': isSelectedZone,
+                            })}
+                            onClick={() => showActiveTransfers(null)}
+                            style={{
+                                gridColumn: x + 1,
+                                gridRow: y + 1,
+                                width: `${TENSIX_SIZE}px`,
+                                height: `${TENSIX_SIZE}px`,
+                            }}
+                            key={`${x}-${y}`}
+                        >
+                            {isAnnotatingCores ? getNodeType([y, x]) : ''}
+                        </div>
+                    );
+                }),
             )}
         </div>
     );
