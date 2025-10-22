@@ -230,7 +230,7 @@ const LocalFolderOptions: FC = () => {
 
         createToastNotification('Memory report deleted', folder.reportName);
 
-        if (activeProfilerReport === folder) {
+        if (activeProfilerReport?.path === folder.path) {
             setActiveProfilerReport(null);
             setProfilerUploadLabel('Choose directory...');
             setProfilerFolder(undefined);

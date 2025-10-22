@@ -155,10 +155,10 @@ function Layout() {
     );
 }
 
-const getLocalReportName = (reports: ReportFolder[], path: string | null) =>
+const getLocalReportName = (reports: ReportFolder[], path: string | null): string | undefined =>
     reports?.find((report) => report.path === path)?.reportName;
 
-const getRemoteReportName = (remoteFolders: RemoteFolder[], folderName: string | null) =>
-    folderName ? remoteFolders?.find((report) => report.remotePath.includes(folderName))?.reportName : false;
+const getRemoteReportName = (remoteFolders: RemoteFolder[], folderName: string | null): string | undefined =>
+    folderName ? remoteFolders?.find((report) => report.remotePath.includes(folderName))?.reportName : undefined;
 
 export default Layout;
