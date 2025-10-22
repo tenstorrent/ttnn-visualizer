@@ -26,6 +26,7 @@ import { OperationDescription } from '../model/APIData';
 import ListItem from './ListItem';
 import { formatSize } from '../functions/math';
 import OperationListPerfData from './OperationListPerfData';
+import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -102,10 +103,13 @@ const OperationList = () => {
     };
 
     const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
-        const el = event.currentTarget;
+        const { scrollTop, offsetHeight, scrollHeight } = event.currentTarget;
 
-        setHasScrolledFromTop(!(el.scrollTop < OPERATION_EL_HEIGHT / 2));
-        setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
+        setHasScrolledFromTop(!(scrollTop < OPERATION_EL_HEIGHT / 2));
+
+        const scrollBottom = scrollTop + offsetHeight;
+
+        setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
     };
 
     const operationsWithRange = useMemo(() => {

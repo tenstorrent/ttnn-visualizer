@@ -25,6 +25,7 @@ import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
 import { toReadableShape, toReadableType } from '../functions/math';
 import MultiSelectField from './MultiSelectField';
+import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -78,10 +79,14 @@ const TensorList = () => {
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
 
     const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
-        const el = event.currentTarget;
+        const { scrollTop, offsetHeight, scrollHeight } = event.currentTarget;
 
-        setHasScrolledFromTop(!(el.scrollTop < OPERATION_EL_HEIGHT / 2));
-        setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
+        setHasScrolledFromTop(!(scrollTop < OPERATION_EL_HEIGHT / 2));
+
+        const scrollBottom = scrollTop + offsetHeight;
+
+        setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
+        setHasScrolledToBottom(scrollTop + offsetHeight >= scrollHeight);
     };
 
     const handleToggleCollapsible = (operationId: number) => {

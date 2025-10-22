@@ -37,7 +37,7 @@ import {
 } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
-import { ScrollLocations } from '../../definitions/ScrollPositions';
+import { SCROLL_TOLERANCE_PX, ScrollLocations } from '../../definitions/ScrollPositions';
 import useRestoreScrollPosition from '../../hooks/useRestoreScrollPosition';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
@@ -119,10 +119,14 @@ function BufferSummaryPlotRenderer({
     const { updateScrollPosition } = useRestoreScrollPosition(virtualizer, ScrollLocations.BUFFER_SUMMARY);
 
     const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
-        const el = event.currentTarget;
+        const { scrollTop, offsetHeight, scrollHeight } = event.currentTarget;
 
-        setHasScrolledFromTop(!(el.scrollTop < OPERATION_EL_HEIGHT / 2));
-        setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
+        setHasScrolledFromTop(!(scrollTop < OPERATION_EL_HEIGHT / 2));
+
+        const scrollBottom = scrollTop + offsetHeight;
+
+        setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
+        setHasScrolledToBottom(scrollTop + offsetHeight >= scrollHeight);
     };
 
     const handleNavigateToOperation = (event: React.MouseEvent<HTMLAnchorElement>, path: string, index: number) => {

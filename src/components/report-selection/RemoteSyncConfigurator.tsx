@@ -10,7 +10,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useSetAtom } from 'jotai';
 import { useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
-import getFolderNameFromPath from '../../definitions/getFolderNameFromPath';
+import getFolderNameFromPath from '../../functions/getFolderNameFromPath';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
 import createToastNotification from '../../functions/createToastNotification';
 import getServerConfig from '../../functions/getServerConfig';

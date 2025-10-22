@@ -20,6 +20,7 @@ import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { renderMemoryLayoutAtom, showBufferSummaryZoomedAtom, showHexAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
+import { SCROLL_TOLERANCE_PX } from '../../definitions/ScrollPositions';
 
 const PLACEHOLDER_ARRAY_SIZE = 30;
 const OPERATION_EL_HEIGHT = 20; // Height in px of each list item
@@ -99,10 +100,14 @@ function BufferSummaryPlotRendererDRAM({
     const virtualItems = virtualizer.getVirtualItems();
 
     const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
-        const el = event.currentTarget;
+        const { scrollTop, offsetHeight, scrollHeight } = event.currentTarget;
 
-        setHasScrolledFromTop(!(el.scrollTop < OPERATION_EL_HEIGHT / 2));
-        setHasScrolledToBottom(el.scrollTop + el.offsetHeight >= el.scrollHeight);
+        setHasScrolledFromTop(!(scrollTop < OPERATION_EL_HEIGHT / 2));
+
+        const scrollBottom = scrollTop + offsetHeight;
+
+        setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
+        setHasScrolledToBottom(scrollTop + offsetHeight >= scrollHeight);
     };
 
     return uniqueBuffersByOperationList && tensorListByOperation ? (
