@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -78,15 +78,20 @@ const TensorList = () => {
         filteredTensorList && filteredTensorList.length >= 0 ? filteredTensorList.length : PLACEHOLDER_ARRAY_SIZE;
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
 
-    const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
-        const { scrollTop, offsetHeight, scrollHeight } = event.currentTarget;
+    const handleUserScrolling = () => {
+        updateScrollShade();
+    };
 
-        setHasScrolledFromTop(!(scrollTop < OPERATION_EL_HEIGHT / 2));
+    const updateScrollShade = () => {
+        if (scrollElementRef.current) {
+            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
 
-        const scrollBottom = scrollTop + offsetHeight;
+            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
 
-        setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
-        setHasScrolledToBottom(scrollTop + offsetHeight >= scrollHeight);
+            const scrollBottom = scrollTop + offsetHeight;
+
+            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
+        }
     };
 
     const handleToggleCollapsible = (operationId: number) => {
@@ -169,7 +174,10 @@ const TensorList = () => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
             scrollElementRef.current.scrollTop = 0;
             setHasScrolledFromTop(false);
+            setHasScrolledToBottom(false);
         }
+
+        updateScrollShade();
     }, [virtualHeight]);
 
     return (
@@ -277,7 +285,7 @@ const TensorList = () => {
                     'scroll-shade-bottom': !hasScrolledToBottom && numberOfTensors > virtualItems.length,
                     'scroll-lock': virtualHeight <= 0,
                 })}
-                onScroll={(event) => handleUserScrolling(event)}
+                onScroll={handleUserScrolling}
             >
                 <div
                     style={{

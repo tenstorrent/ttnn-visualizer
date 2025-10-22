@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Fragment, UIEvent, useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
@@ -99,15 +99,20 @@ function BufferSummaryPlotRendererDRAM({
     });
     const virtualItems = virtualizer.getVirtualItems();
 
-    const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
-        const { scrollTop, offsetHeight, scrollHeight } = event.currentTarget;
+    const handleUserScrolling = () => {
+        updateScrollShade();
+    };
 
-        setHasScrolledFromTop(!(scrollTop < OPERATION_EL_HEIGHT / 2));
+    const updateScrollShade = () => {
+        if (scrollElementRef.current) {
+            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
 
-        const scrollBottom = scrollTop + offsetHeight;
+            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
 
-        setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
-        setHasScrolledToBottom(scrollTop + offsetHeight >= scrollHeight);
+            const scrollBottom = scrollTop + offsetHeight;
+
+            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
+        }
     };
 
     return uniqueBuffersByOperationList && tensorListByOperation ? (
@@ -165,7 +170,7 @@ function BufferSummaryPlotRendererDRAM({
                             'scroll-shade-top': hasScrolledFromTop,
                             'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
                         })}
-                        onScroll={(event) => handleUserScrolling(event)}
+                        onScroll={handleUserScrolling}
                         ref={scrollElementRef}
                     >
                         <div

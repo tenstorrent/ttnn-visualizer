@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { UIEvent, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { Switch, Tooltip } from '@blueprintjs/core';
@@ -118,15 +118,20 @@ function BufferSummaryPlotRenderer({
 
     const { updateScrollPosition } = useRestoreScrollPosition(virtualizer, ScrollLocations.BUFFER_SUMMARY);
 
-    const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
-        const { scrollTop, offsetHeight, scrollHeight } = event.currentTarget;
+    const handleUserScrolling = () => {
+        updateScrollShade();
+    };
 
-        setHasScrolledFromTop(!(scrollTop < OPERATION_EL_HEIGHT / 2));
+    const updateScrollShade = () => {
+        if (scrollElementRef.current) {
+            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
 
-        const scrollBottom = scrollTop + offsetHeight;
+            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
 
-        setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
-        setHasScrolledToBottom(scrollTop + offsetHeight >= scrollHeight);
+            const scrollBottom = scrollTop + offsetHeight;
+
+            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
+        }
     };
 
     const handleNavigateToOperation = (event: React.MouseEvent<HTMLAnchorElement>, path: string, index: number) => {
@@ -217,7 +222,7 @@ function BufferSummaryPlotRenderer({
                     'scroll-shade-top': hasScrolledFromTop,
                     'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
                 })}
-                onScroll={(event) => handleUserScrolling(event)}
+                onScroll={handleUserScrolling}
                 ref={scrollElementRef}
             >
                 <div

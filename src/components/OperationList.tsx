@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { UIEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Intent, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -102,14 +102,21 @@ const OperationList = () => {
         );
     };
 
-    const handleUserScrolling = (event: UIEvent<HTMLDivElement>) => {
-        const { scrollTop, offsetHeight, scrollHeight } = event.currentTarget;
+    const handleUserScrolling = () => {
+        // TODO: Maybe move this into a hook
+        updateScrollShade();
+    };
 
-        setHasScrolledFromTop(!(scrollTop < OPERATION_EL_HEIGHT / 2));
+    const updateScrollShade = () => {
+        if (scrollElementRef.current) {
+            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
 
-        const scrollBottom = scrollTop + offsetHeight;
+            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
 
-        setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
+            const scrollBottom = scrollTop + offsetHeight;
+
+            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
+        }
     };
 
     const operationsWithRange = useMemo(() => {
@@ -178,7 +185,10 @@ const OperationList = () => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
             scrollElementRef.current.scrollTop = 0;
             setHasScrolledFromTop(false);
+            setHasScrolledToBottom(false);
         }
+
+        updateScrollShade();
     }, [virtualHeight]);
 
     return (
@@ -296,7 +306,7 @@ const OperationList = () => {
                     'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
                     'scroll-lock': virtualHeight <= 0,
                 })}
-                onScroll={(event) => handleUserScrolling(event)}
+                onScroll={handleUserScrolling}
             >
                 <div
                     style={{
