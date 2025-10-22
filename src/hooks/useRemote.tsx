@@ -139,9 +139,17 @@ const useRemoteConnection = () => {
         },
     };
 
-    const readRemoteFile = async (connection?: RemoteConnection) => {
+    const readRemoteFile = async (filePath: string) => {
         try {
-            const response = await axiosInstance.post('/api/remote/read', connection);
+            const response = await axiosInstance.post(
+                '/api/remote/read',
+                { filePath },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                },
+            );
 
             return response.data;
         } catch (error) {

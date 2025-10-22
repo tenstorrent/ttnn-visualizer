@@ -26,6 +26,7 @@ import { OperationDescription } from '../model/APIData';
 import ListItem from './ListItem';
 import { formatSize } from '../functions/math';
 import OperationListPerfData from './OperationListPerfData';
+import StackTrace from './operation-details/StackTrace';
 import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
 
 const PLACEHOLDER_ARRAY_SIZE = 10;
@@ -128,6 +129,11 @@ const OperationList = () => {
 
         return fetchedOperations;
     }, [fetchedOperations, selectedOperationRange]);
+
+    const handleToggleStackTrace = (index: number) => {
+        const scrollToIndex = index - 1;
+        virtualizer.scrollToIndex(scrollToIndex < 0 ? 0 : scrollToIndex);
+    };
 
     useMemo(() => {
         if (operationsWithRange) {
@@ -336,7 +342,7 @@ const OperationList = () => {
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
                                                 <Tooltip
-                                                    content={operation?.error ? `Error detected in this operation` : ''}
+                                                    content={operation?.error ? `Error recorded in operation` : ''}
                                                     placement={PopoverPosition.TOP}
                                                 >
                                                     <ListItem
@@ -367,34 +373,37 @@ const OperationList = () => {
                                                 </p>
 
                                                 {operation?.error && (
-                                                    <div className='memory-error'>
-                                                        <p className='memory-error-title'>
-                                                            {operation?.error.error_type}
-                                                        </p>
-                                                        <p>{operation?.error.error_message}</p>
+                                                    <>
+                                                        <div className='memory-error'>
+                                                            <p className='memory-error-title'>
+                                                                {operation.error.error_type}
+                                                            </p>
 
-                                                        <div className='code-wrapper'>
-                                                            <code
-                                                                className='language-python code-output'
-                                                                // eslint-disable-next-line react/no-danger
-                                                                dangerouslySetInnerHTML={{
-                                                                    __html: operation?.error.error_message,
-                                                                }}
+                                                            <StackTrace
+                                                                stackTrace={operation.error.error_message}
+                                                                language='cpp'
+                                                                hideSourceButton
+                                                                isInline
+                                                                onToggleExpanded={(_isOpen: boolean) =>
+                                                                    handleToggleStackTrace(virtualRow.index)
+                                                                }
                                                             />
                                                         </div>
 
-                                                        <p className='memory-error-title'>Stack Trace</p>
+                                                        <div className='memory-error'>
+                                                            <p className='memory-error-title'>Stack Trace</p>
 
-                                                        <div className='code-wrapper'>
-                                                            <code
-                                                                className='language-python code-output'
-                                                                // eslint-disable-next-line react/no-danger
-                                                                dangerouslySetInnerHTML={{
-                                                                    __html: operation?.error.stack_trace,
-                                                                }}
+                                                            <StackTrace
+                                                                stackTrace={operation.error.stack_trace}
+                                                                language='cpp'
+                                                                hideSourceButton
+                                                                isInline
+                                                                onToggleExpanded={(_isOpen: boolean) =>
+                                                                    handleToggleStackTrace(virtualRow.index)
+                                                                }
                                                             />
                                                         </div>
-                                                    </div>
+                                                    </>
                                                 )}
 
                                                 {activePerformanceReport && (

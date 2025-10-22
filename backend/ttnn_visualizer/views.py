@@ -1164,11 +1164,19 @@ def test_remote_folder():
 
 
 @api.route("/remote/read", methods=["POST"])
-def read_remote_folder():
-    connection = RemoteConnection.model_validate(request.json, strict=False)
+@with_instance
+def read_remote_folder(instance: Instance):
+    file_path = request.json.get("filePath")
+
+    remote_connection = instance.remote_connection
+    if not remote_connection:
+        return Response(
+            status=HTTPStatus.BAD_REQUEST,
+            response="No remote connection found in instance.",
+        )
+
     try:
-        # Only profilerPath is relevant here as we're reading the stack trace file
-        content = read_remote_file(connection, remote_path=connection.profilerPath)
+        content = read_remote_file(remote_connection, remote_path=file_path)
     except RemoteConnectionException as e:
         return Response(status=e.http_status, response=e.message)
     return Response(status=200, response=content)
