@@ -27,7 +27,7 @@ function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurati
                 y: data?.map((row) => row.device_time),
                 mode: 'markers',
                 type: 'scatter',
-                name: getPlotLabel(dataIndex, perfReport, comparisonReportList),
+                name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
                 marker: {
                     size: 10,
                     color: getPrimaryDataColours(dataIndex),
