@@ -51,40 +51,43 @@ function StackTrace({ stackTrace, language, hideSourceButton, isInline, isExpand
 
     const stackTraceWithHighlights = useMemo(() => {
         const filePathMatches = FILE_PATH_REGEX.exec(stackTrace);
-        let highlightedString = hljs.highlight(stackTrace, { language }).value;
+        let highlightedFileContents = hljs.highlight(stackTrace, { language }).value;
 
         if (filePathMatches) {
             setFilePath(filePathMatches[0]);
         }
 
         let line = 1;
-        highlightedString = highlightedString.replace(
+        highlightedFileContents = highlightedFileContents.replace(
             /^/gm,
             () => `<div class="ttnn-line"><span class="line-number">${line++}</span>`,
         );
-        highlightedString = highlightedString.replace(/<div class="ttnn-line">/gm, (match) => `</div>${match}`);
+        highlightedFileContents = highlightedFileContents.replace(
+            /<div class="ttnn-line">/gm,
+            (match) => `</div>${match}`,
+        );
 
-        return highlightedString;
+        return highlightedFileContents;
     }, [stackTrace, language]);
 
     const fileWithHighlights = useMemo(() => {
         const lineNumberMatches = LINE_NUMBER_REGEX.exec(stackTrace);
 
         if (fileContents && lineNumberMatches?.[0]) {
-            let highlightedString = hljs.highlight(fileContents, { language }).value;
+            let highlightedFileContents = hljs.highlight(fileContents, { language }).value;
 
             let line = 1;
-            highlightedString = highlightedString.replace(/^/gm, () => {
+            highlightedFileContents = highlightedFileContents.replace(/^/gm, () => {
                 const classes =
                     line === parseInt(lineNumberMatches?.[0], 10) ? 'ttnn-line highlighted-line' : 'ttnn-line';
                 return `<div class="${classes}"><span class="line-number">${line++}</span>`;
             });
-            highlightedString = highlightedString.replace(
+            highlightedFileContents = highlightedFileContents.replace(
                 /<div class="ttnn-line">|<div class="ttnn-line highlighted-line">/gm,
                 (match) => `</div>${match}`,
             );
 
-            return highlightedString;
+            return highlightedFileContents;
         }
 
         return '';
