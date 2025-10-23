@@ -32,7 +32,7 @@ interface StackTraceProps {
     isInline?: boolean;
     // Supply these two props if you want to control the expanded state from outside
     isExpanded?: boolean;
-    onToggleExpanded?: (isVisible: boolean) => void;
+    onChangeExpanded?: (isVisible: boolean) => void;
 }
 
 function StackTrace({
@@ -41,7 +41,7 @@ function StackTrace({
     hideSourceButton,
     isInline,
     isExpanded,
-    onToggleExpanded,
+    onChangeExpanded,
 }: StackTraceProps) {
     // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
     // const [canReadRemoteFile, setCanReadRemoteFile] = useState(true);
@@ -125,8 +125,8 @@ function StackTrace({
             scrollElementRef?.current?.scrollIntoView();
         }
 
-        if (onToggleExpanded) {
-            onToggleExpanded(isExpandedInternal);
+        if (onChangeExpanded) {
+            onChangeExpanded(isExpandedInternal);
         }
     };
 
