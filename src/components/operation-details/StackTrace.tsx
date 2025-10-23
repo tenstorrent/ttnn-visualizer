@@ -31,16 +31,23 @@ interface StackTraceProps {
     hideSourceButton?: boolean;
     isInline?: boolean;
     // Supply these two props if you want to control the expanded state from outside
-    isExpanded?: boolean;
+    isInitiallyExpanded?: boolean;
     onExpandChange?: (isVisible: boolean) => void;
 }
 
-function StackTrace({ stackTrace, language, hideSourceButton, isInline, isExpanded, onExpandChange }: StackTraceProps) {
+function StackTrace({
+    stackTrace,
+    language,
+    hideSourceButton,
+    isInline,
+    isInitiallyExpanded,
+    onExpandChange,
+}: StackTraceProps) {
     // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
     // const [canReadRemoteFile, setCanReadRemoteFile] = useState(true);
     const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
 
-    const [isExpandedInternal, setIsExpandedInternal] = useState(isExpanded || false);
+    const [isExpanded, setIsExpanded] = useState(isInitiallyExpanded || false);
     const [filePath, setFilePath] = useState('');
     const [isFetchingFile, setIsFetchingFile] = useState(false);
     const [fileContents, setFileContents] = useState('');
@@ -115,14 +122,14 @@ function StackTrace({ stackTrace, language, hideSourceButton, isInline, isExpand
     };
 
     const handleToggleStackTrace = () => {
-        setIsExpandedInternal(!isExpandedInternal);
+        setIsExpanded(!isExpanded);
 
-        if (isExpandedInternal && scrollElementRef?.current && !isTopOfElementInViewport(scrollElementRef.current)) {
+        if (isExpanded && scrollElementRef?.current && !isTopOfElementInViewport(scrollElementRef.current)) {
             scrollElementRef?.current?.scrollIntoView();
         }
 
         if (onExpandChange) {
-            onExpandChange(isExpandedInternal);
+            onExpandChange(isExpanded);
         }
     };
 
@@ -133,7 +140,7 @@ function StackTrace({ stackTrace, language, hideSourceButton, isInline, isExpand
             })}
             ref={scrollElementRef}
         >
-            {isExpandedInternal ? (
+            {isExpanded ? (
                 <div className='code-wrapper'>
                     <code
                         className={`language-${language} code-output`}
@@ -158,8 +165,8 @@ function StackTrace({ stackTrace, language, hideSourceButton, isInline, isExpand
                     variant={ButtonVariant.MINIMAL}
                     intent={Intent.PRIMARY}
                     onClick={handleToggleStackTrace}
-                    text={isExpandedInternal ? 'Collapse' : 'Expand'}
-                    endIcon={isExpandedInternal ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
+                    text={isExpanded ? 'Collapse' : 'Expand'}
+                    endIcon={isExpanded ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
                 />
 
                 {!hideSourceButton && (

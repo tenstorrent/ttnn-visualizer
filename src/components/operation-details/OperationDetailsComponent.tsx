@@ -176,7 +176,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                             <StackTrace
                                 stackTrace={details.stack_trace}
                                 language='python'
-                                isExpanded={showFullStackTrace}
+                                isInitiallyExpanded={showFullStackTrace}
                                 onExpandChange={() => setShowFullStackTrace(!showFullStackTrace)}
                             />
                         )}
