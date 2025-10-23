@@ -4,6 +4,7 @@
 
 import { Button, Dialog, DialogBody, DialogFooter, Intent } from '@blueprintjs/core';
 import { useState } from 'react';
+import { IconNames } from '@blueprintjs/icons';
 import getServerConfig from '../functions/getServerConfig';
 
 const InitialMessage = () => {
@@ -17,7 +18,7 @@ const InitialMessage = () => {
     return (
         <Dialog
             title='Welcome to TT-NN Visualizer'
-            icon='info-sign'
+            icon={IconNames.INFO_SIGN}
             isOpen={isDialogOpen}
             usePortal={false}
             onClose={handleCloseDialog}
