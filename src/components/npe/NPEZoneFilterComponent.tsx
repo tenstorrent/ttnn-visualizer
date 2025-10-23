@@ -13,14 +13,19 @@ import { ItemPredicate, Select } from '@blueprintjs/select';
 import Collapsible from '../Collapsible';
 import { NPEData, NPERootZone, NPEZone, NPE_COORDINATES, NPE_COORDINATE_INDEX } from '../../model/NPEModel';
 
-interface NPEZonesRendererProps {
+interface NPEZoneFilterComponentProps {
     npeData: NPEData;
     open: boolean;
     onClose: () => void;
     onSelect: (address: NPE_COORDINATES | null) => void;
 }
 
-const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = false, onClose, onSelect }) => {
+const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
+    npeData,
+    open = false,
+    onClose,
+    onSelect,
+}) => {
     const [selectedDeviceId, setSelectedDeviceId] = React.useState<number | null>(null);
     const [selectedCoreAddress, setSelectedCoreAddress] = React.useState<string | null>(null);
     const sortCoreAddress = useCallback((a: NPERootZone, b: NPERootZone) => {
@@ -218,4 +223,4 @@ const deviceIdItemRenderer =
             icon={id === selected ? IconNames.TICK : IconNames.BLANK}
         />
     );
-export default NPEZonesRenderer;
+export default NPEZoneFilterComponent;

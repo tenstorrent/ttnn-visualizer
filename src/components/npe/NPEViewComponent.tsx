@@ -5,7 +5,7 @@
 
 import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
-import 'styles/components/ZonesRenderer.scss';
+import 'styles/components/NPEZoneFilterComponent.scss';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Intent, Size, Slider, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -44,7 +44,7 @@ import { RouteOriginsRenderer } from './RouteOriginsRenderer';
 import { useSelectedTransferGrouping, useShowActiveTransfers } from './useNPEHandlers';
 import { altCongestionColorsAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
-import NPEZonesRenderer from './NPEZonesRenderer';
+import NPEZoneFilterComponent from './NPEZoneFilterComponent';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -775,7 +775,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 setHighlightedRoute={setHighlightedRoute}
                 nocType={nocFilter}
             />
-            <NPEZonesRenderer
+            <NPEZoneFilterComponent
                 npeData={npeData}
                 open={openZonesPanel}
                 onClose={() => {
