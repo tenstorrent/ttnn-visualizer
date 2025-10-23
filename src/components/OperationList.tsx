@@ -384,7 +384,7 @@ const OperationList = () => {
                                                                 language='cpp'
                                                                 hideSourceButton
                                                                 isInline
-                                                                onChangeExpanded={(_isOpen: boolean) =>
+                                                                onExpandChange={(_isOpen: boolean) =>
                                                                     handleToggleStackTrace(virtualRow.index)
                                                                 }
                                                             />
@@ -398,7 +398,7 @@ const OperationList = () => {
                                                                 language='cpp'
                                                                 hideSourceButton
                                                                 isInline
-                                                                onChangeExpanded={(_isOpen: boolean) =>
+                                                                onExpandChange={(_isOpen: boolean) =>
                                                                     handleToggleStackTrace(virtualRow.index)
                                                                 }
                                                             />

@@ -177,7 +177,7 @@ const OperationDetailsComponent: React.FC<OperationDetailsProps> = ({ operationI
                                 stackTrace={details.stack_trace}
                                 language='python'
                                 isExpanded={showFullStackTrace}
-                                onChangeExpanded={() => setShowFullStackTrace(!showFullStackTrace)}
+                                onExpandChange={() => setShowFullStackTrace(!showFullStackTrace)}
                             />
                         )}
                         <div className='chart-controls'>

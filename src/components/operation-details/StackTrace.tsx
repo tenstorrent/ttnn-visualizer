@@ -32,17 +32,10 @@ interface StackTraceProps {
     isInline?: boolean;
     // Supply these two props if you want to control the expanded state from outside
     isExpanded?: boolean;
-    onChangeExpanded?: (isVisible: boolean) => void;
+    onExpandChange?: (isVisible: boolean) => void;
 }
 
-function StackTrace({
-    stackTrace,
-    language,
-    hideSourceButton,
-    isInline,
-    isExpanded,
-    onChangeExpanded,
-}: StackTraceProps) {
+function StackTrace({ stackTrace, language, hideSourceButton, isInline, isExpanded, onExpandChange }: StackTraceProps) {
     // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
     // const [canReadRemoteFile, setCanReadRemoteFile] = useState(true);
     const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
@@ -125,8 +118,8 @@ function StackTrace({
             scrollElementRef?.current?.scrollIntoView();
         }
 
-        if (onChangeExpanded) {
-            onChangeExpanded(isExpandedInternal);
+        if (onExpandChange) {
+            onExpandChange(isExpandedInternal);
         }
     };
 
