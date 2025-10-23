@@ -29,3 +29,10 @@ export interface MountRemoteFolder {
     status: HttpStatusCode;
     message: string;
 }
+
+export const SYNC_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+});
+
+export const NEVER_SYNCED_LABEL = 'never';

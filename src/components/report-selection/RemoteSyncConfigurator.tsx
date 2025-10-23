@@ -2,14 +2,19 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, useEffect, useState } from 'react';
+import { FC, useEffect, useMemo, useState } from 'react';
 
-import { Button, FormGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, FormGroup, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 
-import { IconNames } from '@blueprintjs/icons';
+import { IconName, IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import { useQueryClient } from '@tanstack/react-query';
-import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
+import {
+    NEVER_SYNCED_LABEL,
+    RemoteConnection,
+    RemoteFolder,
+    SYNC_DATE_FORMATTER,
+} from '../../definitions/RemoteConnection';
 import createToastNotification from '../../functions/createToastNotification';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
@@ -25,6 +30,7 @@ import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
 import { ReportLocation } from '../../definitions/Reports';
+import getUTCFromEpoch from '../../functions/getUTCFromEpoch';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemoteConnection();
@@ -263,6 +269,11 @@ const RemoteSyncConfigurator: FC = () => {
         performanceReportLocation,
     ]);
 
+    const isSelectedReportFolderOutdated = useMemo(
+        () => (selectedReportFolder ? isRemoteFolderOutdated(selectedReportFolder) : false),
+        [selectedReportFolder],
+    );
+
     return (
         <>
             <FormGroup
@@ -388,18 +399,42 @@ const RemoteSyncConfigurator: FC = () => {
                     }}
                     type='profiler'
                 >
-                    <Tooltip
-                        content='Re-sync remote folder'
-                        position={PopoverPosition.TOP}
-                    >
-                        <Button
-                            aria-label='Re-sync remote folder'
-                            icon={IconNames.REFRESH}
-                            loading={isSyncingReportFolder}
-                            disabled={isDisabled || !selectedReportFolder || reportFolderList?.length === 0}
-                            onClick={async () => syncSelectedReportFolder(selectedReportFolder)}
-                        />
-                    </Tooltip>
+                    {(profilerReportLocation === ReportLocation.REMOTE || isSyncingReportFolder) && (
+                        <Tooltip
+                            content={getTooltipContent(
+                                selectedReportFolder,
+                                isSelectedReportFolderOutdated,
+                                isSyncingReportFolder,
+                            )}
+                            position={PopoverPosition.TOP}
+                        >
+                            <Button
+                                aria-label={getTooltipContent(
+                                    selectedReportFolder,
+                                    isSelectedReportFolderOutdated,
+                                    isSyncingReportFolder,
+                                )}
+                                icon={
+                                    selectedReportFolder
+                                        ? getSyncIcon(
+                                              selectedReportFolder,
+                                              isSyncingReportFolder,
+                                              isSelectedReportFolderOutdated,
+                                          )
+                                        : undefined
+                                }
+                                intent={getSyncIntent(
+                                    selectedReportFolder,
+                                    isSyncingReportFolder,
+                                    isSelectedReportFolderOutdated,
+                                )}
+                                variant={ButtonVariant.MINIMAL}
+                                loading={isSyncingReportFolder}
+                                disabled={isDisabled || !selectedReportFolder || reportFolderList?.length === 0}
+                                onClick={async () => syncSelectedReportFolder(selectedReportFolder)}
+                            />
+                        </Tooltip>
+                    )}
                 </RemoteFolderSelector>
             </FormGroup>
 
@@ -458,6 +493,46 @@ const RemoteSyncConfigurator: FC = () => {
             </FormGroup>
         </>
     );
+};
+
+const getTooltipContent = (folder: RemoteFolder | undefined, isOutdated: boolean, isSyncing: boolean): string => {
+    if (!folder || isSyncing) {
+        return '';
+    }
+
+    if (isOutdated) {
+        return `Click to sync, folder may be out of date - ${folder.lastSynced ? SYNC_DATE_FORMATTER.format(getUTCFromEpoch(folder.lastSynced)) : `last sync: ${NEVER_SYNCED_LABEL}`}`;
+    }
+
+    return `Folder last synced ${folder.lastSynced ? `${SYNC_DATE_FORMATTER.format(getUTCFromEpoch(folder.lastSynced))}` : ''}`;
+};
+
+const getSyncIcon = (folder: RemoteFolder | undefined, isSyncing: boolean, isOutdated: boolean): IconName => {
+    if (typeof folder === 'undefined') {
+        return IconNames.HELP;
+    }
+
+    if (isSyncing) {
+        return IconNames.REFRESH;
+    }
+
+    if (isOutdated) {
+        return IconNames.OUTDATED;
+    }
+
+    return IconNames.UPDATED;
+};
+
+const getSyncIntent = (folder: RemoteFolder | undefined, isSyncing: boolean, isOutdated: boolean): Intent => {
+    if (isSyncing) {
+        return Intent.NONE;
+    }
+
+    if (folder && isOutdated) {
+        return Intent.WARNING;
+    }
+
+    return Intent.SUCCESS;
 };
 
 export default RemoteSyncConfigurator;
