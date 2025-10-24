@@ -32,6 +32,12 @@
         }
     }
 
+    .collapsible-controls {
+        .collapsible-button {
+            background-color: transparent;
+        }
+    }
+
     &.empty-collapsible {
         .collapsible-controls {
             [type='button'] {
@@ -46,12 +52,6 @@
             .bp6-icon.bp6-icon-caret-down {
                 display: none;
             }
-        }
-    }
-
-    .collapsible-controls {
-        .collapsible-button {
-            background-color: transparent;
         }
     }
 

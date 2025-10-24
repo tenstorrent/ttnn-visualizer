@@ -27,6 +27,7 @@ import FeedbackButton from './FeedbackButton';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import useRemoteConnection from '../hooks/useRemote';
+import useRestoreScrollPositionV2 from '../hooks/useRestoreScrollPositionV2';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -47,6 +48,7 @@ function Layout() {
     const { data: instance } = useInstance();
     const { data: reports } = useReportFolderList();
     const location = useLocation();
+    const { resetScrollPositions } = useRestoreScrollPositionV2();
 
     const appVersion = import.meta.env.APP_VERSION;
     const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
@@ -62,6 +64,8 @@ function Layout() {
 
     useEffect(() => {
         if (instance?.active_report) {
+            resetScrollPositions();
+
             setActiveProfilerReport(
                 profilerReportPath
                     ? {
@@ -86,6 +90,7 @@ function Layout() {
                 instance?.performance_path?.includes('/remote') ? ReportLocation.REMOTE : ReportLocation.LOCAL,
             );
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         instance,
         profilerReportPath,
@@ -97,6 +102,7 @@ function Layout() {
         profilerReportLocation,
         setProfilerReportLocation,
         setPerformanceReportLocation,
+        // resetScrollPositions --- IGNORE --
     ]);
 
     return (
