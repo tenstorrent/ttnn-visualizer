@@ -9,3 +9,11 @@ export interface VirtualListState {
     itemCount: number;
     measurementsCache: VirtualItem[];
 }
+
+export enum ScrollLocationsV2 {
+    OPERATION_LIST = 'operation_list',
+}
+
+export interface ScrollPositionV2 {
+    [key: string]: VirtualListState;
+}

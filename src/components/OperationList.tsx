@@ -19,7 +19,6 @@ import ROUTES from '../definitions/Routes';
 import {
     activePerformanceReportAtom,
     expandedOperationsAtom,
-    operationListStateAtom,
     selectedOperationRangeAtom,
     shouldCollapseAllOperationsAtom,
 } from '../store/app';
@@ -28,7 +27,9 @@ import ListItem from './ListItem';
 import { formatSize } from '../functions/math';
 import OperationListPerfData from './OperationListPerfData';
 import StackTrace from './operation-details/StackTrace';
+import useRestoreScrollPositionV2 from '../hooks/useRestoreScrollPositionV2';
 import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
+import { ScrollLocationsV2 } from '../definitions/ScrollPositionsV2';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -43,7 +44,6 @@ enum SortingOptions {
 const OperationList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
     const [expandedOperations, setExpandedOperations] = useAtom(expandedOperationsAtom);
-    const [operationListState, setOperationListState] = useAtom(operationListStateAtom);
 
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
@@ -59,13 +59,16 @@ const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
+    const { getListState, setListState } = useRestoreScrollPositionV2(ScrollLocationsV2.OPERATION_LIST);
     const scrollElementRef = useRef<HTMLDivElement>(null);
+
+    const listState = getListState();
 
     const {
         itemCount: restoredItemCount,
         scrollOffset: restoredOffset,
         measurementsCache: restoreMeasurementsCache,
-    } = operationListState ?? {};
+    } = listState ?? {};
 
     const virtualizer = useVirtualizer({
         estimateSize: () => OPERATION_EL_HEIGHT,
@@ -88,6 +91,7 @@ const OperationList = () => {
         //     return cachedMeasurement || element.getBoundingClientRect().height;
         // },
     });
+
     const virtualItems = virtualizer.getVirtualItems();
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
     const numberOfOperations = filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE;
@@ -191,17 +195,9 @@ const OperationList = () => {
     }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration, selectedOperationRange]);
 
     useEffect(() => {
-        setOperationListState({
-            itemCount: filteredOperationsList?.length || 0,
-            scrollOffset: virtualizer.scrollOffset || 0,
-            measurementsCache: virtualizer.measurementsCache,
-        });
-    }, [setOperationListState, filteredOperationsList, virtualizer.scrollOffset, virtualizer.measurementsCache]);
-
-    useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;
 
-        if (initialOperationId && virtualizer) {
+        if (initialOperationId) {
             const operationIndex =
                 fetchedOperations?.findIndex(
                     (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
@@ -212,24 +208,47 @@ const OperationList = () => {
             // Navigating to the same page replaces the entry in the browser history
             navigate(ROUTES.OPERATIONS, { replace: true });
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- Only want to run this on mount
-    }, []);
+
+        setListState({
+            itemCount: filteredOperationsList?.length || 0,
+            scrollOffset: virtualizer.scrollOffset || 0,
+            measurementsCache: virtualizer.measurementsCache,
+        });
+    }, [
+        virtualizer.scrollOffset,
+        virtualizer.measurementsCache,
+        filteredOperationsList,
+        fetchedOperations,
+        location.state,
+        navigate,
+        setListState,
+    ]);
 
     const scrollToIndex = useCallback(
-        (index: number) => {
-            virtualizer.scrollToIndex(index, { align: 'start' });
-        },
+        (index: number) => virtualizer.scrollToIndex(index, { align: 'start' }),
         [virtualizer],
     );
 
     const scrollToTop = () => {
         setFocussedRow(null);
         scrollToIndex(0);
+        setListState({
+            itemCount: filteredOperationsList?.length || 0,
+            scrollOffset: 0,
+            measurementsCache: virtualizer.measurementsCache,
+        });
     };
 
     const scrollToEnd = () => {
+        setFocussedRow(null);
         scrollToIndex(numberOfOperations);
+        setListState({
+            itemCount: filteredOperationsList?.length || 0,
+            scrollOffset: scrollElementRef.current?.scrollTop || virtualizer.scrollOffset || 0,
+            measurementsCache: virtualizer.measurementsCache,
+        });
     };
+
     useEffect(() => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
             scrollElementRef.current.scrollTop = 0;

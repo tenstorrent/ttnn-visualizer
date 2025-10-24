@@ -8,7 +8,7 @@ import { Virtualizer } from '@tanstack/react-virtual';
 import { ScrollLocations, ScrollPositions } from '../definitions/ScrollPositions';
 import { scrollPositionsAtom } from '../store/app';
 
-const useRestoreScrollPosition = (virtualizer: Virtualizer<Element, Element>, key: ScrollLocations) => {
+const useRestoreScrollPosition = (virtualizer: Virtualizer<HTMLDivElement, Element>, key: ScrollLocations) => {
     const [scrollPositions, setScrollPositions] = useAtom(scrollPositionsAtom);
 
     const updateScrollPosition = (index: number) => {
