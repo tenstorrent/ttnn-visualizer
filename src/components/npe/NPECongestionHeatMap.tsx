@@ -6,22 +6,41 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useAtomValue } from 'jotai';
 import { calculateLinkCongestionColor } from './drawingApi';
-import { NPE_LINK, NoCType, TimestepData } from '../../model/NPEModel';
+import { NPERootZone, NPEZone, NPE_LINK, NoCType, TimestepData } from '../../model/NPEModel';
 import { altCongestionColorsAtom } from '../../store/app';
 
 interface NPEHeatMapProps {
     timestepList: TimestepData[];
     canvasWidth: number;
+    useTimesteps: boolean;
+    cyclesPerTimestep: number;
+    selectedZoneList: NPERootZone[];
     nocType?: NoCType | null;
 }
 
-const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasWidth, nocType = null }) => {
+const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
+    timestepList,
+    canvasWidth,
+    nocType = null,
+    useTimesteps,
+    cyclesPerTimestep,
+    selectedZoneList = [],
+}) => {
     const altCongestionColors = useAtomValue(altCongestionColorsAtom);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const canvasHeight = 30;
+    const CANVAS_HEIGHT = 30;
+    const HEIGHT_PER_ZONE = 20;
+    const getMaxDepth = (z: NPEZone): number => (z.zones?.length ? 1 + Math.max(...z.zones.map(getMaxDepth)) : 0);
 
+    const canvasZoneHeight =
+        Math.max(
+            ...selectedZoneList.flatMap((zone) => {
+                return zone.zones.map((z) => 1 + getMaxDepth(z));
+            }),
+            0,
+        ) * HEIGHT_PER_ZONE;
+    // const canvasZoneHeight = selectedZoneList.length > 0 ? selectedZoneList.length * 20 : 0;
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
-
     const congestionMapPerTimestamp = useMemo(() => {
         return {
             worst: timestepList.map((timestep) => {
@@ -78,26 +97,29 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
     useEffect(() => {
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext('2d');
-
         if (!canvas || !ctx) {
             return;
         }
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // ctx.fillStyle = '#ff0000ff';
+        ctx.fillRect(0, 0, canvasWidth, CANVAS_HEIGHT + canvasZoneHeight);
+        ctx.clearRect(0, 0, canvas.width, CANVAS_HEIGHT + canvasZoneHeight);
         const chunkWidth = canvas.width / congestionMapPerTimestamp.worst.length;
         congestionMapPerTimestamp.worst.forEach(({ color }, index) => {
             ctx.fillStyle = color;
-            ctx.fillRect(index * chunkWidth, 0, chunkWidth, canvas.height / 3);
+            ctx.fillRect(index * chunkWidth, 0, chunkWidth, CANVAS_HEIGHT / 3);
         });
         congestionMapPerTimestamp.utilization.forEach(({ color }, index) => {
             ctx.fillStyle = color;
-            ctx.fillRect(index * chunkWidth, canvas.height / 3, chunkWidth, (canvas.height / 3) * 2);
+            ctx.fillRect(index * chunkWidth, CANVAS_HEIGHT / 3, chunkWidth, (CANVAS_HEIGHT / 3) * 2);
         });
         congestionMapPerTimestamp.demand.forEach(({ color }, index) => {
             ctx.fillStyle = color;
-            ctx.fillRect(index * chunkWidth, (canvas.height / 3) * 2, chunkWidth, canvas.height);
+            ctx.fillRect(index * chunkWidth, (CANVAS_HEIGHT / 3) * 2, chunkWidth, CANVAS_HEIGHT / 3);
         });
-    }, [congestionMapPerTimestamp, canvasWidth, canvasHeight]);
+
+        // ctx.fillStyle = '#FFFFFF';
+    }, [congestionMapPerTimestamp, canvasWidth, CANVAS_HEIGHT, canvasZoneHeight]);
 
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
@@ -115,7 +137,13 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                     y: 0,
                     text: (
                         <div>
-                            {nocType !== undefined && <div>Selected {nocType}</div>}
+                            {useTimesteps ? (
+                                <>Timestep {hoveredIndex}</>
+                            ) : (
+                                <>Cycles {hoveredIndex * cyclesPerTimestep}</>
+                            )}
+
+                            {nocType !== null && <div>Selected {nocType}</div>}
                             <div>
                                 <span
                                     style={{
@@ -182,7 +210,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                         offset: {
                             enabled: true,
                             options: {
-                                offset: [tooltip.x, canvasHeight * 1.5],
+                                offset: [tooltip.x, CANVAS_HEIGHT + canvasZoneHeight + 30],
                             },
                         },
                     }}
@@ -202,11 +230,10 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({ timestepList, canvasW
                 </Tooltip>
             )}
             <canvas
-                title='NOC timeline'
-                style={{ width: '100%', height: `${canvasHeight}px` }}
+                style={{ width: '100%', height: `${CANVAS_HEIGHT + canvasZoneHeight}px` }}
                 ref={canvasRef}
                 width={canvasWidth}
-                height={canvasHeight}
+                height={CANVAS_HEIGHT + canvasZoneHeight}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
             />

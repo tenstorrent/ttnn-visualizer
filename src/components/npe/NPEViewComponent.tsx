@@ -19,6 +19,7 @@ import {
     NPEData,
     NPERootZone,
     NPE_COORDINATES,
+    NPE_COORDINATE_INDEX,
     NPE_LINK,
     NoCFlowBase,
     NoCTransfer,
@@ -76,6 +77,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [visualizationMode, setVisualizationMode] = useState<VISUALIZATION_MODE>(VISUALIZATION_MODE.CONGESTION);
     const [openZonesPanel, setOpenZonesPanel] = useState<boolean>(false);
     const [selectedZoneAddress, setSelectedZoneAddress] = useState<NPE_COORDINATES | null>(null);
+
     let totalColsChips = 0;
     const [zoom, setZoom] = useState<number>(0.75);
     const chips = Object.entries(npeData.chips).map(([ClusterChipId, coords]) => {
@@ -107,6 +109,19 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
         }
     }, [fabricEventsFilter, isFabricTransfersFilteringEnabled]);
+
+    const selectedZoneList: NPERootZone[] = useMemo(() => {
+        if (selectedZoneAddress === null) {
+            return [];
+        }
+        return zones.filter((rootZone) => {
+            return (
+                rootZone.core[NPE_COORDINATE_INDEX.CHIP_ID] === selectedZoneAddress[NPE_COORDINATE_INDEX.CHIP_ID] &&
+                rootZone.core[NPE_COORDINATE_INDEX.Y] === selectedZoneAddress[NPE_COORDINATE_INDEX.Y] &&
+                rootZone.core[NPE_COORDINATE_INDEX.X] === selectedZoneAddress[NPE_COORDINATE_INDEX.X]
+            );
+        });
+    }, [selectedZoneAddress, zones]);
 
     const links = useMemo(() => {
         const timestepData = npeData.timestep_data[selectedTimestep];
@@ -516,6 +531,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 <NPECongestionHeatMap
                     timestepList={npeData.timestep_data}
                     canvasWidth={canvasWidth}
+                    useTimesteps={timestepsScale}
+                    cyclesPerTimestep={npeData.common_info.cycles_per_timestep || 1}
+                    selectedZoneList={selectedZoneList}
                     nocType={nocFilter}
                 />
             </div>
