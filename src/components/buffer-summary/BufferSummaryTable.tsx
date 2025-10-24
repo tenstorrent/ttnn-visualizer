@@ -6,7 +6,7 @@ import classNames from 'classnames';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Table2 } from '@blueprintjs/table';
-import { Checkbox, HotkeysProvider, Icon, InputGroup } from '@blueprintjs/core';
+import { Checkbox, HotkeysProvider, Icon, InputGroup, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { BuffersByOperationData } from '../../hooks/useAPI';
 import { BufferTypeLabel } from '../../model/BufferType';
@@ -150,7 +150,7 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                 {definition?.filterable && (
                     <div className='column-filter'>
                         <InputGroup
-                            size='small'
+                            size={Size.SMALL}
                             asyncControl
                             onChange={(e) => updateColumnFilter(key, e.target.value)}
                             placeholder='Filter...'

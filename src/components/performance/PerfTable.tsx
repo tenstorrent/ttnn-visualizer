@@ -139,7 +139,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                             <Button
                                 icon={IconNames.Random}
                                 onClick={() => navigate(`${ROUTES.NPE}/${manifestRecord.file}`)}
-                                variant='minimal'
+                                variant={ButtonVariant.MINIMAL}
                                 className='graph-button'
                             />
                         </Tooltip>
@@ -231,7 +231,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                                                 <div className='column-filter'>
                                                     <InputGroup
                                                         asyncControl
-                                                        size='small'
+                                                        size={Size.SMALL}
                                                         onValueChange={(value) => updateColumnFilter(h.key, value)}
                                                         placeholder='Filter...'
                                                         value={filters?.[h.key]}

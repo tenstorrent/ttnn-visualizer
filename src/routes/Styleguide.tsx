@@ -11,6 +11,7 @@ import {
     InputGroup,
     Intent,
     PopoverPosition,
+    Size,
     Switch,
     Tag,
     Tooltip,
@@ -509,31 +510,31 @@ export default function Styleguide() {
             <div className='container flex'>
                 <Tag
                     intent={Intent.NONE}
-                    size='large'
+                    size={Size.LARGE}
                 >
                     None
                 </Tag>
                 <Tag
                     intent={Intent.PRIMARY}
-                    size='large'
+                    size={Size.LARGE}
                 >
                     Primary
                 </Tag>
                 <Tag
                     intent={Intent.WARNING}
-                    size='large'
+                    size={Size.LARGE}
                 >
                     Warning
                 </Tag>
                 <Tag
                     intent={Intent.SUCCESS}
-                    size='large'
+                    size={Size.LARGE}
                 >
                     Success
                 </Tag>
                 <Tag
                     intent={Intent.DANGER}
-                    size='large'
+                    size={Size.LARGE}
                 >
                     Danger
                 </Tag>

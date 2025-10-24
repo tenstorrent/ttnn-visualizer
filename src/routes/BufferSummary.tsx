@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { AnchorButton, ButtonGroup, Callout, Intent, Tab, Tabs } from '@blueprintjs/core';
+import { AnchorButton, ButtonGroup, ButtonVariant, Callout, Intent, Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import { useBuffers, useCreateTensorsByOperationByIdList, useOperationsList } from '../hooks/useAPI';
@@ -68,7 +68,7 @@ function BufferSummary() {
                     intent={Intent.PRIMARY}
                     href={`${ROUTES.BUFFERS}#${SECTION_IDS.PLOT}`}
                     icon={IconNames.HORIZONTAL_BAR_CHART}
-                    variant={activeSection !== SECTION_IDS.PLOT ? 'outlined' : undefined}
+                    variant={activeSection !== SECTION_IDS.PLOT ? ButtonVariant.OUTLINED : undefined}
                 >
                     Plot view
                 </AnchorButton>
@@ -77,7 +77,7 @@ function BufferSummary() {
                     intent={Intent.PRIMARY}
                     href={`${ROUTES.BUFFERS}#${SECTION_IDS.TABLE}`}
                     icon={IconNames.TH}
-                    variant={activeSection !== SECTION_IDS.TABLE ? 'outlined' : undefined}
+                    variant={activeSection !== SECTION_IDS.TABLE ? ButtonVariant.OUTLINED : undefined}
                 >
                     Table view
                 </AnchorButton>
@@ -95,7 +95,7 @@ function BufferSummary() {
                 id='performance-tabs'
                 selectedTabId={selectedTabId}
                 onChange={(id: TAB_IDS) => setSelectedTabId(id)}
-                size='large'
+                size={Size.LARGE}
                 renderActiveTabPanelOnly
             >
                 <Tab

@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Button, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup, Tooltip } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import { AxiosError } from 'axios';
 import { FC, useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
@@ -104,7 +105,7 @@ const RemoteConnectionDialog: FC<RemoteConnectionDialogProps> = ({
         <Dialog
             className='remote-connection-dialog'
             title={title} // Blueprint Dialog renders a H6 here regardless of what markup you pass here
-            icon='info-sign'
+            icon={IconNames.INFO_SIGN}
             canOutsideClickClose={false}
             isOpen={open}
             onClose={() => closeDialog(true)}

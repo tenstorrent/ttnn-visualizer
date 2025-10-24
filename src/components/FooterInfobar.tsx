@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Button, ButtonVariant, Collapse, NumberRange, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Collapse, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
@@ -130,7 +130,7 @@ function FooterInfobar() {
                             icon={sliderIsOpen ? IconNames.CARET_DOWN : IconNames.CARET_UP}
                             onClick={() => setSliderIsOpen(!sliderIsOpen)}
                             disabled={isOperationDetails}
-                            size='small'
+                            size={Size.SMALL}
                         >
                             Range
                         </Button>

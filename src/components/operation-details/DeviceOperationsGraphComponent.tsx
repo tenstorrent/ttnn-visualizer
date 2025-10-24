@@ -5,7 +5,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DataSet, Network } from 'vis-network/standalone';
 import { Edge } from 'vis-network';
-import { Button, Card, Overlay2 } from '@blueprintjs/core';
+import { Button, ButtonVariant, Card, Overlay2, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Node, NodeType } from '../../model/APIData';
 import { getTensorColor } from '../../functions/colorGenerator';
@@ -223,8 +223,8 @@ const GraphComponent: React.FC<GraphComponentProps> = ({ data, open, onClose }) 
                     <h3 className='title'>
                         <Button
                             icon={IconNames.CROSS}
-                            variant='minimal'
-                            size='small'
+                            variant={ButtonVariant.MINIMAL}
+                            size={Size.SMALL}
                             onClick={onClose}
                         />
                     </h3>

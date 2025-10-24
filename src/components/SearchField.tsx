@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import React from 'react';
-import { Button, Icon, InputGroup } from '@blueprintjs/core';
+import { Button, ButtonVariant, Icon, InputGroup } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import 'styles/components/SearchField.scss';
 import classNames from 'classnames';
@@ -36,7 +36,7 @@ function SearchField({
                     searchQuery ? (
                         <Button
                             disabled={disabled}
-                            variant='minimal'
+                            variant={ButtonVariant.MINIMAL}
                             onClick={() => {
                                 onQueryChanged('');
                             }}
