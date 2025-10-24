@@ -136,7 +136,7 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
                         className='core-selector'
                         items={coreAddressList}
                         itemRenderer={coreItemRenderer}
-                        disabled={selectedDeviceId === -1}
+                        disabled={selectedDeviceId === null}
                         filterable
                         itemPredicate={filterCoreAddress}
                         noResults={
@@ -154,7 +154,7 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
                     >
                         <Button
                             variant={ButtonVariant.OUTLINED}
-                            disabled={selectedDeviceId === -1}
+                            disabled={selectedDeviceId === null}
                             text={selectedCoreAddress ? `Selected core ${selectedCoreAddress}` : 'Filter cores'}
                         />
                     </Select>
