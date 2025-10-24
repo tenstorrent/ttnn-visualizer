@@ -2,11 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, useEffect, useState } from 'react';
+import { FC, useEffect, useMemo, useState } from 'react';
 
-import { Button, FormGroup, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { FormGroup } from '@blueprintjs/core';
 
-import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import { useQueryClient } from '@tanstack/react-query';
 import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
@@ -25,6 +24,7 @@ import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
 import { ReportLocation } from '../../definitions/Reports';
+import RemoteSyncButton from './RemoteSyncButton';
 
 const RemoteSyncConfigurator: FC = () => {
     const remote = useRemoteConnection();
@@ -263,6 +263,15 @@ const RemoteSyncConfigurator: FC = () => {
         performanceReportLocation,
     ]);
 
+    const isSelectedReportFolderOutdated = useMemo(
+        () => (selectedReportFolder ? isRemoteFolderOutdated(selectedReportFolder) : false),
+        [selectedReportFolder],
+    );
+    const isSelectedPerfFolderOutdated = useMemo(
+        () => (selectedPerformanceFolder ? isRemoteFolderOutdated(selectedPerformanceFolder) : false),
+        [selectedPerformanceFolder],
+    );
+
     return (
         <>
             <FormGroup
@@ -363,7 +372,6 @@ const RemoteSyncConfigurator: FC = () => {
                     remoteFolder={profilerReportLocation === ReportLocation.REMOTE ? selectedReportFolder : undefined}
                     remoteFolderList={reportFolderList}
                     loading={isLoading || isFetching}
-                    updatingFolderList={isFetching}
                     disabled={isDisabled}
                     onSelectFolder={async (folder) => {
                         if (remote.persistentState.selectedConnection) {
@@ -388,18 +396,16 @@ const RemoteSyncConfigurator: FC = () => {
                     }}
                     type='profiler'
                 >
-                    <Tooltip
-                        content='Re-sync remote folder'
-                        position={PopoverPosition.TOP}
-                    >
-                        <Button
-                            aria-label='Re-sync remote folder'
-                            icon={IconNames.REFRESH}
-                            loading={isSyncingReportFolder}
-                            disabled={isDisabled || !selectedReportFolder || reportFolderList?.length === 0}
-                            onClick={async () => syncSelectedReportFolder(selectedReportFolder)}
-                        />
-                    </Tooltip>
+                    {(profilerReportLocation === ReportLocation.REMOTE || isSyncingReportFolder) &&
+                        selectedReportFolder && (
+                            <RemoteSyncButton
+                                isDisabled={isDisabled}
+                                selectedReportFolder={selectedReportFolder}
+                                isSyncingReportFolder={isSyncingReportFolder}
+                                isSelectedReportFolderOutdated={isSelectedReportFolderOutdated}
+                                handleClick={syncSelectedReportFolder}
+                            />
+                        )}
                 </RemoteFolderSelector>
             </FormGroup>
 
@@ -414,7 +420,6 @@ const RemoteSyncConfigurator: FC = () => {
                     }
                     remoteFolderList={remotePerformanceFolderList}
                     loading={isLoading || isFetching}
-                    updatingFolderList={isFetching}
                     disabled={isDisabled}
                     onSelectFolder={async (folder) => {
                         if (remote.persistentState.selectedConnection) {
@@ -440,20 +445,16 @@ const RemoteSyncConfigurator: FC = () => {
                     }}
                     type='performance'
                 >
-                    <Tooltip
-                        content='Re-sync remote folder'
-                        position={PopoverPosition.TOP}
-                    >
-                        <Button
-                            aria-label='Re-sync remote folder'
-                            icon={IconNames.REFRESH}
-                            loading={isSyncingPerformanceFolder}
-                            disabled={
-                                isDisabled || !selectedPerformanceFolder || remotePerformanceFolderList?.length === 0
-                            }
-                            onClick={async () => syncSelectedPerfReportFolder(selectedPerformanceFolder)}
-                        />
-                    </Tooltip>
+                    {(profilerReportLocation === ReportLocation.REMOTE || isSyncingPerformanceFolder) &&
+                        selectedPerformanceFolder && (
+                            <RemoteSyncButton
+                                isDisabled={isDisabled}
+                                selectedReportFolder={selectedPerformanceFolder}
+                                isSyncingReportFolder={isSyncingPerformanceFolder}
+                                isSelectedReportFolderOutdated={isSelectedPerfFolderOutdated}
+                                handleClick={syncSelectedPerfReportFolder}
+                            />
+                        )}
                 </RemoteFolderSelector>
             </FormGroup>
         </>

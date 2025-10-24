@@ -31,8 +31,8 @@ interface StackTraceProps {
     hideSourceButton?: boolean;
     isInline?: boolean;
     // Supply these two props if you want to control the expanded state from outside
-    isExpanded?: boolean;
-    onToggleExpanded?: (isVisible: boolean) => void;
+    isInitiallyExpanded?: boolean;
+    onExpandChange?: (isVisible: boolean) => void;
 }
 
 function StackTrace({
@@ -40,14 +40,14 @@ function StackTrace({
     language,
     hideSourceButton,
     isInline,
-    isExpanded,
-    onToggleExpanded,
+    isInitiallyExpanded,
+    onExpandChange,
 }: StackTraceProps) {
     // TODO: See if you can read the remote file and use setCanReadRemoteFile appropriately
     // const [canReadRemoteFile, setCanReadRemoteFile] = useState(true);
     const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
 
-    const [isExpandedInternal, setIsExpandedInternal] = useState(isExpanded || false);
+    const [isExpanded, setIsExpanded] = useState(isInitiallyExpanded || false);
     const [filePath, setFilePath] = useState('');
     const [isFetchingFile, setIsFetchingFile] = useState(false);
     const [fileContents, setFileContents] = useState('');
@@ -58,40 +58,43 @@ function StackTrace({
 
     const stackTraceWithHighlights = useMemo(() => {
         const filePathMatches = FILE_PATH_REGEX.exec(stackTrace);
-        let highlightedString = hljs.highlight(stackTrace, { language }).value;
+        let highlightedFileContents = hljs.highlight(stackTrace, { language }).value;
 
         if (filePathMatches) {
             setFilePath(filePathMatches[0]);
         }
 
         let line = 1;
-        highlightedString = highlightedString.replace(
+        highlightedFileContents = highlightedFileContents.replace(
             /^/gm,
             () => `<div class="ttnn-line"><span class="line-number">${line++}</span>`,
         );
-        highlightedString = highlightedString.replace(/<div class="ttnn-line">/gm, (match) => `</div>${match}`);
+        highlightedFileContents = highlightedFileContents.replace(
+            /<div class="ttnn-line">/gm,
+            (match) => `</div>${match}`,
+        );
 
-        return highlightedString;
+        return highlightedFileContents;
     }, [stackTrace, language]);
 
     const fileWithHighlights = useMemo(() => {
         const lineNumberMatches = LINE_NUMBER_REGEX.exec(stackTrace);
 
         if (fileContents && lineNumberMatches?.[0]) {
-            let highlightedString = hljs.highlight(fileContents, { language }).value;
+            let highlightedFileContents = hljs.highlight(fileContents, { language }).value;
 
             let line = 1;
-            highlightedString = highlightedString.replace(/^/gm, () => {
+            highlightedFileContents = highlightedFileContents.replace(/^/gm, () => {
                 const classes =
                     line === parseInt(lineNumberMatches?.[0], 10) ? 'ttnn-line highlighted-line' : 'ttnn-line';
                 return `<div class="${classes}"><span class="line-number">${line++}</span>`;
             });
-            highlightedString = highlightedString.replace(
+            highlightedFileContents = highlightedFileContents.replace(
                 /<div class="ttnn-line">|<div class="ttnn-line highlighted-line">/gm,
                 (match) => `</div>${match}`,
             );
 
-            return highlightedString;
+            return highlightedFileContents;
         }
 
         return '';
@@ -119,14 +122,14 @@ function StackTrace({
     };
 
     const handleToggleStackTrace = () => {
-        setIsExpandedInternal(!isExpandedInternal);
+        setIsExpanded(!isExpanded);
 
-        if (isExpandedInternal && scrollElementRef?.current && !isTopOfElementInViewport(scrollElementRef.current)) {
+        if (isExpanded && scrollElementRef?.current && !isTopOfElementInViewport(scrollElementRef.current)) {
             scrollElementRef?.current?.scrollIntoView();
         }
 
-        if (onToggleExpanded) {
-            onToggleExpanded(isExpandedInternal);
+        if (onExpandChange) {
+            onExpandChange(isExpanded);
         }
     };
 
@@ -137,7 +140,7 @@ function StackTrace({
             })}
             ref={scrollElementRef}
         >
-            {isExpandedInternal ? (
+            {isExpanded ? (
                 <div className='code-wrapper'>
                     <code
                         className={`language-${language} code-output`}
@@ -162,8 +165,8 @@ function StackTrace({
                     variant={ButtonVariant.MINIMAL}
                     intent={Intent.PRIMARY}
                     onClick={handleToggleStackTrace}
-                    text={isExpandedInternal ? 'Collapse' : 'Expand'}
-                    endIcon={isExpandedInternal ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
+                    text={isExpanded ? 'Collapse' : 'Expand'}
+                    endIcon={isExpanded ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
                 />
 
                 {!hideSourceButton && (
