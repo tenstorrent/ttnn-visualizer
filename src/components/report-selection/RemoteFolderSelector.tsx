@@ -11,12 +11,12 @@ import {
     RemoteConnection,
     RemoteFolder,
     SYNC_DATE_FORMATTER,
+    getUTCFromEpoch,
 } from '../../definitions/RemoteConnection';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import useRemoteConnection from '../../hooks/useRemote';
 import 'styles/components/RemoteFolderSelector.scss';
 import HighlightedText from '../HighlightedText';
-import getUTCFromEpoch from '../../functions/getUTCFromEpoch';
 
 type FolderTypes = 'performance' | 'profiler';
 
@@ -32,18 +32,20 @@ const remoteFolderRenderer =
             ? SYNC_DATE_FORMATTER.format(getUTCFromEpoch(lastSynced))
             : NEVER_SYNCED_LABEL;
 
+        const isReportOutdated = isRemoteFolderOutdated(folder);
+
         const statusIcon = (
             <Tooltip
                 content={
-                    isRemoteFolderOutdated(folder)
-                        ? `Folder is stale - last synced: ${lastSyncedDate}`
-                        : `Folder is up to date - last synced: ${lastSyncedDate}`
+                    isReportOutdated
+                        ? `Report is stale - last synced: ${lastSyncedDate}`
+                        : `Report is up to date - last synced: ${lastSyncedDate}`
                 }
                 placement={PopoverPosition.TOP}
             >
                 <Icon
-                    icon={isRemoteFolderOutdated(folder) ? IconNames.UPDATED : IconNames.HISTORY}
-                    color={isRemoteFolderOutdated(folder) ? 'goldenrod' : 'green'}
+                    icon={isReportOutdated ? IconNames.UPDATED : IconNames.HISTORY}
+                    color={isReportOutdated ? 'goldenrod' : 'green'}
                 />
             </Tooltip>
         );

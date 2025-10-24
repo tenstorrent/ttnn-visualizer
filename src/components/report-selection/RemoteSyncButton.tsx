@@ -5,8 +5,12 @@
 import { Button, ButtonVariant, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { FC } from 'react';
 import { IconName, IconNames } from '@blueprintjs/icons';
-import { NEVER_SYNCED_LABEL, RemoteFolder, SYNC_DATE_FORMATTER } from '../../definitions/RemoteConnection';
-import getUTCFromEpoch from '../../functions/getUTCFromEpoch';
+import {
+    NEVER_SYNCED_LABEL,
+    RemoteFolder,
+    SYNC_DATE_FORMATTER,
+    getUTCFromEpoch,
+} from '../../definitions/RemoteConnection';
 
 interface RemoteSyncButtonProps {
     selectedReportFolder: RemoteFolder | undefined;
@@ -55,10 +59,10 @@ const getTooltipContent = (folder: RemoteFolder | undefined, isSyncing: boolean,
     }
 
     if (isOutdated) {
-        return `Click to sync, folder may be out of date - ${folder.lastSynced ? SYNC_DATE_FORMATTER.format(getUTCFromEpoch(folder.lastSynced)) : `last sync: ${NEVER_SYNCED_LABEL}`}`;
+        return `Click to sync, report may be out of date - ${folder.lastSynced ? SYNC_DATE_FORMATTER.format(getUTCFromEpoch(folder.lastSynced)) : `last sync: ${NEVER_SYNCED_LABEL}`}`;
     }
 
-    return `Folder last synced ${folder.lastSynced ? `${SYNC_DATE_FORMATTER.format(getUTCFromEpoch(folder.lastSynced))}` : ''}`;
+    return `Report last synced ${folder.lastSynced ? `${SYNC_DATE_FORMATTER.format(getUTCFromEpoch(folder.lastSynced))}` : ''}`;
 };
 
 const getSyncIcon = (folder: RemoteFolder | undefined, isSyncing: boolean, isOutdated: boolean): IconName => {

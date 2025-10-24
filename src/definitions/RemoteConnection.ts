@@ -35,4 +35,6 @@ export const SYNC_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
     timeStyle: 'short',
 });
 
+export const getUTCFromEpoch = (epoch: number): Date => new Date(epoch * 1000);
+
 export const NEVER_SYNCED_LABEL = 'never';
