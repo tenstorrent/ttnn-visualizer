@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useAtomValue } from 'jotai';
 import { calculateLinkCongestionColor } from './drawingApi';
-import { NPERootZone, NPEZone, NPE_LINK, NoCType, TimestepData } from '../../model/NPEModel';
+import { NPERootZone, NPE_LINK, NoCType, TimestepData, getKernelColor } from '../../model/NPEModel';
 import { altCongestionColorsAtom } from '../../store/app';
 
 interface NPEHeatMapProps {
@@ -29,17 +29,29 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
     const altCongestionColors = useAtomValue(altCongestionColorsAtom);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const CANVAS_HEIGHT = 30;
-    const HEIGHT_PER_ZONE = 20;
-    const getMaxDepth = (z: NPEZone): number => (z.zones?.length ? 1 + Math.max(...z.zones.map(getMaxDepth)) : 0);
+    const ZONE_RANGE_HEIGHT = 10;
 
-    const canvasZoneHeight =
-        Math.max(
-            ...selectedZoneList.flatMap((zone) => {
-                return zone.zones.map((z) => 1 + getMaxDepth(z));
-            }),
-            0,
-        ) * HEIGHT_PER_ZONE;
-    // const canvasZoneHeight = selectedZoneList.length > 0 ? selectedZoneList.length * 20 : 0;
+    // this will be needed for rendering all zones, not just root zones
+    // const HEIGHT_PER_ZONE = 20;
+    // const getMaxDepth = (z: NPEZone): number => (z.zones?.length ? 1 + Math.max(...z.zones.map(getMaxDepth)) : 0);
+    // const zoneDepth = Math.max(
+    //     ...selectedZoneList.flatMap((zone) => {
+    //         return zone.zones.map((z) => 1 + getMaxDepth(z));
+    //     }),
+    //     0,
+    // );
+
+    const zoneRanges = useMemo(() => {
+        return selectedZoneList.flatMap((rootZone) =>
+            rootZone.zones.map((zone) => ({
+                proc: rootZone.proc,
+                start: zone.start / cyclesPerTimestep,
+                end: zone.end / cyclesPerTimestep,
+            })),
+        );
+    }, [selectedZoneList, cyclesPerTimestep]);
+
+    const canvasZoneHeight = zoneRanges.length * ZONE_RANGE_HEIGHT;
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
     const congestionMapPerTimestamp = useMemo(() => {
         return {
@@ -101,8 +113,6 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
             return;
         }
 
-        // ctx.fillStyle = '#ff0000ff';
-        ctx.fillRect(0, 0, canvasWidth, CANVAS_HEIGHT + canvasZoneHeight);
         ctx.clearRect(0, 0, canvas.width, CANVAS_HEIGHT + canvasZoneHeight);
         const chunkWidth = canvas.width / congestionMapPerTimestamp.worst.length;
         congestionMapPerTimestamp.worst.forEach(({ color }, index) => {
@@ -118,8 +128,14 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
             ctx.fillRect(index * chunkWidth, (CANVAS_HEIGHT / 3) * 2, chunkWidth, CANVAS_HEIGHT / 3);
         });
 
-        // ctx.fillStyle = '#FFFFFF';
-    }, [congestionMapPerTimestamp, canvasWidth, CANVAS_HEIGHT, canvasZoneHeight]);
+        zoneRanges.forEach((range, index) => {
+            const color = getKernelColor(range.proc);
+            const startX = range.start * chunkWidth;
+            const endX = range.end * chunkWidth;
+            ctx.fillStyle = color;
+            ctx.fillRect(startX, CANVAS_HEIGHT + index * ZONE_RANGE_HEIGHT, endX - startX, ZONE_RANGE_HEIGHT);
+        });
+    }, [congestionMapPerTimestamp, canvasWidth, CANVAS_HEIGHT, canvasZoneHeight, selectedZoneList, zoneRanges]);
 
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
@@ -128,64 +144,86 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
             const mouseX = event.clientX - rect.left;
             const chunkWidth = rect.width / congestionMapPerTimestamp.worst.length;
             const hoveredIndex = Math.floor(mouseX / chunkWidth);
-
+            const y = event.clientY - rect.top;
+            let zoneindex = null;
+            if (y > CANVAS_HEIGHT) {
+                zoneindex = Math.floor((y - CANVAS_HEIGHT) / ZONE_RANGE_HEIGHT);
+            }
+            const zoneConversionRatio = useTimesteps ? 1 : cyclesPerTimestep;
+            const units = useTimesteps ? 'Timestep' : 'Cycle';
             if (hoveredIndex > -1) {
                 const x = mouseX;
+
+                const congestionHoverCondition = zoneindex === null;
+                const zoneHoverCondition =
+                    zoneindex !== null && zoneRanges[zoneindex] && hoveredIndex < zoneRanges[zoneindex].end;
+                if (!congestionHoverCondition && !zoneHoverCondition) {
+                    setTooltip(null);
+                    return;
+                }
 
                 setTooltip({
                     x,
                     y: 0,
                     text: (
-                        <div>
-                            {useTimesteps ? (
-                                <>Timestep {hoveredIndex}</>
-                            ) : (
-                                <>Cycles {hoveredIndex * cyclesPerTimestep}</>
-                            )}
-
+                        <div className='congestion-heatmap-tooltip'>
+                            <h3>
+                                {units} {hoveredIndex * zoneConversionRatio}
+                            </h3>
                             {nocType !== null && <div>Selected {nocType}</div>}
-                            <div>
-                                <span
-                                    style={{
-                                        width: '10px',
-                                        height: '10px',
-                                        display: 'inline-block',
-                                        backgroundColor: congestionMapPerTimestamp.worst[hoveredIndex].color,
-                                    }}
-                                />{' '}
-                                Max Demand:{' '}
-                                {congestionMapPerTimestamp.worst[hoveredIndex].value > -1
-                                    ? `${congestionMapPerTimestamp.worst[hoveredIndex].value.toFixed(3)} %`
-                                    : 'N/A'}
-                            </div>
-                            <div>
-                                <span
-                                    style={{
-                                        width: '10px',
-                                        height: '10px',
-                                        display: 'inline-block',
-                                        backgroundColor: congestionMapPerTimestamp.utilization[hoveredIndex].color,
-                                    }}
-                                />
-                                {` Avg Utilization: ${congestionMapPerTimestamp.utilization[hoveredIndex].value.toFixed(3)} %`}
-                            </div>
-                            <div>
-                                <span
-                                    style={{
-                                        width: '10px',
-                                        height: '10px',
-                                        display: 'inline-block',
-                                        backgroundColor: congestionMapPerTimestamp.demand[hoveredIndex].color,
-                                    }}
-                                />
-                                {` Avg Demand: ${congestionMapPerTimestamp.demand[hoveredIndex].value.toFixed(3)} %`}
-                            </div>
+                            {congestionHoverCondition && (
+                                <>
+                                    <div>
+                                        <span
+                                            style={{
+                                                width: '10px',
+                                                height: '10px',
+                                                display: 'inline-block',
+                                                backgroundColor: congestionMapPerTimestamp.worst[hoveredIndex].color,
+                                            }}
+                                        />{' '}
+                                        Max Demand:{' '}
+                                        {congestionMapPerTimestamp.worst[hoveredIndex].value > -1
+                                            ? `${congestionMapPerTimestamp.worst[hoveredIndex].value.toFixed(3)} %`
+                                            : 'N/A'}
+                                    </div>
+                                    <div>
+                                        <span
+                                            style={{
+                                                width: '10px',
+                                                height: '10px',
+                                                display: 'inline-block',
+                                                backgroundColor:
+                                                    congestionMapPerTimestamp.utilization[hoveredIndex].color,
+                                            }}
+                                        />
+                                        {` Avg Utilization: ${congestionMapPerTimestamp.utilization[hoveredIndex].value.toFixed(3)} %`}
+                                    </div>
+                                    <div>
+                                        <span
+                                            style={{
+                                                width: '10px',
+                                                height: '10px',
+                                                display: 'inline-block',
+                                                backgroundColor: congestionMapPerTimestamp.demand[hoveredIndex].color,
+                                            }}
+                                        />
+                                        {` Avg Demand: ${congestionMapPerTimestamp.demand[hoveredIndex].value.toFixed(3)} %`}
+                                    </div>
+                                </>
+                            )}
+                            {zoneHoverCondition && (
+                                <div>
+                                    {zoneRanges[zoneindex!].proc}: {units.toLowerCase()}{' '}
+                                    {(zoneRanges[zoneindex!].start * zoneConversionRatio).toFixed(0)} -{' '}
+                                    {(zoneRanges[zoneindex!].end * zoneConversionRatio).toFixed(0)}
+                                </div>
+                            )}
                         </div>
                     ),
                 });
             } else {
-                // eslint-disable-next-line no-unused-expressions, @typescript-eslint/no-unused-expressions
-                canvasRef.current && (canvasRef.current.style.cursor = 'default');
+                // canvasRef.current && (canvasRef.current.style.cursor = 'default');
                 setTooltip(null);
             }
         }

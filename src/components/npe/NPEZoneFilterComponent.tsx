@@ -11,7 +11,14 @@ import { IconNames } from '@blueprintjs/icons';
 import type { ItemRenderer } from '@blueprintjs/select';
 import { ItemPredicate, Select } from '@blueprintjs/select';
 import Collapsible from '../Collapsible';
-import { NPEData, NPERootZone, NPEZone, NPE_COORDINATES, NPE_COORDINATE_INDEX } from '../../model/NPEModel';
+import {
+    NPEData,
+    NPERootZone,
+    NPEZone,
+    NPE_COORDINATES,
+    NPE_COORDINATE_INDEX,
+    getKernelColor,
+} from '../../model/NPEModel';
 
 interface NPEZoneFilterComponentProps {
     npeData: NPEData;
@@ -186,7 +193,15 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
                         <Collapsible
                             collapseClassName='root-zone-collapsible'
                             key={`${rootZone.proc}-${rootZone.core.join('-')}`}
-                            label={`${rootZone.proc} ${rootZone.core.join('-')}`}
+                            label={
+                                <div className='root-zone-label'>
+                                    <span
+                                        className='color-square'
+                                        style={{ backgroundColor: getKernelColor(rootZone.proc) }}
+                                    />
+                                    {rootZone.proc} {rootZone.core.join('-')}
+                                </div>
+                            }
                             isOpen={false}
                         >
                             <div>{getZoneElements(rootZone.zones, rootZone.core, 1)}</div>
