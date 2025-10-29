@@ -25,6 +25,8 @@ import { Instance } from '../model/APIData';
 
 const MAX_TITLE_LENGTH = 20;
 
+const RANGE_DISALLOWED_ROUTES: string[] = [`${ROUTES.OPERATIONS}/`, ROUTES.NPE];
+
 function FooterInfobar() {
     const [sliderIsOpen, setSliderIsOpen] = useState(false);
     const selectedRange = useAtomValue(selectedOperationRangeAtom);
@@ -36,15 +38,14 @@ function FooterInfobar() {
 
     const location = useLocation();
 
-    const isOperationDetails = location.pathname.includes(`${ROUTES.OPERATIONS}/`);
+    const isAllowedRoute = !RANGE_DISALLOWED_ROUTES.some((route) => location.pathname.startsWith(route));
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
-    const isNPE = location.pathname.includes(`${ROUTES.NPE}`);
 
     useEffect(() => {
-        if (isOperationDetails || isNPE) {
+        if (!isAllowedRoute) {
             setSliderIsOpen(false);
         }
-    }, [isNPE, isOperationDetails]);
+    }, [isAllowedRoute]);
 
     const getSelectedRangeLabel = (): string | null => {
         if (isPerformanceRoute) {
@@ -129,7 +130,7 @@ function FooterInfobar() {
                         <Button
                             icon={sliderIsOpen ? IconNames.CARET_DOWN : IconNames.CARET_UP}
                             onClick={() => setSliderIsOpen(!sliderIsOpen)}
-                            disabled={isOperationDetails}
+                            disabled={!isAllowedRoute}
                             size={Size.SMALL}
                         >
                             Range
