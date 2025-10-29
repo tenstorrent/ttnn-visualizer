@@ -5,7 +5,7 @@
 import classNames from 'classnames';
 import { Button, ButtonVariant, Collapse, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
 import {
@@ -25,7 +25,7 @@ import { Instance } from '../model/APIData';
 
 const MAX_TITLE_LENGTH = 20;
 
-const RANGE_DISALLOWED_ROUTES: string[] = [`${ROUTES.OPERATIONS}/`, ROUTES.NPE];
+const RANGE_DISALLOWED_ROUTES: string[] = [ROUTES.NPE];
 
 function FooterInfobar() {
     const [sliderIsOpen, setSliderIsOpen] = useState(false);
@@ -38,11 +38,23 @@ function FooterInfobar() {
 
     const location = useLocation();
 
-    const isAllowedRoute = !RANGE_DISALLOWED_ROUTES.some((route) => location.pathname.startsWith(route));
+    const isAllowedRoute = useCallback(() => {
+        if (RANGE_DISALLOWED_ROUTES.some((route) => route === location.pathname)) {
+            return false;
+        }
+
+        // Check if the path matches /operations/${number} i.e. an operation details page
+        const operationsRegex = /^\/operations\/\d+$/;
+        if (operationsRegex.test(location.pathname)) {
+            return false;
+        }
+
+        return true;
+    }, [location]);
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
 
     useEffect(() => {
-        if (!isAllowedRoute) {
+        if (!isAllowedRoute()) {
             setSliderIsOpen(false);
         }
     }, [isAllowedRoute]);
@@ -130,7 +142,7 @@ function FooterInfobar() {
                         <Button
                             icon={sliderIsOpen ? IconNames.CARET_DOWN : IconNames.CARET_UP}
                             onClick={() => setSliderIsOpen(!sliderIsOpen)}
-                            disabled={!isAllowedRoute}
+                            disabled={!isAllowedRoute()}
                             size={Size.SMALL}
                         >
                             Range
