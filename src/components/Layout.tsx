@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Link, useLocation } from 'react-router-dom';
-import { Classes } from '@blueprintjs/core';
+import { Classes, PopoverPosition } from '@blueprintjs/core';
 import { Helmet } from 'react-helmet-async';
 import { useAtom, useSetAtom } from 'jotai';
 import { ToastContainer, cssTransition } from 'react-toastify';
@@ -149,7 +149,7 @@ function Layout() {
             <FeedbackButton />
 
             <ToastContainer
-                position='top-right'
+                position={PopoverPosition.TOP_RIGHT}
                 autoClose={false}
                 newestOnTop={false}
                 closeOnClick

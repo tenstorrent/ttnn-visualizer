@@ -11,16 +11,28 @@ import { IconNames } from '@blueprintjs/icons';
 import type { ItemRenderer } from '@blueprintjs/select';
 import { ItemPredicate, Select } from '@blueprintjs/select';
 import Collapsible from '../Collapsible';
-import { NPEData, NPERootZone, NPEZone, NPE_COORDINATES, NPE_COORDINATE_INDEX } from '../../model/NPEModel';
+import {
+    NPEData,
+    NPERootZone,
+    NPEZone,
+    NPE_COORDINATES,
+    NPE_COORDINATE_INDEX,
+    getKernelColor,
+} from '../../model/NPEModel';
 
-interface NPEZonesRendererProps {
+interface NPEZoneFilterComponentProps {
     npeData: NPEData;
     open: boolean;
     onClose: () => void;
     onSelect: (address: NPE_COORDINATES | null) => void;
 }
 
-const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = false, onClose, onSelect }) => {
+const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
+    npeData,
+    open = false,
+    onClose,
+    onSelect,
+}) => {
     const [selectedDeviceId, setSelectedDeviceId] = React.useState<number | null>(null);
     const [selectedCoreAddress, setSelectedCoreAddress] = React.useState<string | null>(null);
     const sortCoreAddress = useCallback((a: NPERootZone, b: NPERootZone) => {
@@ -136,7 +148,7 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
                         className='core-selector'
                         items={coreAddressList}
                         itemRenderer={coreItemRenderer}
-                        disabled={selectedDeviceId === -1}
+                        disabled={selectedDeviceId === null}
                         filterable
                         itemPredicate={filterCoreAddress}
                         noResults={
@@ -154,7 +166,7 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
                     >
                         <Button
                             variant={ButtonVariant.OUTLINED}
-                            disabled={selectedDeviceId === -1}
+                            disabled={selectedDeviceId === null}
                             text={selectedCoreAddress ? `Selected core ${selectedCoreAddress}` : 'Filter cores'}
                         />
                     </Select>
@@ -181,7 +193,15 @@ const NPEZonesRenderer: React.FC<NPEZonesRendererProps> = ({ npeData, open = fal
                         <Collapsible
                             collapseClassName='root-zone-collapsible'
                             key={`${rootZone.proc}-${rootZone.core.join('-')}`}
-                            label={`${rootZone.proc} ${rootZone.core.join('-')}`}
+                            label={
+                                <div className='root-zone-label'>
+                                    <span
+                                        className='color-square'
+                                        style={{ backgroundColor: getKernelColor(rootZone.proc) }}
+                                    />
+                                    {rootZone.proc} {rootZone.core.join('-')}
+                                </div>
+                            }
                             isOpen={false}
                         >
                             <div>{getZoneElements(rootZone.zones, rootZone.core, 1)}</div>
@@ -218,4 +238,4 @@ const deviceIdItemRenderer =
             icon={id === selected ? IconNames.TICK : IconNames.BLANK}
         />
     );
-export default NPEZonesRenderer;
+export default NPEZoneFilterComponent;

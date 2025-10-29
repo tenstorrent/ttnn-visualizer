@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Edge, Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 import 'vis-network/styles/vis-network.css';
-import { Button, Intent, Label, PopoverPosition, Slider, Switch, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Intent, Label, PopoverPosition, Slider, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { OperationDescription, Tensor } from '../model/APIData';
@@ -317,7 +317,7 @@ const OperationGraph: React.FC<{
                             icon={IconNames.ArrowLeft}
                             onClick={() => focusOnNode(previousOperation || null)}
                             disabled={!previousOperation || isLoading}
-                            variant='outlined'
+                            variant={ButtonVariant.OUTLINED}
                             aria-label={
                                 previousOperation
                                     ? `Go to previous operation ${previousOperation}`
@@ -331,7 +331,7 @@ const OperationGraph: React.FC<{
                         content={`Center on operation ${focusedNode}`}
                     >
                         <Button
-                            variant='outlined'
+                            variant={ButtonVariant.OUTLINED}
                             onClick={() => focusOnNode(focusedNode)}
                             disabled={isLoading}
                             aria-label={`Center on operation ${focusedNode}`}
@@ -348,7 +348,7 @@ const OperationGraph: React.FC<{
                             icon={IconNames.ArrowRight}
                             onClick={() => focusOnNode(nextOperation || null)}
                             disabled={!nextOperation || isLoading}
-                            variant='outlined'
+                            variant={ButtonVariant.OUTLINED}
                             aria-label={nextOperation ? `Go to next operation ${nextOperation}` : 'No next operation'}
                         />
                     </Tooltip>
@@ -372,7 +372,7 @@ const OperationGraph: React.FC<{
                             navigateFilteredNodes(previousFilteredIndex);
                         }}
                         disabled={isLoading || filteredNodeIdList.length === 0}
-                        variant='outlined'
+                        variant={ButtonVariant.OUTLINED}
                         aria-label='Previous result'
                     />
                     {currentFilteredIndex !== null && filteredNodeIdList.length > 0 ? currentFilteredIndex + 1 : 0}/
@@ -383,7 +383,7 @@ const OperationGraph: React.FC<{
                             navigateFilteredNodes(nextFilteredIndex);
                         }}
                         disabled={isLoading || filteredNodeIdList.length === 0}
-                        variant='outlined'
+                        variant={ButtonVariant.OUTLINED}
                         aria-label='Next result'
                     />
                     <Switch
