@@ -40,13 +40,11 @@ $height-offset: 15px;
     }
 
     .buffer-summary-plot-container {
-        display: flex;
-        flex-wrap: nowrap;
-        align-items: center;
+        display: grid;
+        grid-template-columns: 1fr $label-width;
         padding-bottom: 5px;
 
         .y-axis-tick {
-            width: $label-width;
             padding-left: $label-margin;
             margin-bottom: 0;
             flex-shrink: 0;
