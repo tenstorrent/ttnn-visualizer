@@ -5,7 +5,7 @@
 import classNames from 'classnames';
 import { Button, ButtonVariant, Collapse, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
 import {
@@ -25,6 +25,8 @@ import { Instance } from '../model/APIData';
 
 const MAX_TITLE_LENGTH = 20;
 
+const RANGE_DISALLOWED_ROUTES: string[] = [ROUTES.NPE];
+
 function FooterInfobar() {
     const [sliderIsOpen, setSliderIsOpen] = useState(false);
     const selectedRange = useAtomValue(selectedOperationRangeAtom);
@@ -36,15 +38,26 @@ function FooterInfobar() {
 
     const location = useLocation();
 
-    const isOperationDetails = location.pathname.includes(`${ROUTES.OPERATIONS}/`);
+    const isAllowedRoute = useCallback(() => {
+        if (RANGE_DISALLOWED_ROUTES.includes(location.pathname)) {
+            return false;
+        }
+
+        // Check if the path matches /operations/${number} i.e. an operation details page
+        const operationsRegex = /^\/operations\/\d+$/;
+        if (operationsRegex.test(location.pathname)) {
+            return false;
+        }
+
+        return true;
+    }, [location.pathname]);
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
-    const isNPE = location.pathname.includes(`${ROUTES.NPE}`);
 
     useEffect(() => {
-        if (isOperationDetails || isNPE) {
+        if (!isAllowedRoute()) {
             setSliderIsOpen(false);
         }
-    }, [isNPE, isOperationDetails]);
+    }, [isAllowedRoute]);
 
     const getSelectedRangeLabel = (): string | null => {
         if (isPerformanceRoute) {
@@ -129,7 +142,7 @@ function FooterInfobar() {
                         <Button
                             icon={sliderIsOpen ? IconNames.CARET_DOWN : IconNames.CARET_UP}
                             onClick={() => setSliderIsOpen(!sliderIsOpen)}
-                            disabled={isOperationDetails}
+                            disabled={!isAllowedRoute()}
                             size={Size.SMALL}
                         >
                             Range
