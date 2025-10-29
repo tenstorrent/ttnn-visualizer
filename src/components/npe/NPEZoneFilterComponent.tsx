@@ -12,6 +12,7 @@ import type { ItemRenderer } from '@blueprintjs/select';
 import { ItemPredicate, Select } from '@blueprintjs/select';
 import Collapsible from '../Collapsible';
 import {
+    KERNEL_PROCESS,
     NPEData,
     NPERootZone,
     NPEZone,
@@ -25,6 +26,7 @@ interface NPEZoneFilterComponentProps {
     open: boolean;
     onClose: () => void;
     onSelect: (address: NPE_COORDINATES | null) => void;
+    onExpand: (state: boolean, proc: KERNEL_PROCESS, address: NPE_COORDINATES) => void;
 }
 
 const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
@@ -32,6 +34,7 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
     open = false,
     onClose,
     onSelect,
+    onExpand,
 }) => {
     const [selectedDeviceId, setSelectedDeviceId] = React.useState<number | null>(null);
     const [selectedCoreAddress, setSelectedCoreAddress] = React.useState<string | null>(null);
@@ -108,6 +111,10 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
 
     const coreItemRenderer = useMemo(() => coreAddressItemRenderer(selectedCoreAddress), [selectedCoreAddress]);
     const deviceItemRenderer = useMemo(() => deviceIdItemRenderer(selectedDeviceId), [selectedDeviceId]);
+
+    const onExpandStateChange = (state: boolean, proc: KERNEL_PROCESS, address: NPE_COORDINATES) => {
+        onExpand(state, proc, address);
+    };
     return (
         <div className={classNames('zones-renderer', { open })}>
             <div className='zones-controls'>
@@ -203,6 +210,9 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
                                 </div>
                             }
                             isOpen={false}
+                            onExpandToggle={(state) => {
+                                onExpandStateChange(state, rootZone.proc, rootZone.core);
+                            }}
                         >
                             <div>{getZoneElements(rootZone.zones, rootZone.core, 1)}</div>
                         </Collapsible>

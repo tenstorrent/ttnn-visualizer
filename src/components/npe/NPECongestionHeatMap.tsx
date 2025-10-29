@@ -2,11 +2,19 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useAtomValue } from 'jotai';
-import { calculateLinkCongestionColor } from './drawingApi';
-import { NPERootZone, NPE_LINK, NoCType, TimestepData, getKernelColor } from '../../model/NPEModel';
+import { calculateLinkCongestionColor, getNpeZoneColor } from './drawingApi';
+import {
+    NPERootZoneUXInfo,
+    NPEZone,
+    NPE_LINK,
+    NoCType,
+    TimestepData,
+    ZoneDrawingInfo,
+    getKernelColor,
+} from '../../model/NPEModel';
 import { altCongestionColorsAtom } from '../../store/app';
 
 interface NPEHeatMapProps {
@@ -14,7 +22,7 @@ interface NPEHeatMapProps {
     canvasWidth: number;
     useTimesteps: boolean;
     cyclesPerTimestep: number;
-    selectedZoneList: NPERootZone[];
+    selectedZoneList: NPERootZoneUXInfo[];
     nocType?: NoCType | null;
 }
 
@@ -30,6 +38,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const CANVAS_HEIGHT = 30;
     const ZONE_RANGE_HEIGHT = 10;
+    const ZONE_HEIGHT = 10;
 
     // this will be needed for rendering all zones, not just root zones
     // const HEIGHT_PER_ZONE = 20;
@@ -40,6 +49,21 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
     //     }),
     //     0,
     // );
+    const getZoneDrawing = useCallback(
+        (zones: NPEZone[], depth: number): ZoneDrawingInfo[] => {
+            return zones.flatMap((zone) => {
+                return [
+                    {
+                        depth,
+                        start: zone.start / cyclesPerTimestep,
+                        end: zone.end / cyclesPerTimestep,
+                    } as ZoneDrawingInfo,
+                    ...getZoneDrawing(zone.zones, depth + 1),
+                ];
+            });
+        },
+        [cyclesPerTimestep],
+    );
 
     const zoneRanges = useMemo(() => {
         return selectedZoneList.flatMap((rootZone) =>
@@ -47,9 +71,23 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
                 proc: rootZone.proc,
                 start: zone.start / cyclesPerTimestep,
                 end: zone.end / cyclesPerTimestep,
+                zones: [],
             })),
         );
     }, [selectedZoneList, cyclesPerTimestep]);
+
+    const expandedZoneRanges = useMemo(() => {
+        return (
+            selectedZoneList
+                .filter((rootZone) => rootZone.expandedState)
+                // .filter((rootZone) => true)
+                .map((rootZone) => {
+                    return getZoneDrawing(rootZone.zones, 1);
+                })
+        );
+    }, [getZoneDrawing, selectedZoneList]);
+
+    // console.log(expandedZoneRanges);
 
     const canvasZoneHeight = zoneRanges.length * ZONE_RANGE_HEIGHT;
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
@@ -128,6 +166,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
             ctx.fillRect(index * chunkWidth, (CANVAS_HEIGHT / 3) * 2, chunkWidth, CANVAS_HEIGHT / 3);
         });
 
+        // const yoffset = 0;
         zoneRanges.forEach((range, index) => {
             const color = getKernelColor(range.proc);
             const startX = range.start * chunkWidth;
@@ -135,7 +174,29 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
             ctx.fillStyle = color;
             ctx.fillRect(startX, CANVAS_HEIGHT + index * ZONE_RANGE_HEIGHT, endX - startX, ZONE_RANGE_HEIGHT);
         });
-    }, [congestionMapPerTimestamp, canvasWidth, CANVAS_HEIGHT, canvasZoneHeight, selectedZoneList, zoneRanges]);
+        expandedZoneRanges.forEach((ranges) => {
+            ranges.forEach((range) => {
+                const color = getNpeZoneColor(range.depth);
+                const startX = range.start * chunkWidth;
+                const endX = range.end * chunkWidth;
+                ctx.fillStyle = color;
+                ctx.fillRect(
+                    startX,
+                    CANVAS_HEIGHT + (zoneRanges.length + (range.depth - 1)) * ZONE_RANGE_HEIGHT,
+                    endX - startX,
+                    ZONE_HEIGHT,
+                );
+            });
+        });
+    }, [
+        congestionMapPerTimestamp,
+        canvasWidth,
+        CANVAS_HEIGHT,
+        canvasZoneHeight,
+        selectedZoneList,
+        zoneRanges,
+        expandedZoneRanges,
+    ]);
 
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
