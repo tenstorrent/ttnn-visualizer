@@ -9,18 +9,23 @@ import { ScrollLocationsV2, ScrollPositionV2, VirtualListState } from '../defini
 const useRestoreScrollPositionV2 = (key?: ScrollLocationsV2) => {
     const [scrollPositions, setScrollPositions] = useAtom(scrollPositionsV2Atom);
 
-    const setListState = (state: VirtualListState) => {
+    const updateListState = (state: Partial<VirtualListState>) => {
         if (key) {
             setScrollPositions((currentValue): ScrollPositionV2 => {
                 if (!currentValue) {
                     return {
-                        [key]: state,
+                        [key]: {
+                            ...(state as VirtualListState),
+                        },
                     };
                 }
 
                 return {
                     ...currentValue,
-                    [key]: state,
+                    [key]: {
+                        ...currentValue[key],
+                        ...state,
+                    },
                 };
             });
         }
@@ -40,7 +45,7 @@ const useRestoreScrollPositionV2 = (key?: ScrollLocationsV2) => {
 
     return {
         getListState,
-        setListState,
+        updateListState,
         resetScrollPositions,
     };
 };

@@ -16,12 +16,7 @@ import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ListView.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
-import {
-    activePerformanceReportAtom,
-    expandedOperationsAtom,
-    selectedOperationRangeAtom,
-    shouldCollapseAllOperationsAtom,
-} from '../store/app';
+import { activePerformanceReportAtom, selectedOperationRangeAtom, shouldCollapseAllOperationsAtom } from '../store/app';
 import { OperationDescription } from '../model/APIData';
 import ListItem from './ListItem';
 import { formatSize } from '../functions/math';
@@ -43,7 +38,6 @@ enum SortingOptions {
 
 const OperationList = () => {
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
-    const [expandedOperations, setExpandedOperations] = useAtom(expandedOperationsAtom);
 
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
@@ -59,7 +53,7 @@ const OperationList = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
-    const { getListState, setListState } = useRestoreScrollPositionV2(ScrollLocationsV2.OPERATION_LIST);
+    const { getListState, updateListState } = useRestoreScrollPositionV2(ScrollLocationsV2.OPERATION_LIST);
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const listState = getListState();
@@ -97,16 +91,20 @@ const OperationList = () => {
     const numberOfOperations = filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE;
 
     const handleToggleCollapsible = (operationId: number) => {
-        setExpandedOperations((currentIds) => {
-            const operationIds = [...currentIds];
+        if (listState) {
+            let { expandedItems } = listState;
 
-            if (operationIds.includes(operationId)) {
-                return operationIds.filter((id) => id !== operationId);
+            if (!expandedItems) {
+                expandedItems = new Set<number>();
+                expandedItems.add(operationId);
+            } else if (expandedItems.has(operationId)) {
+                expandedItems.delete(operationId);
             }
 
-            operationIds.push(operationId);
-            return operationIds;
-        });
+            updateListState({
+                expandedItems,
+            });
+        }
     };
 
     const handleSortByID = () => {
@@ -125,9 +123,13 @@ const OperationList = () => {
 
     const handleExpandAllToggle = () => {
         setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
-        setExpandedOperations(
-            !shouldCollapseAll && filteredOperationsList ? filteredOperationsList.map((operation) => operation.id) : [],
-        );
+        updateListState({
+            expandedItems: new Set(
+                !shouldCollapseAll && filteredOperationsList
+                    ? filteredOperationsList.map((operation) => operation.id)
+                    : [],
+            ),
+        });
     };
 
     const handleUserScrolling = () => {
@@ -195,33 +197,37 @@ const OperationList = () => {
     }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration, selectedOperationRange]);
 
     useEffect(() => {
-        const initialOperationId = location.state?.previousOperationId;
+        const handler = setTimeout(() => {
+            const initialOperationId = location.state?.previousOperationId;
 
-        if (initialOperationId) {
-            const operationIndex =
-                fetchedOperations?.findIndex(
-                    (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
-                ) || 0;
+            if (initialOperationId) {
+                const operationIndex =
+                    fetchedOperations?.findIndex(
+                        (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
+                    ) || 0;
 
-            setFocussedRow(operationIndex);
+                setFocussedRow(operationIndex);
 
-            // Navigating to the same page replaces the entry in the browser history
-            navigate(ROUTES.OPERATIONS, { replace: true });
-        }
+                // Navigating to the same page replaces the entry in the browser history
+                navigate(ROUTES.OPERATIONS, { replace: true });
+            }
 
-        setListState({
-            itemCount: filteredOperationsList?.length || 0,
-            scrollOffset: virtualizer.scrollOffset || 0,
-            measurementsCache: virtualizer.measurementsCache,
-        });
+            updateListState({
+                scrollOffset: virtualizer.scrollOffset || 0,
+                measurementsCache: virtualizer.measurementsCache,
+            });
+        }, 200);
+
+        return () => clearTimeout(handler);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
-        virtualizer.scrollOffset,
-        virtualizer.measurementsCache,
-        filteredOperationsList,
         fetchedOperations,
+        filteredOperationsList,
         location.state,
         navigate,
-        setListState,
+        // updateListState,
+        virtualizer.measurementsCache,
+        virtualizer.scrollOffset,
     ]);
 
     const scrollToIndex = useCallback(
@@ -232,20 +238,16 @@ const OperationList = () => {
     const scrollToTop = () => {
         setFocussedRow(null);
         scrollToIndex(0);
-        setListState({
-            itemCount: filteredOperationsList?.length || 0,
+        updateListState({
             scrollOffset: 0,
-            measurementsCache: virtualizer.measurementsCache,
         });
     };
 
     const scrollToEnd = () => {
         setFocussedRow(null);
         scrollToIndex(numberOfOperations);
-        setListState({
-            itemCount: filteredOperationsList?.length || 0,
+        updateListState({
             scrollOffset: scrollElementRef.current?.scrollTop || virtualizer.scrollOffset || 0,
-            measurementsCache: virtualizer.measurementsCache,
         });
     };
 
@@ -426,7 +428,7 @@ const OperationList = () => {
                                                     variant={ButtonVariant.OUTLINED}
                                                 />
                                             }
-                                            isOpen={expandedOperations.includes(operation.id)}
+                                            isOpen={!!listState?.expandedItems?.has(operation.id)}
                                         >
                                             <div className='arguments-wrapper'>
                                                 <p className='monospace'>

@@ -8,6 +8,7 @@ export interface VirtualListState {
     scrollOffset: number;
     itemCount: number;
     measurementsCache: VirtualItem[];
+    expandedItems: Set<number>;
 }
 
 export enum ScrollLocationsV2 {
