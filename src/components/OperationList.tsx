@@ -209,7 +209,7 @@ const OperationList = () => {
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
 
-                <ButtonGroup variant='minimal'>
+                <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
                         content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
                         placement={PopoverPosition.TOP}
@@ -236,7 +236,7 @@ const OperationList = () => {
                                     ? IconNames.SortAlphabeticalDesc
                                     : IconNames.SortAlphabetical
                             }
-                            variant={isSortingModeActive(shouldSortByID) ? 'outlined' : undefined}
+                            variant={isSortingModeActive(shouldSortByID) ? ButtonVariant.OUTLINED : undefined}
                             aria-label={
                                 shouldSortByID === SortingOptions.DESCENDING
                                     ? 'Sort by id descending'
@@ -260,7 +260,7 @@ const OperationList = () => {
                                     ? IconNames.SortNumericalDesc
                                     : IconNames.SortNumerical
                             }
-                            variant={isSortingModeActive(shouldSortDuration) ? 'outlined' : undefined}
+                            variant={isSortingModeActive(shouldSortDuration) ? ButtonVariant.OUTLINED : undefined}
                             aria-label={
                                 shouldSortDuration === SortingOptions.DESCENDING
                                     ? 'Sort by duration descending'

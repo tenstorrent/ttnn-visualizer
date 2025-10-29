@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, InputGroup, RangeSlider, Tooltip } from '@blueprintjs/core';
+import { Button, InputGroup, RangeSlider, Size, Tooltip } from '@blueprintjs/core';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation } from 'react-router';
@@ -184,7 +184,7 @@ function Range() {
                                 }}
                                 fill={false}
                                 disabled={!isPerformanceRoute}
-                                size='small'
+                                size={Size.SMALL}
                                 aria-label='Performance min value'
                             />
                             <InputGroup
@@ -198,7 +198,7 @@ function Range() {
                                 }}
                                 fill={false}
                                 disabled={!isPerformanceRoute}
-                                size='small'
+                                size={Size.SMALL}
                                 aria-label='Performance max value'
                             />
                         </div>
@@ -235,7 +235,7 @@ function Range() {
                                     icon={IconNames.RESET}
                                     onClick={() => (isInSync ? resetSliders() : setSelectedPerformanceRange(perfRange))}
                                     disabled={!isPerformanceRoute}
-                                    size='small'
+                                    size={Size.SMALL}
                                     aria-label='Reset performance range'
                                 />
                             </Tooltip>
@@ -259,7 +259,7 @@ function Range() {
                                 }}
                                 fill={false}
                                 disabled={shouldDisableOpRange}
-                                size='small'
+                                size={Size.SMALL}
                                 aria-label='Operation min value'
                             />
                             <InputGroup
@@ -273,7 +273,7 @@ function Range() {
                                 }}
                                 fill={false}
                                 disabled={shouldDisableOpRange}
-                                size='small'
+                                size={Size.SMALL}
                                 aria-label='Operation max value'
                             />
                         </div>
@@ -308,7 +308,7 @@ function Range() {
                             icon={IconNames.RESET}
                             onClick={() => (isInSync ? resetSliders() : setSelectedOperationRange(operationRange))}
                             disabled={shouldDisableOpRange}
-                            size='small'
+                            size={Size.SMALL}
                             aria-label='Reset operation range'
                         />
                     </Tooltip>

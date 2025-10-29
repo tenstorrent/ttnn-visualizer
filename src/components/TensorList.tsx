@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Button, ButtonGroup, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import SearchField from './SearchField';
@@ -192,7 +192,7 @@ const TensorList = () => {
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
 
-                <ButtonGroup variant='minimal'>
+                <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
                         content='Toggle high consumer tensors'
                         placement={PopoverPosition.TOP}
@@ -202,7 +202,7 @@ const TensorList = () => {
                             endIcon={IconNames.ISSUE}
                             disabled={!tensorsWithRange?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
                             intent={HIGH_CONSUMER_INTENT}
-                            variant={showHighConsumerTensors ? 'outlined' : undefined}
+                            variant={showHighConsumerTensors ? ButtonVariant.OUTLINED : undefined}
                             aria-label='Toggle high consumer tensors'
                         >
                             {filteredTensorList?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS).length}
@@ -218,7 +218,7 @@ const TensorList = () => {
                             endIcon={IconNames.OUTDATED}
                             intent={Intent.WARNING}
                             disabled={nonDeallocatedTensorList.size === 0}
-                            variant={showLateDeallocatedTensors ? 'outlined' : undefined}
+                            variant={showLateDeallocatedTensors ? ButtonVariant.OUTLINED : undefined}
                             aria-label='Toggle high consumer tensors'
                         >
                             {filteredTensorList?.filter((tensor) => nonDeallocatedTensorList.get(tensor.id)).length}
