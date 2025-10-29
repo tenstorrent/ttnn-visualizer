@@ -36,7 +36,6 @@ const TensorList = () => {
     const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
     const [bufferTypeFilters, setBufferTypeFilters] = useAtom(tensorBufferTypeFiltersAtom);
-    // const [tensorListScroll, setTensorListScroll] = useAtom(tensorListScrollAtom);
 
     const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
     const [filterQuery, setFilterQuery] = useState('');

@@ -91,20 +91,23 @@ const OperationList = () => {
     const numberOfOperations = filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE;
 
     const handleToggleCollapsible = (operationId: number) => {
-        if (listState) {
-            let { expandedItems } = listState;
+        let expandedItems: Set<number>;
 
-            if (!expandedItems) {
-                expandedItems = new Set<number>();
-                expandedItems.add(operationId);
-            } else if (expandedItems.has(operationId)) {
-                expandedItems.delete(operationId);
-            }
-
-            updateListState({
-                expandedItems,
-            });
+        if (listState && listState.expandedItems) {
+            expandedItems = new Set<number>(listState.expandedItems);
+        } else {
+            expandedItems = new Set<number>();
         }
+
+        if (expandedItems.has(operationId)) {
+            expandedItems.delete(operationId);
+        } else {
+            expandedItems.add(operationId);
+        }
+
+        updateListState({
+            expandedItems,
+        });
     };
 
     const handleSortByID = () => {
@@ -164,6 +167,15 @@ const OperationList = () => {
         virtualizer.scrollToIndex(scrollToIndex < 0 ? 0 : scrollToIndex);
     };
 
+    const updateOnScroll = useCallback(
+        () =>
+            updateListState({
+                scrollOffset: virtualizer.scrollOffset || 0,
+                measurementsCache: virtualizer.measurementsCache,
+            }),
+        [updateListState, virtualizer.scrollOffset, virtualizer.measurementsCache],
+    );
+
     useMemo(() => {
         if (operationsWithRange) {
             let operations = [...operationsWithRange];
@@ -197,38 +209,22 @@ const OperationList = () => {
     }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration, selectedOperationRange]);
 
     useEffect(() => {
-        const handler = setTimeout(() => {
-            const initialOperationId = location.state?.previousOperationId;
+        const initialOperationId = location.state?.previousOperationId;
+        // console.log('useEffect triggered', initialOperationId, listState);
 
-            if (initialOperationId) {
-                const operationIndex =
-                    fetchedOperations?.findIndex(
-                        (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
-                    ) || 0;
+        if (initialOperationId) {
+            const operationIndex =
+                fetchedOperations?.findIndex(
+                    (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
+                ) || 0;
 
-                setFocussedRow(operationIndex);
+            setFocussedRow(operationIndex);
 
-                // Navigating to the same page replaces the entry in the browser history
-                navigate(ROUTES.OPERATIONS, { replace: true });
-            }
-
-            updateListState({
-                scrollOffset: virtualizer.scrollOffset || 0,
-                measurementsCache: virtualizer.measurementsCache,
-            });
-        }, 200);
-
-        return () => clearTimeout(handler);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [
-        fetchedOperations,
-        filteredOperationsList,
-        location.state,
-        navigate,
-        // updateListState,
-        virtualizer.measurementsCache,
-        virtualizer.scrollOffset,
-    ]);
+            // Navigating to the same page replaces the entry in the browser history
+            navigate(ROUTES.OPERATIONS, { replace: true });
+            updateOnScroll();
+        }
+    }, [fetchedOperations, location.state?.previousOperationId, navigate, updateOnScroll]);
 
     const scrollToIndex = useCallback(
         (index: number) => virtualizer.scrollToIndex(index, { align: 'start' }),

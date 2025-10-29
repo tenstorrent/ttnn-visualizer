@@ -53,7 +53,6 @@ export const isFullStackTraceAtom = atom(false);
 
 // Tensors route
 export const expandedTensorsAtom = atom<number[]>([]);
-export const tensorListScrollAtom = atom<number>(0);
 export const tensorBufferTypeFiltersAtom = atom<(BufferType | null)[]>([]);
 
 // Buffers route
