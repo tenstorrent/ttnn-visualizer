@@ -50,7 +50,7 @@ function FooterInfobar() {
         }
 
         return true;
-    }, [location]);
+    }, [location.pathname]);
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
 
     useEffect(() => {
