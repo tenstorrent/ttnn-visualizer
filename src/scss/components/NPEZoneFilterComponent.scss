@@ -56,7 +56,11 @@
     }
 
     .root-zone-collapsible {
-        //
+        .root-zone-label {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
     }
 
     .zone-interactive {
