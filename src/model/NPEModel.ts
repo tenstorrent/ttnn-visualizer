@@ -242,12 +242,12 @@ export enum KERNEL_PROCESS {
 }
 
 export const KERNEL_COLORS: Record<KERNEL_PROCESS, string> = {
-    [KERNEL_PROCESS.BRISC]: `rgba(255, 99, 71, 1)`, // Tomato
-    [KERNEL_PROCESS.TRISC_0]: `rgba(34, 139, 34, 1)`, // DodgerBlue
-    [KERNEL_PROCESS.TRISC_1]: `rgba(255, 215, 0, 1)`, // Gold
-    [KERNEL_PROCESS.NCRISC]: `rgba(30, 144, 255, 1)`, // ForestGreen
-    [KERNEL_PROCESS.ERISC]: `rgba(186, 85, 211, 1)`, // MediumOrchid
-    [KERNEL_PROCESS.CORE_AGG]: `rgba(255, 69, 0, 1)`, // OrangeRed
+    [KERNEL_PROCESS.BRISC]: `rgba(255, 99, 71, 1)`,
+    [KERNEL_PROCESS.TRISC_0]: `rgba(34, 139, 34, 1)`,
+    [KERNEL_PROCESS.TRISC_1]: `rgba(255, 215, 0, 1)`,
+    [KERNEL_PROCESS.NCRISC]: `rgba(30, 144, 255, 1)`,
+    [KERNEL_PROCESS.ERISC]: `rgba(186, 85, 211, 1)`,
+    [KERNEL_PROCESS.CORE_AGG]: `rgba(255, 69, 0, 1)`,
 };
 
 export const getKernelColor = (proc: KERNEL_PROCESS): string => KERNEL_COLORS[proc] || 'rgba(255, 255,255, 1)';

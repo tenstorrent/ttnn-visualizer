@@ -25,6 +25,9 @@ interface NPEHeatMapProps {
     selectedZoneList: NPERootZoneUXInfo[];
     nocType?: NoCType | null;
 }
+const CANVAS_HEIGHT = 30;
+const ZONE_RANGE_HEIGHT = 10;
+const ZONE_HEIGHT = 10;
 
 const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
     timestepList,
@@ -36,9 +39,6 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
 }) => {
     const altCongestionColors = useAtomValue(altCongestionColorsAtom);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const CANVAS_HEIGHT = 30;
-    const ZONE_RANGE_HEIGHT = 10;
-    const ZONE_HEIGHT = 10;
 
     // this will be needed for rendering all zones, not just root zones
     // const HEIGHT_PER_ZONE = 20;
@@ -189,9 +189,9 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
             });
         });
     }, [
+        //
         congestionMapPerTimestamp,
         canvasWidth,
-        CANVAS_HEIGHT,
         canvasZoneHeight,
         selectedZoneList,
         zoneRanges,
@@ -206,10 +206,9 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
             const chunkWidth = rect.width / congestionMapPerTimestamp.worst.length;
             const hoveredIndex = Math.floor(mouseX / chunkWidth);
             const y = event.clientY - rect.top;
-            let zoneindex = null;
-            if (y > CANVAS_HEIGHT) {
-                zoneindex = Math.floor((y - CANVAS_HEIGHT) / ZONE_RANGE_HEIGHT);
-            }
+
+            const zoneindex = y > CANVAS_HEIGHT ? Math.floor((y - CANVAS_HEIGHT) / ZONE_RANGE_HEIGHT) : null;
+
             const zoneConversionRatio = useTimesteps ? 1 : cyclesPerTimestep;
             const units = useTimesteps ? 'Timestep' : 'Cycle';
             if (hoveredIndex > -1) {
@@ -236,10 +235,8 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
                                 <>
                                     <div>
                                         <span
+                                            className='color-square'
                                             style={{
-                                                width: '10px',
-                                                height: '10px',
-                                                display: 'inline-block',
                                                 backgroundColor: congestionMapPerTimestamp.worst[hoveredIndex].color,
                                             }}
                                         />{' '}
@@ -250,10 +247,8 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
                                     </div>
                                     <div>
                                         <span
+                                            className='color-square'
                                             style={{
-                                                width: '10px',
-                                                height: '10px',
-                                                display: 'inline-block',
                                                 backgroundColor:
                                                     congestionMapPerTimestamp.utilization[hoveredIndex].color,
                                             }}
@@ -262,10 +257,8 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
                                     </div>
                                     <div>
                                         <span
+                                            className='color-square'
                                             style={{
-                                                width: '10px',
-                                                height: '10px',
-                                                display: 'inline-block',
                                                 backgroundColor: congestionMapPerTimestamp.demand[hoveredIndex].color,
                                             }}
                                         />
@@ -284,7 +277,6 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
                     ),
                 });
             } else {
-                // canvasRef.current && (canvasRef.current.style.cursor = 'default');
                 setTooltip(null);
             }
         }

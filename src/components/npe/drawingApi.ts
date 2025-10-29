@@ -275,7 +275,7 @@ function* npeColorGenerator(): IterableIterator<string> {
     let i = 0;
     while (true) {
         yield NPE_ZONE_COLOR[i]!;
-        i = (i + 1) % colorList.length;
+        i = (i + 1) % NPE_ZONE_COLOR.length;
     }
 }
 
