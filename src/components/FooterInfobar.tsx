@@ -39,7 +39,7 @@ function FooterInfobar() {
     const location = useLocation();
 
     const isAllowedRoute = useCallback(() => {
-        if (RANGE_DISALLOWED_ROUTES.some((route) => route === location.pathname)) {
+        if (RANGE_DISALLOWED_ROUTES.includes(location.pathname)) {
             return false;
         }
 
