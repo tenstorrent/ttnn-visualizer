@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Intent, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -16,20 +16,17 @@ import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ListView.scss';
 import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
-import {
-    activePerformanceReportAtom,
-    expandedOperationsAtom,
-    selectedOperationRangeAtom,
-    shouldCollapseAllOperationsAtom,
-} from '../store/app';
+import { activePerformanceReportAtom, selectedOperationRangeAtom, shouldCollapseAllOperationsAtom } from '../store/app';
 import { OperationDescription } from '../model/APIData';
 import ListItem from './ListItem';
 import { formatSize } from '../functions/math';
 import OperationListPerfData from './OperationListPerfData';
 import StackTrace from './operation-details/StackTrace';
+import useRestoreScrollPositionV2 from '../hooks/useRestoreScrollPositionV2';
 import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
+import { ScrollLocationsV2 } from '../definitions/ScrollPositionsV2';
 
-const PLACEHOLDER_ARRAY_SIZE = 10;
+const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
 const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
 
@@ -40,10 +37,10 @@ enum SortingOptions {
 }
 
 const OperationList = () => {
-    const location = useLocation();
-    const navigate = useNavigate();
-    const { data: fetchedOperations, error, isLoading } = useOperationsList();
-    const scrollElementRef = useRef<HTMLDivElement>(null);
+    const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
+
+    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
     const [filterQuery, setFilterQuery] = useState('');
     const [filteredOperationsList, setFilteredOperationsList] = useState<OperationDescription[]>([]);
@@ -51,34 +48,65 @@ const OperationList = () => {
     const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
-    const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
-    const [expandedOperations, setExpandedOperations] = useAtom(expandedOperationsAtom);
-    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const [focussedRow, setFocussedRow] = useState<number | null>(null);
 
-    // TODO: Figure out an initial scroll position based on last used operation - https://github.com/tenstorrent/ttnn-visualizer/issues/737
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { data: fetchedOperations, error, isLoading } = useOperationsList();
+    const { getListState, updateListState } = useRestoreScrollPositionV2(ScrollLocationsV2.OPERATION_LIST);
+    const scrollElementRef = useRef<HTMLDivElement>(null);
+    const listStateRef = useRef<number>();
+
+    const listState = getListState();
+
+    const {
+        itemCount: restoredItemCount,
+        scrollOffset: restoredOffset,
+        measurementsCache: restoreMeasurementsCache,
+    } = listState ?? {};
+
     const virtualizer = useVirtualizer({
-        count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
-        getScrollElement: () => scrollElementRef.current,
         estimateSize: () => OPERATION_EL_HEIGHT,
+        getScrollElement: () => scrollElementRef.current,
+        overscan: 10,
+        initialMeasurementsCache: restoreMeasurementsCache,
+        count: restoredItemCount || filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
+        initialOffset: restoredOffset || 0,
+        // TODO: Can help prevent stuttering when scrolling back up but needs more research
+        // measureElement: (element, _entry, instance) => {
+        //     const direction = instance.scrollDirection;
+        //     if (direction === 'forward' || direction === null) {
+        //         // Allow remeasuring when scrolling down or direction is null
+        //         return element.getBoundingClientRect().height;
+        //     }
+        //     // When scrolling up, use cached measurement to prevent stuttering
+        //     const indexKey = Number(element.getAttribute('data-index'));
+        //     const cachedMeasurement = instance.measurementsCache[indexKey]?.size;
+        //     return cachedMeasurement || element.getBoundingClientRect().height;
+        // },
     });
+
     const virtualItems = virtualizer.getVirtualItems();
-    const numberOfOperations =
-        filteredOperationsList && filteredOperationsList.length >= 0
-            ? filteredOperationsList.length
-            : PLACEHOLDER_ARRAY_SIZE;
+    const numberOfOperations = filteredOperationsList.length;
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
 
     const handleToggleCollapsible = (operationId: number) => {
-        setExpandedOperations((currentIds) => {
-            const operationIds = [...currentIds];
+        let expandedItems: Set<number>;
 
-            if (operationIds.includes(operationId)) {
-                return operationIds.filter((id) => id !== operationId);
-            }
+        if (listState && listState.expandedItems) {
+            expandedItems = new Set<number>(listState.expandedItems);
+        } else {
+            expandedItems = new Set<number>();
+        }
 
-            operationIds.push(operationId);
-            return operationIds;
+        if (expandedItems.has(operationId)) {
+            expandedItems.delete(operationId);
+        } else {
+            expandedItems.add(operationId);
+        }
+
+        updateListState({
+            expandedItems,
         });
     };
 
@@ -98,9 +126,13 @@ const OperationList = () => {
 
     const handleExpandAllToggle = () => {
         setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
-        setExpandedOperations(
-            !shouldCollapseAll && filteredOperationsList ? filteredOperationsList.map((operation) => operation.id) : [],
-        );
+        updateListState({
+            expandedItems: new Set(
+                !shouldCollapseAll && filteredOperationsList
+                    ? filteredOperationsList.map((operation) => operation.id)
+                    : [],
+            ),
+        });
     };
 
     const handleUserScrolling = () => {
@@ -167,26 +199,42 @@ const OperationList = () => {
         }
     }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration, selectedOperationRange]);
 
-    useEffect(() => {
-        const initialOperationId = location.state?.previousOperationId;
+    const scrollToIndex = useCallback(
+        (index: number) => virtualizer.scrollToIndex(index, { align: 'start' }),
+        [virtualizer],
+    );
 
-        if (initialOperationId && virtualizer) {
-            const operationIndex =
-                fetchedOperations?.findIndex(
-                    (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
-                ) || 0;
+    const scrollToTop = () => {
+        setFocussedRow(null);
+        scrollToIndex(0);
+        updateListState({
+            scrollOffset: 0,
+        });
+    };
 
-            // Looks better if we scroll to the previous index
-            virtualizer.scrollToIndex(operationIndex - 1, {
-                align: 'start',
-            });
+    const scrollToEnd = () => {
+        setFocussedRow(null);
+        scrollToIndex(numberOfOperations);
+        updateListState({
+            scrollOffset: scrollElementRef.current?.scrollTop || virtualizer.scrollOffset || 0,
+        });
+    };
 
-            // Navigating to the same page replaces the entry in the browser history
-            // TODO: Revisit this code later to make sure it's not causing any weird side effects
-            navigate(ROUTES.OPERATIONS, { replace: true });
+    // Throttled update of list state on scroll change
+    const throttledUpdateListState = useCallback(() => {
+        if (listStateRef.current) {
+            cancelAnimationFrame(listStateRef.current);
         }
-    }, [virtualizer, fetchedOperations, location, navigate]);
 
+        listStateRef.current = requestAnimationFrame(() => {
+            updateListState({
+                scrollOffset: virtualizer.scrollOffset || 0,
+                measurementsCache: virtualizer.measurementsCache,
+            });
+        });
+    }, [updateListState, virtualizer.scrollOffset, virtualizer.measurementsCache]);
+
+    // Reset scroll to top
     useEffect(() => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
             scrollElementRef.current.scrollTop = 0;
@@ -196,6 +244,33 @@ const OperationList = () => {
 
         updateScrollShade();
     }, [virtualHeight]);
+
+    useEffect(() => {
+        const initialOperationId = location.state?.previousOperationId;
+
+        if (initialOperationId) {
+            const operationIndex =
+                fetchedOperations?.findIndex(
+                    (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
+                ) || 0;
+
+            setFocussedRow(operationIndex);
+
+            // Navigating to the same page replaces the entry in the browser history
+            navigate(ROUTES.OPERATIONS, { replace: true });
+        }
+    }, [fetchedOperations, location.state?.previousOperationId, navigate]);
+
+    // List state update
+    useEffect(() => {
+        throttledUpdateListState();
+
+        return () => {
+            if (listStateRef.current) {
+                cancelAnimationFrame(listStateRef.current);
+            }
+        };
+    }, [throttledUpdateListState]);
 
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList
@@ -274,9 +349,7 @@ const OperationList = () => {
                         placement={PopoverPosition.TOP}
                     >
                         <Button
-                            onClick={() => {
-                                virtualizer.scrollToIndex(0);
-                            }}
+                            onClick={scrollToTop}
                             icon={IconNames.DOUBLE_CHEVRON_UP}
                             aria-label='Scroll to top'
                         />
@@ -287,9 +360,7 @@ const OperationList = () => {
                         placement={PopoverPosition.TOP}
                     >
                         <Button
-                            onClick={() => {
-                                virtualizer.scrollToIndex(numberOfOperations - 1);
-                            }}
+                            onClick={scrollToEnd}
                             icon={IconNames.DOUBLE_CHEVRON_DOWN}
                             aria-label='Scroll to bottom'
                         />
@@ -310,7 +381,6 @@ const OperationList = () => {
                 className={classNames('scrollable-element', {
                     'scroll-shade-top': hasScrolledFromTop && virtualHeight >= 0,
                     'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
-                    'scroll-lock': virtualHeight <= 0,
                 })}
                 onScroll={handleUserScrolling}
             >
@@ -333,10 +403,13 @@ const OperationList = () => {
 
                                 return (
                                     <li
-                                        className={classNames('list-item-container')}
+                                        className={classNames('list-item-container', {
+                                            'focus-fade': focussedRow === virtualRow.index,
+                                        })}
                                         key={virtualRow.key}
-                                        data-index={virtualRow.index}
                                         ref={virtualizer.measureElement}
+                                        data-id={operation.id}
+                                        data-index={virtualRow.index}
                                     >
                                         <Collapsible
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
@@ -353,7 +426,7 @@ const OperationList = () => {
                                                     />
                                                 </Tooltip>
                                             }
-                                            keepChildrenMounted={false}
+                                            keepChildrenMounted
                                             additionalElements={
                                                 <Button
                                                     className='buffer-view'
@@ -365,7 +438,7 @@ const OperationList = () => {
                                                     variant={ButtonVariant.OUTLINED}
                                                 />
                                             }
-                                            isOpen={expandedOperations.includes(operation.id)}
+                                            isOpen={!!listState?.expandedItems?.has(operation.id)}
                                         >
                                             <div className='arguments-wrapper'>
                                                 <p className='monospace'>
@@ -424,7 +497,7 @@ const OperationList = () => {
                             })
                         ) : (
                             <>
-                                {isLoading ? <LoadingSpinner /> : <p>No results</p>}
+                                {isLoading ? <LoadingSpinner /> : <p className='no-results'>No results</p>}
                                 {error && <div>An error occurred: {error.message}</div>}
                             </>
                         )}
