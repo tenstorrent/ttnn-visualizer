@@ -5,7 +5,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useAtomValue } from 'jotai';
-import { calculateLinkCongestionColor, getNpeZoneColor } from './drawingApi';
+import { calculateLinkCongestionColor } from './drawingApi';
 import {
     NPERootZoneUXInfo,
     NPEZone,
@@ -86,10 +86,12 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
                 })
         );
     }, [getZoneDrawing, selectedZoneList]);
-
+    const maxZoneDepth =
+        Math.max(...expandedZoneRanges.flatMap((range) => range.map((r) => r.depth)), 0) + zoneRanges.length;
     // console.log(expandedZoneRanges);
+    // console.log('maxZoneDepth', maxZoneDepth);
 
-    const canvasZoneHeight = zoneRanges.length * ZONE_RANGE_HEIGHT;
+    const canvasZoneHeight = maxZoneDepth * ZONE_RANGE_HEIGHT;
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
     const congestionMapPerTimestamp = useMemo(() => {
         return {
@@ -176,7 +178,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
         });
         expandedZoneRanges.forEach((ranges) => {
             ranges.forEach((range) => {
-                const color = getNpeZoneColor(range.depth);
+                const color = '#fff';
                 const startX = range.start * chunkWidth;
                 const endX = range.end * chunkWidth;
                 ctx.fillStyle = color;
@@ -314,7 +316,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
                             left: `${tooltip.x}px`,
                             width: '0',
                             height: '0',
-                            backgroundColor: 'red',
+                            backgroundColor: '#fff',
                             zIndex: 100,
                         }}
                     />

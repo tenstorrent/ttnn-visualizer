@@ -4,7 +4,7 @@
 
 // @eslint-disable jsx-a11y/mouse-events-have-key-events
 
-import React, { useCallback, useMemo } from 'react';
+import React, { Fragment, useCallback, useMemo } from 'react';
 import classNames from 'classnames';
 import { Button, ButtonGroup, ButtonVariant, MenuItem, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -91,11 +91,9 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
     ): React.JSX.Element | React.JSX.Element[] => {
         return zones.map((zone, index) => {
             return (
-                <>
-                    {}
+                <Fragment key={`${zone.id}-start-${index}`}>
                     <div
                         className={`zone-interactive  depth-${depth}`}
-                        key={`${zone.id}-start-${index}`}
                         style={{ marginLeft: `${depth * 20}px` }}
                         // onClick={() => {
                         // FUTURE FUNCTIONALITY, zone selection on click
@@ -104,7 +102,7 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
                         {zone.id} <span className='zone-timeline-range'>{`${zone.start} - ${zone.end}`}</span>
                     </div>
                     {getZoneElements(zone.zones, core, depth + 1)}
-                </>
+                </Fragment>
             );
         });
     };
