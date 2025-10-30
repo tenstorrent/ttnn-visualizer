@@ -66,32 +66,43 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
     );
 
     const zoneRanges = useMemo(() => {
-        return selectedZoneList.flatMap((rootZone) =>
-            rootZone.zones.map((zone) => ({
-                proc: rootZone.proc,
-                start: zone.start / cyclesPerTimestep,
-                end: zone.end / cyclesPerTimestep,
-                zones: [],
-            })),
-        );
-    }, [selectedZoneList, cyclesPerTimestep]);
+        let maxZoneDepth = 0;
+        let groupIndex = -1;
+        return {
+            range: selectedZoneList.flatMap((rootZone) => {
+                groupIndex += 1;
+                const childZones = rootZone.expandedState ? getZoneDrawing(rootZone.zones, 1) : [];
+                const maxDepth = childZones.length ? Math.max(...childZones.map((z) => z.depth)) : 0;
+                maxZoneDepth += 1 + maxDepth;
+                return rootZone.zones.map((zone) => ({
+                    groupIndex,
+                    maxDepth, // rows for children in this group
+                    proc: rootZone.proc,
+                    start: zone.start / cyclesPerTimestep,
+                    end: zone.end / cyclesPerTimestep,
+                    zones: childZones, // children shared per root
+                }));
+            }),
+            maxZoneDepth,
+        };
+    }, [selectedZoneList, cyclesPerTimestep, getZoneDrawing]);
 
-    const expandedZoneRanges = useMemo(() => {
-        return (
-            selectedZoneList
-                .filter((rootZone) => rootZone.expandedState)
-                // .filter((rootZone) => true)
-                .map((rootZone) => {
-                    return getZoneDrawing(rootZone.zones, 1);
-                })
-        );
-    }, [getZoneDrawing, selectedZoneList]);
-    const maxZoneDepth =
-        Math.max(...expandedZoneRanges.flatMap((range) => range.map((r) => r.depth)), 0) + zoneRanges.length;
+    // const expandedZoneRanges = useMemo(() => {
+    //     return (
+    //         selectedZoneList
+    //             .filter((rootZone) => rootZone.expandedState)
+    //             // .filter((rootZone) => true)
+    //             .map((rootZone) => {
+    //                 return getZoneDrawing(rootZone.zones, 1);
+    //             })
+    //     );
+    // }, [getZoneDrawing, selectedZoneList]);
+    // const maxZoneDepth =
+    //     Math.max(...expandedZoneRanges.flatMap((range) => range.map((r) => r.depth)), 0) + zoneRanges.length;
     // console.log(expandedZoneRanges);
     // console.log('maxZoneDepth', maxZoneDepth);
 
-    const canvasZoneHeight = maxZoneDepth * ZONE_RANGE_HEIGHT;
+    const canvasZoneHeight = zoneRanges.maxZoneDepth * ZONE_RANGE_HEIGHT;
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
     const congestionMapPerTimestamp = useMemo(() => {
         return {
@@ -168,28 +179,63 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
             ctx.fillRect(index * chunkWidth, (CANVAS_HEIGHT / 3) * 2, chunkWidth, CANVAS_HEIGHT / 3);
         });
 
-        // const yoffset = 0;
-        zoneRanges.forEach((range, index) => {
+        const groupBaseY = new Map<number, number>();
+        {
+            let yCursor = CANVAS_HEIGHT;
+            const seen = new Set<number>();
+
+            for (const r of zoneRanges.range) {
+                const alreadySeen = seen.has(r.groupIndex);
+                if (!alreadySeen) {
+                    seen.add(r.groupIndex);
+                    groupBaseY.set(r.groupIndex, yCursor);
+
+                    const rows = 1 + (r.maxDepth ?? 0);
+                    yCursor += rows * ZONE_RANGE_HEIGHT;
+                }
+            }
+        }
+
+        zoneRanges.range.forEach((range) => {
             const color = getKernelColor(range.proc);
             const startX = range.start * chunkWidth;
             const endX = range.end * chunkWidth;
+
+            const baseY = groupBaseY.get(range.groupIndex)!;
+
             ctx.fillStyle = color;
-            ctx.fillRect(startX, CANVAS_HEIGHT + index * ZONE_RANGE_HEIGHT, endX - startX, ZONE_RANGE_HEIGHT);
+            ctx.fillRect(startX, baseY, endX - startX, ZONE_RANGE_HEIGHT);
+
+            if (range.zones.length > 0) {
+                const zoneColor = '#fff000';
+                range.zones.forEach((childZone) => {
+                    const childStartX = childZone.start * chunkWidth;
+                    const childEndX = childZone.end * chunkWidth;
+                    const childY = baseY + childZone.depth * ZONE_RANGE_HEIGHT;
+
+                    ctx.fillStyle = zoneColor;
+                    ctx.fillRect(childStartX, childY, childEndX - childStartX, ZONE_HEIGHT);
+                });
+            }
         });
-        expandedZoneRanges.forEach((ranges) => {
-            ranges.forEach((range) => {
-                const color = '#fff';
-                const startX = range.start * chunkWidth;
-                const endX = range.end * chunkWidth;
-                ctx.fillStyle = color;
-                ctx.fillRect(
-                    startX,
-                    CANVAS_HEIGHT + (zoneRanges.length + (range.depth - 1)) * ZONE_RANGE_HEIGHT,
-                    endX - startX,
-                    ZONE_HEIGHT,
-                );
-            });
-        });
+        // zoneRanges.forEach((range, index) => {
+        //     const color = getKernelColor(range.proc);
+        //     const startX = range.start * chunkWidth;
+        //     const endX = range.end * chunkWidth;
+        //     ctx.fillStyle = color;
+        //     ctx.fillRect(startX, CANVAS_HEIGHT + index * ZONE_RANGE_HEIGHT, endX - startX, ZONE_RANGE_HEIGHT);
+        //     // draw child zones if expanded
+        //     if (range.zones.length > 0) {
+        //         range.zones.forEach((childZone) => {
+        //             const childStartX = childZone.start * chunkWidth;
+        //             const childEndX = childZone.end * chunkWidth;
+        //             const childY =
+        //                 CANVAS_HEIGHT + (index + childZone.depth) * ZONE_RANGE_HEIGHT; /* offset by parent zone index */
+        //             ctx.fillStyle = getKernelColor(range.proc);
+        //             ctx.fillRect(childStartX, childY, childEndX - childStartX, ZONE_HEIGHT);
+        //         });
+        //     }
+        // });
     }, [
         //
         congestionMapPerTimestamp,
@@ -197,7 +243,6 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
         canvasZoneHeight,
         selectedZoneList,
         zoneRanges,
-        expandedZoneRanges,
     ]);
 
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
