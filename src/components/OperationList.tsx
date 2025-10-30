@@ -55,6 +55,7 @@ const OperationList = () => {
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
     const { getListState, updateListState } = useRestoreScrollPositionV2(ScrollLocationsV2.OPERATION_LIST);
     const scrollElementRef = useRef<HTMLDivElement>(null);
+    const listStateRef = useRef<number>();
 
     const listState = getListState();
 
@@ -68,7 +69,6 @@ const OperationList = () => {
         estimateSize: () => OPERATION_EL_HEIGHT,
         getScrollElement: () => scrollElementRef.current,
         overscan: 10,
-        useAnimationFrameWithResizeObserver: true,
         initialMeasurementsCache: restoreMeasurementsCache,
         count: restoredItemCount || filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
         initialOffset: restoredOffset || 0,
@@ -220,6 +220,21 @@ const OperationList = () => {
         });
     };
 
+    // Throttled update of list state on scroll change
+    const throttledUpdateListState = useCallback(() => {
+        if (listStateRef.current) {
+            cancelAnimationFrame(listStateRef.current);
+        }
+
+        listStateRef.current = requestAnimationFrame(() => {
+            updateListState({
+                scrollOffset: virtualizer.scrollOffset || 0,
+                measurementsCache: virtualizer.measurementsCache,
+            });
+        });
+    }, [updateListState, virtualizer.scrollOffset, virtualizer.measurementsCache]);
+
+    // Reset scroll to top
     useEffect(() => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
             scrollElementRef.current.scrollTop = 0;
@@ -246,12 +261,16 @@ const OperationList = () => {
         }
     }, [fetchedOperations, location.state?.previousOperationId, navigate]);
 
+    // List state update
     useEffect(() => {
-        updateListState({
-            scrollOffset: virtualizer.scrollOffset || 0,
-            measurementsCache: virtualizer.measurementsCache,
-        });
-    }, [updateListState, virtualizer.scrollOffset, virtualizer.measurementsCache]);
+        throttledUpdateListState();
+
+        return () => {
+            if (listStateRef.current) {
+                cancelAnimationFrame(listStateRef.current);
+            }
+        };
+    }, [throttledUpdateListState]);
 
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList
