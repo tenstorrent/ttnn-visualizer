@@ -87,8 +87,8 @@ const OperationList = () => {
     });
 
     const virtualItems = virtualizer.getVirtualItems();
+    const numberOfOperations = filteredOperationsList.length;
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
-    const numberOfOperations = filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE;
 
     const handleToggleCollapsible = (operationId: number) => {
         let expandedItems: Set<number>;
@@ -381,7 +381,6 @@ const OperationList = () => {
                 className={classNames('scrollable-element', {
                     'scroll-shade-top': hasScrolledFromTop && virtualHeight >= 0,
                     'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
-                    'scroll-lock': virtualHeight <= 0,
                 })}
                 onScroll={handleUserScrolling}
             >
@@ -498,7 +497,7 @@ const OperationList = () => {
                             })
                         ) : (
                             <>
-                                {isLoading ? <LoadingSpinner /> : <p>No results</p>}
+                                {isLoading ? <LoadingSpinner /> : <p className='no-results'>No results</p>}
                                 {error && <div>An error occurred: {error.message}</div>}
                             </>
                         )}

@@ -282,7 +282,6 @@ const TensorList = () => {
                 className={classNames('scrollable-element', {
                     'scroll-shade-top': hasScrolledFromTop && virtualHeight >= 0,
                     'scroll-shade-bottom': !hasScrolledToBottom && numberOfTensors > virtualItems.length,
-                    'scroll-lock': virtualHeight <= 0,
                 })}
                 onScroll={handleUserScrolling}
             >

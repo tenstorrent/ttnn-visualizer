@@ -35,10 +35,6 @@
         overflow-y: auto;
         position: relative;
 
-        &.scroll-lock {
-            overflow-y: unset;
-        }
-
         &::before,
         &::after {
             content: '';
@@ -104,5 +100,11 @@
         margin-left: 5px;
         margin-right: 5px;
         margin-bottom: 5px;
+    }
+
+    .no-results {
+        font-size: 18px;
+        margin-top: 5px;
+        margin-left: 8px;
     }
 }
