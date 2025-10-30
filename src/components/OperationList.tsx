@@ -167,15 +167,6 @@ const OperationList = () => {
         virtualizer.scrollToIndex(scrollToIndex < 0 ? 0 : scrollToIndex);
     };
 
-    const updateOnScroll = useCallback(
-        () =>
-            updateListState({
-                scrollOffset: virtualizer.scrollOffset || 0,
-                measurementsCache: virtualizer.measurementsCache,
-            }),
-        [updateListState, virtualizer.scrollOffset, virtualizer.measurementsCache],
-    );
-
     useMemo(() => {
         if (operationsWithRange) {
             let operations = [...operationsWithRange];
@@ -208,24 +199,6 @@ const OperationList = () => {
         }
     }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration, selectedOperationRange]);
 
-    useEffect(() => {
-        const initialOperationId = location.state?.previousOperationId;
-        // console.log('useEffect triggered', initialOperationId, listState);
-
-        if (initialOperationId) {
-            const operationIndex =
-                fetchedOperations?.findIndex(
-                    (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
-                ) || 0;
-
-            setFocussedRow(operationIndex);
-
-            // Navigating to the same page replaces the entry in the browser history
-            navigate(ROUTES.OPERATIONS, { replace: true });
-            updateOnScroll();
-        }
-    }, [fetchedOperations, location.state?.previousOperationId, navigate, updateOnScroll]);
-
     const scrollToIndex = useCallback(
         (index: number) => virtualizer.scrollToIndex(index, { align: 'start' }),
         [virtualizer],
@@ -256,6 +229,29 @@ const OperationList = () => {
 
         updateScrollShade();
     }, [virtualHeight]);
+
+    useEffect(() => {
+        const initialOperationId = location.state?.previousOperationId;
+
+        if (initialOperationId) {
+            const operationIndex =
+                fetchedOperations?.findIndex(
+                    (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
+                ) || 0;
+
+            setFocussedRow(operationIndex);
+
+            // Navigating to the same page replaces the entry in the browser history
+            navigate(ROUTES.OPERATIONS, { replace: true });
+        }
+    }, [fetchedOperations, location.state?.previousOperationId, navigate]);
+
+    useEffect(() => {
+        updateListState({
+            scrollOffset: virtualizer.scrollOffset || 0,
+            measurementsCache: virtualizer.measurementsCache,
+        });
+    }, [updateListState, virtualizer.scrollOffset, virtualizer.measurementsCache]);
 
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList
