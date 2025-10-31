@@ -54,6 +54,7 @@ function BufferSummaryPlotRendererDRAM({
 }: BufferSummaryPlotRendererDRAMProps) {
     const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const [activeRow, setActiveRow] = useState<number | null>(null);
     const [showHex, setShowHex] = useAtom(showHexAtom);
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [isZoomedIn, setIsZoomedIn] = useAtom(showBufferSummaryZoomedAtom);
@@ -195,8 +196,11 @@ function BufferSummaryPlotRendererDRAM({
                                             key={virtualRow.key}
                                             data-index={virtualRow.index}
                                             ref={virtualizer.measureElement}
+                                            onMouseEnter={() => setActiveRow(operation.id)}
+                                            onMouseLeave={() => setActiveRow(null)}
                                         >
                                             <BufferSummaryRow
+                                                className={classNames({ 'is-active': operation.id === activeRow })}
                                                 buffers={operation.buffers}
                                                 // operationId={operation.id}
                                                 memoryStart={isZoomedIn ? zoomedMemoryOptions[index].start : 0}

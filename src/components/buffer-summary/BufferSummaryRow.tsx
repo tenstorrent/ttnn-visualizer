@@ -234,7 +234,12 @@ const BufferSummaryRow = ({
     };
 
     return (
-        <>
+        <div
+            className={classNames('buffer-summary-row', className)}
+            style={{
+                padding: memoryStart > 0 ? `0 ${computedPadding}%` : '0',
+            }}
+        >
             {tooltip && (
                 <Tooltip
                     content={tooltip.text}
@@ -261,23 +266,17 @@ const BufferSummaryRow = ({
                     />
                 </Tooltip>
             )}
-            <div
-                className={classNames('buffer-summary-row', className)}
-                style={{
-                    padding: memoryStart > 0 ? `0 ${computedPadding}%` : '0',
-                }}
-            >
-                <canvas
-                    className='canvas'
-                    ref={canvasRef}
-                    width={CANVAS_WIDTH}
-                    height={CANVAS_HEIGHT}
-                    onMouseMove={handleMouseMove}
-                    onMouseLeave={handleMouseLeave}
-                    onClick={handleClick}
-                />
-            </div>
-        </>
+
+            <canvas
+                className='canvas'
+                ref={canvasRef}
+                width={CANVAS_WIDTH}
+                height={CANVAS_HEIGHT}
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+                onClick={handleClick}
+            />
+        </div>
     );
 };
 
