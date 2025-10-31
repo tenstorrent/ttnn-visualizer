@@ -29,6 +29,7 @@ import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import { filterBySignpostAtom, hideHostOpsAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
 import { PATTERN_COUNT } from '../../definitions/Performance';
+import { BufferType } from '../../model/BufferType';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -36,6 +37,7 @@ interface PerformanceTableProps {
     filters: TableFilter;
     rawOpCodeFilter: string[];
     mathFidelityFilter: string[];
+    bufferTypeFilter: (BufferType | null)[];
     provideMatmulAdvice: boolean;
     hiliteHighDispatch: boolean;
     shouldHighlightRows: boolean;
@@ -52,6 +54,7 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     filters,
     rawOpCodeFilter,
     mathFidelityFilter,
+    bufferTypeFilter,
     provideMatmulAdvice,
     hiliteHighDispatch,
     shouldHighlightRows,
@@ -70,7 +73,14 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
     // TODO: Refactor so that sortAndFilterPerfTableData is not used here and PerfReport.
     // Currently it is needed because the "Showing 'x' of 'y' rows" is calculated in PerfReport but the sorting and filtering is done here.
     const tableFields = useMemo<TypedPerfTableRow[]>(() => {
-        let parsedRows = sortAndFilterPerfTableData(data, filters, rawOpCodeFilter, mathFidelityFilter, hideHostOps);
+        let parsedRows = sortAndFilterPerfTableData(
+            data,
+            filters,
+            rawOpCodeFilter,
+            mathFidelityFilter,
+            bufferTypeFilter,
+            hideHostOps,
+        );
 
         // If filtering by signpost, add a fake row at the top to represent the signpost as tt-perf-report removes it from the data
         if (filterBySignpost && parsedRows.length > 0) {
@@ -87,7 +97,16 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
 
         // Still some awkward casting here
         return [...sortTableFields(parsedRows as [])];
-    }, [data, filters, rawOpCodeFilter, mathFidelityFilter, sortTableFields, filterBySignpost, hideHostOps]);
+    }, [
+        data,
+        filters,
+        rawOpCodeFilter,
+        mathFidelityFilter,
+        bufferTypeFilter,
+        sortTableFields,
+        filterBySignpost,
+        hideHostOps,
+    ]);
 
     const comparisonDataTableFields = useMemo<TypedPerfTableRow[][]>(
         () =>
@@ -97,13 +116,14 @@ const PerformanceTable: FC<PerformanceTableProps> = ({
                     filters,
                     rawOpCodeFilter,
                     mathFidelityFilter,
+                    bufferTypeFilter,
                     hideHostOps,
                 );
 
                 // Still some awkward casting here
                 return [...sortTableFields(parsedRows as [])];
             }) || [],
-        [comparisonData, filters, rawOpCodeFilter, mathFidelityFilter, sortTableFields, hideHostOps],
+        [comparisonData, filters, rawOpCodeFilter, mathFidelityFilter, bufferTypeFilter, sortTableFields, hideHostOps],
     );
 
     const visibleHeaders = [

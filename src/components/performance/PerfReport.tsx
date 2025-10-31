@@ -39,6 +39,7 @@ import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
 import {
     activePerformanceReportAtom,
+    bufferTypeFilterListAtom,
     comparisonPerformanceReportListAtom,
     filterBySignpostAtom,
     hideHostOpsAtom,
@@ -63,6 +64,8 @@ import HighlightedText from '../HighlightedText';
 import { OpType } from '../../definitions/Performance';
 import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
+import { BufferType, BufferTypeLabel } from '../../model/BufferType';
+import { DeviceOperationLayoutTypes } from '../../model/APIData';
 
 interface PerformanceReportProps {
     data?: PerfTableRow[];
@@ -89,6 +92,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
     const [hideHostOps, setHideHostOps] = useAtom(hideHostOpsAtom);
     const [activeMathFilterList, setActiveMathFilterList] = useAtom(mathFilterListAtom);
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
+    const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
@@ -151,6 +155,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 filters,
                 activeRawOpCodeFilterList,
                 activeMathFilterList,
+                activeBufferTypeFilterList,
                 hideHostOps,
             ),
         [
@@ -158,6 +163,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             filters,
             activeMathFilterList,
             activeRawOpCodeFilterList,
+            activeBufferTypeFilterList,
             useNormalisedData,
             normalisedData.data,
             hideHostOps,
@@ -171,6 +177,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                 filters,
                 activeRawOpCodeFilterList,
                 activeMathFilterList,
+                activeBufferTypeFilterList,
                 hideHostOps,
             ),
         [
@@ -179,6 +186,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
             filters,
             activeRawOpCodeFilterList,
             activeMathFilterList,
+            activeBufferTypeFilterList,
             useNormalisedData,
             normalisedData.data,
             hideHostOps,
@@ -296,17 +304,28 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                         searchQuery={filters?.op_code || ''}
                     />
 
-                    <MultiSelectField<PerfTableRow, 'raw_op_code'>
+                    <MultiSelectField<TypedPerfTableRow, 'buffer_type'>
+                        keyName='buffer_type'
+                        options={processedRows || []}
+                        labelFormatter={(value: BufferType | null) =>
+                            value !== null ? BufferTypeLabel[value] : 'No value'
+                        }
+                        placeholder='Select Buffer Type...'
+                        values={activeBufferTypeFilterList}
+                        updateHandler={setActiveBufferTypeFilterList}
+                    />
+
+                    <MultiSelectField<TypedPerfTableRow, 'raw_op_code'>
                         keyName='raw_op_code'
-                        options={data || []}
+                        options={processedRows || []}
                         placeholder='Select Op Codes...'
                         values={activeRawOpCodeFilterList}
                         updateHandler={setActiveRawOpCodeFilterList}
                     />
 
-                    <MultiSelectField<PerfTableRow, 'math_fidelity'>
+                    <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>
                         keyName='math_fidelity'
-                        options={data || []}
+                        options={processedRows || []}
                         placeholder='Select Math Fidelity...'
                         values={activeMathFilterList}
                         updateHandler={setActiveMathFilterList}
@@ -473,6 +492,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                     filters={filters}
                                     rawOpCodeFilter={activeRawOpCodeFilterList}
                                     mathFidelityFilter={activeMathFilterList}
+                                    bufferTypeFilter={activeBufferTypeFilterList}
                                     provideMatmulAdvice={provideMatmulAdvice}
                                     hiliteHighDispatch={hiliteHighDispatch}
                                     shouldHighlightRows={highlightRows && useNormalisedData}
@@ -551,6 +571,7 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
                                         filters={filters}
                                         rawOpCodeFilter={activeRawOpCodeFilterList}
                                         mathFidelityFilter={activeMathFilterList}
+                                        bufferTypeFilter={activeBufferTypeFilterList}
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}
                                         shouldHighlightRows={highlightRows && useNormalisedData}
@@ -571,6 +592,39 @@ const PerformanceReport: FC<PerformanceReportProps> = ({
 
 const HIGH_DISPATCH_THRESHOLD = 6.5;
 
+interface RowAttributes {
+    device: number | null;
+    buffer_type: BufferType | null;
+    layout: DeviceOperationLayoutTypes | null;
+}
+
+const getBufferType = (type?: string): BufferType | null => {
+    if (!type) {
+        return null;
+    }
+
+    if (type === 'L1') {
+        return BufferType.L1;
+    }
+
+    if (type === 'DRAM') {
+        return BufferType.DRAM;
+    }
+
+    return null;
+};
+
+const getRowAttributes = (row: PerfTableRow): RowAttributes => {
+    const regex = /DEV_(\d)_(DRAM|L1)_(\w*)/gm;
+    const matchIn0 = regex.exec(row.input_0_memory);
+
+    return {
+        device: matchIn0?.[1] ? parseInt(matchIn0[1], 10) : null,
+        buffer_type: getBufferType(matchIn0?.[2]),
+        layout: matchIn0?.[3] ? (matchIn0[3] as DeviceOperationLayoutTypes) : null,
+    };
+};
+
 const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: number }[]): TypedPerfTableRow[] => {
     return rows.map((row) => {
         const val = parseInt(row.op_to_op_gap, 10);
@@ -590,6 +644,7 @@ const enrichRowData = (rows: PerfTableRow[], opIdsMap: { perfId?: string; opId: 
             dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
             flops: row.flops ? parseFloat(row.flops) : null,
             flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
+            ...getRowAttributes(row),
         };
     });
 };

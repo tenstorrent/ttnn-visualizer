@@ -6,7 +6,14 @@ import React from 'react';
 import { Icon, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router-dom';
-import { MathFidelity, PerfTableRow, TableHeader, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import {
+    ColumnHeaders,
+    MathFidelity,
+    PerfTableRow,
+    TableHeader,
+    TableKeys,
+    TypedPerfTableRow,
+} from '../definitions/PerfTable';
 import { OperationDescription } from '../model/APIData';
 import { formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
@@ -14,6 +21,7 @@ import HighlightedText from '../components/HighlightedText';
 import { OpType } from '../definitions/Performance';
 import { TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 import { NormalisedPerfData } from './normalisePerformanceData';
+import { BufferTypeLabel } from '../model/BufferType';
 
 export enum CellColour {
     White = 'white',
@@ -77,7 +85,7 @@ export const formatCell = (
     const isHost = isHostOp(row.raw_op_code);
 
     if (isSignpost) {
-        if (key !== 'id' && key !== 'op_code') {
+        if (key !== ColumnHeaders.id && key !== ColumnHeaders.op_code) {
             return '';
         }
 
@@ -86,12 +94,18 @@ export const formatCell = (
     }
 
     if (isHost) {
-        if (key !== 'id' && key !== 'op_code' && key !== 'bound') {
+        if (key !== ColumnHeaders.id && key !== ColumnHeaders.op_code && key !== ColumnHeaders.bound) {
             return '';
         }
     }
 
-    if (key === 'high_dispatch') {
+    if (key === ColumnHeaders.buffer_type) {
+        return typeof value === 'number' && Number.isInteger(value) && value in BufferTypeLabel
+            ? BufferTypeLabel[value as number]
+            : '';
+    }
+
+    if (key === ColumnHeaders.high_dispatch) {
         return (
             <Tooltip content='Op with > 6 µs dispatch latency'>
                 <Icon
@@ -103,7 +117,7 @@ export const formatCell = (
         );
     }
 
-    if (key === 'op' && operations) {
+    if (key === ColumnHeaders.OP && operations) {
         return (
             <Tooltip
                 content={
@@ -176,11 +190,11 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         return DEFAULT_COLOUR;
     }
 
-    if (key === 'id' || key === 'total_percent' || key === 'device_time') {
+    if (key === ColumnHeaders.id || key === ColumnHeaders.total_percent || key === ColumnHeaders.device_time) {
         return DEFAULT_COLOUR;
     }
 
-    if (key === 'bound') {
+    if (key === ColumnHeaders.bound) {
         if (keyValue === 'DRAM') {
             return CellColour.Green;
         }
@@ -194,16 +208,21 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         }
     }
 
-    if (key === 'dram' || key === 'dram_percent' || key === 'flops' || key === 'flops_percent') {
+    if (
+        key === ColumnHeaders.dram ||
+        key === ColumnHeaders.dram_percent ||
+        key === ColumnHeaders.flops ||
+        key === ColumnHeaders.flops_percent
+    ) {
         const dramP = row.dram_percent;
         const flopsP = row.flops_percent;
 
         if (dramP != null && flopsP != null) {
             if (dramP > flopsP) {
-                if (key === 'dram' || key === 'dram_percent') {
+                if (key === ColumnHeaders.dram || key === ColumnHeaders.dram_percent) {
                     return CellColour.Yellow;
                 }
-            } else if (key === 'flops' || key === 'flops_percent') {
+            } else if (key === ColumnHeaders.flops || key === ColumnHeaders.flops_percent) {
                 return CellColour.Yellow;
             }
         }
@@ -215,17 +234,17 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         return DEFAULT_COLOUR;
     }
 
-    if (key === 'cores' && keyValue != null) {
+    if (key === ColumnHeaders.cores && keyValue != null) {
         return getCoreColour(keyValue);
     }
 
-    if (key === 'op_code') {
+    if (key === ColumnHeaders.op_code) {
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.raw_op_code.includes(opCodeKey));
 
         return match ? OPERATION_COLOURS[match] : DEFAULT_COLOUR;
     }
 
-    if (key === 'math_fidelity' && typeof keyValue === 'string') {
+    if (key === ColumnHeaders.math_fidelity && typeof keyValue === 'string') {
         const parts = keyValue.split(' ');
         const mathFidelity = parts[0] as MathFidelity;
         const input0Datatype = row.input_0_datatype || '';
@@ -248,7 +267,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         return DEFAULT_COLOUR;
     }
 
-    if (key === 'op_to_op_gap' && typeof keyValue === 'string') {
+    if (key === ColumnHeaders.op_to_op_gap && typeof keyValue === 'string') {
         return getOpToOpGapColour(keyValue);
     }
 
