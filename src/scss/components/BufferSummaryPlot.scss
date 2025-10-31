@@ -47,7 +47,6 @@ $height-offset: 15px;
         .y-axis-tick {
             padding-left: $label-margin;
             margin-bottom: 0;
-            flex-shrink: 0;
             white-space: nowrap;
             text-overflow: ellipsis;
             overflow: hidden;
