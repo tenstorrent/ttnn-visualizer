@@ -57,6 +57,7 @@ it('renders the initial form state when there is no data', () => {
 
 it('enables fetch remote folder list button when a connection is selected', () => {
     window.localStorage.setItem('remoteConnections', JSON.stringify(remoteConnection));
+    window.localStorage.setItem('selectedConnection', JSON.stringify(remoteConnection[0]));
 
     render(
         <TestProviders>
@@ -81,8 +82,6 @@ it('enables fetch remote folder list button when a connection is selected', () =
 });
 
 it('clears localStorage and resets state when removing a connection', () => {
-    window.localStorage.setItem('remoteConnections', JSON.stringify(remoteConnection));
-
     const { rerender } = render(
         <TestProviders>
             <RemoteSyncConfigurator />
@@ -173,7 +172,7 @@ it('displays correct connection information format', () => {
     expect(getButtonWithText('Test Connection - ssh://test.example.com:2222/')).not.toBeNull();
 });
 
-// TODO: Fix this functionality
+// TODO: Error will throw currently due to inadequate handling of a JSON parse failure
 it.skip('handles localStorage parsing errors gracefully', () => {
     // Set invalid JSON in localStorage
     window.localStorage.setItem('remoteConnections', 'invalid-json');

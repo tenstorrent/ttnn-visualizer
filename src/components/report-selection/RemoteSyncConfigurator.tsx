@@ -445,7 +445,7 @@ const RemoteSyncConfigurator: FC = () => {
                     }}
                     type='performance'
                 >
-                    {(profilerReportLocation === ReportLocation.REMOTE || isSyncingPerformanceFolder) &&
+                    {(performanceReportLocation === ReportLocation.REMOTE || isSyncingPerformanceFolder) &&
                         selectedPerformanceFolder && (
                             <RemoteSyncButton
                                 isDisabled={isDisabled}
