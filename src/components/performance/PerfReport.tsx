@@ -615,7 +615,7 @@ const getBufferType = (type?: string): BufferType | null => {
 };
 
 const getRowAttributes = (row: PerfTableRow): RowAttributes => {
-    const regex = /DEV_(\d)_(DRAM|L1)_(\w*)/gm;
+    const regex = /DEV_(\d)_(DRAM|L1)_(\w*)/m;
     const matchIn0 = regex.exec(row.input_0_memory);
 
     return {

@@ -81,11 +81,12 @@ export default function Performance() {
             colour: MarkerColours[index],
         }));
     }, [perfData, comparisonPerfData]);
+
     const rangedData = useMemo(
         () =>
-            !comparisonReportList && selectedRange && filteredPerfData.length > 0
+            comparisonReportList && selectedRange && filteredPerfData.length > 0
                 ? filteredPerfData.filter((row) => {
-                      const rowId = parseInt(row?.id, 10);
+                      const rowId = typeof row?.id === 'number' ? row.id : parseInt(row?.id, 10);
                       return rowId >= selectedRange[0] && rowId <= selectedRange[1];
                   })
                 : filteredPerfData,
