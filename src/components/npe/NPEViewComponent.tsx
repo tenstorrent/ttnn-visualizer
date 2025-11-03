@@ -101,12 +101,9 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
     const [altCongestionColors, setAltCongestionColors] = useAtom(altCongestionColorsAtom);
     const [fabricEventsFilter, setFabricEventsFilter] = useState<EVENT_TYPE_FILTER>(EVENT_TYPE_FILTER.ALL_EVENTS);
     const [timestepsScale, setTimestepsScale] = useState<boolean>(true);
-    // const [expandedZones, setExpandedZones] = useState<Record<>>(new Set());
     const zones: NPERootZone[] = useMemo(() => {
         return npeData.zones || [];
     }, [npeData]);
-    // eslint-disable-next-line no-void
-    void zones;
 
     const isFabricTransfersFilteringEnabled = useMemo(() => {
         return npeData.noc_transfers.some((tr) => tr.fabric_event_type);
