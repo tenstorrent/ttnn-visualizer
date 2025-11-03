@@ -219,6 +219,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
             const chunkWidth = rect.width / congestionMapPerTimestamp.worst.length;
             const hoveredIndex = Math.floor(mouseX / chunkWidth);
             const y = event.clientY - rect.top;
+            const x = mouseX;
 
             const zoneArea = y > HEATMAP_HEIGHT;
 
@@ -226,9 +227,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
             const units = useTimesteps ? 'Timestep' : 'Cycle';
 
             if (hoveredIndex > -1) {
-                const x = mouseX;
                 const congestionHoverCondition = !zoneArea;
-
                 const hoveredZone = Array.from(hoverMap.entries()).find(([_, r]) => {
                     return y >= r.y && y <= r.y + r.height && x >= r.x && x <= r.x + r.width;
                 });
