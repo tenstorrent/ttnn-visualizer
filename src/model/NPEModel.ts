@@ -209,6 +209,7 @@ export interface ZoneDrawingInfo {
     depth: number;
     start: number;
     end: number;
+    id: string;
     color?: string;
 }
 
