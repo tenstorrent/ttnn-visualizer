@@ -94,6 +94,7 @@ it('clears localStorage and resets state when removing a connection', () => {
 
     // Clear localStorage to simulate connection removal
     window.localStorage.removeItem('remoteConnections');
+    window.localStorage.removeItem('selectedConnection');
 
     rerender(
         <TestProviders>
@@ -220,8 +221,7 @@ it('handles API errors gracefully', () => {
 // TODO: Fix this test
 it.skip('enables sync buttons when folders are selected', async () => {
     window.localStorage.setItem('remoteConnections', JSON.stringify(remoteConnection));
-
-    // Mock successful folder data
+    window.localStorage.setItem('selectedConnection', JSON.stringify(remoteConnection[0]));
 
     render(
         <TestProviders>
