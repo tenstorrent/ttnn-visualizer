@@ -81,7 +81,7 @@ interface RemoteFolderSelectorProps {
     loading?: boolean;
     disabled?: boolean;
     fallbackLabel?: string;
-    icon?: string;
+    icon?: IconName;
     onSelectFolder: (folder: RemoteFolder) => void;
     type: FolderTypes;
 }
@@ -121,7 +121,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
                 onItemSelect={onSelectFolder}
             >
                 <Button
-                    icon={icon as IconName}
+                    icon={icon}
                     endIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={isDisabled}
                     text={remoteFolder?.reportName ?? fallbackLabel}
