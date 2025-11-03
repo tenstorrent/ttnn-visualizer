@@ -27,6 +27,7 @@ interface NPEZoneFilterComponentProps {
     onClose: () => void;
     onSelect: (address: NPE_COORDINATES | null) => void;
     onExpand: (state: boolean, proc: KERNEL_PROCESS, address: NPE_COORDINATES) => void;
+    onZoneClick: (zone: NPEZone) => void;
 }
 
 const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
@@ -35,6 +36,7 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
     onClose,
     onSelect,
     onExpand,
+    onZoneClick,
 }) => {
     const [selectedDeviceId, setSelectedDeviceId] = React.useState<number | null>(null);
     const [selectedCoreAddress, setSelectedCoreAddress] = React.useState<string | null>(null);
@@ -92,12 +94,13 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
         return zones.map((zone, index) => {
             return (
                 <Fragment key={`${zone.id}-start-${index}`}>
+                    {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions */}
                     <div
                         className={`zone-interactive  depth-${depth}`}
                         style={{ marginLeft: `${depth * 20}px` }}
-                        // onClick={() => {
-                        // FUTURE FUNCTIONALITY, zone selection on click
-                        // }}
+                        onClick={() => {
+                            onZoneClick(zone);
+                        }}
                     >
                         {zone.id} <span className='zone-timeline-range'>{`${zone.start} - ${zone.end}`}</span>
                     </div>
@@ -172,7 +175,7 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
                         <Button
                             variant={ButtonVariant.OUTLINED}
                             disabled={selectedDeviceId === null}
-                            text={selectedCoreAddress ? `Selected core ${selectedCoreAddress}` : 'Filter cores'}
+                            text={selectedCoreAddress ? `${selectedCoreAddress}` : 'Filter cores'}
                         />
                     </Select>
                     <Tooltip

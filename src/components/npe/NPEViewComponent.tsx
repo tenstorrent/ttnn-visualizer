@@ -20,6 +20,7 @@ import {
     NPEData,
     NPERootZone,
     NPERootZoneUXInfo,
+    NPEZone,
     NPE_COORDINATES,
     NPE_COORDINATE_INDEX,
     NPE_LINK,
@@ -276,6 +277,10 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         setSelectedTimestep((prev) => {
             return prev < range - 1 ? prev + 1 : 0;
         });
+    };
+    const onNavigateToZone = (zone: NPEZone) => {
+        const timestep = Math.floor(zone.start / (npeData.common_info.cycles_per_timestep || 1));
+        setSelectedTimestep(timestep);
     };
     const handleScrubberChange = (value: number) => {
         stopAnimation();
@@ -821,6 +826,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         [key]: state,
                     }));
                 }}
+                onZoneClick={onNavigateToZone}
             />
         </div>
     );
