@@ -279,7 +279,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
         });
     };
     const onNavigateToZone = (zone: NPEZone) => {
-        const timestep = Math.floor(zone.start / (npeData.common_info.cycles_per_timestep || 1));
+        const timestep = Math.floor(zone.start / (npeData.common_info.cycles_per_timestep ?? 1));
         setSelectedTimestep(timestep);
     };
     const handleScrubberChange = (value: number) => {
@@ -549,7 +549,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                     timestepList={npeData.timestep_data}
                     canvasWidth={canvasWidth}
                     useTimesteps={timestepsScale}
-                    cyclesPerTimestep={npeData.common_info.cycles_per_timestep || 1}
+                    cyclesPerTimestep={npeData.common_info.cycles_per_timestep ?? 1}
                     selectedZoneList={selectedZoneList}
                     nocType={nocFilter}
                 />
