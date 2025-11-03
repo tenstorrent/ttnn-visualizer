@@ -548,6 +548,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                 <NPECongestionHeatMap
                     timestepList={npeData.timestep_data}
                     canvasWidth={canvasWidth}
+                    currentPosition={selectedTimestep}
                     useTimesteps={timestepsScale}
                     cyclesPerTimestep={npeData.common_info.cycles_per_timestep || 1}
                     selectedZoneList={selectedZoneList}

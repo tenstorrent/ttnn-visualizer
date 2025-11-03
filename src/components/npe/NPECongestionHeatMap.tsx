@@ -22,6 +22,7 @@ interface NPEHeatMapProps {
     timestepList: TimestepData[];
     canvasWidth: number;
     useTimesteps: boolean;
+    currentPosition?: number;
     cyclesPerTimestep: number;
     selectedZoneList: NPERootZoneUXInfo[];
     nocType?: NoCType | null;
@@ -34,6 +35,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
     canvasWidth,
     nocType = null,
     useTimesteps,
+    currentPosition,
     cyclesPerTimestep,
     selectedZoneList = [],
 }) => {
@@ -200,6 +202,10 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
                 });
             }
         });
+        const x = (currentPosition ?? 0) * chunkWidth;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.fillRect(x, 0, 2, HEATMAP_HEIGHT + canvasZoneHeight);
+
         setHoverMap(hovermap);
     }, [
         //
@@ -208,6 +214,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
         canvasZoneHeight,
         selectedZoneList,
         zoneRanges,
+        currentPosition,
     ]);
 
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -217,7 +224,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
             const scaleX = canvas.width / rect.width;
             const mouseX = (event.clientX - rect.left) * scaleX;
             const chunkWidth = rect.width / congestionMapPerTimestamp.worst.length;
-            const hoveredIndex = Math.floor(mouseX / chunkWidth);
+            const hoveredIndex = Math.floor((event.clientX - rect.left) / chunkWidth);
             const y = event.clientY - rect.top;
 
             const zoneArea = y > HEATMAP_HEIGHT;
