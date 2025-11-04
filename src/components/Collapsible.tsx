@@ -34,12 +34,9 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
     isDisabled = false,
 }) => {
     const [isOpenState, setIsOpenState] = React.useState(isOpen);
+
     useEffect(() => {
-        if (onExpandToggle) {
-            onExpandToggle(isOpen);
-        }
         setIsOpenState(isOpen);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
 
     const icon = isOpenState ? IconNames.CARET_UP : IconNames.CARET_DOWN;
