@@ -12,7 +12,7 @@ import { ScrollPositions } from '../definitions/ScrollPositions';
 import { Signpost } from '../functions/perfFunctions';
 import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
-import { PerfTableRow, TableFilter } from '../definitions/PerfTable';
+import { TableFilter, TypedPerfTableRow } from '../definitions/PerfTable';
 import { BufferType } from '../model/BufferType';
 import { ScrollPositionV2 } from '../definitions/ScrollPositionsV2';
 
@@ -71,8 +71,9 @@ export const filterBySignpostAtom = atom<Signpost | null>(null);
 export const selectedDeviceAtom = atom<number | null>(DEFAULT_DEVICE_ID); // Assumes device_id always uses a zero based index (NOT REALLY USED AT THE MOMENT)
 export const renderMemoryLayoutAtom = atom<boolean>(false);
 export const hideHostOpsAtom = atom<boolean>(true);
-export const mathFilterListAtom = atom<PerfTableRow['math_fidelity'][]>([]);
-export const rawOpCodeFilterListAtom = atom<PerfTableRow['raw_op_code'][]>([]);
+export const mathFilterListAtom = atom<TypedPerfTableRow['math_fidelity'][]>([]);
+export const rawOpCodeFilterListAtom = atom<TypedPerfTableRow['raw_op_code'][]>([]);
+export const bufferTypeFilterListAtom = atom<TypedPerfTableRow['buffer_type'][]>([]);
 
 // NPE
 export const altCongestionColorsAtom = atomWithStorage<boolean>('altCongestionColorsAtom', false);

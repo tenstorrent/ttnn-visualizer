@@ -2,23 +2,32 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { useAtomValue } from 'jotai';
 import { calculateLinkCongestionColor } from './drawingApi';
-import { NPERootZone, NPE_LINK, NoCType, TimestepData, getKernelColor } from '../../model/NPEModel';
+import {
+    NPERootZoneUXInfo,
+    NPEZone,
+    NPE_LINK,
+    NoCType,
+    TimestepData,
+    ZoneDrawingInfo,
+    getKernelColor,
+} from '../../model/NPEModel';
 import { altCongestionColorsAtom } from '../../store/app';
 
+type Rect = { x: number; y: number; width: number; height: number };
 interface NPEHeatMapProps {
     timestepList: TimestepData[];
     canvasWidth: number;
     useTimesteps: boolean;
     cyclesPerTimestep: number;
-    selectedZoneList: NPERootZone[];
+    selectedZoneList: NPERootZoneUXInfo[];
     nocType?: NoCType | null;
 }
-const CANVAS_HEIGHT = 30;
-const ZONE_RANGE_HEIGHT = 10;
+const HEATMAP_HEIGHT = 30;
+const ZONE_HEIGHT = 10;
 
 const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
     timestepList,
@@ -30,28 +39,48 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
 }) => {
     const altCongestionColors = useAtomValue(altCongestionColorsAtom);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const [hoverMap, setHoverMap] = useState<Map<string, Rect>>(new Map());
 
-    // this will be needed for rendering all zones, not just root zones
-    // const HEIGHT_PER_ZONE = 20;
-    // const getMaxDepth = (z: NPEZone): number => (z.zones?.length ? 1 + Math.max(...z.zones.map(getMaxDepth)) : 0);
-    // const zoneDepth = Math.max(
-    //     ...selectedZoneList.flatMap((zone) => {
-    //         return zone.zones.map((z) => 1 + getMaxDepth(z));
-    //     }),
-    //     0,
-    // );
+    const getZoneDrawingModel = useCallback(
+        (zones: NPEZone[], depth: number): ZoneDrawingInfo[] => {
+            return zones.flatMap((zone) => {
+                return [
+                    {
+                        id: zone.id,
+                        depth,
+                        start: zone.start / cyclesPerTimestep,
+                        end: zone.end / cyclesPerTimestep,
+                    } as ZoneDrawingInfo,
+                    ...getZoneDrawingModel(zone.zones, depth + 1),
+                ];
+            });
+        },
+        [cyclesPerTimestep],
+    );
 
     const zoneRanges = useMemo(() => {
-        return selectedZoneList.flatMap((rootZone) =>
-            rootZone.zones.map((zone) => ({
-                proc: rootZone.proc,
-                start: zone.start / cyclesPerTimestep,
-                end: zone.end / cyclesPerTimestep,
-            })),
-        );
-    }, [selectedZoneList, cyclesPerTimestep]);
+        let maxZoneDepth = 0;
+        let groupIndex = -1;
+        return {
+            range: selectedZoneList.flatMap((rootZone) => {
+                groupIndex += 1;
+                const childZones = rootZone.expandedState ? getZoneDrawingModel(rootZone.zones, 1) : [];
+                const maxDepth = childZones.length ? Math.max(...childZones.map((z) => z.depth)) : 0;
+                maxZoneDepth += 1 + maxDepth;
+                return rootZone.zones.map((zone) => ({
+                    groupIndex,
+                    maxDepth,
+                    proc: rootZone.proc,
+                    start: zone.start / cyclesPerTimestep,
+                    end: zone.end / cyclesPerTimestep,
+                    zones: childZones,
+                }));
+            }),
+            maxZoneDepth,
+        };
+    }, [selectedZoneList, cyclesPerTimestep, getZoneDrawingModel]);
 
-    const canvasZoneHeight = zoneRanges.length * ZONE_RANGE_HEIGHT;
+    const canvasZoneHeight = zoneRanges.maxZoneDepth * ZONE_HEIGHT;
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: React.JSX.Element } | null>(null);
     const congestionMapPerTimestamp = useMemo(() => {
         return {
@@ -113,50 +142,96 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
             return;
         }
 
-        ctx.clearRect(0, 0, canvas.width, CANVAS_HEIGHT + canvasZoneHeight);
+        ctx.clearRect(0, 0, canvas.width, HEATMAP_HEIGHT + canvasZoneHeight);
         const chunkWidth = canvas.width / congestionMapPerTimestamp.worst.length;
         congestionMapPerTimestamp.worst.forEach(({ color }, index) => {
             ctx.fillStyle = color;
-            ctx.fillRect(index * chunkWidth, 0, chunkWidth, CANVAS_HEIGHT / 3);
+            ctx.fillRect(index * chunkWidth, 0, chunkWidth, HEATMAP_HEIGHT / 3);
         });
         congestionMapPerTimestamp.utilization.forEach(({ color }, index) => {
             ctx.fillStyle = color;
-            ctx.fillRect(index * chunkWidth, CANVAS_HEIGHT / 3, chunkWidth, (CANVAS_HEIGHT / 3) * 2);
+            ctx.fillRect(index * chunkWidth, HEATMAP_HEIGHT / 3, chunkWidth, (HEATMAP_HEIGHT / 3) * 2);
         });
         congestionMapPerTimestamp.demand.forEach(({ color }, index) => {
             ctx.fillStyle = color;
-            ctx.fillRect(index * chunkWidth, (CANVAS_HEIGHT / 3) * 2, chunkWidth, CANVAS_HEIGHT / 3);
+            ctx.fillRect(index * chunkWidth, (HEATMAP_HEIGHT / 3) * 2, chunkWidth, HEATMAP_HEIGHT / 3);
         });
 
-        zoneRanges.forEach((range, index) => {
+        const groupBaseY = new Map<number, number>();
+        {
+            let yCursor = HEATMAP_HEIGHT;
+            const seen = new Set<number>();
+
+            for (const rootZone of zoneRanges.range) {
+                const alreadySeen = seen.has(rootZone.groupIndex);
+                if (!alreadySeen) {
+                    seen.add(rootZone.groupIndex);
+                    groupBaseY.set(rootZone.groupIndex, yCursor);
+
+                    const rows = 1 + (rootZone.maxDepth ?? 0);
+                    yCursor += rows * ZONE_HEIGHT;
+                }
+            }
+        }
+
+        const hovermap = new Map<string, Rect>();
+
+        zoneRanges.range.forEach((range) => {
             const color = getKernelColor(range.proc);
-            const startX = range.start * chunkWidth;
-            const endX = range.end * chunkWidth;
-            ctx.fillStyle = color;
-            ctx.fillRect(startX, CANVAS_HEIGHT + index * ZONE_RANGE_HEIGHT, endX - startX, ZONE_RANGE_HEIGHT);
+            const baseY = groupBaseY.get(range.groupIndex)!;
+            {
+                const x = range.start * chunkWidth;
+                const end = range.end * chunkWidth;
+                const rect: Rect = { x, y: baseY, width: end - x, height: ZONE_HEIGHT - 1 };
+                ctx.fillStyle = color;
+                ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+                hovermap.set(range.proc, rect);
+            }
+            if (range.zones.length > 0) {
+                const zoneColor = '#fff000';
+                range.zones.forEach((zone) => {
+                    const x = zone.start * chunkWidth;
+                    const end = zone.end * chunkWidth;
+                    const y = baseY + zone.depth * ZONE_HEIGHT;
+                    const rect: Rect = { x, y, width: end - x, height: ZONE_HEIGHT - 1 };
+                    ctx.fillStyle = zoneColor;
+                    ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+                    hovermap.set(zone.id, rect);
+                });
+            }
         });
-    }, [congestionMapPerTimestamp, canvasWidth, canvasZoneHeight, selectedZoneList, zoneRanges]);
+        setHoverMap(hovermap);
+    }, [
+        //
+        congestionMapPerTimestamp,
+        canvasWidth,
+        canvasZoneHeight,
+        selectedZoneList,
+        zoneRanges,
+    ]);
 
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
         if (canvas) {
             const rect = canvas.getBoundingClientRect();
-            const mouseX = event.clientX - rect.left;
+            const scaleX = canvas.width / rect.width;
+            const mouseX = (event.clientX - rect.left) * scaleX;
             const chunkWidth = rect.width / congestionMapPerTimestamp.worst.length;
             const hoveredIndex = Math.floor(mouseX / chunkWidth);
             const y = event.clientY - rect.top;
+            const x = mouseX;
 
-            const zoneindex = y > CANVAS_HEIGHT ? Math.floor((y - CANVAS_HEIGHT) / ZONE_RANGE_HEIGHT) : null;
+            const zoneArea = y > HEATMAP_HEIGHT;
 
             const zoneConversionRatio = useTimesteps ? 1 : cyclesPerTimestep;
             const units = useTimesteps ? 'Timestep' : 'Cycle';
-            if (hoveredIndex > -1) {
-                const x = mouseX;
 
-                const congestionHoverCondition = zoneindex === null;
-                const zoneHoverCondition =
-                    zoneindex !== null && zoneRanges[zoneindex] && hoveredIndex < zoneRanges[zoneindex].end;
-                if (!congestionHoverCondition && !zoneHoverCondition) {
+            if (hoveredIndex > -1) {
+                const congestionHoverCondition = !zoneArea;
+                const hoveredZone = Array.from(hoverMap.entries()).find(([_, r]) => {
+                    return y >= r.y && y <= r.y + r.height && x >= r.x && x <= r.x + r.width;
+                });
+                if (!congestionHoverCondition && hoveredZone === undefined) {
                     setTooltip(null);
                     return;
                 }
@@ -205,13 +280,11 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
                                     </div>
                                 </>
                             )}
-                            {zoneHoverCondition && (
-                                <div>
-                                    {zoneRanges[zoneindex!].proc}: {units.toLowerCase()}{' '}
-                                    {(zoneRanges[zoneindex!].start * zoneConversionRatio).toFixed(0)} -{' '}
-                                    {(zoneRanges[zoneindex!].end * zoneConversionRatio).toFixed(0)}
-                                </div>
-                            )}
+                            {hoveredZone &&
+                                (() => {
+                                    const [id] = hoveredZone;
+                                    return <div>{id}</div>;
+                                })()}
                         </div>
                     ),
                 });
@@ -240,7 +313,7 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
                         offset: {
                             enabled: true,
                             options: {
-                                offset: [tooltip.x, CANVAS_HEIGHT + canvasZoneHeight + 30],
+                                offset: [tooltip.x, HEATMAP_HEIGHT + canvasZoneHeight + 30],
                             },
                         },
                     }}
@@ -253,17 +326,17 @@ const NPECongestionHeatMap: React.FC<NPEHeatMapProps> = ({
                             left: `${tooltip.x}px`,
                             width: '0',
                             height: '0',
-                            backgroundColor: 'red',
+                            backgroundColor: '#fff',
                             zIndex: 100,
                         }}
                     />
                 </Tooltip>
             )}
             <canvas
-                style={{ width: '100%', height: `${CANVAS_HEIGHT + canvasZoneHeight}px` }}
+                style={{ width: '100%', height: `${HEATMAP_HEIGHT + canvasZoneHeight}px` }}
                 ref={canvasRef}
                 width={canvasWidth}
-                height={CANVAS_HEIGHT + canvasZoneHeight}
+                height={HEATMAP_HEIGHT + canvasZoneHeight}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
             />

@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { FilterableColumnKeys, TableFilter, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import { BufferType } from '../model/BufferType';
 import { isHostOp } from './perfFunctions';
 
 const isFiltersActive = (filters: TableFilter) =>
@@ -19,6 +20,7 @@ const sortAndFilterPerfTableData = (
     filters: TableFilter,
     rawOpCodeFilter: string[],
     mathFilter: string[],
+    bufferTypeFilter: (BufferType | null)[],
     hideHostOps: boolean,
 ): TypedPerfTableRow[] => {
     if (data?.length === 0) {
@@ -56,6 +58,12 @@ const sortAndFilterPerfTableData = (
     if (mathFilter?.length > 0) {
         filteredRows = filteredRows.filter(
             (row) => row?.math_fidelity !== null && mathFilter.includes(row.math_fidelity),
+        );
+    }
+
+    if (bufferTypeFilter?.length > 0) {
+        filteredRows = filteredRows.filter(
+            (row) => row?.buffer_type !== null && bufferTypeFilter.includes(row.buffer_type),
         );
     }
 

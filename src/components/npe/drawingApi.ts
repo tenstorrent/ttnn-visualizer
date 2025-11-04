@@ -34,21 +34,21 @@ export interface LinkPoints {
 }
 
 const colorList: string[] = [
-    '#FFFFFF', // White
-    '#FF0000', // Red
-    '#0000FF', // Blue
-    '#FFFF00', // Yellow
-    '#FF00FF', // Fuchsia
-    '#FF4500', // OrangeRed
-    'rgb(91,131,19)', // Greenish
-    '#9400D3', // DarkViolet
-    '#FFD700', // Gold
-    '#1E90FF', // DodgerBlue
-    '#007500', // LimeGreen
-    '#FF69B4', // HotPink
-    '#BA55D3', // MediumOrchid
-    '#7FFF00', // Chartreuse
-    '#B22222', // FireBrick
+    '#FFFFFF',
+    '#FF0000',
+    '#0000FF',
+    '#FFFF00',
+    '#FF00FF',
+    '#FF4500',
+    '#5B8313',
+    '#9400D3',
+    '#FFD700',
+    '#1E90FF',
+    '#007500',
+    '#FF69B4',
+    '#BA55D3',
+    '#7FFF00',
+    '#B22222',
 ];
 
 function* colorGenerator(): IterableIterator<string> {

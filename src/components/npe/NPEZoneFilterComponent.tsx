@@ -4,7 +4,7 @@
 
 // @eslint-disable jsx-a11y/mouse-events-have-key-events
 
-import React, { useCallback, useMemo } from 'react';
+import React, { Fragment, useCallback, useMemo } from 'react';
 import classNames from 'classnames';
 import { Button, ButtonGroup, ButtonVariant, MenuItem, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -12,6 +12,7 @@ import type { ItemRenderer } from '@blueprintjs/select';
 import { ItemPredicate, Select } from '@blueprintjs/select';
 import Collapsible from '../Collapsible';
 import {
+    KERNEL_PROCESS,
     NPEData,
     NPERootZone,
     NPEZone,
@@ -25,6 +26,8 @@ interface NPEZoneFilterComponentProps {
     open: boolean;
     onClose: () => void;
     onSelect: (address: NPE_COORDINATES | null) => void;
+    onExpand: (state: boolean, proc: KERNEL_PROCESS, address: NPE_COORDINATES) => void;
+    onZoneClick: (zone: NPEZone) => void;
 }
 
 const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
@@ -32,6 +35,8 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
     open = false,
     onClose,
     onSelect,
+    onExpand,
+    onZoneClick,
 }) => {
     const [selectedDeviceId, setSelectedDeviceId] = React.useState<number | null>(null);
     const [selectedCoreAddress, setSelectedCoreAddress] = React.useState<string | null>(null);
@@ -88,26 +93,29 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
     ): React.JSX.Element | React.JSX.Element[] => {
         return zones.map((zone, index) => {
             return (
-                <>
-                    {}
+                <Fragment key={`${zone.id}-start-${index}`}>
+                    {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions */}
                     <div
                         className={`zone-interactive  depth-${depth}`}
-                        key={`${zone.id}-start-${index}`}
                         style={{ marginLeft: `${depth * 20}px` }}
-                        // onClick={() => {
-                        // FUTURE FUNCTIONALITY, zone selection on click
-                        // }}
+                        onClick={() => {
+                            onZoneClick(zone);
+                        }}
                     >
                         {zone.id} <span className='zone-timeline-range'>{`${zone.start} - ${zone.end}`}</span>
                     </div>
                     {getZoneElements(zone.zones, core, depth + 1)}
-                </>
+                </Fragment>
             );
         });
     };
 
     const coreItemRenderer = useMemo(() => coreAddressItemRenderer(selectedCoreAddress), [selectedCoreAddress]);
     const deviceItemRenderer = useMemo(() => deviceIdItemRenderer(selectedDeviceId), [selectedDeviceId]);
+
+    const onExpandStateChange = (state: boolean, proc: KERNEL_PROCESS, address: NPE_COORDINATES) => {
+        onExpand(state, proc, address);
+    };
     return (
         <div className={classNames('zones-renderer', { open })}>
             <div className='zones-controls'>
@@ -167,7 +175,7 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
                         <Button
                             variant={ButtonVariant.OUTLINED}
                             disabled={selectedDeviceId === null}
-                            text={selectedCoreAddress ? `Selected core ${selectedCoreAddress}` : 'Filter cores'}
+                            text={selectedCoreAddress ? `${selectedCoreAddress}` : 'Filter cores'}
                         />
                     </Select>
                     <Tooltip
@@ -203,6 +211,9 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
                                 </div>
                             }
                             isOpen={false}
+                            onExpandToggle={(state) => {
+                                onExpandStateChange(state, rootZone.proc, rootZone.core);
+                            }}
                         >
                             <div>{getZoneElements(rootZone.zones, rootZone.core, 1)}</div>
                         </Collapsible>

@@ -84,10 +84,14 @@ function Layout() {
             );
             setActiveNpe(instance.active_report?.npe_name ?? null);
             setProfilerReportLocation(
-                instance?.profiler_path?.includes('/remote') ? ReportLocation.REMOTE : ReportLocation.LOCAL,
+                instance?.profiler_path?.includes('/remote') && instance?.remote_profiler_folder
+                    ? ReportLocation.REMOTE
+                    : ReportLocation.LOCAL,
             );
             setPerformanceReportLocation(
-                instance?.performance_path?.includes('/remote') ? ReportLocation.REMOTE : ReportLocation.LOCAL,
+                instance?.performance_path?.includes('/remote') && instance?.remote_performance_folder
+                    ? ReportLocation.REMOTE
+                    : ReportLocation.LOCAL,
             );
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- resetScrollPositions is stable and does not need to be a dependency

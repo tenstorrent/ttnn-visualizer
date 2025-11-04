@@ -53,8 +53,9 @@ const MultiSelectField = <T, K extends keyof T>({
     const formattedOptions = useMemo((): T[K][] => {
         const keyData = options.map((option) => option[keyName]);
         const uniqueValues = new Set(keyData.filter((val): val is T[K] => val != null && val !== ''));
+        const sortedOptions = Array.from(uniqueValues).sort((a, b) => (a > b ? 1 : -1));
 
-        return Array.from(uniqueValues).sort((a, b) => (a > b ? 1 : -1));
+        return sortedOptions;
     }, [options, keyName]);
 
     const filterPredicate: ItemPredicate<T[K]> = useCallback(

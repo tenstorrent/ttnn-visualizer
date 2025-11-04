@@ -17,7 +17,7 @@ interface CollapsibleProps {
     contentStyles?: React.CSSProperties;
     contentClassName?: string;
     keepChildrenMounted?: boolean;
-    onExpandToggle?: () => void;
+    onExpandToggle?: (state: boolean) => void;
     isDisabled?: boolean;
 }
 
@@ -35,7 +35,11 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
 }) => {
     const [isOpenState, setIsOpenState] = React.useState(isOpen);
     useEffect(() => {
+        if (onExpandToggle) {
+            onExpandToggle(isOpen);
+        }
         setIsOpenState(isOpen);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
 
     const icon = isOpenState ? IconNames.CARET_UP : IconNames.CARET_DOWN;
@@ -51,7 +55,7 @@ const Collapsible: React.FC<React.PropsWithChildren<CollapsibleProps>> = ({
                             !isDisabled
                                 ? () => {
                                       if (onExpandToggle) {
-                                          onExpandToggle();
+                                          onExpandToggle(!isOpenState);
                                       }
                                       setIsOpenState(!isOpenState);
                                   }

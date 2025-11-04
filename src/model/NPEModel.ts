@@ -193,11 +193,24 @@ export interface NPERootZone {
     core: NPE_COORDINATES;
 }
 
+export interface NPERootZoneUXInfo extends NPERootZone {
+    expandedState: boolean;
+}
+
 export interface NPEZone {
     id: string;
     zones: NPEZone[];
     start: number;
     end: number;
+    depth: number;
+}
+
+export interface ZoneDrawingInfo {
+    depth: number;
+    start: number;
+    end: number;
+    id: string;
+    color?: string;
 }
 
 export enum NPE_COORDINATE_INDEX {

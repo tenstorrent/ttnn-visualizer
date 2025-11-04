@@ -2,9 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { DeviceOperationLayoutTypes } from '../model/APIData';
+import { BufferType } from '../model/BufferType';
 import { OpType } from './Performance';
 
-export type TableKeys = keyof PerfTableRow;
+export type TableKeys = keyof TypedPerfTableRow;
 export type TableFilter = Partial<Record<TableKeys, string>> | null;
 
 export interface TableHeader {
@@ -84,6 +86,10 @@ export interface TypedPerfTableRow
     flops: number | null;
     flops_percent: number | null;
     bound: BoundType | null;
+    // Next three extracted from input_0_memory
+    buffer_type: BufferType | null;
+    device: number | null;
+    layout: DeviceOperationLayoutTypes | null;
 }
 
 // Not a general enum but used in evaluateFidelity to analyze tt-perf-report output
@@ -137,7 +143,10 @@ export enum ColumnHeaders {
     total_percent = 'total_percent',
     bound = 'bound',
     op_code = 'op_code',
+    device = 'device',
+    buffer_type = 'buffer_type',
     device_time = 'device_time',
+    layout = 'layout',
     op_to_op_gap = 'op_to_op_gap',
     cores = 'cores',
     dram = 'dram',
@@ -155,6 +164,9 @@ export const TableHeaders: TableHeader[] = [
     { label: 'Total %', key: ColumnHeaders.total_percent, unit: '%', decimals: 1, sortable: true },
     { label: 'Bound', key: ColumnHeaders.bound, colour: 'yellow' },
     { label: 'OP Code', key: ColumnHeaders.op_code, colour: 'blue', sortable: true, filterable: true },
+    // { label: 'Device', key: ColumnHeaders.device }, Hidden because tt-perf-report doesn't really support multi device well
+    { label: 'Buffer Type', key: ColumnHeaders.buffer_type, sortable: true, filterable: true },
+    { label: 'Layout', key: ColumnHeaders.layout, sortable: true, filterable: true },
     { label: 'Device Time', key: ColumnHeaders.device_time, unit: 'µs', decimals: 0, sortable: true },
     { label: 'Op-to-Op Gap', key: ColumnHeaders.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
     { label: 'Cores', key: ColumnHeaders.cores, colour: 'green', sortable: true },
@@ -208,4 +220,7 @@ export const signpostRowDefaults = Object.freeze({
     output_subblock_w: '',
     pm_ideal_ns: '',
     op_type: OpType.SIGNPOST,
+    device: null,
+    layout: null,
+    buffer_type: null,
 });
