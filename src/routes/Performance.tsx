@@ -37,6 +37,11 @@ export default function Performance() {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
+    const [selectedTabId, setSelectedTabId] = useAtom(perfSelectedTabAtom);
+
+    const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
+    const [filteredComparisonData, setFilteredComparisonData] = useState<PerfTableRow[][]>([]);
+    const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>([]);
 
     const {
         data,
@@ -51,12 +56,8 @@ export default function Performance() {
 
     const perfData = data?.report;
     const stackedData = data?.stacked_report;
-
     const comparisonPerfData = useMemo(() => comparisonData?.map((d) => d.report) || [], [comparisonData]);
     const comparisonStackedData = useMemo(() => comparisonData?.map((d) => d.stacked_report) || [], [comparisonData]);
-
-    // useClearSelectedBuffer();
-
     const opCodeOptions = useMemo(() => {
         const opCodes = Array.from(
             new Set([
@@ -81,10 +82,16 @@ export default function Performance() {
         }));
     }, [perfData, comparisonPerfData]);
 
-    const [selectedTabId, setSelectedTabId] = useAtom(perfSelectedTabAtom);
-    const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
-    const [filteredComparisonData, setFilteredComparisonData] = useState<PerfTableRow[][]>([]);
-    const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>(opCodeOptions);
+    const rangedData = useMemo(
+        () =>
+            comparisonReportList && selectedRange && filteredPerfData.length > 0
+                ? filteredPerfData.filter((row) => {
+                      const rowId = typeof row?.id === 'number' ? row.id : parseInt(row?.id, 10);
+                      return rowId >= selectedRange[0] && rowId <= selectedRange[1];
+                  })
+                : filteredPerfData,
+        [selectedRange, filteredPerfData, comparisonReportList],
+    );
 
     // Clear comparison report if users switches active perf report to the comparison report
     useEffect(() => {
@@ -129,17 +136,6 @@ export default function Performance() {
     useEffect(() => {
         setSelectedOpCodes(opCodeOptions);
     }, [opCodeOptions]);
-
-    const rangedData = useMemo(
-        () =>
-            !comparisonReportList && selectedRange && filteredPerfData.length > 0
-                ? filteredPerfData.filter((row) => {
-                      const rowId = parseInt(row?.id, 10);
-                      return rowId >= selectedRange[0] && rowId <= selectedRange[1];
-                  })
-                : filteredPerfData,
-        [selectedRange, filteredPerfData, comparisonReportList],
-    );
 
     if (isLoadingPerformance && !perfDataError) {
         return <LoadingSpinner />;
