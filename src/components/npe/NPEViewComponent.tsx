@@ -278,7 +278,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
             return prev < range - 1 ? prev + 1 : 0;
         });
     };
-    const onNavigateToZone = (zone: NPEZone) => {
+    const onHandleZoneNavigation = (zone: NPEZone) => {
         const timestep = Math.floor(zone.start / (npeData.common_info.cycles_per_timestep ?? 1));
         setSelectedTimestep(timestep);
     };
@@ -826,7 +826,7 @@ const NPEView: React.FC<NPEViewProps> = ({ npeData }) => {
                         [key]: state,
                     }));
                 }}
-                onZoneClick={onNavigateToZone}
+                onZoneClick={onHandleZoneNavigation}
             />
         </div>
     );
