@@ -55,10 +55,15 @@ const OperationList = () => {
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
     const { getListState, updateListState } = useRestoreScrollPositionV2(ScrollLocationsV2.OPERATION_LIST);
     const scrollElementRef = useRef<HTMLDivElement>(null);
-    const listStateRef = useRef<number>();
+    const currentListState = useRef({
+        itemCount: 0,
+        scrollOffset: 0,
+        measurementsCache: {},
+        expandedItems: new Set<number>(),
+    });
 
+    // Get previous list state
     const listState = getListState();
-
     const {
         itemCount: restoredItemCount,
         scrollOffset: restoredOffset,
@@ -91,13 +96,7 @@ const OperationList = () => {
     const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
 
     const handleToggleCollapsible = (operationId: number) => {
-        let expandedItems: Set<number>;
-
-        if (listState && listState.expandedItems) {
-            expandedItems = new Set<number>(listState.expandedItems);
-        } else {
-            expandedItems = new Set<number>();
-        }
+        const { expandedItems } = currentListState.current;
 
         if (expandedItems.has(operationId)) {
             expandedItems.delete(operationId);
@@ -105,9 +104,7 @@ const OperationList = () => {
             expandedItems.add(operationId);
         }
 
-        updateListState({
-            expandedItems,
-        });
+        currentListState.current.expandedItems = expandedItems;
     };
 
     const handleSortByID = () => {
@@ -126,13 +123,9 @@ const OperationList = () => {
 
     const handleExpandAllToggle = () => {
         setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
-        updateListState({
-            expandedItems: new Set(
-                !shouldCollapseAll && filteredOperationsList
-                    ? filteredOperationsList.map((operation) => operation.id)
-                    : [],
-            ),
-        });
+        currentListState.current.expandedItems = new Set<number>(
+            !shouldCollapseAll && filteredOperationsList ? filteredOperationsList.map((operation) => operation.id) : [],
+        );
     };
 
     const handleUserScrolling = () => {
@@ -207,32 +200,16 @@ const OperationList = () => {
     const scrollToTop = () => {
         setFocusedRow(null);
         scrollToIndex(0);
-        updateListState({
-            scrollOffset: 0,
-        });
+
+        currentListState.current.scrollOffset = 0;
     };
 
     const scrollToEnd = () => {
         setFocusedRow(null);
         scrollToIndex(numberOfOperations);
-        updateListState({
-            scrollOffset: scrollElementRef.current?.scrollTop || virtualizer.scrollOffset || 0,
-        });
+
+        currentListState.current.scrollOffset = scrollElementRef.current?.scrollTop || virtualizer.scrollOffset || 0;
     };
-
-    // Throttled update of list state on scroll change
-    const throttledUpdateListState = useCallback(() => {
-        if (listStateRef.current) {
-            cancelAnimationFrame(listStateRef.current);
-        }
-
-        listStateRef.current = requestAnimationFrame(() => {
-            updateListState({
-                scrollOffset: virtualizer.scrollOffset || 0,
-                measurementsCache: virtualizer.measurementsCache,
-            });
-        });
-    }, [updateListState, virtualizer.scrollOffset, virtualizer.measurementsCache]);
 
     // Reset scroll to top
     useEffect(() => {
@@ -261,16 +238,15 @@ const OperationList = () => {
         }
     }, [fetchedOperations, location.state?.previousOperationId, navigate]);
 
-    // List state update
     useEffect(() => {
-        throttledUpdateListState();
-
         return () => {
-            if (listStateRef.current) {
-                cancelAnimationFrame(listStateRef.current);
-            }
+            // Save scroll position only on unmount
+            updateListState({
+                scrollOffset: virtualizer.scrollOffset || 0,
+                measurementsCache: virtualizer.measurementsCache,
+            });
         };
-    }, [throttledUpdateListState]);
+    }, [updateListState, virtualizer.scrollOffset, virtualizer.measurementsCache]);
 
     return (
         // TODO: Turn this into a generation ListView component used by OperationList and TensorList
@@ -438,7 +414,7 @@ const OperationList = () => {
                                                     variant={ButtonVariant.OUTLINED}
                                                 />
                                             }
-                                            isOpen={!!listState?.expandedItems?.has(operation.id)}
+                                            isOpen={!!currentListState?.current?.expandedItems?.has(operation.id)}
                                         >
                                             <div className='arguments-wrapper'>
                                                 <p className='monospace'>
