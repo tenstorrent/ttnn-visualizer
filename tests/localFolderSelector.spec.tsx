@@ -11,6 +11,7 @@ import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
 import { ReportFolder } from '../src/definitions/Reports';
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
+import { TEST_IDS } from '../src/definitions/TestIds';
 
 // Scrub the markup after each test
 afterEach(cleanup);
@@ -43,8 +44,8 @@ it('renders the folder selector and upload fields', async () => {
     );
 
     expect(getAllButtonsWithText('Select a report...')).toHaveLength(2);
-    expect(screen.getByTestId('local-profiler-upload')).not.toBeNull();
-    expect(screen.getByTestId('local-performance-upload')).not.toBeNull();
+    expect(screen.getByTestId(TEST_IDS.LOCAL_PROFILER_UPLOAD)).not.toBeNull();
+    expect(screen.getByTestId(TEST_IDS.LOCAL_PERFORMANCE_UPLOAD)).not.toBeNull();
 
     getAllButtonsWithText('Select a report...')[0].click();
 
@@ -71,7 +72,7 @@ it('updates the instance when a profiler report is selected and creates toast me
 
     screen.getByText(reportName).click();
 
-    await waitFor(() => expect(screen.getByTestId('toast-filename').textContent).to.contain(reportName));
+    await waitFor(() => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(reportName));
 
     expect(getAllButtonsWithText(reportName)).toHaveLength(1);
     expect(getAllButtonsWithText('Select a report...')).toHaveLength(1);

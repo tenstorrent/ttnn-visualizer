@@ -6,6 +6,7 @@ import { Button, Icon, MenuItem, PopoverPosition, Tooltip } from '@blueprintjs/c
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { FC, type PropsWithChildren } from 'react';
+import { TEST_IDS } from '../../definitions/TestIds';
 import {
     NEVER_SYNCED_LABEL,
     RemoteConnection,
@@ -125,6 +126,7 @@ const RemoteFolderSelector: FC<PropsWithChildren<RemoteFolderSelectorProps>> = (
                     endIcon={remoteFolderList?.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={isDisabled}
                     text={remoteFolder?.reportName ?? fallbackLabel}
+                    data-testid={TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON}
                 />
             </Select>
 
